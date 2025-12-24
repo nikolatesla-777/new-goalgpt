@@ -160,27 +160,54 @@ export class MatchDetailLiveService {
 
     const root = unwrapResults(container);
 
-    const statusId =
-      (typeof root?.status_id === 'number' ? root.status_id : null) ??
-      (typeof root?.status === 'number' ? root.status : null) ??
-      (typeof root?.match?.status_id === 'number' ? root.match.status_id : null) ??
-      (typeof root?.match?.status === 'number' ? root.match.status : null) ??
-      null;
+    // CRITICAL FIX: Handle score array format: [match_id, status_id, home_scores[], away_scores[], update_time, ...]
+    let statusId: number | null = null;
+    if (Array.isArray(root?.score) && root.score.length >= 2 && typeof root.score[1] === 'number') {
+      statusId = root.score[1];
+      logger.debug(`[DetailLive] Extracted status_id=${statusId} from score array format`);
+    } else {
+      statusId =
+        (typeof root?.status_id === 'number' ? root.status_id : null) ??
+        (typeof root?.status === 'number' ? root.status : null) ??
+        (typeof root?.match?.status_id === 'number' ? root.match.status_id : null) ??
+        (typeof root?.match?.status === 'number' ? root.match.status : null) ??
+        null;
+    }
 
     // Best-effort score extraction. Prefer explicit display scores if present.
-    const homeScoreDisplay =
-      (typeof root?.home_score === 'number' ? root.home_score : null) ??
-      (typeof root?.home_score_display === 'number' ? root.home_score_display : null) ??
-      (typeof root?.score?.home === 'number' ? root.score.home : null) ??
-      (typeof root?.match?.home_score === 'number' ? root.match.home_score : null) ??
-      null;
-
-    const awayScoreDisplay =
-      (typeof root?.away_score === 'number' ? root.away_score : null) ??
-      (typeof root?.away_score_display === 'number' ? root.away_score_display : null) ??
-      (typeof root?.score?.away === 'number' ? root.score.away : null) ??
-      (typeof root?.match?.away_score === 'number' ? root.match.away_score : null) ??
-      null;
+    // CRITICAL FIX: Handle score array format: [match_id, status_id, home_scores[], away_scores[], update_time, ...]
+    let homeScoreDisplay: number | null = null;
+    let awayScoreDisplay: number | null = null;
+    
+    if (Array.isArray(root?.score) && root.score.length >= 4) {
+      // score[2] = home_scores array, score[3] = away_scores array
+      // Index 0 of score array is regular score
+      const homeScores = Array.isArray(root.score[2]) ? root.score[2] : null;
+      const awayScores = Array.isArray(root.score[3]) ? root.score[3] : null;
+      homeScoreDisplay = homeScores && homeScores.length > 0 && typeof homeScores[0] === 'number' ? homeScores[0] : null;
+      awayScoreDisplay = awayScores && awayScores.length > 0 && typeof awayScores[0] === 'number' ? awayScores[0] : null;
+      if (homeScoreDisplay !== null || awayScoreDisplay !== null) {
+        logger.debug(`[DetailLive] Extracted scores from score array format: ${homeScoreDisplay}-${awayScoreDisplay}`);
+      }
+    }
+    
+    if (homeScoreDisplay === null) {
+      homeScoreDisplay =
+        (typeof root?.home_score === 'number' ? root.home_score : null) ??
+        (typeof root?.home_score_display === 'number' ? root.home_score_display : null) ??
+        (typeof root?.score?.home === 'number' ? root.score.home : null) ??
+        (typeof root?.match?.home_score === 'number' ? root.match.home_score : null) ??
+        null;
+    }
+    
+    if (awayScoreDisplay === null) {
+      awayScoreDisplay =
+        (typeof root?.away_score === 'number' ? root.away_score : null) ??
+        (typeof root?.away_score_display === 'number' ? root.away_score_display : null) ??
+        (typeof root?.score?.away === 'number' ? root.score.away : null) ??
+        (typeof root?.match?.away_score === 'number' ? root.match.away_score : null) ??
+        null;
+    }
 
     // Incidents/stats may be arrays or nested in different keys.
     const incidents =
@@ -209,12 +236,19 @@ export class MatchDetailLiveService {
         : null;
 
     // Extract provider update_time if available
-    const updateTimeRaw =
-      (typeof root?.update_time === 'number' ? root.update_time : null) ??
-      (typeof root?.updateTime === 'number' ? root.updateTime : null) ??
-      (typeof root?.updated_at === 'number' ? root.updated_at : null) ??
-      (typeof root?.match?.update_time === 'number' ? root.match.update_time : null) ??
-      null;
+    // CRITICAL FIX: Handle score array format where update_time is at index 4
+    let updateTimeRaw: number | null = null;
+    if (Array.isArray(root?.score) && root.score.length >= 5 && typeof root.score[4] === 'number') {
+      updateTimeRaw = root.score[4];
+      logger.debug(`[DetailLive] Extracted update_time=${updateTimeRaw} from score array format`);
+    } else {
+      updateTimeRaw =
+        (typeof root?.update_time === 'number' ? root.update_time : null) ??
+        (typeof root?.updateTime === 'number' ? root.updateTime : null) ??
+        (typeof root?.updated_at === 'number' ? root.updated_at : null) ??
+        (typeof root?.match?.update_time === 'number' ? root.match.update_time : null) ??
+        null;
+    }
 
     const updateTime =
       typeof updateTimeRaw === 'number' && Number.isFinite(updateTimeRaw) && updateTimeRaw > 0
