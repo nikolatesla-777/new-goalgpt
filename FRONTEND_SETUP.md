@@ -145,3 +145,4 @@ server {
 - MatchMinuteUpdateWorker'ın çalıştığını kontrol et
 - Browser console'da hata var mı kontrol et
 
+

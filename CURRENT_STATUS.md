@@ -112,3 +112,4 @@ Bootstrap tamamlandığında:
 - Database connection ve API endpoint'leri çalışıyor
 - Schema import edilmiş, tablolar mevcut
 
+

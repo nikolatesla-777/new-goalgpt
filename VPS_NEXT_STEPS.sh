@@ -79,3 +79,4 @@ echo ""
 
 echo "✅ Kontrol tamamlandı!"
 
+

@@ -157,3 +157,4 @@ LIMIT 5;
 
 **Sonraki Adım:** PM2 log'larını kontrol et ve database'deki maç status'ünü kontrol et.
 
+

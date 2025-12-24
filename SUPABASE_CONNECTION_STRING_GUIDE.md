@@ -145,3 +145,4 @@ Eğer hala bulamıyorsan:
 - VEYA bana connection string formatını gönder, ben senin için `.env` dosyasını hazırlayayım
 
 
+

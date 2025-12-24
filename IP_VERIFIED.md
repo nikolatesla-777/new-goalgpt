@@ -77,3 +77,4 @@ curl "https://api.thesports.com/v1/football/match/recent/list?user=goalgpt&secre
 IP sorunu çözüldü. Artık TheSports API'ye istek atabilirsiniz!
 
 
+

@@ -132,3 +132,4 @@ else
     echo "💡 Yedek .env dosyası: $PROJECT_DIR/.env.direct.bak"
 fi
 
+

@@ -21,3 +21,4 @@ echo "2. Database connection test: curl http://localhost:3000/api/health"
 echo "3. API test: curl http://localhost:3000/api/matches/recent"
 
 
+

@@ -148,3 +148,4 @@ nano /var/www/goalgpt/.env
 - [ ] Supabase setup hazırlığı yapıldı
 
 
+

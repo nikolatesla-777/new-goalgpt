@@ -179,3 +179,4 @@ curl -s https://api.ipify.org  # Production server IP
 **Kalıcı çözüm:** IP whitelist ve account scope sorunlarını çözmek.
 
 
+

@@ -83,3 +83,4 @@ echo ""
 
 echo "✅ Detailed bootstrap check tamamlandı!"
 
+

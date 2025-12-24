@@ -91,3 +91,4 @@ DB_MAX_CONNECTIONS=20
 - [ ] Parse et ve `.env` dosyasına ekle
 - [ ] Test et
 
+

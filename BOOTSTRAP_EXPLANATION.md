@@ -107,3 +107,4 @@ cd /var/www/goalgpt && node -e "const {Pool}=require('pg');require('dotenv').con
 - 15-45 dakika içinde bootstrap tamamlanır
 - Sonrasında matches endpoint'leri data döndürecek
 
+

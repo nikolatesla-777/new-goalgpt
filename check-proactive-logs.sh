@@ -18,3 +18,4 @@ echo ""
 echo "Recent ProactiveCheck summary:"
 pm2 logs goalgpt-backend --lines 50 | grep -i "ProactiveCheck.*Completed\|ProactiveCheck.*Found" | tail -10
 
+

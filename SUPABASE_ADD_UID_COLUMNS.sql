@@ -33,3 +33,4 @@ CREATE INDEX IF NOT EXISTS idx_ts_teams_is_duplicate ON ts_teams(is_duplicate);
 CREATE INDEX IF NOT EXISTS idx_ts_players_is_duplicate ON ts_players(is_duplicate);
 CREATE INDEX IF NOT EXISTS idx_ts_coaches_is_duplicate ON ts_coaches(is_duplicate);
 
+

@@ -141,3 +141,4 @@ curl -s "https://api.thesports.com/v1/football/match/recent/list?user=goalgpt&se
 4. ⏳ Whitelist onayı sonrası endpoint'ler test edilmeli
 
 
+

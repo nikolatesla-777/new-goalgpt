@@ -123,3 +123,4 @@ Thank you.
 - **Dynamic IP:** Eğer IP değişiyorsa, static IP'ye geçmek gerekiyor
 
 
+

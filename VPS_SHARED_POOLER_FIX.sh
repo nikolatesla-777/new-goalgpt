@@ -123,3 +123,4 @@ else
     echo "💡 Yedek .env dosyası: $PROJECT_DIR/.env.backup.*"
 fi
 
+

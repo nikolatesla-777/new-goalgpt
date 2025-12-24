@@ -75,3 +75,4 @@ echo ""
 
 echo "✅ Diagnostic check tamamlandı!"
 
+

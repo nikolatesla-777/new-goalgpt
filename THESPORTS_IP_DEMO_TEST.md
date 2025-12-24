@@ -96,3 +96,4 @@ curl -s http://httpbin.org/ip
 - **Static IP:** Production sunucu static IP kullanmalı (dynamic IP sorun yaratır)
 
 
+

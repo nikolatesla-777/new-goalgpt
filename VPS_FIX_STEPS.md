@@ -133,3 +133,4 @@ curl http://localhost:3000/api/health
 - [ ] `/api/health` endpoint'i `"database": "connected"` döndürüyor
 - [ ] "Tenant or user not found" hatası yok
 
+

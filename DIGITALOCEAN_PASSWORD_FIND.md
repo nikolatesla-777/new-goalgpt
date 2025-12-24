@@ -63,3 +63,4 @@ Eğer SSH key'in varsa:
 
 Password genellikle **1-2 dakika içinde email'ine gelir**.
 
+

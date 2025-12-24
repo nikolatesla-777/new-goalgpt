@@ -92,3 +92,4 @@ IP doğrulandıktan sonra:
 2. ❌ IP yanlış → Doğru IP'yi ekle ve tekrar test et
 
 
+
