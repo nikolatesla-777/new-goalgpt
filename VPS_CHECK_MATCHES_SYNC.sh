@@ -28,8 +28,8 @@ async function checkMatches() {
     const result = await pool.query('SELECT COUNT(*) as c FROM ts_matches');
     console.log('ts_matches:', result.rows[0].c);
     
-    // Check today's matches
-    const todayResult = await pool.query(\"SELECT COUNT(*) as c FROM ts_matches WHERE DATE(match_time) = CURRENT_DATE\");
+    // Check today's matches (match_time is BIGINT timestamp)
+    const todayResult = await pool.query(\"SELECT COUNT(*) as c FROM ts_matches WHERE to_timestamp(match_time)::date = CURRENT_DATE\");
     console.log('Today matches:', todayResult.rows[0].c);
     
     process.exit(0);
