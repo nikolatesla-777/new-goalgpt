@@ -42,6 +42,7 @@ export class ProactiveMatchStatusCheckWorker {
 
     this.isRunning = true;
     const startedAt = Date.now();
+    let client = null;
 
     try {
       const nowTs = Math.floor(Date.now() / 1000);
@@ -59,7 +60,7 @@ export class ProactiveMatchStatusCheckWorker {
       // 1. Are today (TSİ-based)
       // 2. match_time has passed
       // 3. status is still NOT_STARTED (1)
-      const client = await pool.connect();
+      client = await pool.connect();
       try {
         const query = `
           SELECT 
@@ -236,12 +237,20 @@ export class ProactiveMatchStatusCheckWorker {
           duration_ms: duration,
         });
       } finally {
-        client.release();
+        if (client) {
+          client.release();
+        }
       }
     } catch (error: any) {
       logger.error('[ProactiveCheck] Fatal error:', error);
+      logEvent('error', 'proactive.check.fatal', {
+        error_message: error.message || 'Unknown error',
+        error_stack: error.stack,
+      });
     } finally {
+      // CRITICAL FIX: Always reset isRunning flag, even if error occurred
       this.isRunning = false;
+      logger.debug('[ProactiveCheck] Reset isRunning flag');
     }
   }
 
