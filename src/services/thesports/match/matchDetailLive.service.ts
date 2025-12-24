@@ -465,28 +465,28 @@ export class MatchDetailLiveService {
           }
         }
         
-        // Status 4 (SECOND_HALF): Set second_half_kickoff_ts if transitioning from HT
-        if (live.statusId === 4 && existingStatusId === 3) {
-          if (existing.second_half_kickoff_ts === null) {
-            setParts.push(`second_half_kickoff_ts = $${i++}`);
-            values.push(kickoffTimeToUse);
-            const source = live.liveKickoffTime !== null ? 'liveKickoff' : 'now';
-            logger.info(`[KickoffTS] set second_half_kickoff_ts=${kickoffTimeToUse} match_id=${match_id} source=${source}`);
-          } else {
-            logger.debug(`[KickoffTS] skip (already set) second_half_kickoff_ts match_id=${match_id}`);
-          }
+        // Status 4 (SECOND_HALF): Set second_half_kickoff_ts if NULL
+        // CRITICAL FIX: Don't check existingStatusId - provider says SECOND_HALF, set it
+        // If we missed HALF_TIME transition (status 3), we still need to set second_half_kickoff_ts
+        if (live.statusId === 4 && existing.second_half_kickoff_ts === null) {
+          setParts.push(`second_half_kickoff_ts = $${i++}`);
+          values.push(kickoffTimeToUse);
+          const source = live.liveKickoffTime !== null ? 'liveKickoff' : 'now';
+          logger.info(`[KickoffTS] set second_half_kickoff_ts=${kickoffTimeToUse} match_id=${match_id} source=${source} existing_status=${existingStatusId}`);
+        } else if (live.statusId === 4 && existing.second_half_kickoff_ts !== null) {
+          logger.debug(`[KickoffTS] skip (already set) second_half_kickoff_ts match_id=${match_id}`);
         }
         
-        // Status 5 (OVERTIME): Set overtime_kickoff_ts if transitioning from SECOND_HALF
-        if (live.statusId === 5 && existingStatusId === 4) {
-          if (existing.overtime_kickoff_ts === null) {
-            setParts.push(`overtime_kickoff_ts = $${i++}`);
-            values.push(kickoffTimeToUse);
-            const source = live.liveKickoffTime !== null ? 'liveKickoff' : 'now';
-            logger.info(`[KickoffTS] set overtime_kickoff_ts=${kickoffTimeToUse} match_id=${match_id} source=${source}`);
-          } else {
-            logger.debug(`[KickoffTS] skip (already set) overtime_kickoff_ts match_id=${match_id}`);
-          }
+        // Status 5 (OVERTIME): Set overtime_kickoff_ts if NULL
+        // CRITICAL FIX: Don't check existingStatusId - provider says OVERTIME, set it
+        // If we missed SECOND_HALF transition, we still need to set overtime_kickoff_ts
+        if (live.statusId === 5 && existing.overtime_kickoff_ts === null) {
+          setParts.push(`overtime_kickoff_ts = $${i++}`);
+          values.push(kickoffTimeToUse);
+          const source = live.liveKickoffTime !== null ? 'liveKickoff' : 'now';
+          logger.info(`[KickoffTS] set overtime_kickoff_ts=${kickoffTimeToUse} match_id=${match_id} source=${source} existing_status=${existingStatusId}`);
+        } else if (live.statusId === 5 && existing.overtime_kickoff_ts !== null) {
+          logger.debug(`[KickoffTS] skip (already set) overtime_kickoff_ts match_id=${match_id}`);
         }
       }
 
