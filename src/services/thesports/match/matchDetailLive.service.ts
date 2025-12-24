@@ -272,6 +272,59 @@ export class MatchDetailLiveService {
   }
 
   /**
+   * Calculate minute from kickoff timestamps (fallback when provider doesn't supply minute)
+   * Uses same logic as MatchMinuteService.calculateMinute()
+   */
+  private calculateMinuteFromKickoffs(
+    statusId: number | null,
+    firstHalfKickoffTs: number | null,
+    secondHalfKickoffTs: number | null,
+    overtimeKickoffTs: number | null,
+    existingMinute: number | null,
+    nowTs: number
+  ): number | null {
+    if (statusId === null) return null;
+
+    // Status 2 (FIRST_HALF)
+    if (statusId === 2) {
+      if (firstHalfKickoffTs === null) return null;
+      const calculated = Math.floor((nowTs - firstHalfKickoffTs) / 60) + 1;
+      return Math.min(calculated, 45); // Clamp max 45
+    }
+
+    // Status 3 (HALF_TIME) - frozen at 45
+    if (statusId === 3) {
+      return 45; // Always 45, never NULL
+    }
+
+    // Status 4 (SECOND_HALF)
+    if (statusId === 4) {
+      if (secondHalfKickoffTs === null) return null;
+      const calculated = 45 + Math.floor((nowTs - secondHalfKickoffTs) / 60) + 1;
+      return Math.max(calculated, 46); // Clamp min 46
+    }
+
+    // Status 5 (OVERTIME)
+    if (statusId === 5) {
+      if (overtimeKickoffTs === null) return null;
+      return 90 + Math.floor((nowTs - overtimeKickoffTs) / 60) + 1;
+    }
+
+    // Status 7 (PENALTY) - retain existing minute
+    if (statusId === 7) {
+      return existingMinute; // Retain last computed value, never NULL if exists
+    }
+
+    // Status 8 (END), 9 (DELAY), 10 (INTERRUPT) - retain existing minute
+    if (statusId === 8 || statusId === 9 || statusId === 10) {
+      return existingMinute; // Retain last computed value, never NULL if exists
+    }
+
+    // Unknown status or status 1 (NOT_STARTED) - return null
+    return null;
+  }
+
+  /**
    * Detect schema capabilities once per process to keep reconcile fast.
    */
   private async ensureReconcileSchema(client: any): Promise<void> {
@@ -376,7 +429,8 @@ export class MatchDetailLiveService {
       // Read existing timestamps and status for transition detection
       const existingResult = await client.query(
         `SELECT provider_update_time, last_event_ts, status_id, match_time,
-         first_half_kickoff_ts, second_half_kickoff_ts, overtime_kickoff_ts 
+         first_half_kickoff_ts, second_half_kickoff_ts, overtime_kickoff_ts,
+         COALESCE(minute, match_minute) as minute
          FROM ts_matches WHERE external_id = $1`,
         [match_id]
       );
@@ -498,19 +552,38 @@ export class MatchDetailLiveService {
 
       // CRITICAL FIX: Update minute from provider if available (provider-authoritative)
       // Provider's minute value takes precedence over calculated minute
-      if (this.minuteColumnName && live.minute !== null) {
-        // Provider says minute = X, use it (even during HT if provider says so)
-        setParts.push(`${this.minuteColumnName} = $${i++}`);
-        values.push(live.minute);
-        logger.debug(`[DetailLive] Setting minute=${live.minute} from provider for match_id=${match_id}`);
-      } else if (this.minuteColumnName) {
-        // IMPORTANT: During halftime (and some terminal states), we must NOT show a running minute.
-        // If we persist minute values during HT, UI can display weird values (e.g., "HT 06:00").
-        // We clear minute only if the schema has a minute column AND provider didn't supply a minute.
-        const isHalfTime = live.statusId === 3; // TheSports commonly uses 3 = HALF_TIME
-        const isFinished = live.statusId === 8 || live.statusId === 9; // defensive (varies by plan); no harm if not used
-        if (isHalfTime || isFinished) {
-          setParts.push(`${this.minuteColumnName} = NULL`);
+      // If provider doesn't supply minute, calculate from kickoff timestamps (fallback)
+      if (this.minuteColumnName) {
+        if (live.minute !== null) {
+          // Provider says minute = X, use it (even during HT if provider says so)
+          setParts.push(`${this.minuteColumnName} = $${i++}`);
+          values.push(live.minute);
+          logger.debug(`[DetailLive] Setting minute=${live.minute} from provider for match_id=${match_id}`);
+        } else {
+          // Provider didn't supply minute - calculate from kickoff timestamps if available
+          const calculatedMinute = this.calculateMinuteFromKickoffs(
+            live.statusId,
+            existing.first_half_kickoff_ts,
+            existing.second_half_kickoff_ts,
+            existing.overtime_kickoff_ts,
+            existing.minute,
+            ingestionTs
+          );
+          
+          if (calculatedMinute !== null) {
+            setParts.push(`${this.minuteColumnName} = $${i++}`);
+            values.push(calculatedMinute);
+            logger.debug(`[DetailLive] Setting calculated minute=${calculatedMinute} from kickoff_ts for match_id=${match_id} status=${live.statusId}`);
+          } else {
+            // IMPORTANT: During halftime (and some terminal states), we must NOT show a running minute.
+            // If we persist minute values during HT, UI can display weird values (e.g., "HT 06:00").
+            // We clear minute only if the schema has a minute column AND provider didn't supply a minute.
+            const isHalfTime = live.statusId === 3; // TheSports commonly uses 3 = HALF_TIME
+            const isFinished = live.statusId === 8 || live.statusId === 9; // defensive (varies by plan); no harm if not used
+            if (isHalfTime || isFinished) {
+              setParts.push(`${this.minuteColumnName} = NULL`);
+            }
+          }
         }
       }
 
