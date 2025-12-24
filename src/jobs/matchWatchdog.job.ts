@@ -790,26 +790,42 @@ export class MatchWatchdogWorker {
 
   /**
    * Start the worker
-   * Runs every 20 seconds (more aggressive for real-time updates)
+   * DISABLED: Watchdog is unnecessary - /data/update → /match/detail_live handles all status transitions
+   * 
+   * Normal flow:
+   * 1. /data/update lists changed matches (every 20s)
+   * 2. DataUpdateWorker calls /match/detail_live for each changed match
+   * 3. /match/detail_live updates status (HALF_TIME → SECOND_HALF, etc.)
+   * 
+   * Watchdog was causing issues:
+   * - Incorrectly transitioning HALF_TIME → END
+   * - Incorrectly transitioning active matches → END
+   * - Unnecessary recent/list checks
    */
   start(): void {
-    if (this.intervalId) {
-      logger.warn('Match watchdog worker already started');
-      return;
-    }
-
-    // Run immediately on start
-    void this.tick();
-
-    // CRITICAL FIX: Run every 20 seconds (was 30) for more aggressive checking
-    this.intervalId = setInterval(() => {
-      void this.tick();
-    }, 20000); // 20 seconds
-
-    logEvent('info', 'worker.started', {
+    logger.warn('[Watchdog] DISABLED: Status transitions handled by /data/update → /match/detail_live');
+    logger.warn('[Watchdog] MatchWatchdogWorker.start() called but worker is disabled');
+    logEvent('info', 'worker.disabled', {
       worker: 'MatchWatchdogWorker',
-      interval_sec: 20,
+      reason: 'data_update_handles_transitions',
     });
+    return; // Worker disabled - /data/update → /match/detail_live handles all transitions
+
+    // OLD CODE (commented out - /data/update handles transitions):
+    // if (this.intervalId) {
+    //   logger.warn('Match watchdog worker already started');
+    //   return;
+    // }
+    // // Run immediately on start
+    // void this.tick();
+    // // CRITICAL FIX: Run every 20 seconds (was 30) for more aggressive checking
+    // this.intervalId = setInterval(() => {
+    //   void this.tick();
+    // }, 20000); // 20 seconds
+    // logEvent('info', 'worker.started', {
+    //   worker: 'MatchWatchdogWorker',
+    //   interval_sec: 20,
+    // });
   }
 
   /**
