@@ -56,12 +56,13 @@ export class ProactiveMatchStatusCheckWorker {
       const todayStartTSI = Math.floor((Date.UTC(year, month, day, 0, 0, 0) - TSI_OFFSET_SECONDS * 1000) / 1000);
       const todayEndTSI = todayStartTSI + 86400; // 24 hours later
 
-      // Find matches that:
-      // 1. Are today (TSİ-based)
-      // 2. match_time has passed
-      // 3. status is still NOT_STARTED (1)
+      // Find matches that should be checked via endpoint:
+      // 1. NOT_STARTED (1) but match_time has passed - should be LIVE
+      // 2. END (8) but match_time is less than 150 minutes ago - suspicious, verify via endpoint
       client = await pool.connect();
       try {
+        const minTimeForEnd = nowTs - (150 * 60); // 150 minutes ago
+        
         const query = `
           SELECT 
             external_id,
@@ -72,13 +73,18 @@ export class ProactiveMatchStatusCheckWorker {
           FROM ts_matches
           WHERE match_time >= $1
             AND match_time < $2
-            AND match_time <= $3
-            AND status_id = 1
+            AND (
+              -- Case 1: NOT_STARTED but match_time passed - should be LIVE
+              (status_id = 1 AND match_time <= $3)
+              OR
+              -- Case 2: END but match_time is suspiciously recent (< 150 min ago)
+              (status_id = 8 AND match_time >= $4)
+            )
           ORDER BY match_time ASC
           LIMIT 100
         `;
 
-        const result = await client.query(query, [todayStartTSI, todayEndTSI, nowTs]);
+        const result = await client.query(query, [todayStartTSI, todayEndTSI, nowTs, minTimeForEnd]);
         const matches = result.rows;
 
         if (matches.length === 0) {
@@ -86,7 +92,12 @@ export class ProactiveMatchStatusCheckWorker {
           return;
         }
 
-        logger.info(`[ProactiveCheck] Found ${matches.length} matches that should be live`);
+        const notStartedCount = matches.filter(m => m.status_id === 1).length;
+        const suspiciousEndCount = matches.filter(m => m.status_id === 8).length;
+        logger.info(
+          `[ProactiveCheck] Found ${matches.length} matches to check via endpoint: ` +
+          `${notStartedCount} NOT_STARTED (should be live), ${suspiciousEndCount} suspicious END (verify via endpoint)`
+        );
 
         let checkedCount = 0;
         let updatedCount = 0;
@@ -96,11 +107,16 @@ export class ProactiveMatchStatusCheckWorker {
           try {
             checkedCount++;
             const minutesAgo = Math.floor((nowTs - match.match_time) / 60);
+            const checkReason = match.status_id === 1 
+              ? 'should_be_live' 
+              : 'suspicious_end_verify_via_endpoint';
 
             logEvent('info', 'proactive.check.start', {
               match_id: match.external_id,
               match_time: match.match_time,
               minutes_ago: minutesAgo,
+              current_status_id: match.status_id,
+              reason: checkReason,
             });
 
             // CRITICAL FIX: Try detail_live first, then diary as fallback

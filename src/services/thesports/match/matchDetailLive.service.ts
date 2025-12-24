@@ -356,36 +356,6 @@ export class MatchDetailLiveService {
       const existingProviderTime = existing.provider_update_time;
       const existingEventTime = existing.last_event_ts;
       const existingStatusId = existing.status_id;
-      const matchTime = existing.match_time;
-      
-      // CRITICAL SAFETY CHECK: Reject END status if match started less than 150 minutes ago
-      // This prevents incorrect END transitions from provider when match just started
-      if (live.statusId === 8 && matchTime !== null) {
-        const nowTs = Math.floor(Date.now() / 1000);
-        const minTimeForEnd = matchTime + (150 * 60); // 150 minutes (2.5 hours) minimum
-        
-        if (nowTs < minTimeForEnd) {
-          const minutesSinceMatchTime = Math.floor((nowTs - matchTime) / 60);
-          logger.warn(
-            `[DetailLive] REJECTED END status for match ${match_id}: ` +
-            `Provider sent status=8 (END) but match started only ${minutesSinceMatchTime} minutes ago ` +
-            `(match_time: ${new Date(matchTime * 1000).toISOString()}, ` +
-            `minimum required: 150 minutes). Keeping existing status=${existingStatusId}.`
-          );
-          
-          logEvent('warn', 'detail_live.reconcile.rejected_end', {
-            match_id,
-            reason: 'match_time_too_recent',
-            minutes_since_match_time: minutesSinceMatchTime,
-            match_time: matchTime,
-            provider_status_id: 8,
-            existing_status_id: existingStatusId,
-          });
-          
-          // Override live.statusId to null to prevent END update
-          live.statusId = null;
-        }
-      }
 
       // Check freshness (idempotent guard)
       if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
