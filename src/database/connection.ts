@@ -29,9 +29,32 @@ const pool = new Pool({
   }),
 });
 
-pool.on('error', (err) => {
-  logger.error('Unexpected error on idle client', err);
-  process.exit(-1);
+pool.on('error', (err: any) => {
+  // CRITICAL FIX: Don't exit on connection errors - these are expected during network hiccups
+  // Only log the error - pool will automatically retry connections
+  // Connection errors (ECONNRESET, ETIMEDOUT) are normal in production environments
+  // and should not crash the entire backend
+  logger.warn('Database pool error (non-fatal, pool will retry):', {
+    message: err.message,
+    code: err.code,
+    errno: err.errno,
+  });
+  
+  // Only exit on truly critical errors (invalid connection string, auth failures)
+  // These are unlikely to recover automatically
+  const isCriticalError = err.code === '28P01' || // invalid_password
+                          err.code === '28000' || // invalid_authorization_specification
+                          err.code === '3D000' || // invalid_catalog_name (database doesn't exist)
+                          err.message?.includes('password authentication failed') ||
+                          err.message?.includes('database') && err.message?.includes('does not exist');
+  
+  if (isCriticalError) {
+    logger.error('CRITICAL database error - exiting:', err);
+    process.exit(-1);
+  }
+  
+  // For connection errors (ECONNRESET, ETIMEDOUT, etc.), just log and continue
+  // The pool will automatically retry connections
 });
 
 export async function connectDatabase() {
