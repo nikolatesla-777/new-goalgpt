@@ -4,6 +4,9 @@ import { logger } from '../utils/logger';
 
 dotenv.config();
 
+// CRITICAL: Supabase connection configuration
+const isSupabase = process.env.DB_HOST?.includes('supabase') || process.env.DB_HOST?.includes('pooler');
+
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
@@ -12,13 +15,18 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD || '',
   max: parseInt(process.env.DB_MAX_CONNECTIONS || '20'),
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000, // Increased for Supabase
   // CRITICAL: Supabase requires SSL
-  ssl: process.env.DB_HOST?.includes('supabase') || process.env.DB_HOST?.includes('pooler') 
+  ssl: isSupabase
     ? {
         rejectUnauthorized: false, // Supabase uses self-signed certificates
       }
     : false,
+  // CRITICAL: Connection pooling mode for Supabase
+  ...(isSupabase && {
+    // Supabase connection pooling specific settings
+    application_name: 'goalgpt-backend',
+  }),
 });
 
 pool.on('error', (err) => {
