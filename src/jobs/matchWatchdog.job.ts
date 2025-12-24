@@ -125,32 +125,180 @@ export class MatchWatchdogWorker {
           // Phase 5-S FIX: Check recent/list first - if match is finished (status=8) or not in list, transition to END
           const recentListMatch = recentListAllMatches.get(stale.matchId);
           
-          if (!recentListMatch) {
-            // Match not in recent/list - likely finished, transition to END
-            logger.info(`[Watchdog] Match ${stale.matchId} not in recent/list, transitioning to END (status 8)`);
+          // CRITICAL FIX HATA #3: HALF_TIME (status 3) için özel kontrol
+          // Devre arasından ikinci yarıya geçiş sırasında recent/list'te olmayabilir
+          if (stale.statusId === 3 && !recentListMatch) {
+            logger.info(
+              `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list, ` +
+              `checking detail_live for SECOND_HALF transition before END`
+            );
             
+            const { pool } = await import('../../database/connection');
             const client = await pool.connect();
             try {
-              const updateResult = await client.query(
-                `UPDATE ts_matches 
-                 SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
-                 WHERE external_id = $2 AND status_id IN (2, 3, 4, 5, 7)`,
-                [Math.floor(Date.now() / 1000), stale.matchId]
+              // Önce detail_live çek - SECOND_HALF olabilir
+              const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(stale.matchId, null);
+              
+              if (reconcileResult.updated && reconcileResult.rowCount > 0) {
+                // detail_live başarılı → status güncellendi (muhtemelen SECOND_HALF)
+                if (reconcileResult.statusId === 4) {
+                  logger.info(
+                    `[Watchdog] HALF_TIME match ${stale.matchId} transitioned to SECOND_HALF via detail_live`
+                  );
+                  successCount++;
+                  reasons['half_time_to_second_half'] = (reasons['half_time_to_second_half'] || 0) + 1;
+                  
+                  logEvent('info', 'watchdog.reconcile.done', {
+                    match_id: stale.matchId,
+                    result: 'success',
+                    reason: 'half_time_to_second_half',
+                    duration_ms: Date.now() - reconcileStartTime,
+                    row_count: reconcileResult.rowCount,
+                    new_status_id: 4,
+                  });
+                  continue; // Success - skip further processing
+                } else {
+                  logger.info(
+                    `[Watchdog] HALF_TIME match ${stale.matchId} updated via detail_live to status ${reconcileResult.statusId}`
+                  );
+                  successCount++;
+                  reasons['half_time_updated'] = (reasons['half_time_updated'] || 0) + 1;
+                  continue; // Success - skip further processing
+                }
+              }
+              
+              // detail_live başarısız → match_time kontrolü yap
+              const matchInfo = await client.query(
+                `SELECT match_time, first_half_kickoff_ts FROM ts_matches WHERE external_id = $1`,
+                [stale.matchId]
               );
               
-              if (updateResult.rowCount > 0) {
-                successCount++;
-                reasons['finished_not_in_recent_list'] = (reasons['finished_not_in_recent_list'] || 0) + 1;
+              if (matchInfo.rows.length > 0) {
+                const match = matchInfo.rows[0];
+                const nowTs = Math.floor(Date.now() / 1000);
+                const matchTime = match.match_time;
+                const firstHalfKickoff = match.first_half_kickoff_ts;
                 
-                logEvent('info', 'watchdog.reconcile.done', {
-                  match_id: stale.matchId,
-                  result: 'success',
-                  reason: 'finished_not_in_recent_list',
-                  duration_ms: Date.now() - reconcileStartTime,
-                  row_count: updateResult.rowCount,
-                  new_status_id: 8,
-                });
-                continue; // Skip detail_live reconcile
+                // Calculate minimum time for match to be finished
+                // First half (45) + HT (15) + Second half (45) + margin (15) = 120 minutes
+                const minTimeForEnd = (firstHalfKickoff || matchTime) + (120 * 60);
+                
+                if (nowTs < minTimeForEnd) {
+                  logger.warn(
+                    `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list but match started ` +
+                    `${Math.floor((nowTs - matchTime) / 60)} minutes ago (<120 min). ` +
+                    `Skipping END transition. Will retry later.`
+                  );
+                  skippedCount++;
+                  reasons['half_time_too_recent'] = (reasons['half_time_too_recent'] || 0) + 1;
+                  continue; // Don't transition to END, retry later
+                } else {
+                  // Match time is old enough, safe to transition to END
+                  logger.info(
+                    `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list and match started ` +
+                    `${Math.floor((nowTs - matchTime) / 60)} minutes ago (>120 min). Transitioning to END.`
+                  );
+                  
+                  const updateResult = await client.query(
+                    `UPDATE ts_matches 
+                     SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
+                     WHERE external_id = $2 AND status_id = 3`,
+                    [nowTs, stale.matchId]
+                  );
+                  
+                  if (updateResult.rowCount > 0) {
+                    successCount++;
+                    reasons['half_time_finished_safe'] = (reasons['half_time_finished_safe'] || 0) + 1;
+                    
+                    logEvent('info', 'watchdog.reconcile.done', {
+                      match_id: stale.matchId,
+                      result: 'success',
+                      reason: 'half_time_finished_safe',
+                      duration_ms: Date.now() - reconcileStartTime,
+                      row_count: updateResult.rowCount,
+                      new_status_id: 8,
+                      match_time: matchTime,
+                      elapsed_minutes: Math.floor((nowTs - matchTime) / 60),
+                    });
+                    continue; // Skip further processing
+                  }
+                }
+              }
+            } catch (detailLiveError: any) {
+              logger.warn(
+                `[Watchdog] detail_live failed for HALF_TIME match ${stale.matchId}: ${detailLiveError.message}`
+              );
+              // Fall through to normal processing
+            } finally {
+              client.release();
+            }
+          }
+          
+          // Normal stale match processing (status 2, 4, 5, 7) - HATA #1 fix will be applied here
+          if (!recentListMatch) {
+            // Match not in recent/list - check match_time before transitioning to END
+            const { pool } = await import('../../database/connection');
+            const client = await pool.connect();
+            try {
+              const matchInfo = await client.query(
+                `SELECT match_time, first_half_kickoff_ts, second_half_kickoff_ts, status_id 
+                 FROM ts_matches WHERE external_id = $1`,
+                [stale.matchId]
+              );
+              
+              if (matchInfo.rows.length === 0) {
+                continue; // Match not found, skip
+              }
+              
+              const match = matchInfo.rows[0];
+              const nowTs = Math.floor(Date.now() / 1000);
+              const matchTime = match.match_time;
+              
+              // Calculate minimum time for match to be finished
+              // Standard match: 90 minutes + 15 min HT = 105 minutes minimum
+              // With overtime: up to 120 minutes
+              // Safety margin: 150 minutes (2.5 hours) from match_time
+              const minTimeForEnd = matchTime + (150 * 60); // 150 minutes in seconds
+              
+              // If match started less than 150 minutes ago, DO NOT transition to END
+              if (nowTs < minTimeForEnd) {
+                logger.warn(
+                  `[Watchdog] Match ${stale.matchId} not in recent/list but match_time (${matchTime}) ` +
+                  `is less than 150 minutes ago (now: ${nowTs}, diff: ${Math.floor((nowTs - matchTime) / 60)} min). ` +
+                  `Skipping END transition. Will try detail_live instead.`
+                );
+                // Continue to detail_live reconcile instead of END
+                // (fall through to detail_live check below)
+              } else {
+                // Match time is old enough, safe to transition to END
+                logger.info(
+                  `[Watchdog] Match ${stale.matchId} not in recent/list and match_time (${matchTime}) ` +
+                  `is ${Math.floor((nowTs - matchTime) / 60)} minutes ago (>150 min). Transitioning to END.`
+                );
+                
+                const updateResult = await client.query(
+                  `UPDATE ts_matches 
+                   SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
+                   WHERE external_id = $2 AND status_id IN (2, 3, 4, 5, 7)`,
+                  [nowTs, stale.matchId]
+                );
+                
+                if (updateResult.rowCount > 0) {
+                  successCount++;
+                  reasons['finished_not_in_recent_list_safe'] = (reasons['finished_not_in_recent_list_safe'] || 0) + 1;
+                  
+                  logEvent('info', 'watchdog.reconcile.done', {
+                    match_id: stale.matchId,
+                    result: 'success',
+                    reason: 'finished_not_in_recent_list_safe',
+                    duration_ms: Date.now() - reconcileStartTime,
+                    row_count: updateResult.rowCount,
+                    new_status_id: 8,
+                    match_time: matchTime,
+                    elapsed_minutes: Math.floor((nowTs - matchTime) / 60),
+                  });
+                  continue; // Skip detail_live reconcile
+                }
               }
             } finally {
               client.release();
