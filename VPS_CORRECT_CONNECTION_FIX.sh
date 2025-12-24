@@ -49,16 +49,16 @@ echo ""
 # Connection test
 echo "🧪 Connection test başlıyor..."
 cd "$PROJECT_DIR"
-node -e "
-const { Pool } = require('pg');
-require('dotenv').config();
+node -e '
+const { Pool } = require("pg");
+require("dotenv").config();
 
-console.log('🔍 Connection bilgileri:');
-console.log('  Host:', process.env.DB_HOST);
-console.log('  Port:', process.env.DB_PORT);
-console.log('  Database:', process.env.DB_NAME);
-console.log('  User:', process.env.DB_USER);
-console.log('');
+console.log("🔍 Connection bilgileri:");
+console.log("  Host:", process.env.DB_HOST);
+console.log("  Port:", process.env.DB_PORT);
+console.log("  Database:", process.env.DB_NAME);
+console.log("  User:", process.env.DB_USER);
+console.log("");
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -70,24 +70,24 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
-pool.query('SELECT version()')
+pool.query("SELECT version()")
   .then(result => {
-    console.log('✅ Connection başarılı!');
-    console.log('PostgreSQL version:', result.rows[0].version);
+    console.log("✅ Connection başarılı!");
+    console.log("PostgreSQL version:", result.rows[0].version);
     process.exit(0);
   })
   .catch(error => {
-    console.error('❌ Connection hatası:', error.message);
-    console.error('Error code:', error.code);
-    if (error.code === 'XX000') {
-      console.error('');
-      console.error('💡 "Tenant or user not found" hatası:');
-      console.error('   - User adı veya password yanlış olabilir');
-      console.error('   - Supabase Dashboard → Settings → Database → Password kontrol et');
+    console.error("❌ Connection hatası:", error.message);
+    console.error("Error code:", error.code);
+    if (error.code === "XX000") {
+      console.error("");
+      console.error("💡 Tenant or user not found hatası:");
+      console.error("   - User adı veya password yanlış olabilir");
+      console.error("   - Supabase Dashboard → Settings → Database → Password kontrol et");
     }
     process.exit(1);
   });
-"
+'
 
 TEST_RESULT=$?
 
