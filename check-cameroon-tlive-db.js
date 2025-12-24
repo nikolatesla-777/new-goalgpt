@@ -9,16 +9,29 @@ const matchId = 'jw2r09hk9d3erz8'; // Cameroon match ID
 async function checkTliveData() {
   console.log(`\n🔍 Checking tlive data in database for match: ${matchId}\n`);
   
+  const isSupabase = process.env.DB_HOST?.includes('supabase') || process.env.DB_HOST?.includes('pooler');
+  
   const pool = new Pool({
     host: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT || '5432'),
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    ssl: isSupabase || process.env.DB_SSL === 'true' 
+      ? { rejectUnauthorized: false } 
+      : false,
   });
 
-  const client = await pool.connect();
+  pool.on('error', (err) => {
+    console.error('Pool error (non-fatal):', err.message);
+  });
+
+  let client;
+  try {
+    client = await pool.connect();
   try {
     // Check which columns exist
     const columnCheck = await client.query(`
