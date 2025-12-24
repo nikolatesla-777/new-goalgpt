@@ -162,7 +162,27 @@ export class DataUpdateWorker {
         run_id: runId,
       });
 
-      const dbClient = await pool.connect();
+      // CRITICAL FIX: Handle database connection errors gracefully (placeholder DB)
+      let dbClient = null;
+      try {
+        dbClient = await pool.connect();
+      } catch (dbError: any) {
+        // Database connection failed (placeholder DB or not configured)
+        const isDbConnectionError = dbError.message?.includes('getaddrinfo') || 
+                                    dbError.message?.includes('EAI_AGAIN') ||
+                                    dbError.message?.includes('placeholder') ||
+                                    dbError.message?.includes('Connection');
+        
+        if (isDbConnectionError) {
+          logger.warn(`[DataUpdate:${runId}] Database connection failed (placeholder DB). Skipping DB operations. Error: ${dbError.message}`);
+          // Continue without database - don't crash the worker
+          return;
+        } else {
+          // Re-throw non-connection errors
+          throw dbError;
+        }
+      }
+
       try {
         for (const matchId of changedMatchIds) {
           try {
@@ -205,7 +225,9 @@ export class DataUpdateWorker {
           }
         }
       } finally {
-        dbClient.release();
+        if (dbClient) {
+          dbClient.release();
+        }
       }
     } catch (error: any) {
       logger.error('Data update check error:', error);
