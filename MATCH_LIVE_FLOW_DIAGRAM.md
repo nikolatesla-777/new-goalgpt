@@ -16,17 +16,17 @@ graph TB
     Diary1 --> DB1[(Database<br/>ts_matches<br/>status_id=1)]
     
     %% Daily Sync
-    DB1 --> DailySync[DailyMatchSyncWorker<br/>Her 10 dakikada bir]
+    DB1 --> DailySync[DailyMatchSyncWorker<br/>Her gün 00:05 TSİ<br/>+ Her 30 dk repair window]
     DailySync --> Diary2["/match/diary<br/>Bugünkü maçları sync et"]
     Diary2 --> DB2[(Database<br/>Yeni maçlar eklendi)]
     
     %% Incremental Sync
-    DB2 --> MatchSync[MatchSyncWorker<br/>Her 5 dakikada bir]
+    DB2 --> MatchSync[MatchSyncWorker<br/>Her 1 dakikada bir<br/>+ Live reconcile: 30s<br/>+ Half-time: 2 dk]
     MatchSync --> Recent1["/match/recent/list<br/>time parametresi ile<br/>Değişen maçları çek"]
     Recent1 --> DB3[(Database<br/>Maçlar güncellendi)]
     
     %% Should-Be-Live Detection
-    DB3 --> Watchdog[MatchWatchdogWorker<br/>Her 30 saniyede bir]
+    DB3 --> Watchdog[MatchWatchdogWorker<br/>Her 20 saniyede bir]
     Watchdog --> Check1{Maç başlamalı mı?<br/>match_time geçti<br/>status_id=1}
     
     Check1 -->|Evet| Recent2["/match/recent/list<br/>Maç canlı mı kontrol et"]
@@ -41,7 +41,7 @@ graph TB
     UpdateStatus1 --> DB4[(Database<br/>status_id güncellendi)]
     
     %% Proactive Check
-    DB3 --> Proactive[ProactiveMatchStatusCheckWorker<br/>Her 2 dakikada bir]
+    DB3 --> Proactive[ProactiveMatchStatusCheckWorker<br/>Her 20 saniyede bir]
     Proactive --> Check3{Bugünkü maçlar<br/>status_id=1<br/>match_time geçti}
     
     Check3 -->|Evet| DetailLive2["/match/detail_live<br/>Maç durumunu kontrol et"]
@@ -192,10 +192,10 @@ Message Types:
 | Worker | Sıklık | Endpoint | Amaç |
 |--------|--------|----------|------|
 | **BootstrapService** | 1x (başlangıçta) | `/match/diary` | İlk maçları yükle |
-| **DailyMatchSyncWorker** | Her 10 dakika | `/match/diary` | Bugünkü programı sync et |
-| **MatchSyncWorker** | Her 5 dakika | `/match/recent/list` | Değişen maçları sync et |
-| **MatchWatchdogWorker** | Her 30 saniye | `/match/recent/list` + `/match/detail_live` | Stale ve should-be-live maçları bul |
-| **ProactiveMatchStatusCheckWorker** | Her 2 dakika | `/match/detail_live` + `/match/diary` | NOT_STARTED → LIVE geçişi |
+| **DailyMatchSyncWorker** | Her gün 00:05 TSİ + Her 30 dk repair | `/match/diary` | Bugünkü programı sync et |
+| **MatchSyncWorker** | Her 1 dakika (cron) + Live: 30s, HT: 2dk | `/match/recent/list` | Değişen maçları sync et |
+| **MatchWatchdogWorker** | Her 20 saniye | `/match/recent/list` + `/match/detail_live` | Stale ve should-be-live maçları bul |
+| **ProactiveMatchStatusCheckWorker** | Her 20 saniye | `/match/detail_live` + `/match/diary` | NOT_STARTED → LIVE geçişi |
 | **DataUpdateWorker** | Her 20 saniye | `/data/update` + `/match/detail_live` | Real-time güncellemeler |
 | **WebSocketService** | Sürekli (MQTT) | WebSocket | Real-time mesajlar |
 | **MatchMinuteUpdateWorker** | Her 30 saniye | - | Dakika hesapla |
