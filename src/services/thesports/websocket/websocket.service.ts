@@ -451,6 +451,8 @@ export class WebSocketService {
             `⚠️ [WebSocket/STATUS] UPDATE affected 0 rows: matchId=${matchId}, status=${statusId}. ` +
             `Match not found in DB or external_id mismatch.`
           );
+        } else {
+          logger.info(`[WebSocket/STATUS] Successfully updated status_id=${statusId} for matchId=${matchId}, rowCount=${res.rowCount}`);
         }
       } finally {
         client.release();
