@@ -266,6 +266,7 @@ export class WebSocketService {
           // Infer status from tlive (fixes "45+ but actually HT")
           const inferredStatus = this.inferStatusFromTlive(tliveArr);
           if (inferredStatus !== null) {
+            logger.info(`[WebSocket/TLIVE] Inferred status ${inferredStatus} from tlive for match ${matchId}, updating database`);
             // Update local transition map (resurrection-safe)
             this.handleMatchStateTransition(matchId, inferredStatus);
 
@@ -300,10 +301,13 @@ export class WebSocketService {
 
     const getDataStr = (entry: any) => String(entry?.data ?? '').toLowerCase();
 
-    if (recent.some((e) => {
+    // Check for HALF_TIME
+    const halfTimeEntry = recent.find((e) => {
       const dataStr = getDataStr(e);
       return dataStr.includes('half time') || dataStr.includes('halftime') || dataStr.includes('ht') || dataStr.includes('devre arası') || dataStr.includes('devre arasi');
-    })) {
+    });
+    if (halfTimeEntry) {
+      logger.info(`[WebSocket/TLIVE] HALF_TIME detected from tlive: ${JSON.stringify(halfTimeEntry)}`);
       return MatchState.HALF_TIME as unknown as number;
     }
 
