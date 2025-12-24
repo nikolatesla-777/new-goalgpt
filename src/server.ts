@@ -217,6 +217,7 @@ const start = async () => {
     
     // CRITICAL: Bootstrap system before starting MQTT
     // Bootstrap MUST complete successfully before MQTT connection
+    // CRITICAL FIX: Allow server to start even if bootstrap fails (for placeholder DB setup)
     logger.info('🔧 Running Bootstrap Sequence...');
     let bootstrapSuccess = false;
     try {
@@ -225,55 +226,76 @@ const start = async () => {
       logger.info('✅ Bootstrap Complete');
       bootstrapSuccess = true;
     } catch (error: any) {
-      logger.error('❌ Bootstrap failed:', error.message);
-      logger.error('⚠️ MQTT connection will NOT start without successful bootstrap');
-      // Do NOT continue - system needs bootstrap to be ready
-      throw new Error(`Bootstrap failed: ${error.message}`);
+      // CRITICAL FIX: If bootstrap fails due to database connection (placeholder DB),
+      // allow server to start anyway. Bootstrap will retry when database is configured.
+      const isDbConnectionError = error.message?.includes('getaddrinfo') || 
+                                  error.message?.includes('EAI_AGAIN') ||
+                                  error.message?.includes('placeholder') ||
+                                  error.message?.includes('Connection');
+      
+      if (isDbConnectionError) {
+        logger.warn('⚠️ Bootstrap failed due to database connection (placeholder DB). Server will start without bootstrap.');
+        logger.warn('⚠️ MQTT connection will NOT start until database is configured.');
+        bootstrapSuccess = false; // Don't start MQTT, but allow server to run
+      } else {
+        logger.error('❌ Bootstrap failed:', error.message);
+        logger.error('⚠️ MQTT connection will NOT start without successful bootstrap');
+        // For non-DB errors, still throw (critical system error)
+        throw new Error(`Bootstrap failed: ${error.message}`);
+      }
     }
 
     // Initialize WebSocket service (ONLY after bootstrap completes successfully)
+    // CRITICAL FIX: Allow server to start even if bootstrap failed (for placeholder DB)
     if (!bootstrapSuccess) {
-      logger.error('❌ Cannot start MQTT: Bootstrap did not complete successfully');
-      throw new Error('Bootstrap did not complete successfully');
+      logger.warn('⚠️ MQTT connection will NOT start: Bootstrap did not complete successfully (likely database not configured)');
+      logger.warn('⚠️ Server will continue running. Configure database and restart to enable MQTT.');
+      // Don't throw - allow server to start without MQTT
     }
 
-    websocketService = new WebSocketService();
-    
-    // Register event handlers - push to frontend when goal/score changes
-    websocketService.onEvent((event) => {
-      logger.info(`WebSocket Event: ${event.type} for match ${event.matchId}`);
+    // Initialize WebSocket service (ONLY after bootstrap completes successfully)
+    if (bootstrapSuccess) {
+      websocketService = new WebSocketService();
       
-      // CRITICAL: Push event to all connected frontend clients
-      const message = JSON.stringify({
-        type: event.type,
-        matchId: event.matchId,
-        data: event,
-        timestamp: Date.now(),
+      // Register event handlers - push to frontend when goal/score changes
+      websocketService.onEvent((event) => {
+        logger.info(`WebSocket Event: ${event.type} for match ${event.matchId}`);
+        
+        // CRITICAL: Push event to all connected frontend clients
+        const message = JSON.stringify({
+          type: event.type,
+          matchId: event.matchId,
+          data: event,
+          timestamp: Date.now(),
+        });
+        
+        frontendConnections.forEach((conn) => {
+          try {
+            conn.socket.send(message);
+          } catch (error: any) {
+            logger.error('Failed to send WebSocket message to frontend:', error);
+            frontendConnections.delete(conn);
+          }
+        });
       });
       
-      frontendConnections.forEach((conn) => {
-        try {
-          conn.socket.send(message);
-        } catch (error: any) {
-          logger.error('Failed to send WebSocket message to frontend:', error);
-          frontendConnections.delete(conn);
-        }
-      });
-    });
-    
-    // CRITICAL: Also push score updates directly when MQTT receives score messages
-    // We'll hook into the WebSocketService to emit SCORE_CHANGE events
-    // This is handled by the existing onEvent handler above
+      // CRITICAL: Also push score updates directly when MQTT receives score messages
+      // We'll hook into the WebSocketService to emit SCORE_CHANGE events
+      // This is handled by the existing onEvent handler above
 
-    // Connect WebSocket (only after bootstrap completes successfully)
-    try {
-      await websocketService.connect();
-      logger.info('✅ WebSocket service connected');
-      setWebSocketState(true, true); // enabled and connected
-    } catch (error: any) {
-      logger.error('⚠️ WebSocket connection failed, will retry:', error.message);
-      setWebSocketState(true, false); // enabled but not connected
-      // Continue without WebSocket, fallback to HTTP polling
+      // Connect WebSocket (only after bootstrap completes successfully)
+      try {
+        await websocketService.connect();
+        logger.info('✅ WebSocket service connected');
+        setWebSocketState(true, true); // enabled and connected
+      } catch (error: any) {
+        logger.error('⚠️ WebSocket connection failed, will retry:', error.message);
+        setWebSocketState(true, false); // enabled but not connected
+        // Continue without WebSocket, fallback to HTTP polling
+      }
+    } else {
+      logger.warn('⚠️ WebSocket service NOT initialized: Bootstrap did not complete successfully');
+      setWebSocketState(false, false); // disabled
     }
 
     // Start background workers
