@@ -46,29 +46,38 @@ export class BootstrapService {
    * Check if database is empty (no basic metadata)
    */
   private async isDbEmpty(): Promise<boolean> {
-    const client = await pool.connect();
+    // CRITICAL FIX: If database connection fails (placeholder DB), skip bootstrap
+    // This allows server to start without database (for Supabase setup phase)
     try {
-      // Check if we have any categories
-      const categoryResult = await client.query('SELECT COUNT(*) as count FROM ts_categories');
-      const categoryCount = parseInt(categoryResult.rows[0]?.count || '0', 10);
+      const client = await pool.connect();
+      try {
+        // Check if we have any categories
+        const categoryResult = await client.query('SELECT COUNT(*) as count FROM ts_categories');
+        const categoryCount = parseInt(categoryResult.rows[0]?.count || '0', 10);
 
-      // Check if we have any competitions
-      const competitionResult = await client.query('SELECT COUNT(*) as count FROM ts_competitions');
-      const competitionCount = parseInt(competitionResult.rows[0]?.count || '0', 10);
+        // Check if we have any competitions
+        const competitionResult = await client.query('SELECT COUNT(*) as count FROM ts_competitions');
+        const competitionCount = parseInt(competitionResult.rows[0]?.count || '0', 10);
 
-      // Check if we have any teams
-      const teamResult = await client.query('SELECT COUNT(*) as count FROM ts_teams');
-      const teamCount = parseInt(teamResult.rows[0]?.count || '0', 10);
+        // Check if we have any teams
+        const teamResult = await client.query('SELECT COUNT(*) as count FROM ts_teams');
+        const teamCount = parseInt(teamResult.rows[0]?.count || '0', 10);
 
-      const isEmpty = categoryCount === 0 && competitionCount === 0 && teamCount === 0;
+        const isEmpty = categoryCount === 0 && competitionCount === 0 && teamCount === 0;
 
-      logger.info(
-        `Database status: Categories=${categoryCount}, Competitions=${competitionCount}, Teams=${teamCount}, Empty=${isEmpty}`
-      );
+        logger.info(
+          `Database status: Categories=${categoryCount}, Competitions=${competitionCount}, Teams=${teamCount}, Empty=${isEmpty}`
+        );
 
-      return isEmpty;
-    } finally {
-      client.release();
+        return isEmpty;
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      // Database connection failed (placeholder DB or not configured)
+      // Return false to skip bootstrap syncs, but allow server to start
+      logger.warn('⚠️ Database connection failed during bootstrap check. Skipping bootstrap syncs. Error:', error.message);
+      return false; // Treat as "not empty" to skip syncs
     }
   }
 
