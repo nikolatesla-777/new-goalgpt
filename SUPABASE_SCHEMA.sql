@@ -196,9 +196,14 @@ CREATE TABLE IF NOT EXISTS ts_competitions (
   cur_stage_id VARCHAR(255),
   primary_color VARCHAR(50),
   secondary_color VARCHAR(50),
+  uid VARCHAR(255),
+  is_duplicate BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Index for uid column (for duplicate handling)
+CREATE INDEX IF NOT EXISTS idx_ts_competitions_uid ON ts_competitions(uid);
 
 -- TS Seasons Table
 CREATE TABLE IF NOT EXISTS ts_seasons (
@@ -244,9 +249,14 @@ CREATE TABLE IF NOT EXISTS ts_teams (
   country_id VARCHAR(255),
   venue_id VARCHAR(255),
   coach_id VARCHAR(255),
+  uid VARCHAR(255),
+  is_duplicate BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Index for uid column (for duplicate handling)
+CREATE INDEX IF NOT EXISTS idx_ts_teams_uid ON ts_teams(uid);
 
 -- TS Players Table
 CREATE TABLE IF NOT EXISTS ts_players (
@@ -269,9 +279,14 @@ CREATE TABLE IF NOT EXISTS ts_players (
   positions JSONB,
   ability JSONB,
   characteristics JSONB,
+  uid VARCHAR(255),
+  is_duplicate BOOLEAN DEFAULT false,
   updated_at TIMESTAMP DEFAULT NOW(),
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Index for uid column (for duplicate handling)
+CREATE INDEX IF NOT EXISTS idx_ts_players_uid ON ts_players(uid);
 
 -- TS Coaches Table
 CREATE TABLE IF NOT EXISTS ts_coaches (
@@ -289,9 +304,14 @@ CREATE TABLE IF NOT EXISTS ts_coaches (
   nationality VARCHAR(100),
   joined BIGINT,
   contract_until BIGINT,
+  uid VARCHAR(255),
+  is_duplicate BOOLEAN DEFAULT false,
   updated_at TIMESTAMP DEFAULT NOW(),
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Index for uid column (for duplicate handling)
+CREATE INDEX IF NOT EXISTS idx_ts_coaches_uid ON ts_coaches(uid);
 
 -- TS Referees Table
 CREATE TABLE IF NOT EXISTS ts_referees (
