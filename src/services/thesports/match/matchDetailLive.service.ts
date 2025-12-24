@@ -222,25 +222,12 @@ export class MatchDetailLiveService {
       (Array.isArray(root?.technical_statistics) ? root.technical_statistics : null) ??
       null;
 
-    // Provider-supplied live kickoff time (epoch seconds). Do NOT derive from local time.
-    const liveKickoffTimeRaw =
-      (typeof root?.live_kickoff_time === 'number' ? root.live_kickoff_time : null) ??
-      (typeof root?.liveKickoffTime === 'number' ? root.liveKickoffTime : null) ??
-      (typeof root?.match?.live_kickoff_time === 'number' ? root.match.live_kickoff_time : null) ??
-      (typeof root?.match?.liveKickoffTime === 'number' ? root.match.liveKickoffTime : null) ??
-      null;
-
-    const liveKickoffTime =
-      typeof liveKickoffTimeRaw === 'number' && Number.isFinite(liveKickoffTimeRaw) && liveKickoffTimeRaw > 0
-        ? liveKickoffTimeRaw
-        : null;
-
-    // Extract provider update_time if available
-    // CRITICAL FIX: Handle score array format where update_time is at index 4
+    // Extract provider update_time if available (separate from kick-off timestamp)
+    // CRITICAL FIX: Handle score array format where update_time might be at index 5 (after kick-off timestamp at index 4)
     let updateTimeRaw: number | null = null;
-    if (Array.isArray(root?.score) && root.score.length >= 5 && typeof root.score[4] === 'number') {
-      updateTimeRaw = root.score[4];
-      logger.debug(`[DetailLive] Extracted update_time=${updateTimeRaw} from score array format`);
+    if (Array.isArray(root?.score) && root.score.length >= 6 && typeof root.score[5] === 'number') {
+      updateTimeRaw = root.score[5];
+      logger.debug(`[DetailLive] Extracted update_time=${updateTimeRaw} from score array format (index 5)`);
     } else {
       updateTimeRaw =
         (typeof root?.update_time === 'number' ? root.update_time : null) ??
@@ -249,6 +236,31 @@ export class MatchDetailLiveService {
         (typeof root?.match?.update_time === 'number' ? root.match.update_time : null) ??
         null;
     }
+
+    // Provider-supplied "Kick-off timestamp" (epoch seconds)
+    // According to TheSports docs: "Kick-off timestamp" changes in real-time based on match status:
+    // - Status FIRST_HALF (2): first half kick-off time
+    // - Status SECOND_HALF (4): second half kick-off time
+    // This is in score array at index 4, or in root object as live_kickoff_time
+    let liveKickoffTimeRaw: number | null = null;
+    if (Array.isArray(root?.score) && root.score.length >= 5 && typeof root.score[4] === 'number') {
+      // Score array index 4 is "Kick-off timestamp" according to TheSports docs
+      liveKickoffTimeRaw = root.score[4];
+      logger.debug(`[DetailLive] Extracted kick-off timestamp=${liveKickoffTimeRaw} from score array format (index 4)`);
+    } else {
+      // Fallback to root object fields
+      liveKickoffTimeRaw =
+        (typeof root?.live_kickoff_time === 'number' ? root.live_kickoff_time : null) ??
+        (typeof root?.liveKickoffTime === 'number' ? root.liveKickoffTime : null) ??
+        (typeof root?.match?.live_kickoff_time === 'number' ? root.match.live_kickoff_time : null) ??
+        (typeof root?.match?.liveKickoffTime === 'number' ? root.match.liveKickoffTime : null) ??
+        null;
+    }
+
+    const liveKickoffTime =
+      typeof liveKickoffTimeRaw === 'number' && Number.isFinite(liveKickoffTimeRaw) && liveKickoffTimeRaw > 0
+        ? liveKickoffTimeRaw
+        : null;
 
     const updateTime =
       typeof updateTimeRaw === 'number' && Number.isFinite(updateTimeRaw) && updateTimeRaw > 0
