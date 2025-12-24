@@ -10,9 +10,15 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'goalgpt',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
-  max: 20,
+  max: parseInt(process.env.DB_MAX_CONNECTIONS || '20'),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  // CRITICAL: Supabase requires SSL
+  ssl: process.env.DB_HOST?.includes('supabase') || process.env.DB_HOST?.includes('pooler') 
+    ? {
+        rejectUnauthorized: false, // Supabase uses self-signed certificates
+      }
+    : false,
 });
 
 pool.on('error', (err) => {
