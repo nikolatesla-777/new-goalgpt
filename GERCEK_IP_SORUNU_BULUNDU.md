@@ -122,3 +122,4 @@ Thank you.
 - **5.47.86.116:** Bu production sunucunun gerçek outbound IP'si
 - **Dynamic IP:** Eğer IP değişiyorsa, static IP'ye geçmek gerekiyor
 
+

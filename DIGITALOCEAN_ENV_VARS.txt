@@ -1,0 +1,28 @@
+# DigitalOcean App Platform - Environment Variables
+# Settings → App-Level Environment Variables bölümüne ekle
+
+# ============================================
+# Database (Supabase - Placeholder, sonra güncellenecek)
+# ============================================
+DB_HOST=placeholder
+DB_PORT=6543
+DB_NAME=postgres
+DB_USER=placeholder
+DB_PASSWORD=placeholder
+DB_MAX_CONNECTIONS=20
+
+# ============================================
+# TheSports API
+# ============================================
+THESPORTS_API_BASE_URL=https://api.thesports.com/v1/football
+THESPORTS_API_SECRET=3205e4f6efe04a03f0055152c4aa0f37
+THESPORTS_API_USER=goalgpt
+
+# ============================================
+# Server Configuration
+# ============================================
+PORT=3000
+NODE_ENV=production
+LOG_LEVEL=info
+
+

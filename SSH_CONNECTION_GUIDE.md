@@ -209,3 +209,4 @@ SSH bağlantısı başarılı olduktan sonra:
 curl -sSL https://raw.githubusercontent.com/nikolatesla-777/new-goalgpt/main/deploy.sh | bash
 ```
 
+

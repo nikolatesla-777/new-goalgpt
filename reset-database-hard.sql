@@ -16,3 +16,4 @@ SELECT 'Hard reset completed. Tables truncated: ts_matches, ts_competitions, ts_
 
 
 
+

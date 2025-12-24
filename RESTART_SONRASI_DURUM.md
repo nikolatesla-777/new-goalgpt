@@ -92,3 +92,4 @@
 
 **Tüm kriterler karşılanıyor!** 🎉
 
+

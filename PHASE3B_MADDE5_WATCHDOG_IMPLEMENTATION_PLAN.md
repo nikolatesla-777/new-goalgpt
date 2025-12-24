@@ -280,3 +280,4 @@ After implementation:
 **Note on Status 3 (HALF_TIME):** We still include `status_id=3` in the watchdog scan, but we use a relaxed stale threshold (`halfTimeStaleSeconds=900`) so HT matches are not falsely treated as stale during the normal 15-minute break.
 
 
+

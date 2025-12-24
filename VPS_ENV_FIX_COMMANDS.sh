@@ -67,3 +67,4 @@ echo "1. Logları kontrol et: pm2 logs goalgpt-backend --lines 30"
 echo "2. Database connection test: curl http://localhost:3000/api/health"
 echo "3. API test: curl http://localhost:3000/api/matches/recent"
 
+

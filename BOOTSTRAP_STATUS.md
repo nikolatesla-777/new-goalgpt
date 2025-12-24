@@ -106,3 +106,4 @@ psql -c "SELECT entity_type, last_updated_at FROM ts_sync_state;"
 
 
 
+

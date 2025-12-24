@@ -146,3 +146,4 @@ curl -s "https://api.thesports.com/v1/football/match/recent/list?user=goalgpt&se
 
 **Aksiyon:** TheSports support'a detaylı mesaj gönderilmeli.
 
+

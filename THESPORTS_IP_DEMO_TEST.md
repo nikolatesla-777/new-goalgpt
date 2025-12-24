@@ -95,3 +95,4 @@ curl -s http://httpbin.org/ip
 - **TheSports IP Demo endpoint'i:** TheSports API'nin gördüğü gerçek IP'yi döndürür
 - **Static IP:** Production sunucu static IP kullanmalı (dynamic IP sorun yaratır)
 
+

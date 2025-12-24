@@ -250,7 +250,7 @@ const pool = new Pool({
 
 ---
 
-### PHASE 7: Testing & Validation
+image.png### PHASE 7: Testing & Validation
 
 #### 6.1 Database Connection Test
 ```bash

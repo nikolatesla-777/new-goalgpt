@@ -159,3 +159,4 @@ Fallback: Watchdog (yama) → %100 çalışıyor ama geç tespit ediyor
 - Watchdog'u sadece "son çare" olarak kullanmak
 - Proaktif kontrol mekanizması eklemek
 
+

@@ -221,7 +221,20 @@ export class MatchDetailLiveService {
         ? updateTimeRaw
         : null;
 
-    return { statusId, homeScoreDisplay, awayScoreDisplay, incidents, statistics, liveKickoffTime, updateTime };
+    // Extract minute from provider (WebSocket/detail_live source)
+    const minuteRaw =
+      (typeof root?.minute === 'number' ? root.minute : null) ??
+      (typeof root?.match_minute === 'number' ? root.match_minute : null) ??
+      (typeof root?.match?.minute === 'number' ? root.match.minute : null) ??
+      (typeof root?.match?.match_minute === 'number' ? root.match.match_minute : null) ??
+      null;
+
+    const minute =
+      typeof minuteRaw === 'number' && Number.isFinite(minuteRaw) && minuteRaw >= 0
+        ? minuteRaw
+        : null;
+
+    return { statusId, homeScoreDisplay, awayScoreDisplay, incidents, statistics, liveKickoffTime, updateTime, minute };
   }
 
   /**

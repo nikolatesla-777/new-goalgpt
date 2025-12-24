@@ -131,26 +131,34 @@ export class MatchMinuteWorker {
 
   /**
    * Start the worker
-   * Runs every 30 seconds
+   * DISABLED: Minute updates now come only from WebSocket/detail_live
+   * This worker previously calculated minutes from kickoff timestamps every 30 seconds.
+   * Now minutes are provider-authoritative (from /match/detail_live endpoint).
    */
   start(): void {
-    if (this.intervalId) {
-      logger.warn('Match minute worker already started');
-      return;
-    }
-
-    // Run immediately on start
-    void this.tick();
-
-    // Then run every 30 seconds
-    this.intervalId = setInterval(() => {
-      void this.tick();
-    }, 30000);
-
-    logEvent('info', 'worker.started', {
+    logger.warn('[MinuteEngine] DISABLED: Minute updates now come only from WebSocket/detail_live');
+    logger.warn('[MinuteEngine] MatchMinuteWorker.start() called but worker is disabled');
+    logEvent('info', 'worker.disabled', {
       worker: 'MatchMinuteWorker',
-      interval_sec: 30,
+      reason: 'minutes_from_websocket_detail_live_only',
     });
+    return; // Worker disabled - minutes come from WebSocket/detail_live only
+
+    // OLD CODE (commented out - minutes now come from provider):
+    // if (this.intervalId) {
+    //   logger.warn('Match minute worker already started');
+    //   return;
+    // }
+    // // Run immediately on start
+    // void this.tick();
+    // // Then run every 30 seconds
+    // this.intervalId = setInterval(() => {
+    //   void this.tick();
+    // }, 30000);
+    // logEvent('info', 'worker.started', {
+    //   worker: 'MatchMinuteWorker',
+    //   interval_sec: 30,
+    // });
   }
 
   /**

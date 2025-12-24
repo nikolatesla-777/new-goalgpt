@@ -76,3 +76,4 @@ pool.query('SELECT version()')
 echo ""
 echo "✅ Test tamamlandı!"
 
+

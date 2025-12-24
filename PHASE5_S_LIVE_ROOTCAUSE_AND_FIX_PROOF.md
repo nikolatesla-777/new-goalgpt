@@ -179,3 +179,4 @@ psql -c "SELECT external_id, status_id, minute, home_score_regular, away_score_r
 - **Provider diary status=1:** This might be provider's actual state (match not started yet, or provider hasn't updated)  
 - **Fix ensures:** If provider diary shows status=2+, DB will be updated  
 - **No heuristic:** We never change status based on `match_time` - only provider data
+

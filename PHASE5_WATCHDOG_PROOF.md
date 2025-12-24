@@ -287,3 +287,4 @@ tail -200 logs/combined.log | grep -E "watchdog.reconcile.(start|done)" | tail -
 - No update (rowCount=0) counts as "skip" not "fail" (idempotent guard)
 
 
+

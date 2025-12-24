@@ -20,3 +20,4 @@ logEvent('info', 'test.secret', {
 console.log('\n✅ Check logs above - secret fields should show [REDACTED], normal_field should show original value');
 
 
+
