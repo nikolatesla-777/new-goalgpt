@@ -36,7 +36,7 @@ async function checkUidColumns() {
     if (compResult.rows.length < 2 || teamResult.rows.length < 2) {
       console.log('');
       console.log('❌ UID kolonları eksik! Supabase migration çalıştırılmalı.');
-      console.log('   SUPABASE_ADD_UID_COLUMNS.sql dosyasını Supabase SQL Editor'de çalıştır.');
+      console.log('   SUPABASE_ADD_UID_COLUMNS.sql dosyasını Supabase SQL Editor de çalıştır.');
     } else {
       console.log('');
       console.log('✅ UID kolonları mevcut.');
