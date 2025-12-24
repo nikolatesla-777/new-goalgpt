@@ -222,20 +222,16 @@ export class MatchDetailLiveService {
       (Array.isArray(root?.technical_statistics) ? root.technical_statistics : null) ??
       null;
 
-    // Extract provider update_time if available (separate from kick-off timestamp)
-    // CRITICAL FIX: Handle score array format where update_time might be at index 5 (after kick-off timestamp at index 4)
+    // Extract provider update_time if available (NOT in score array - only in root object)
+    // Score array format: [match_id, status_id, home_scores[], away_scores[], kick_off_timestamp, "Compatible ignore"]
+    // update_time is NOT in score array, extract from root object fields
     let updateTimeRaw: number | null = null;
-    if (Array.isArray(root?.score) && root.score.length >= 6 && typeof root.score[5] === 'number') {
-      updateTimeRaw = root.score[5];
-      logger.debug(`[DetailLive] Extracted update_time=${updateTimeRaw} from score array format (index 5)`);
-    } else {
-      updateTimeRaw =
-        (typeof root?.update_time === 'number' ? root.update_time : null) ??
-        (typeof root?.updateTime === 'number' ? root.updateTime : null) ??
-        (typeof root?.updated_at === 'number' ? root.updated_at : null) ??
-        (typeof root?.match?.update_time === 'number' ? root.match.update_time : null) ??
-        null;
-    }
+    updateTimeRaw =
+      (typeof root?.update_time === 'number' ? root.update_time : null) ??
+      (typeof root?.updateTime === 'number' ? root.updateTime : null) ??
+      (typeof root?.updated_at === 'number' ? root.updated_at : null) ??
+      (typeof root?.match?.update_time === 'number' ? root.match.update_time : null) ??
+      null;
 
     // Provider-supplied "Kick-off timestamp" (epoch seconds)
     // According to TheSports docs: "Kick-off timestamp" changes in real-time based on match status:
