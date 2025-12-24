@@ -3,15 +3,23 @@
  */
 
 const https = require('https');
+require('dotenv').config();
 
 const matchId = 'k82rekhgxp2grep';
+const user = process.env.THESPORTS_API_USER || '';
+const secret = process.env.THESPORTS_API_SECRET || '';
 
 function makeRequest(path) {
   return new Promise((resolve, reject) => {
+    // Add user and secret to query params
+    const url = new URL(path, 'https://api.thesports.com');
+    url.searchParams.set('user', user);
+    url.searchParams.set('secret', secret);
+    
     const options = {
-      hostname: 'api.thesports.com',
+      hostname: url.hostname,
       port: 443,
-      path: path,
+      path: url.pathname + url.search,
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
