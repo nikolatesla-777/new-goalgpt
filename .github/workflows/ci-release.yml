@@ -1,0 +1,47 @@
+name: CI / Release Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22.11.0'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (touched files clean check)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./.github/scripts/check-touched-files-typecheck.sh
+          else
+            npm run typecheck
+          fi
+
+      - name: Run deterministic tests
+        run: |
+          npm run test:phase3a
+          npm run test:phase3b-minute
+          npm run test:phase3b-watchdog
+
+      - name: Smoke test
+        run: ./.github/scripts/smoke-test.sh
+
+

@@ -1,0 +1,271 @@
+/**
+ * Match API Client
+ */
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
+export interface Competition {
+  id: string;
+  name: string;
+  logo_url?: string | null;
+  country_id?: string;
+  country_name?: string;
+}
+
+export interface MatchRecent {
+  id: string;
+  competition_id?: string;
+  season_id?: string;
+  match_time: number;
+  status: number; // Backend uses 'status' not 'match_status'
+  match_status?: number; // legacy/compat alias (some endpoints may still send this)
+  minute?: number | null; // Phase 3C: Backend-calculated minute (from Minute Engine)
+  minute_text: string; // Phase 4-4: UI-friendly display text (HT/45+/90+/FT/etc.) - REQUIRED, never null
+  updated_at: string; // Phase 4-4: ISO timestamp of last DB update (for stale badge)
+  age_sec?: number | null; // Phase 4-4: Optional age since last update (backend-calculated)
+  stale_reason?: string | null; // Phase 4-4: Optional stale reason from Phase 4-3
+  provider_update_time?: number | null; // Phase 4-4: Optional provider timestamp (epoch seconds)
+  last_event_ts?: number | null; // Phase 4-4: Optional last event timestamp (epoch seconds)
+  live_kickoff_time?: number | null; // legacy/compat (deprecated for minute calculation, kept for backward compat)
+  home_team_id: string;
+  away_team_id: string;
+  home_score?: number;
+  away_score?: number;
+  home_score_regular?: number | null;
+  away_score_regular?: number | null;
+  home_score_overtime?: number | null;
+  away_score_overtime?: number | null;
+  home_score_penalties?: number | null;
+  away_score_penalties?: number | null;
+  home_red_cards?: number | null;
+  away_red_cards?: number | null;
+  home_yellow_cards?: number | null;
+  away_yellow_cards?: number | null;
+  home_corners?: number | null;
+  away_corners?: number | null;
+  home_team?: {
+    id: string;
+    name: string;
+    logo_url: string | null;
+  };
+  away_team?: {
+    id: string;
+    name: string;
+    logo_url: string | null;
+  };
+  competition?: Competition | null;
+}
+
+export interface MatchDiary {
+  id: string;
+  competition_id?: string;
+  season_id?: string;
+  match_time: number;
+  status: number; // Backend uses 'status' not 'match_status'
+  match_status?: number; // legacy/compat alias (some endpoints may still send this)
+  minute?: number | null; // Phase 3C: Backend-calculated minute (from Minute Engine)
+  minute_text: string; // Phase 4-4: UI-friendly display text (HT/45+/90+/FT/etc.) - REQUIRED, never null
+  updated_at: string; // Phase 4-4: ISO timestamp of last DB update (for stale badge)
+  age_sec?: number | null; // Phase 4-4: Optional age since last update (backend-calculated)
+  stale_reason?: string | null; // Phase 4-4: Optional stale reason from Phase 4-3
+  provider_update_time?: number | null; // Phase 4-4: Optional provider timestamp (epoch seconds)
+  last_event_ts?: number | null; // Phase 4-4: Optional last event timestamp (epoch seconds)
+  live_kickoff_time?: number | null; // legacy/compat (deprecated for minute calculation, kept for backward compat)
+  home_team_id: string;
+  away_team_id: string;
+  home_score?: number;
+  away_score?: number;
+  home_score_regular?: number | null;
+  away_score_regular?: number | null;
+  home_score_overtime?: number | null;
+  away_score_overtime?: number | null;
+  home_score_penalties?: number | null;
+  away_score_penalties?: number | null;
+  home_red_cards?: number | null;
+  away_red_cards?: number | null;
+  home_yellow_cards?: number | null;
+  away_yellow_cards?: number | null;
+  home_corners?: number | null;
+  away_corners?: number | null;
+  home_team?: {
+    id: string;
+    name: string;
+    logo_url: string | null;
+  };
+  away_team?: {
+    id: string;
+    name: string;
+    logo_url: string | null;
+  };
+  competition?: Competition | null;
+}
+
+// Alias for compatibility
+export type Match = MatchRecent | MatchDiary;
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+export interface MatchRecentResponse {
+  results: MatchRecent[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  err?: string; // TheSports API error message
+}
+
+export interface MatchDiaryResponse {
+  results: MatchDiary[];
+  total?: number;
+  err?: string; // TheSports API error message
+}
+
+/**
+ * Get recent matches
+ */
+export async function getRecentMatches(params?: {
+  page?: number;
+  limit?: number;
+  date?: string;
+}): Promise<MatchRecentResponse> {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.append('page', params.page.toString());
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.date) queryParams.append('date', params.date);
+
+  const url = `${API_BASE_URL}/matches/recent?${queryParams}`;
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+  }
+  
+  const data: ApiResponse<MatchRecentResponse> = await response.json();
+  
+  if (!data.success) {
+    throw new Error(data.message || 'Failed to fetch recent matches');
+  }
+  
+  // Check for TheSports API error
+  if (data.data.err) {
+    throw new Error(data.data.err);
+  }
+  
+  return data.data;
+}
+
+/**
+ * Get live matches
+ * Returns matches with status_id IN (2, 3, 4, 5, 7) that started within the last 4 hours
+ * NO date filtering - only status and time-based filtering
+ */
+export async function getLiveMatches(): Promise<MatchDiaryResponse> {
+  const url = `${API_BASE_URL}/matches/live`;
+  
+  // Add timeout (60 seconds) to prevent hanging
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+    }
+    
+    const data: ApiResponse<MatchDiaryResponse> = await response.json();
+  
+  if (!data.success) {
+    throw new Error(data.message || 'Failed to fetch live matches');
+  }
+  
+  // Check for TheSports API error
+  if (data.data.err) {
+    throw new Error(data.data.err);
+  }
+  
+  // CRITICAL FIX: Ensure results is always an array
+  const results = Array.isArray(data.data?.results) ? data.data.results : [];
+  
+    return {
+      results,
+      err: data.data?.err ?? undefined,
+      total: data.data?.total,
+    };
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout: Canlı maçlar çok uzun sürdü. Lütfen tekrar deneyin.');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get match diary for a specific date
+ */
+export async function getMatchDiary(date?: string): Promise<MatchDiaryResponse> {
+  const queryParams = new URLSearchParams();
+  if (date) {
+    // Backend expects YYYY-MM-DD format, it will convert to YYYYMMDD internally
+    queryParams.append('date', date);
+  }
+
+  const fullUrl = `${API_BASE_URL}/matches/diary?${queryParams}`;
+  console.log('🔍 [getMatchDiary] Full URL:', fullUrl);
+  console.log('🔍 [getMatchDiary] Date param:', date);
+
+  const response = await fetch(fullUrl);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ [getMatchDiary] HTTP Error:', response.status, errorText);
+    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+  }
+  
+  const data: ApiResponse<MatchDiaryResponse> = await response.json();
+  console.log('📦 [getMatchDiary] Response structure:', {
+    success: data.success,
+    hasData: !!data.data,
+    hasResults: !!data.data?.results,
+    resultsCount: data.data?.results?.length || 0,
+    hasErr: !!data.data?.err,
+    err: data.data?.err,
+    dataType: typeof data.data,
+    isArray: Array.isArray(data.data),
+  });
+  
+  if (!data.success) {
+    console.error('❌ [getMatchDiary] API returned success=false:', data.message);
+    throw new Error(data.message || 'Failed to fetch match diary');
+  }
+  
+  // CRITICAL FIX: Ensure we unwrap the data correctly
+  // Backend returns: { success: true, data: { results: [...], err: null } }
+  // We need to return: { results: [...], err: null }
+  const responseData = data.data;
+  
+  // Check for TheSports API error
+  if (responseData?.err) {
+    console.error('❌ [getMatchDiary] TheSports API error:', responseData.err);
+    throw new Error(responseData.err);
+  }
+  
+  // CRITICAL FIX: Ensure results is always an array
+  const results = Array.isArray(responseData?.results) ? responseData.results : [];
+  
+  console.log('✅ [getMatchDiary] Returning data with', results.length, 'matches');
+  
+  // Return safe structure: always return { results: array, err?: string }
+  return {
+    results,
+    err: responseData?.err ?? undefined,
+    total: responseData?.total,
+  };
+}

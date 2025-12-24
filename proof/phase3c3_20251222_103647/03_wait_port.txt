@@ -1,0 +1,2 @@
+=== [4/8] Wait for port 3000 ===
+health OK (attempt 3)

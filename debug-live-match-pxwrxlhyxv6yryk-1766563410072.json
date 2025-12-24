@@ -1,0 +1,46 @@
+{
+  "external_id": "pxwrxlhyxv6yryk",
+  "db": {
+    "match_time": "1766541600",
+    "status_id": 1,
+    "minute": null,
+    "minute_text": "—",
+    "home_score": null,
+    "away_score": null,
+    "provider_update_time": null,
+    "last_event_ts": null,
+    "updated_at": "2025-12-24T00:30:01.047Z",
+    "first_half_kickoff_ts": null,
+    "second_half_kickoff_ts": null
+  },
+  "provider": {
+    "diary": {
+      "found": true,
+      "status_id": 1,
+      "minute": null,
+      "minute_text": "—",
+      "home_score": 0,
+      "away_score": 0,
+      "update_time": null
+    },
+    "recent_list": {
+      "found": false
+    },
+    "detail_live": {
+      "found": false,
+      "error": "NOT_FOUND"
+    }
+  },
+  "logs": {
+    "watchdog_reconcile": [],
+    "dataupdate_reconcile": [],
+    "websocket": []
+  },
+  "mismatch": {
+    "status": false,
+    "minute": false,
+    "score": true,
+    "overall": true
+  },
+  "root_cause": "NO_WEBSOCKET_MESSAGE"
+}

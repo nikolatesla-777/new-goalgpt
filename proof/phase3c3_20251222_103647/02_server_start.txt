@@ -1,0 +1,3 @@
+=== [3/8] Start server (background) ===
+Using START_CMD=npm run start
+SERVER_PID=70928
