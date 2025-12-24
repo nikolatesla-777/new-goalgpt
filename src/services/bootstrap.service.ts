@@ -90,6 +90,22 @@ export class BootstrapService {
     try {
       // Step 1: Check if database is empty
       const isEmpty = await this.isDbEmpty();
+      
+      // Step 1.1: Check individual master data counts
+      const client = await pool.connect();
+      let categoryCount = 0;
+      let competitionCount = 0;
+      let teamCount = 0;
+      try {
+        const catResult = await client.query('SELECT COUNT(*) as count FROM ts_categories');
+        const compResult = await client.query('SELECT COUNT(*) as count FROM ts_competitions');
+        const teamResult = await client.query('SELECT COUNT(*) as count FROM ts_teams');
+        categoryCount = parseInt(catResult.rows[0]?.count || '0', 10);
+        competitionCount = parseInt(compResult.rows[0]?.count || '0', 10);
+        teamCount = parseInt(teamResult.rows[0]?.count || '0', 10);
+      } finally {
+        client.release();
+      }
 
       if (isEmpty) {
         logger.info('📦 Database is empty. Running initial syncs...');
@@ -124,7 +140,40 @@ export class BootstrapService {
         await this.teamSyncWorker.syncTeams();
         logger.info('✅ Teams synced');
       } else {
-        logger.info('📦 Database has data. Skipping initial syncs.');
+        logger.info(`📦 Database has data. Categories=${categoryCount}, Competitions=${competitionCount}, Teams=${teamCount}`);
+        
+        // CRITICAL FIX: Sync missing master data even if database is not empty
+        // This handles cases where partial sync happened (e.g., teams synced but competitions didn't)
+        
+        if (categoryCount === 0) {
+          logger.info('📋 Categories missing. Syncing Categories...');
+          try {
+            await this.categorySyncWorker.syncAllCategories();
+            logger.info('✅ Categories synced');
+          } catch (error: any) {
+            logger.error('Failed to sync categories:', error.message);
+          }
+        }
+        
+        if (competitionCount === 0) {
+          logger.info('🏆 Competitions missing. Syncing Competitions...');
+          try {
+            await this.competitionSyncWorker.syncCompetitions();
+            logger.info('✅ Competitions synced');
+          } catch (error: any) {
+            logger.error('Failed to sync competitions:', error.message);
+          }
+        }
+        
+        if (teamCount === 0) {
+          logger.info('⚽ Teams missing. Syncing Teams...');
+          try {
+            await this.teamSyncWorker.syncTeams();
+            logger.info('✅ Teams synced');
+          } catch (error: any) {
+            logger.error('Failed to sync teams:', error.message);
+          }
+        }
       }
 
       // Step 2: Fetch Today's Bulletin (Vital)
