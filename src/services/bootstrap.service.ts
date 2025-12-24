@@ -276,9 +276,47 @@ export class BootstrapService {
 
       // CRITICAL: Sync matches with results_extra for seed-on-the-fly logic
       // This prevents foreign key constraint failures by creating competitions/teams on-the-fly
-      logger.info(`🔄 Starting to sync ${matchesToSync.length} matches with results_extra...`);
-      const result = await this.matchSyncService.syncMatches(matchesToSync, response.results_extra);
-
+      // BATCH PROCESSING: Process matches in batches to avoid timeout/connection issues
+      const BATCH_SIZE = 100; // Process 100 matches at a time
+      const INTER_BATCH_DELAY_MS = 1000; // 1 second delay between batches
+      const totalBatches = Math.ceil(matchesToSync.length / BATCH_SIZE);
+      
+      logger.info(`🔄 Starting to sync ${matchesToSync.length} matches in ${totalBatches} batches (${BATCH_SIZE} per batch)...`);
+      
+      let totalSynced = 0;
+      let totalErrors = 0;
+      
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const startIndex = batchIndex * BATCH_SIZE;
+        const endIndex = Math.min(startIndex + BATCH_SIZE, matchesToSync.length);
+        const batch = matchesToSync.slice(startIndex, endIndex);
+        const batchNumber = batchIndex + 1;
+        
+        try {
+          logger.info(`📦 [Bootstrap] Processing batch ${batchNumber}/${totalBatches} (matches ${startIndex + 1}-${endIndex})...`);
+          
+          const batchResult = await this.matchSyncService.syncMatches(batch, response.results_extra);
+          
+          totalSynced += batchResult.synced || 0;
+          totalErrors += batchResult.errors || 0;
+          
+          logger.info(
+            `✅ [Bootstrap] Batch ${batchNumber}/${totalBatches} completed: ${batchResult.synced} synced, ${batchResult.errors || 0} errors`
+          );
+          
+          // Small delay between batches to avoid overwhelming the database/API
+          if (batchIndex < totalBatches - 1) {
+            await new Promise((resolve) => setTimeout(resolve, INTER_BATCH_DELAY_MS));
+          }
+        } catch (error: any) {
+          logger.error(`❌ [Bootstrap] Batch ${batchNumber}/${totalBatches} failed:`, error.message);
+          totalErrors += batch.length;
+          // Continue with next batch even if this one failed
+        }
+      }
+      
+      const result = { synced: totalSynced, errors: totalErrors };
+      
       logger.info(
         `✅ Today's schedule synced: ${result.synced}/${matchesToSync.length} matches synced, ${result.errors} errors`
       );
