@@ -1,9 +1,11 @@
 /**
  * Force reconcile a match via detail_live
  */
-const { MatchDetailLiveService } = require('./src/services/thesports/match/matchDetailLive.service');
-const { TheSportsClient } = require('./src/services/thesports/client/thesports-client');
-require('dotenv').config();
+import { MatchDetailLiveService } from './src/services/thesports/match/matchDetailLive.service';
+import { TheSportsClient } from './src/services/thesports/client/thesports-client';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 async function forceReconcile() {
   const matchId = 'k82rekhgxp2grep';
@@ -27,7 +29,7 @@ async function forceReconcile() {
     } else {
       console.log('\n⚠️ Match was not updated (might be already up to date or no changes)');
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('\n❌ Error:', error.message);
     console.error(error.stack);
   }
@@ -36,3 +38,4 @@ async function forceReconcile() {
 }
 
 forceReconcile();
+
