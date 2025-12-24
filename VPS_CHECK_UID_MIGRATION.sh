@@ -10,9 +10,9 @@ echo ""
 # 1. Database'de uid kolonlarını kontrol et
 echo "📊 Database UID Kolonları Kontrolü:"
 cd /var/www/goalgpt
-node -e '
-const { Pool } = require("pg");
-require("dotenv").config();
+node -e "
+const { Pool } = require('pg');
+require('dotenv').config();
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -26,41 +26,31 @@ const pool = new Pool({
 async function checkUidColumns() {
   try {
     // Check ts_competitions
-    const compResult = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = '\''ts_competitions'\'' 
-      AND column_name IN ('\''uid'\'', '\''is_duplicate'\'')
-    `);
-    console.log("ts_competitions uid columns:", compResult.rows.length, "/ 2");
+    const compResult = await pool.query(\"SELECT column_name FROM information_schema.columns WHERE table_name = 'ts_competitions' AND column_name IN ('uid', 'is_duplicate')\");
+    console.log('ts_competitions uid columns:', compResult.rows.length, '/ 2');
     
     // Check ts_teams
-    const teamResult = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = '\''ts_teams'\'' 
-      AND column_name IN ('\''uid'\'', '\''is_duplicate'\'')
-    `);
-    console.log("ts_teams uid columns:", teamResult.rows.length, "/ 2");
+    const teamResult = await pool.query(\"SELECT column_name FROM information_schema.columns WHERE table_name = 'ts_teams' AND column_name IN ('uid', 'is_duplicate')\");
+    console.log('ts_teams uid columns:', teamResult.rows.length, '/ 2');
     
     if (compResult.rows.length < 2 || teamResult.rows.length < 2) {
-      console.log("");
-      console.log("❌ UID kolonları eksik! Supabase migration çalıştırılmalı.");
-      console.log("   SUPABASE_ADD_UID_COLUMNS.sql dosyasını Supabase SQL Editor'de çalıştır.");
+      console.log('');
+      console.log('❌ UID kolonları eksik! Supabase migration çalıştırılmalı.');
+      console.log('   SUPABASE_ADD_UID_COLUMNS.sql dosyasını Supabase SQL Editor'de çalıştır.');
     } else {
-      console.log("");
-      console.log("✅ UID kolonları mevcut.");
+      console.log('');
+      console.log('✅ UID kolonları mevcut.');
     }
     
     process.exit(0);
   } catch (error) {
-    console.error("Error:", error.message);
+    console.error('Error:', error.message);
     process.exit(1);
   }
 }
 
 checkUidColumns();
-'
+"
 echo ""
 
 # 2. Bootstrap başlangıç logları
@@ -75,9 +65,9 @@ echo ""
 
 # 4. Database competitions count
 echo "📊 Database Competitions Count:"
-node -e '
-const { Pool } = require("pg");
-require("dotenv").config();
+node -e "
+const { Pool } = require('pg');
+require('dotenv').config();
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -90,17 +80,17 @@ const pool = new Pool({
 
 async function checkCompetitions() {
   try {
-    const result = await pool.query("SELECT COUNT(*) as c FROM ts_competitions");
-    console.log("ts_competitions:", result.rows[0].c);
+    const result = await pool.query('SELECT COUNT(*) as c FROM ts_competitions');
+    console.log('ts_competitions:', result.rows[0].c);
     process.exit(0);
   } catch (error) {
-    console.error("Error:", error.message);
+    console.error('Error:', error.message);
     process.exit(1);
   }
 }
 
 checkCompetitions();
-'
+"
 echo ""
 
 # 5. Son 30 log satırı (genel durum)
