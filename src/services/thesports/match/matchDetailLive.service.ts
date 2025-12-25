@@ -322,7 +322,17 @@ export class MatchDetailLiveService {
 
     // Status 4 (SECOND_HALF)
     if (statusId === 4) {
-      if (secondHalfKickoffTs === null) return null;
+      if (secondHalfKickoffTs === null) {
+        // CRITICAL FIX: If second_half_kickoff_ts is NULL but first_half_kickoff_ts exists,
+        // estimate second half start time (typically 15 minutes after first half ends)
+        // First half = 45 minutes, half-time break = 15 minutes, so second half starts ~60 minutes after first half kickoff
+        if (firstHalfKickoffTs !== null) {
+          const estimatedSecondHalfStart = firstHalfKickoffTs + (45 * 60) + (15 * 60); // 45 min first half + 15 min break
+          const calculated = 45 + Math.floor((nowTs - estimatedSecondHalfStart) / 60) + 1;
+          return Math.max(calculated, 46); // Clamp min 46
+        }
+        return null;
+      }
       const calculated = 45 + Math.floor((nowTs - secondHalfKickoffTs) / 60) + 1;
       return Math.max(calculated, 46); // Clamp min 46
     }
