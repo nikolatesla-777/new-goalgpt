@@ -25,6 +25,7 @@ export class MatchSyncWorker {
   private isRunning = false;
   private cronJob: cron.ScheduledTask | null = null;
   private liveInterval: NodeJS.Timeout | null = null;
+  private secondHalfInterval: NodeJS.Timeout | null = null;
   private halfTimeInterval: NodeJS.Timeout | null = null;
 
   // LIVE reconcile queue (dedup) + backpressure controls
@@ -41,6 +42,8 @@ export class MatchSyncWorker {
   private readonly LIVE_STATUS_IDS = [2, 4, 5];
   // HALF_TIME is special: minute should not "run", but status/score can still change.
   private readonly HALFTIME_STATUS_IDS = [3];
+  // SECOND_HALF matches need more frequent checks for END transition (FT detection)
+  private readonly SECOND_HALF_STATUS_IDS = [4];
 
   constructor(client: TheSportsClient) {
     // Initialize MatchSyncService for RecentSyncService
