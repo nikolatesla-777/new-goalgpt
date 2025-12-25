@@ -50,6 +50,8 @@ export class MatchMinuteWorker {
             first_half_kickoff_ts,
             second_half_kickoff_ts,
             overtime_kickoff_ts,
+            live_kickoff_time,
+            match_time,
             minute
           FROM ts_matches
           WHERE status_id IN (2, 3, 4, 5, 7)
@@ -71,7 +73,12 @@ export class MatchMinuteWorker {
         for (const match of matches) {
           const matchId = match.external_id;
           const statusId = match.status_id;
-          const firstHalfKickoffTs = match.first_half_kickoff_ts ? Number(match.first_half_kickoff_ts) : null;
+
+          // FALLBACK LOGIC: Use first_half_kickoff_ts, else live_kickoff_time, else match_time
+          const firstHalfKickoffTs = match.first_half_kickoff_ts
+            ? Number(match.first_half_kickoff_ts)
+            : (match.live_kickoff_time ? Number(match.live_kickoff_time) : (match.match_time ? Number(match.match_time) : null));
+
           const secondHalfKickoffTs = match.second_half_kickoff_ts ? Number(match.second_half_kickoff_ts) : null;
           const overtimeKickoffTs = match.overtime_kickoff_ts ? Number(match.overtime_kickoff_ts) : null;
           const existingMinute = match.minute !== null ? Number(match.minute) : null;
@@ -131,34 +138,28 @@ export class MatchMinuteWorker {
 
   /**
    * Start the worker
-   * DISABLED: Minute updates now come only from WebSocket/detail_live
-   * This worker previously calculated minutes from kickoff timestamps every 30 seconds.
-   * Now minutes are provider-authoritative (from /match/detail_live endpoint).
+   * Calculates minutes from kickoff timestamps every 30 seconds.
+   * Fallback when WebSocket/detail_live is unavailable.
    */
   start(): void {
-    logger.warn('[MinuteEngine] DISABLED: Minute updates now come only from WebSocket/detail_live');
-    logger.warn('[MinuteEngine] MatchMinuteWorker.start() called but worker is disabled');
-    logEvent('info', 'worker.disabled', {
-      worker: 'MatchMinuteWorker',
-      reason: 'minutes_from_websocket_detail_live_only',
-    });
-    return; // Worker disabled - minutes come from WebSocket/detail_live only
+    if (this.intervalId) {
+      logger.warn('Match minute worker already started');
+      return;
+    }
 
-    // OLD CODE (commented out - minutes now come from provider):
-    // if (this.intervalId) {
-    //   logger.warn('Match minute worker already started');
-    //   return;
-    // }
-    // // Run immediately on start
-    // void this.tick();
-    // // Then run every 30 seconds
-    // this.intervalId = setInterval(() => {
-    //   void this.tick();
-    // }, 30000);
-    // logEvent('info', 'worker.started', {
-    //   worker: 'MatchMinuteWorker',
-    //   interval_sec: 30,
-    // });
+    logger.info('[MinuteEngine] ENABLED: Calculating minutes from kickoff timestamps');
+    logEvent('info', 'worker.started', {
+      worker: 'MatchMinuteWorker',
+      interval_sec: 30,
+    });
+
+    // Run immediately on start
+    void this.tick();
+
+    // Then run every 30 seconds
+    this.intervalId = setInterval(() => {
+      void this.tick();
+    }, 30000);
   }
 
   /**
