@@ -79,25 +79,8 @@ async function checkDbMinute() {
         console.log(`   Verified: minute = ${verifyResult.rows[0].minute}`);
       } else if (Math.abs(match.minute - clamped) > 2) {
         console.log(`⚠️  WARNING: Database minute (${match.minute}) differs from calculated (${clamped}) by more than 2 minutes`);
-        console.log(`   → Fix: Updating minute to ${clamped}`);
-        
-        // Fix it
-        await client.query(
-          `UPDATE ts_matches 
-           SET minute = $1, updated_at = NOW() 
-           WHERE external_id = $2`,
-          [clamped, match.external_id]
-        );
-        
-        console.log(`   ✅ Fixed: Set minute to ${clamped}`);
-        
-        // Verify
-        const verifyResult = await client.query(
-          `SELECT minute FROM ts_matches WHERE external_id = $1`,
-          [match.external_id]
-        );
-        
-        console.log(`   Verified: minute = ${verifyResult.rows[0].minute}`);
+        console.log(`   → Fix: Run reconcileMatchToDatabase to update minute from provider`);
+        console.log(`   → DO NOT manually update minute - it must come from provider/reconcile`);
       } else {
         console.log(`✅ Database minute (${match.minute}) matches calculated (${clamped})`);
       }
