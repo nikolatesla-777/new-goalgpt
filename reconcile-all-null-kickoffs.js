@@ -105,10 +105,23 @@ async function reconcileAllNullKickoffs() {
         }
         
         const matchData = response.results[0];
-        const statusId = matchData.status_id || matchData.status;
         const score = matchData.score;
         
-        // Extract kickoff time from score array
+        // CRITICAL FIX: Parse status from score array format [match_id, status_id, home_scores[], away_scores[], kickoff_ts, ...]
+        let statusId = null;
+        if (Array.isArray(score) && score.length >= 2 && typeof score[1] === 'number') {
+          statusId = score[1];
+        } else {
+          statusId = matchData.status_id || matchData.status;
+        }
+        
+        // If status is still undefined, use database status
+        if (statusId === null || statusId === undefined) {
+          statusId = match.status_id;
+          console.log(`   ⚠️  Provider status undefined, using DB status: ${statusId}`);
+        }
+        
+        // Extract kickoff time from score array (index 4)
         let kickoffTime = null;
         if (Array.isArray(score) && score.length >= 5 && typeof score[4] === 'number') {
           kickoffTime = score[4];
