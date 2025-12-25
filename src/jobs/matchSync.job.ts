@@ -185,6 +185,13 @@ export class MatchSyncWorker {
       this.reconcileLiveMatches().catch(err => logger.error('[LiveReconcile] enqueue interval error:', err));
     }, 30000);
 
+    // Tier-1.5 reconcile: enqueue SECOND_HALF matches every 15 seconds (more frequent for END/FT detection)
+    // CRITICAL: Second half matches can finish at any time, need frequent checks for status 8 (END)
+    this.secondHalfInterval = setInterval(() => {
+      this.enqueueMatchesForReconcile(this.SECOND_HALF_STATUS_IDS, 'SecondHalfReconcile', 500)
+        .catch(err => logger.error('[SecondHalfReconcile] enqueue interval error:', err));
+    }, 15000); // Every 15 seconds for faster END detection
+
     // Tier-2 reconcile: enqueue HALF_TIME matches less frequently (status can change, but minute must not "run")
     this.halfTimeInterval = setInterval(() => {
       this.enqueueMatchesForReconcile(this.HALFTIME_STATUS_IDS, 'HalfTimeReconcile', 500)
@@ -220,6 +227,12 @@ export class MatchSyncWorker {
       clearInterval(this.liveInterval);
       this.liveInterval = null;
       logger.info('Live reconcile interval stopped');
+    }
+
+    if (this.secondHalfInterval) {
+      clearInterval(this.secondHalfInterval);
+      this.secondHalfInterval = null;
+      logger.info('Second half reconcile interval stopped');
     }
 
     if (this.liveTickInterval) {
