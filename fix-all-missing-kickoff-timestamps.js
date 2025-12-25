@@ -139,14 +139,17 @@ async function fixAllMissingKickoffTimestamps() {
         // Set second_half_kickoff_ts if NULL and status requires it
         if ((match.status_id === 4 || match.status_id === 5 || match.status_id === 7) && match.second_half_kickoff_ts === null) {
           if (providerKickoffTs && providerKickoffTs > 0) {
+            secondHalfKickoffValue = providerKickoffTs;
             updates.push(`second_half_kickoff_ts = $${paramIndex++}`);
             values.push(providerKickoffTs);
           } else {
             // Estimate: match_time + 60 minutes (45 min first half + 15 min halftime)
-            const estimated = match.match_time + (60 * 60);
+            secondHalfKickoffValue = match.match_time + (60 * 60);
             updates.push(`second_half_kickoff_ts = $${paramIndex++}`);
-            values.push(estimated);
+            values.push(secondHalfKickoffValue);
           }
+        } else if (match.second_half_kickoff_ts) {
+          secondHalfKickoffValue = match.second_half_kickoff_ts;
         }
         
         // Set overtime_kickoff_ts if NULL and status requires it
@@ -174,11 +177,8 @@ async function fixAllMissingKickoffTimestamps() {
           calculatedMinute = Math.min(calculatedMinute, 45);
         } else if (match.status_id === 3) {
           calculatedMinute = 45; // Half-time
-        } else if (match.status_id === 4 && (updates.some(u => u.includes('second_half_kickoff_ts')) || match.second_half_kickoff_ts)) {
-          const secondHalfKickoff = updates.some(u => u.includes('second_half_kickoff_ts'))
-            ? (providerKickoffTs || (match.match_time + (60 * 60)))
-            : match.second_half_kickoff_ts;
-          calculatedMinute = 45 + Math.floor((now - secondHalfKickoff) / 60) + 1;
+        } else if (match.status_id === 4 && secondHalfKickoffValue) {
+          calculatedMinute = 45 + Math.floor((now - secondHalfKickoffValue) / 60) + 1;
           calculatedMinute = Math.max(calculatedMinute, 46);
         } else if (match.status_id === 5 && (updates.some(u => u.includes('overtime_kickoff_ts')) || match.overtime_kickoff_ts)) {
           const overtimeKickoff = updates.some(u => u.includes('overtime_kickoff_ts'))
