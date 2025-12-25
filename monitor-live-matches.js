@@ -16,8 +16,6 @@ async function monitorLiveMatches() {
     password: process.env.DB_PASSWORD,
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   });
-
-  const client = await pool.connect();
   
   // Clear screen
   console.clear();
@@ -25,8 +23,10 @@ async function monitorLiveMatches() {
   console.log('Press Ctrl+C to exit\n');
   
   const monitorInterval = setInterval(async () => {
+    let tempClient = null;
     try {
-      const result = await client.query(
+      tempClient = await pool.connect();
+      const result = await tempClient.query(
         `SELECT 
           m.external_id,
           m.status_id,
@@ -125,16 +125,22 @@ async function monitorLiveMatches() {
       console.log('   - Minute should increase every ~60 seconds for live matches');
       console.log('   - Press Ctrl+C to exit\n');
       
-    } catch (error) {
-      console.error('\n❌ Error:', error.message);
-    }
-  }, 5000); // Update every 5 seconds
+      } catch (error) {
+        console.error('\n❌ Error:', error.message);
+      } finally {
+        if (tempClient) {
+          tempClient.release();
+        }
+      }
+    }, 5000); // Update every 5 seconds
   
   // Handle Ctrl+C
   process.on('SIGINT', () => {
     clearInterval(monitorInterval);
     console.log('\n\n👋 Monitoring stopped. Goodbye!\n');
-    client.release();
+    if (client) {
+      client.release();
+    }
     pool.end();
     process.exit(0);
   });
