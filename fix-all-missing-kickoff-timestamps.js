@@ -3,6 +3,7 @@
  * This ensures minute can be calculated for all live matches
  */
 const { Pool } = require('pg');
+const https = require('https');
 require('dotenv').config();
 
 // Import the service (we'll need to use TypeScript compilation or create a JS version)
@@ -52,7 +53,6 @@ async function fixAllMissingKickoffTimestamps() {
     
     console.log(`📊 Found ${result.rows.length} match(es) with NULL kickoff timestamps\n`);
     
-    const https = require('https');
     const user = process.env.THESPORTS_API_USER || '';
     const secret = process.env.THESPORTS_API_SECRET || '';
     
