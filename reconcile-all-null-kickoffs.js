@@ -36,7 +36,11 @@ async function reconcileAllNullKickoffs() {
         second_half_kickoff_ts
        FROM ts_matches
        WHERE status_id IN (2, 3, 4, 5, 7)
-       AND (first_half_kickoff_ts IS NULL OR (status_id = 4 AND second_half_kickoff_ts IS NULL))
+       AND (
+         first_half_kickoff_ts IS NULL 
+         OR (status_id = 4 AND second_half_kickoff_ts IS NULL)
+         OR minute IS NULL
+       )
        ORDER BY match_time DESC
        LIMIT 20`
     );
@@ -193,6 +197,27 @@ async function reconcileAllNullKickoffs() {
               [calculatedMinute, matchId]
             );
             console.log(`   ✅ Set minute = ${calculatedMinute} (calculated from kickoff_ts)`);
+          }
+        } else if (match.minute === null) {
+          // Minute is NULL but kickoff timestamps exist - calculate from existing timestamps
+          let calculatedMinute = null;
+          
+          if (statusId === 2 && match.first_half_kickoff_ts) {
+            calculatedMinute = Math.floor((now - match.first_half_kickoff_ts) / 60) + 1;
+            calculatedMinute = Math.min(calculatedMinute, 45);
+          } else if (statusId === 3) {
+            calculatedMinute = 45;
+          } else if (statusId === 4 && match.second_half_kickoff_ts) {
+            calculatedMinute = 45 + Math.floor((now - match.second_half_kickoff_ts) / 60) + 1;
+            calculatedMinute = Math.max(calculatedMinute, 46);
+          }
+          
+          if (calculatedMinute !== null) {
+            await client.query(
+              `UPDATE ts_matches SET minute = $1 WHERE external_id = $2`,
+              [calculatedMinute, matchId]
+            );
+            console.log(`   ✅ Set minute = ${calculatedMinute} (calculated from existing kickoff_ts)`);
           }
           
           successCount++;
