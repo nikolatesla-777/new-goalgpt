@@ -7,8 +7,9 @@ const http = require('http');
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
-const API_KEY = process.env.THESPORTS_API_KEY;
+const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com/v1/football';
+const API_USER = process.env.THESPORTS_API_USER || process.env.THESPORTS_USER;
+const API_SECRET = process.env.THESPORTS_API_SECRET || process.env.THESPORTS_SECRET;
 
 async function reconcileAllNullKickoffs() {
   const pool = new Pool({
@@ -56,14 +57,19 @@ async function reconcileAllNullKickoffs() {
       
       try {
         // Call /match/detail_live endpoint
-        const url = `${API_URL}/v1/football/match/detail_live?match_id=${matchId}`;
+        const queryParams = new URLSearchParams({
+          user: API_USER,
+          secret: API_SECRET,
+          match_id: matchId
+        });
+        const url = `${API_URL}/match/detail_live?${queryParams.toString()}`;
         const protocol = url.startsWith('https') ? https : http;
         
         const response = await new Promise((resolve, reject) => {
           const req = protocol.get(url, {
             headers: {
-              'X-RapidAPI-Key': API_KEY,
-              'X-RapidAPI-Host': 'api.thesports.com'
+              'Accept': 'application/json',
+              'User-Agent': 'GoalGPT/1.0'
             }
           }, (res) => {
             let data = '';
