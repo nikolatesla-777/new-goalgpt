@@ -20,7 +20,8 @@ async function debugMatch() {
   try {
     console.log(`\n🔍 Debugging match: ${matchId}\n`);
     
-    const result = await client.query(
+    // Try to find match by external_id
+    let result = await client.query(
       `SELECT 
         external_id,
         status_id,
@@ -37,13 +38,42 @@ async function debugMatch() {
       [matchId]
     );
     
+    // If not found, try to find by partial match (in case ID is truncated)
     if (result.rows.length === 0) {
-      console.log('❌ Match not found');
-      return;
+      console.log(`⚠️  Match not found with exact ID: ${matchId}`);
+      console.log(`   Trying to find matches with similar ID...\n`);
+      
+      result = await client.query(
+        `SELECT 
+          external_id,
+          status_id,
+          minute,
+          match_time,
+          first_half_kickoff_ts,
+          second_half_kickoff_ts,
+          overtime_kickoff_ts,
+          live_kickoff_time,
+          provider_update_time,
+          updated_at
+         FROM ts_matches
+         WHERE external_id LIKE $1
+         ORDER BY match_time DESC
+         LIMIT 5`,
+        [`${matchId}%`]
+      );
+      
+      if (result.rows.length === 0) {
+        console.log('❌ Match not found even with partial match');
+        console.log(`   Searched for: ${matchId}`);
+        return;
+      } else {
+        console.log(`✅ Found ${result.rows.length} match(es) with similar ID. Using first match.\n`);
+      }
     }
     
     const match = result.rows[0];
     console.log('📊 Database State:');
+    console.log(`   External ID: ${match.external_id}`);
     console.log(`   Status: ${match.status_id}`);
     console.log(`   Minute: ${match.minute}`);
     console.log(`   Match Time: ${new Date(match.match_time * 1000).toISOString()}`);

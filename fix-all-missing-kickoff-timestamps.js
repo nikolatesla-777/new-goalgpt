@@ -19,7 +19,7 @@ async function fixAllMissingKickoffTimestamps() {
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   });
 
-  const client = await pool.connect();
+  // Don't use a single client for the entire operation - get fresh connections per match
   try {
     console.log('\n🔍 Finding matches with NULL kickoff timestamps or NULL minute...\n');
     
@@ -50,7 +50,10 @@ async function fixAllMissingKickoffTimestamps() {
          )
        ORDER BY match_time DESC
        LIMIT 500`
-    );
+      );
+    } finally {
+      queryClient.release();
+    }
     
     if (result.rows.length === 0) {
       console.log('✅ No matches found with NULL kickoff timestamps or NULL minute');
@@ -66,13 +69,36 @@ async function fixAllMissingKickoffTimestamps() {
     let errors = 0;
     let skipped = 0;
     
-    for (let i = 0; i < result.rows.length; i++) {
+      for (let i = 0; i < result.rows.length; i++) {
       const match = result.rows[i];
       const matchId = match.external_id;
       
-      console.log(`[${i + 1}/${result.rows.length}] Processing: ${matchId.substring(0, 12)}... (status: ${match.status_id})`);
+      console.log(`[${i + 1}/${result.rows.length}] Processing: ${matchId.substring(0, 12)}... (status: ${match.status_id}, minute: ${match.minute})`);
       
+      // Get a fresh connection for each match to avoid connection errors
+      let tempClient = null;
       try {
+        tempClient = await pool.connect();
+        // If minute is NULL but kickoff timestamps exist, calculate minute directly
+        if (match.minute === null && match.status_id === 4 && match.second_half_kickoff_ts) {
+          const now = Math.floor(Date.now() / 1000);
+          const calculatedMinute = 45 + Math.floor((now - match.second_half_kickoff_ts) / 60) + 1;
+          const clampedMinute = Math.max(calculatedMinute, 46);
+          
+          await tempClient.query(
+            `UPDATE ts_matches 
+             SET minute = $1, updated_at = NOW() 
+             WHERE external_id = $2`,
+            [clampedMinute, matchId]
+          );
+          
+          console.log(`  ✅ Calculated and set minute=${clampedMinute} from second_half_kickoff_ts`);
+          fixed++;
+          if (tempClient) tempClient.release();
+          await sleep(200);
+          continue;
+        }
+        
         // Get provider data
         const detailUrl = new URL('/v1/football/match/detail_live', 'https://api.thesports.com');
         detailUrl.searchParams.set('user', user);
@@ -228,6 +254,10 @@ async function fixAllMissingKickoffTimestamps() {
       } catch (error) {
         console.log(`  ❌ Error: ${error.message}`);
         errors++;
+      } finally {
+        if (tempClient) {
+          tempClient.release();
+        }
       }
     }
     
@@ -241,9 +271,6 @@ async function fixAllMissingKickoffTimestamps() {
     console.error('\n❌ Error:', error.message);
     console.error(error.stack);
   } finally {
-    if (client) {
-      client.release();
-    }
     await pool.end();
   }
 }
