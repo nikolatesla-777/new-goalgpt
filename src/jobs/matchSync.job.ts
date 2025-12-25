@@ -25,6 +25,7 @@ export class MatchSyncWorker {
   private isRunning = false;
   private cronJob: cron.ScheduledTask | null = null;
   private liveInterval: NodeJS.Timeout | null = null;
+  private firstHalfInterval: NodeJS.Timeout | null = null;
   private secondHalfInterval: NodeJS.Timeout | null = null;
   private halfTimeInterval: NodeJS.Timeout | null = null;
 
@@ -44,6 +45,8 @@ export class MatchSyncWorker {
   private readonly HALFTIME_STATUS_IDS = [3];
   // SECOND_HALF matches need more frequent checks for END transition (FT detection)
   private readonly SECOND_HALF_STATUS_IDS = [4];
+  // FIRST_HALF matches need frequent checks for HALF_TIME transition (status 2 → 3)
+  private readonly FIRST_HALF_STATUS_IDS = [2];
 
   constructor(client: TheSportsClient) {
     // Initialize MatchSyncService for RecentSyncService
@@ -185,18 +188,26 @@ export class MatchSyncWorker {
       this.reconcileLiveMatches().catch(err => logger.error('[LiveReconcile] enqueue interval error:', err));
     }, 30000);
 
-    // Tier-1.5 reconcile: enqueue SECOND_HALF matches every 15 seconds (more frequent for END/FT detection)
+    // Tier-1.5 reconcile: enqueue FIRST_HALF matches every 20 seconds (for HALF_TIME transition detection)
+    // CRITICAL: First half matches can transition to HALF_TIME (status 2 → 3) at any time around 45 minutes
+    this.firstHalfInterval = setInterval(() => {
+      this.enqueueMatchesForReconcile(this.FIRST_HALF_STATUS_IDS, 'FirstHalfReconcile', 500)
+        .catch(err => logger.error('[FirstHalfReconcile] enqueue interval error:', err));
+    }, 20000); // Every 20 seconds for HALF_TIME transition detection
+
+    // Tier-1.6 reconcile: enqueue SECOND_HALF matches every 15 seconds (more frequent for END/FT detection)
     // CRITICAL: Second half matches can finish at any time, need frequent checks for status 8 (END)
     this.secondHalfInterval = setInterval(() => {
       this.enqueueMatchesForReconcile(this.SECOND_HALF_STATUS_IDS, 'SecondHalfReconcile', 500)
         .catch(err => logger.error('[SecondHalfReconcile] enqueue interval error:', err));
     }, 15000); // Every 15 seconds for faster END detection
 
-    // Tier-2 reconcile: enqueue HALF_TIME matches less frequently (status can change, but minute must not "run")
+    // Tier-2 reconcile: enqueue HALF_TIME matches every 30 seconds (status can change to SECOND_HALF)
+    // CRITICAL: HALF_TIME matches can transition to SECOND_HALF (status 3 → 4) quickly
     this.halfTimeInterval = setInterval(() => {
       this.enqueueMatchesForReconcile(this.HALFTIME_STATUS_IDS, 'HalfTimeReconcile', 500)
         .catch(err => logger.error('[HalfTimeReconcile] enqueue interval error:', err));
-    }, 120000);
+    }, 30000); // Every 30 seconds (reduced from 120s for faster SECOND_HALF transition)
 
     // Process reconcile queue every 1 second (backpressure-controlled)
     this.liveTickInterval = setInterval(() => {

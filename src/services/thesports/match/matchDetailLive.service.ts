@@ -476,23 +476,40 @@ export class MatchDetailLiveService {
       const existingEventTime = existing.last_event_ts;
       const existingStatusId = existing.status_id;
 
-      // Check freshness (idempotent guard)
-      if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
-        // Provider supplied update_time
-        if (existingProviderTime !== null && incomingProviderUpdateTime <= existingProviderTime) {
-          logger.debug(
-            `Skipping stale update for ${match_id} (provider time: ${incomingProviderUpdateTime} <= ${existingProviderTime})`
-          );
-          return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
+      // CRITICAL FIX: Allow status transitions even if timestamps suggest stale data
+      // Status transitions (e.g., 1→2, 2→3, 3→4) are critical and should always be applied
+      const isStatusTransition = live.statusId !== null && live.statusId !== existingStatusId;
+      const isCriticalTransition = 
+        (existingStatusId === 1 && live.statusId === 2) || // NOT_STARTED → FIRST_HALF
+        (existingStatusId === 2 && live.statusId === 3) || // FIRST_HALF → HALF_TIME
+        (existingStatusId === 3 && live.statusId === 4) || // HALF_TIME → SECOND_HALF
+        (existingStatusId === 4 && live.statusId === 8) || // SECOND_HALF → END
+        ([2, 3, 4, 5, 7].includes(existingStatusId) && live.statusId === 8); // Any LIVE → END
+
+      // Check freshness (idempotent guard) - but allow critical status transitions
+      if (!isCriticalTransition) {
+        if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
+          // Provider supplied update_time
+          if (existingProviderTime !== null && incomingProviderUpdateTime <= existingProviderTime) {
+            logger.debug(
+              `Skipping stale update for ${match_id} (provider time: ${incomingProviderUpdateTime} <= ${existingProviderTime})`
+            );
+            return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
+          }
+        } else {
+          // No provider update_time, use event time comparison
+          if (existingEventTime !== null && ingestionTs <= existingEventTime + 5) {
+            logger.debug(
+              `Skipping stale update for ${match_id} (event time: ${ingestionTs} <= ${existingEventTime + 5})`
+            );
+            return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
+          }
         }
       } else {
-        // No provider update_time, use event time comparison
-        if (existingEventTime !== null && ingestionTs <= existingEventTime + 5) {
-          logger.debug(
-            `Skipping stale update for ${match_id} (event time: ${ingestionTs} <= ${existingEventTime + 5})`
-          );
-          return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
-        }
+        logger.info(
+          `[DetailLive] CRITICAL TRANSITION detected for ${match_id}: ${existingStatusId} → ${live.statusId}. ` +
+          `Allowing update despite timestamp check.`
+        );
       }
 
       // Calculate provider_update_time to write (max of existing and incoming)
