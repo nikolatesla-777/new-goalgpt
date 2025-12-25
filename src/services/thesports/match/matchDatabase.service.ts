@@ -292,6 +292,11 @@ export class MatchDatabaseService {
           }
         }
 
+        // CRITICAL FIX: Generate minute_text from minute and status_id
+        const minute = (row.minute !== null && row.minute !== undefined) ? Number(row.minute) : null;
+        const { generateMinuteText } = require('../../utils/matchMinuteText');
+        const minuteText = generateMinuteText(minute, validatedStatus);
+
         return {
           id: row.id,
           competition_id: row.competition_id,
@@ -299,7 +304,8 @@ export class MatchDatabaseService {
           match_time: row.match_time,
           status_id: validatedStatus,
           status: validatedStatus,
-          minute: (row.minute !== null && row.minute !== undefined) ? Number(row.minute) : null, // CRITICAL: Include minute field
+          minute: minute, // CRITICAL: Include minute field
+          minute_text: minuteText, // CRITICAL FIX: Include minute_text field (Phase 4-4 contract)
           home_team_id: row.home_team_id,
           away_team_id: row.away_team_id,
           home_score: (row.home_score ?? null),
