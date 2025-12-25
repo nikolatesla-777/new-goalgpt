@@ -173,6 +173,15 @@ export class ProactiveMatchStatusCheckWorker {
                       const minuteChanged = diaryMinute !== null && diaryMinute !== existing.minute;
                       
                       if (statusChanged || shouldForceUpdate || scoreChanged || minuteChanged) {
+                        // CRITICAL FIX: If status is 2, 3, 4, 5, 7 and first_half_kickoff_ts is NULL, set it from match_time
+                        const needsKickoffTs = (diaryStatusId === 2 || diaryStatusId === 3 || diaryStatusId === 4 || diaryStatusId === 5 || diaryStatusId === 7);
+                        const existingKickoffResult = await dbClient.query(
+                          `SELECT first_half_kickoff_ts FROM ts_matches WHERE external_id = $1`,
+                          [match.external_id]
+                        );
+                        const existingKickoffTs = existingKickoffResult.rows[0]?.first_half_kickoff_ts;
+                        const shouldSetKickoffTs = needsKickoffTs && existingKickoffTs === null;
+                        
                         const updateQuery = `
                           UPDATE ts_matches
                           SET 
@@ -180,6 +189,7 @@ export class ProactiveMatchStatusCheckWorker {
                             home_score_regular = COALESCE($2, home_score_regular),
                             away_score_regular = COALESCE($3, away_score_regular),
                             minute = COALESCE($4, minute),
+                            ${shouldSetKickoffTs ? 'first_half_kickoff_ts = $8,' : ''}
                             provider_update_time = GREATEST(COALESCE(provider_update_time, 0)::BIGINT, $5::BIGINT),
                             last_event_ts = $6::BIGINT,
                             updated_at = NOW()
@@ -193,7 +203,7 @@ export class ProactiveMatchStatusCheckWorker {
                               OR minute IS DISTINCT FROM $4
                             )
                         `;
-                        const updateResult = await dbClient.query(updateQuery, [
+                        const updateParams = [
                           diaryStatusId,
                           diaryHomeScore,
                           diaryAwayScore,
@@ -201,7 +211,12 @@ export class ProactiveMatchStatusCheckWorker {
                           ingestionTs,
                           ingestionTs,
                           match.external_id,
-                        ]);
+                        ];
+                        if (shouldSetKickoffTs) {
+                          updateParams.push(match.match_time); // Use match_time for first_half_kickoff_ts
+                        }
+                        
+                        const updateResult = await dbClient.query(updateQuery, updateParams);
                         
                         if (updateResult.rowCount > 0) {
                           reconcileResult = { updated: true, rowCount: updateResult.rowCount, statusId: diaryStatusId, score: null };
