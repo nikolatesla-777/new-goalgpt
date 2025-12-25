@@ -614,11 +614,19 @@ export class MatchDetailLiveService {
         // CRITICAL FIX: Don't check existingStatusId - provider says SECOND_HALF, set it
         // If we missed HALF_TIME transition (status 3), we still need to set second_half_kickoff_ts
         if (live.statusId === 4 && existing.second_half_kickoff_ts === null) {
+          // CRITICAL FIX: If liveKickoffTime is NULL, estimate second half start time
+          // Second half typically starts 60 minutes after first half kickoff (45 min first half + 15 min break)
+          let secondHalfKickoffValue = kickoffTimeToUse;
+          if (live.liveKickoffTime === null && existing.first_half_kickoff_ts !== null) {
+            // Estimate: first half kickoff + 60 minutes (45 min first half + 15 min break)
+            secondHalfKickoffValue = existing.first_half_kickoff_ts + (60 * 60);
+            logger.info(`[KickoffTS] Estimating second_half_kickoff_ts=${secondHalfKickoffValue} from first_half_kickoff_ts=${existing.first_half_kickoff_ts} for match_id=${match_id}`);
+          }
           setParts.push(`second_half_kickoff_ts = $${i++}`);
-          values.push(kickoffTimeToUse);
-          secondHalfKickoffToUse = kickoffTimeToUse; // Track the new value
-          const source = live.liveKickoffTime !== null ? 'liveKickoff' : 'now';
-          logger.info(`[KickoffTS] set second_half_kickoff_ts=${kickoffTimeToUse} match_id=${match_id} source=${source} existing_status=${existingStatusId}`);
+          values.push(secondHalfKickoffValue);
+          secondHalfKickoffToUse = secondHalfKickoffValue; // Track the new value
+          const source = live.liveKickoffTime !== null ? 'liveKickoff' : (existing.first_half_kickoff_ts !== null ? 'estimated_from_first_half' : 'now');
+          logger.info(`[KickoffTS] set second_half_kickoff_ts=${secondHalfKickoffValue} match_id=${match_id} source=${source} existing_status=${existingStatusId}`);
         } else if (live.statusId === 4 && existing.second_half_kickoff_ts !== null) {
           logger.debug(`[KickoffTS] skip (already set) second_half_kickoff_ts match_id=${match_id}`);
         }
