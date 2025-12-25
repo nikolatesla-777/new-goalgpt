@@ -21,7 +21,7 @@ async function fixAllMissingKickoffTimestamps() {
 
   const client = await pool.connect();
   try {
-    console.log('\n🔍 Finding matches with NULL kickoff timestamps...\n');
+    console.log('\n🔍 Finding matches with NULL kickoff timestamps or NULL minute...\n');
     
     // Find all live matches (status 2, 3, 4, 5, 7) with NULL kickoff timestamps OR NULL minute
     const result = await client.query(
@@ -53,11 +53,11 @@ async function fixAllMissingKickoffTimestamps() {
     );
     
     if (result.rows.length === 0) {
-      console.log('✅ No matches found with NULL kickoff timestamps');
+      console.log('✅ No matches found with NULL kickoff timestamps or NULL minute');
       return;
     }
     
-    console.log(`📊 Found ${result.rows.length} match(es) with NULL kickoff timestamps\n`);
+    console.log(`📊 Found ${result.rows.length} match(es) with NULL kickoff timestamps or NULL minute\n`);
     
     const user = process.env.THESPORTS_API_USER || '';
     const secret = process.env.THESPORTS_API_SECRET || '';
@@ -241,7 +241,9 @@ async function fixAllMissingKickoffTimestamps() {
     console.error('\n❌ Error:', error.message);
     console.error(error.stack);
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
     await pool.end();
   }
 }
