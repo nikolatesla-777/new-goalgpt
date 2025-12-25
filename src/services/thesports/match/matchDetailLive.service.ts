@@ -105,8 +105,8 @@ export class MatchDetailLiveService {
       if (Array.isArray(r)) {
         if (matchId) {
           // CRITICAL FIX: Check multiple possible ID fields (id, match_id, external_id)
-          const found = r.find((item: any) => 
-            String(item?.id || '') === String(matchId) || 
+          const found = r.find((item: any) =>
+            String(item?.id || '') === String(matchId) ||
             String(item?.match_id || '') === String(matchId) ||
             String(item?.external_id || '') === String(matchId)
           );
@@ -124,36 +124,36 @@ export class MatchDetailLiveService {
       if (matchId && r[matchId]) return r[matchId];
 
       const keys = Object.keys(r);
-        if (keys.length === 1) {
-          const v = (r as any)[keys[0]];
-          if (Array.isArray(v)) {
-            if (matchId) {
-              // CRITICAL FIX: Check multiple possible ID fields (id, match_id, external_id)
-              const found = v.find((item: any) => 
-                String(item?.id || '') === String(matchId) || 
-                String(item?.match_id || '') === String(matchId) ||
-                String(item?.external_id || '') === String(matchId)
-              );
-              if (found) {
-                logger.debug(`[DetailLive] matched detail_live by id match_id=${matchId} (len=${v.length}, key=${keys[0]})`);
-                return found;
-              }
-              // CRITICAL: If matchId is not found in the array, return null instead of v[0]
-              logger.warn(`[DetailLive] match_id=${matchId} not found in detail_live results (len=${v.length}, key=${keys[0]}). Checked: id, match_id, external_id`);
-              return null;
+      if (keys.length === 1) {
+        const v = (r as any)[keys[0]];
+        if (Array.isArray(v)) {
+          if (matchId) {
+            // CRITICAL FIX: Check multiple possible ID fields (id, match_id, external_id)
+            const found = v.find((item: any) =>
+              String(item?.id || '') === String(matchId) ||
+              String(item?.match_id || '') === String(matchId) ||
+              String(item?.external_id || '') === String(matchId)
+            );
+            if (found) {
+              logger.debug(`[DetailLive] matched detail_live by id match_id=${matchId} (len=${v.length}, key=${keys[0]})`);
+              return found;
             }
+            // CRITICAL: If matchId is not found in the array, return null instead of v[0]
+            logger.warn(`[DetailLive] match_id=${matchId} not found in detail_live results (len=${v.length}, key=${keys[0]}). Checked: id, match_id, external_id`);
             return null;
           }
-          return v;
+          return null;
         }
+        return v;
+      }
 
       if (r['1']) {
         const v = r['1'];
         if (Array.isArray(v)) {
           if (matchId) {
             // CRITICAL FIX: Check multiple possible ID fields (id, match_id, external_id)
-            const found = v.find((item: any) => 
-              String(item?.id || '') === String(matchId) || 
+            const found = v.find((item: any) =>
+              String(item?.id || '') === String(matchId) ||
               String(item?.match_id || '') === String(matchId) ||
               String(item?.external_id || '') === String(matchId)
             );
@@ -193,7 +193,7 @@ export class MatchDetailLiveService {
     // CRITICAL FIX: Handle score array format: [match_id, status_id, home_scores[], away_scores[], update_time, ...]
     let homeScoreDisplay: number | null = null;
     let awayScoreDisplay: number | null = null;
-    
+
     if (Array.isArray(root?.score) && root.score.length >= 4) {
       // score[2] = home_scores array, score[3] = away_scores array
       // Index 0 of score array is regular score
@@ -205,7 +205,7 @@ export class MatchDetailLiveService {
         logger.debug(`[DetailLive] Extracted scores from score array format: ${homeScoreDisplay}-${awayScoreDisplay}`);
       }
     }
-    
+
     if (homeScoreDisplay === null) {
       homeScoreDisplay =
         (typeof root?.home_score === 'number' ? root.home_score : null) ??
@@ -214,7 +214,7 @@ export class MatchDetailLiveService {
         (typeof root?.match?.home_score === 'number' ? root.match.home_score : null) ??
         null;
     }
-    
+
     if (awayScoreDisplay === null) {
       awayScoreDisplay =
         (typeof root?.away_score === 'number' ? root.away_score : null) ??
@@ -424,13 +424,13 @@ export class MatchDetailLiveService {
       match_id,
       provider_update_time: providerUpdateTimeOverride !== null ? providerUpdateTimeOverride : undefined,
     });
-    
+
     const resp = await this.getMatchDetailLive({ match_id }, { forceRefresh: true });
     const live = this.extractLiveFields(resp, match_id);
 
     // CRITICAL FIX: Log when END status is detected but not extracted
     if (resp?.results && Array.isArray(resp.results)) {
-      const foundMatch = resp.results.find((m: any) => 
+      const foundMatch = resp.results.find((m: any) =>
         String(m?.id || m?.match_id) === String(match_id)
       );
       if (foundMatch) {
@@ -471,7 +471,7 @@ export class MatchDetailLiveService {
           `keys=${resp.results && typeof resp.results === 'object' ? Object.keys(resp.results).join(',') : 'N/A'}`
         );
       }
-      
+
       // If we have providerUpdateTimeOverride from data/update, we can still do a minimal update
       // (just provider_update_time and last_event_ts) to track that we processed this update
       if (providerUpdateTimeOverride !== null) {
@@ -515,7 +515,7 @@ export class MatchDetailLiveService {
       // CRITICAL FIX: Allow status transitions even if timestamps suggest stale data
       // Status transitions (e.g., 1→2, 2→3, 3→4) are critical and should always be applied
       const isStatusTransition = live.statusId !== null && live.statusId !== existingStatusId;
-      const isCriticalTransition = 
+      const isCriticalTransition =
         (existingStatusId === 1 && live.statusId === 2) || // NOT_STARTED → FIRST_HALF
         (existingStatusId === 2 && live.statusId === 3) || // FIRST_HALF → HALF_TIME
         (existingStatusId === 3 && live.statusId === 4) || // HALF_TIME → SECOND_HALF
@@ -578,13 +578,13 @@ export class MatchDetailLiveService {
       // Kickoff timestamp write-once (status transition based)
       // Use liveKickoffTime from provider if available, else use ingestion time as fallback
       const kickoffTimeToUse = live.liveKickoffTime !== null ? live.liveKickoffTime : ingestionTs;
-      
+
       // CRITICAL FIX: Track which kickoff timestamps we're setting in this update
       // This allows minute calculation to use the NEW values, not just existing ones
       let firstHalfKickoffToUse = existing.first_half_kickoff_ts;
       let secondHalfKickoffToUse = existing.second_half_kickoff_ts;
       let overtimeKickoffToUse = existing.overtime_kickoff_ts;
-      
+
       if (hasLiveData && live.statusId !== null) {
         // CRITICAL FIX: Set first_half_kickoff_ts for status 2, 3, 4, 5, 7 if NULL
         // This ensures minute engine can calculate minutes even if transition was missed
@@ -597,7 +597,7 @@ export class MatchDetailLiveService {
           // match_time is the scheduled start time, not the actual start time
           let finalKickoffTime: number;
           let source: string;
-          
+
           if (live.liveKickoffTime !== null) {
             finalKickoffTime = live.liveKickoffTime;
             source = 'liveKickoff';
@@ -616,7 +616,7 @@ export class MatchDetailLiveService {
             finalKickoffTime = matchTime;
             source = 'match_time_fallback';
           }
-          
+
           setParts.push(`first_half_kickoff_ts = $${i++}`);
           values.push(finalKickoffTime);
           firstHalfKickoffToUse = finalKickoffTime; // Track the new value for minute calculation
@@ -628,28 +628,31 @@ export class MatchDetailLiveService {
             logger.debug(`[KickoffTS] skip (already set) first_half_kickoff_ts match_id=${match_id}`);
           }
         }
-        
-        // Status 4 (SECOND_HALF): Set second_half_kickoff_ts if NULL
-        // CRITICAL FIX: Don't check existingStatusId - provider says SECOND_HALF, set it
-        // If we missed HALF_TIME transition (status 3), we still need to set second_half_kickoff_ts
-        if (live.statusId === 4 && existing.second_half_kickoff_ts === null) {
-          // CRITICAL FIX: If liveKickoffTime is NULL, estimate second half start time
-          // Second half typically starts 60 minutes after first half kickoff (45 min first half + 15 min break)
+
+        // Status 4 (SECOND_HALF): ALWAYS set second_half_kickoff_ts from provider
+        // CRITICAL: TheSports API sends NEW kickoff timestamp for second half in score[4]
+        // This value is DIFFERENT from first half - it's the actual second half start time
+        // We MUST update it every time for accurate minute calculation
+        if (hasLiveData && live.statusId === 4 && live.liveKickoffTime !== null) {
+          // Provider sent second half kickoff time - use it
+          setParts.push(`second_half_kickoff_ts = $${i++}`);
+          values.push(live.liveKickoffTime);
+          secondHalfKickoffToUse = live.liveKickoffTime;
+          logger.info(`[KickoffTS] set second_half_kickoff_ts=${live.liveKickoffTime} match_id=${match_id} source=provider_score_array status=${live.statusId}`);
+        } else if (live.statusId === 4 && existing.second_half_kickoff_ts === null) {
+          // Provider didn't send kickoff time, estimate from first half if available
           let secondHalfKickoffValue = kickoffTimeToUse;
-          if (live.liveKickoffTime === null && existing.first_half_kickoff_ts !== null) {
+          if (existing.first_half_kickoff_ts !== null) {
             // Estimate: first half kickoff + 60 minutes (45 min first half + 15 min break)
             secondHalfKickoffValue = existing.first_half_kickoff_ts + (60 * 60);
             logger.info(`[KickoffTS] Estimating second_half_kickoff_ts=${secondHalfKickoffValue} from first_half_kickoff_ts=${existing.first_half_kickoff_ts} for match_id=${match_id}`);
           }
           setParts.push(`second_half_kickoff_ts = $${i++}`);
           values.push(secondHalfKickoffValue);
-          secondHalfKickoffToUse = secondHalfKickoffValue; // Track the new value
-          const source = live.liveKickoffTime !== null ? 'liveKickoff' : (existing.first_half_kickoff_ts !== null ? 'estimated_from_first_half' : 'now');
-          logger.info(`[KickoffTS] set second_half_kickoff_ts=${secondHalfKickoffValue} match_id=${match_id} source=${source} existing_status=${existingStatusId}`);
-        } else if (live.statusId === 4 && existing.second_half_kickoff_ts !== null) {
-          logger.debug(`[KickoffTS] skip (already set) second_half_kickoff_ts match_id=${match_id}`);
+          secondHalfKickoffToUse = secondHalfKickoffValue;
+          logger.info(`[KickoffTS] set second_half_kickoff_ts=${secondHalfKickoffValue} match_id=${match_id} source=estimated existing_status=${existingStatusId}`);
         }
-        
+
         // Status 5 (OVERTIME): Set overtime_kickoff_ts if NULL
         // CRITICAL FIX: Don't check existingStatusId - provider says OVERTIME, set it
         // If we missed SECOND_HALF transition, we still need to set overtime_kickoff_ts
@@ -689,7 +692,7 @@ export class MatchDetailLiveService {
             effectiveFirstHalfKickoff = ingestionTs;
             logger.warn(`[DetailLive] first_half_kickoff_ts is NULL for status 2 match ${match_id}, using ingestionTs=${ingestionTs} for minute calculation`);
           }
-          
+
           const calculatedMinute = this.calculateMinuteFromKickoffs(
             live.statusId,
             effectiveFirstHalfKickoff,  // Use new value if we just set it, otherwise existing, or ingestionTs fallback
@@ -698,7 +701,7 @@ export class MatchDetailLiveService {
             existing.minute,
             ingestionTs
           );
-          
+
           if (calculatedMinute !== null) {
             setParts.push(`${this.minuteColumnName} = $${i++}`);
             values.push(calculatedMinute);
@@ -803,8 +806,8 @@ export class MatchDetailLiveService {
         'SELECT provider_update_time FROM ts_matches WHERE external_id = $1',
         [match_id]
       );
-      const providerUpdateTime = updatedRowResult.rows[0]?.provider_update_time 
-        ? Number(updatedRowResult.rows[0].provider_update_time) 
+      const providerUpdateTime = updatedRowResult.rows[0]?.provider_update_time
+        ? Number(updatedRowResult.rows[0].provider_update_time)
         : null;
 
       return {
