@@ -112,18 +112,22 @@ async function reconcileAllNullKickoffs() {
         const score = matchData.score;
         
         // CRITICAL FIX: Parse status from score array format [match_id, status_id, home_scores[], away_scores[], kickoff_ts, ...]
-        let statusId = null;
+        // Provider status is authoritative - use it, not database status
+        let providerStatusId = null;
         if (Array.isArray(score) && score.length >= 2 && typeof score[1] === 'number') {
-          statusId = score[1];
+          providerStatusId = score[1];
         } else {
-          statusId = matchData.status_id || matchData.status;
+          providerStatusId = matchData.status_id || matchData.status;
         }
         
-        // If status is still undefined, use database status
-        if (statusId === null || statusId === undefined) {
-          statusId = match.status_id;
-          console.log(`   ⚠️  Provider status undefined, using DB status: ${statusId}`);
+        // If provider status is undefined, skip this match (provider has no data)
+        if (providerStatusId === null || providerStatusId === undefined) {
+          console.log(`   ⚠️  Provider status undefined, skipping`);
+          errorCount++;
+          continue;
         }
+        
+        const statusId = providerStatusId; // Use provider status as authoritative
         
         // Extract kickoff time from score array (index 4)
         let kickoffTime = null;
