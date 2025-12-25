@@ -23,7 +23,7 @@ async function fixAllMissingKickoffTimestamps() {
   try {
     console.log('\n🔍 Finding matches with NULL kickoff timestamps...\n');
     
-    // Find all live matches (status 2, 3, 4, 5, 7) with NULL kickoff timestamps
+    // Find all live matches (status 2, 3, 4, 5, 7) with NULL kickoff timestamps OR NULL minute
     const result = await client.query(
       `SELECT 
         external_id,
@@ -41,6 +41,12 @@ async function fixAllMissingKickoffTimestamps() {
            (status_id IN (2, 3, 4, 5, 7) AND first_half_kickoff_ts IS NULL)
            OR (status_id IN (4, 5, 7) AND second_half_kickoff_ts IS NULL)
            OR (status_id = 5 AND overtime_kickoff_ts IS NULL)
+           OR (minute IS NULL AND (
+             (status_id = 2 AND first_half_kickoff_ts IS NOT NULL)
+             OR (status_id = 3)
+             OR (status_id = 4 AND second_half_kickoff_ts IS NOT NULL)
+             OR (status_id = 5 AND overtime_kickoff_ts IS NOT NULL)
+           ))
          )
        ORDER BY match_time DESC
        LIMIT 500`
