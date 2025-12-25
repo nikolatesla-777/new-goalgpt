@@ -137,20 +137,25 @@ async function reconcileAllNullKickoffs() {
         const updateValues = [];
         let paramIndex = 1;
         
-        // Set first_half_kickoff_ts if NULL and status is 2, 3, 4, 5, 7
+        // CRITICAL FIX: Use match_time for first_half_kickoff_ts (not provider kickoffTime)
+        // Provider's kickoffTime (score[4]) is "live kickoff time" which changes based on status
+        // For first half, we need the actual match start time (match_time)
         if ((statusId === 2 || statusId === 3 || statusId === 4 || statusId === 5 || statusId === 7) && match.first_half_kickoff_ts === null) {
-          const finalKickoffTime = kickoffTime || match.match_time || now;
+          const finalKickoffTime = match.match_time; // Use match_time, not provider kickoffTime
           updateParts.push(`first_half_kickoff_ts = $${paramIndex++}`);
           updateValues.push(finalKickoffTime);
-          console.log(`   ✅ Will set first_half_kickoff_ts = ${finalKickoffTime}`);
+          console.log(`   ✅ Will set first_half_kickoff_ts = ${finalKickoffTime} (from match_time)`);
         }
         
         // Set second_half_kickoff_ts if NULL and status is 4
+        // For second half, provider's kickoffTime (score[4]) is the second half start time
         if (statusId === 4 && match.second_half_kickoff_ts === null) {
-          const finalKickoffTime = kickoffTime || now;
+          // Use provider kickoffTime if available, otherwise estimate (match_time + 45 minutes)
+          const estimatedSecondHalfStart = match.match_time + (45 * 60) + (15 * 60); // match_time + 45min + 15min HT
+          const finalKickoffTime = kickoffTime || estimatedSecondHalfStart;
           updateParts.push(`second_half_kickoff_ts = $${paramIndex++}`);
           updateValues.push(finalKickoffTime);
-          console.log(`   ✅ Will set second_half_kickoff_ts = ${finalKickoffTime}`);
+          console.log(`   ✅ Will set second_half_kickoff_ts = ${finalKickoffTime} (${kickoffTime ? 'from provider' : 'estimated'})`);
         }
         
         // Calculate minute if kickoff timestamps are available
@@ -163,7 +168,7 @@ async function reconcileAllNullKickoffs() {
           
           await client.query(updateQuery, updateValues);
           
-          // Now calculate minute
+          // Now calculate minute using correct logic
           const verifyResult = await client.query(
             `SELECT first_half_kickoff_ts, second_half_kickoff_ts, status_id FROM ts_matches WHERE external_id = $1`,
             [matchId]
@@ -175,9 +180,11 @@ async function reconcileAllNullKickoffs() {
           if (statusId === 2 && updated.first_half_kickoff_ts) {
             calculatedMinute = Math.floor((now - updated.first_half_kickoff_ts) / 60) + 1;
             calculatedMinute = Math.min(calculatedMinute, 45);
+          } else if (statusId === 3) {
+            calculatedMinute = 45; // HALF_TIME always 45
           } else if (statusId === 4 && updated.second_half_kickoff_ts) {
-            calculatedMinute = Math.floor((now - updated.second_half_kickoff_ts) / 60) + 1;
-            calculatedMinute = Math.min(calculatedMinute, 90);
+            calculatedMinute = 45 + Math.floor((now - updated.second_half_kickoff_ts) / 60) + 1;
+            calculatedMinute = Math.max(calculatedMinute, 46);
           }
           
           if (calculatedMinute !== null) {
@@ -185,7 +192,7 @@ async function reconcileAllNullKickoffs() {
               `UPDATE ts_matches SET minute = $1 WHERE external_id = $2`,
               [calculatedMinute, matchId]
             );
-            console.log(`   ✅ Set minute = ${calculatedMinute}`);
+            console.log(`   ✅ Set minute = ${calculatedMinute} (calculated from kickoff_ts)`);
           }
           
           successCount++;
