@@ -105,7 +105,21 @@ async function fixAllMissingKickoffTimestamps() {
         }
         
         // Check if status matches
-        if (providerStatusId !== match.status_id) {
+        // If provider says END (8) but DB says live (2,3,4,5,7), update status to END
+        if (providerStatusId === 8 && [2, 3, 4, 5, 7].includes(match.status_id)) {
+          console.log(`  ⚠️  Status mismatch: DB=${match.status_id}, Provider=${providerStatusId} (updating to END)`);
+          // Update status to END
+          await client.query(
+            `UPDATE ts_matches 
+             SET status_id = 8, updated_at = NOW() 
+             WHERE external_id = $1`,
+            [matchId]
+          );
+          console.log(`  ✅ Updated status to END`);
+          fixed++;
+          skipped++;
+          continue; // Skip kickoff timestamp updates for END matches
+        } else if (providerStatusId !== match.status_id && providerStatusId !== null) {
           console.log(`  ⚠️  Status mismatch: DB=${match.status_id}, Provider=${providerStatusId} (skipping)`);
           skipped++;
           continue;
