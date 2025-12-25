@@ -294,7 +294,6 @@ export class MatchDatabaseService {
 
         // CRITICAL FIX: Generate minute_text from minute and status_id
         const minute = (row.minute !== null && row.minute !== undefined) ? Number(row.minute) : null;
-        const { generateMinuteText } = require('../../utils/matchMinuteText');
         const minuteText = generateMinuteText(minute, validatedStatus);
 
         return {
