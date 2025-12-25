@@ -299,6 +299,7 @@ export class MatchDatabaseService {
           match_time: row.match_time,
           status_id: validatedStatus,
           status: validatedStatus,
+          minute: (row.minute !== null && row.minute !== undefined) ? Number(row.minute) : null, // CRITICAL: Include minute field
           home_team_id: row.home_team_id,
           away_team_id: row.away_team_id,
           home_score: (row.home_score ?? null),
