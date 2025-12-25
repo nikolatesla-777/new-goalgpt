@@ -23,33 +23,37 @@ async function fixAllMissingKickoffTimestamps() {
   try {
     console.log('\n🔍 Finding matches with NULL kickoff timestamps or NULL minute...\n');
     
-    // Find all live matches (status 2, 3, 4, 5, 7) with NULL kickoff timestamps OR NULL minute
-    const result = await client.query(
-      `SELECT 
-        external_id,
-        status_id,
-        minute,
-        match_time,
-        first_half_kickoff_ts,
-        second_half_kickoff_ts,
-        overtime_kickoff_ts,
-        live_kickoff_time,
-        provider_update_time
-       FROM ts_matches
-       WHERE status_id IN (2, 3, 4, 5, 7)
-         AND (
-           (status_id IN (2, 3, 4, 5, 7) AND first_half_kickoff_ts IS NULL)
-           OR (status_id IN (4, 5, 7) AND second_half_kickoff_ts IS NULL)
-           OR (status_id = 5 AND overtime_kickoff_ts IS NULL)
-           OR (minute IS NULL AND (
-             (status_id = 2 AND first_half_kickoff_ts IS NOT NULL)
-             OR (status_id = 3)
-             OR (status_id = 4 AND second_half_kickoff_ts IS NOT NULL)
-             OR (status_id = 5 AND overtime_kickoff_ts IS NOT NULL)
-           ))
-         )
-       ORDER BY match_time DESC
-       LIMIT 500`
+    // Get a connection for the initial query
+    const queryClient = await pool.connect();
+    let result;
+    try {
+      // Find all live matches (status 2, 3, 4, 5, 7) with NULL kickoff timestamps OR NULL minute
+      result = await queryClient.query(
+        `SELECT 
+          external_id,
+          status_id,
+          minute,
+          match_time,
+          first_half_kickoff_ts,
+          second_half_kickoff_ts,
+          overtime_kickoff_ts,
+          live_kickoff_time,
+          provider_update_time
+         FROM ts_matches
+         WHERE status_id IN (2, 3, 4, 5, 7)
+           AND (
+             (status_id IN (2, 3, 4, 5, 7) AND first_half_kickoff_ts IS NULL)
+             OR (status_id IN (4, 5, 7) AND second_half_kickoff_ts IS NULL)
+             OR (status_id = 5 AND overtime_kickoff_ts IS NULL)
+             OR (minute IS NULL AND (
+               (status_id = 2 AND first_half_kickoff_ts IS NOT NULL)
+               OR (status_id = 3)
+               OR (status_id = 4 AND second_half_kickoff_ts IS NOT NULL)
+               OR (status_id = 5 AND overtime_kickoff_ts IS NOT NULL)
+             ))
+           )
+         ORDER BY match_time DESC
+         LIMIT 500`
       );
     } finally {
       queryClient.release();
@@ -141,7 +145,7 @@ async function fixAllMissingKickoffTimestamps() {
         if (providerStatusId === 8 && [2, 3, 4, 5, 7].includes(match.status_id)) {
           console.log(`  ⚠️  Status mismatch: DB=${match.status_id}, Provider=${providerStatusId} (updating to END)`);
           // Update status to END
-          await client.query(
+          await tempClient.query(
             `UPDATE ts_matches 
              SET status_id = 8, updated_at = NOW() 
              WHERE external_id = $1`,
@@ -150,10 +154,14 @@ async function fixAllMissingKickoffTimestamps() {
           console.log(`  ✅ Updated status to END`);
           fixed++;
           skipped++;
+          if (tempClient) tempClient.release();
+          await sleep(200);
           continue; // Skip kickoff timestamp updates for END matches
         } else if (providerStatusId !== match.status_id && providerStatusId !== null) {
           console.log(`  ⚠️  Status mismatch: DB=${match.status_id}, Provider=${providerStatusId} (skipping)`);
           skipped++;
+          if (tempClient) tempClient.release();
+          await sleep(200);
           continue;
         }
         
@@ -169,6 +177,7 @@ async function fixAllMissingKickoffTimestamps() {
         }
         
         // Set second_half_kickoff_ts if NULL and status requires it
+        let secondHalfKickoffValue = null;
         if ((match.status_id === 4 || match.status_id === 5 || match.status_id === 7) && match.second_half_kickoff_ts === null) {
           if (providerKickoffTs && providerKickoffTs > 0) {
             secondHalfKickoffValue = providerKickoffTs;
@@ -231,7 +240,7 @@ async function fixAllMissingKickoffTimestamps() {
           
           const query = `UPDATE ts_matches SET ${updates.join(', ')} WHERE external_id = $${paramIndex}`;
           
-          await client.query(query, values);
+          await tempClient.query(query, values);
           
           const updateSummary = [];
           if (updates.some(u => u.includes('first_half_kickoff_ts'))) updateSummary.push('first_half_kickoff_ts');
