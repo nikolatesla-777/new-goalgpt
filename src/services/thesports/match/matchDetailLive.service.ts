@@ -543,6 +543,12 @@ export class MatchDetailLiveService {
       // Use liveKickoffTime from provider if available, else use ingestion time as fallback
       const kickoffTimeToUse = live.liveKickoffTime !== null ? live.liveKickoffTime : ingestionTs;
       
+      // CRITICAL FIX: Track which kickoff timestamps we're setting in this update
+      // This allows minute calculation to use the NEW values, not just existing ones
+      let firstHalfKickoffToUse = existing.first_half_kickoff_ts;
+      let secondHalfKickoffToUse = existing.second_half_kickoff_ts;
+      let overtimeKickoffToUse = existing.overtime_kickoff_ts;
+      
       if (hasLiveData && live.statusId !== null) {
         // CRITICAL FIX: Set first_half_kickoff_ts for status 2, 3, 4, 5, 7 if NULL
         // This ensures minute engine can calculate minutes even if transition was missed
@@ -557,6 +563,7 @@ export class MatchDetailLiveService {
           
           setParts.push(`first_half_kickoff_ts = $${i++}`);
           values.push(finalKickoffTime);
+          firstHalfKickoffToUse = finalKickoffTime; // Track the new value for minute calculation
           const source = live.liveKickoffTime !== null ? 'liveKickoff' : (matchTime !== kickoffTimeToUse ? 'match_time' : 'now');
           logger.info(`[KickoffTS] set first_half_kickoff_ts=${finalKickoffTime} match_id=${match_id} source=${source} status=${live.statusId}`);
         } else if (live.statusId === 2 && (existingStatusId === null || existingStatusId === 1)) {
@@ -573,6 +580,7 @@ export class MatchDetailLiveService {
         if (live.statusId === 4 && existing.second_half_kickoff_ts === null) {
           setParts.push(`second_half_kickoff_ts = $${i++}`);
           values.push(kickoffTimeToUse);
+          secondHalfKickoffToUse = kickoffTimeToUse; // Track the new value
           const source = live.liveKickoffTime !== null ? 'liveKickoff' : 'now';
           logger.info(`[KickoffTS] set second_half_kickoff_ts=${kickoffTimeToUse} match_id=${match_id} source=${source} existing_status=${existingStatusId}`);
         } else if (live.statusId === 4 && existing.second_half_kickoff_ts !== null) {
@@ -585,6 +593,7 @@ export class MatchDetailLiveService {
         if (live.statusId === 5 && existing.overtime_kickoff_ts === null) {
           setParts.push(`overtime_kickoff_ts = $${i++}`);
           values.push(kickoffTimeToUse);
+          overtimeKickoffToUse = kickoffTimeToUse; // Track the new value
           const source = live.liveKickoffTime !== null ? 'liveKickoff' : 'now';
           logger.info(`[KickoffTS] set overtime_kickoff_ts=${kickoffTimeToUse} match_id=${match_id} source=${source} existing_status=${existingStatusId}`);
         } else if (live.statusId === 5 && existing.overtime_kickoff_ts !== null) {
@@ -609,11 +618,12 @@ export class MatchDetailLiveService {
           logger.debug(`[DetailLive] Setting minute=${live.minute} from provider for match_id=${match_id}`);
         } else {
           // Provider didn't supply minute - calculate from kickoff timestamps if available
+          // CRITICAL FIX: Use the NEW kickoff timestamps we're setting in this update (tracked above)
           const calculatedMinute = this.calculateMinuteFromKickoffs(
             live.statusId,
-            existing.first_half_kickoff_ts,
-            existing.second_half_kickoff_ts,
-            existing.overtime_kickoff_ts,
+            firstHalfKickoffToUse,  // Use new value if we just set it, otherwise existing
+            secondHalfKickoffToUse,  // Use new value if we just set it, otherwise existing
+            overtimeKickoffToUse,    // Use new value if we just set it, otherwise existing
             existing.minute,
             ingestionTs
           );
@@ -621,7 +631,7 @@ export class MatchDetailLiveService {
           if (calculatedMinute !== null) {
             setParts.push(`${this.minuteColumnName} = $${i++}`);
             values.push(calculatedMinute);
-            logger.debug(`[DetailLive] Setting calculated minute=${calculatedMinute} from kickoff_ts for match_id=${match_id} status=${live.statusId}`);
+            logger.info(`[DetailLive] Setting calculated minute=${calculatedMinute} from kickoff_ts for match_id=${match_id} status=${live.statusId} (first_half_ts=${firstHalfKickoffToUse}, second_half_ts=${secondHalfKickoffToUse})`);
           } else {
             // IMPORTANT: During halftime (and some terminal states), we must NOT show a running minute.
             // If we persist minute values during HT, UI can display weird values (e.g., "HT 06:00").
@@ -630,6 +640,9 @@ export class MatchDetailLiveService {
             const isFinished = live.statusId === 8 || live.statusId === 9; // defensive (varies by plan); no harm if not used
             if (isHalfTime || isFinished) {
               setParts.push(`${this.minuteColumnName} = NULL`);
+            } else {
+              // CRITICAL: If we can't calculate minute but match is live, log warning
+              logger.warn(`[DetailLive] Cannot calculate minute for match_id=${match_id} status=${live.statusId} - kickoff timestamps missing (first_half=${firstHalfKickoffToUse}, second_half=${secondHalfKickoffToUse})`);
             }
           }
         }
