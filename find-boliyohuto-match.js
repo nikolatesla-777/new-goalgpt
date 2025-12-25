@@ -22,7 +22,6 @@ async function findMatch() {
         m.external_id,
         m.status_id,
         m.minute,
-        m.match_minute,
         m.match_time,
         m.first_half_kickoff_ts,
         m.second_half_kickoff_ts,
@@ -57,7 +56,6 @@ async function findMatch() {
       console.log(`   ID: ${match.external_id}`);
       console.log(`   Status: ${match.status_id}`);
       console.log(`   Minute: ${match.minute}`);
-      console.log(`   Match Minute: ${match.match_minute}`);
       console.log(`   Score: ${match.home_score_regular || 0} - ${match.away_score_regular || 0}`);
       console.log(`   Match Time: ${new Date(match.match_time * 1000).toISOString()}`);
       console.log(`   First Half Kickoff: ${match.first_half_kickoff_ts ? new Date(match.first_half_kickoff_ts * 1000).toISOString() : 'NULL'}`);
