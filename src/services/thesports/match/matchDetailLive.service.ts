@@ -104,13 +104,18 @@ export class MatchDetailLiveService {
 
       if (Array.isArray(r)) {
         if (matchId) {
-          const found = r.find((item: any) => item?.id === matchId || item?.match_id === matchId);
+          // CRITICAL FIX: Check multiple possible ID fields (id, match_id, external_id)
+          const found = r.find((item: any) => 
+            String(item?.id || '') === String(matchId) || 
+            String(item?.match_id || '') === String(matchId) ||
+            String(item?.external_id || '') === String(matchId)
+          );
           if (found) {
             logger.debug(`[DetailLive] matched detail_live by id match_id=${matchId} (len=${r.length})`);
             return found;
           }
           // CRITICAL: If matchId is not found in the array, return null instead of r[0]
-          logger.warn(`[DetailLive] match_id=${matchId} not found in detail_live results (len=${r.length})`);
+          logger.warn(`[DetailLive] match_id=${matchId} not found in detail_live results (len=${r.length}). Checked: id, match_id, external_id`);
           return null;
         }
         return null;
@@ -119,35 +124,45 @@ export class MatchDetailLiveService {
       if (matchId && r[matchId]) return r[matchId];
 
       const keys = Object.keys(r);
-      if (keys.length === 1) {
-        const v = (r as any)[keys[0]];
-        if (Array.isArray(v)) {
-          if (matchId) {
-            const found = v.find((item: any) => item?.id === matchId || item?.match_id === matchId);
-            if (found) {
-              logger.debug(`[DetailLive] matched detail_live by id match_id=${matchId} (len=${v.length}, key=${keys[0]})`);
-              return found;
+        if (keys.length === 1) {
+          const v = (r as any)[keys[0]];
+          if (Array.isArray(v)) {
+            if (matchId) {
+              // CRITICAL FIX: Check multiple possible ID fields (id, match_id, external_id)
+              const found = v.find((item: any) => 
+                String(item?.id || '') === String(matchId) || 
+                String(item?.match_id || '') === String(matchId) ||
+                String(item?.external_id || '') === String(matchId)
+              );
+              if (found) {
+                logger.debug(`[DetailLive] matched detail_live by id match_id=${matchId} (len=${v.length}, key=${keys[0]})`);
+                return found;
+              }
+              // CRITICAL: If matchId is not found in the array, return null instead of v[0]
+              logger.warn(`[DetailLive] match_id=${matchId} not found in detail_live results (len=${v.length}, key=${keys[0]}). Checked: id, match_id, external_id`);
+              return null;
             }
-            // CRITICAL: If matchId is not found in the array, return null instead of v[0]
-            logger.warn(`[DetailLive] match_id=${matchId} not found in detail_live results (len=${v.length}, key=${keys[0]})`);
             return null;
           }
-          return null;
+          return v;
         }
-        return v;
-      }
 
       if (r['1']) {
         const v = r['1'];
         if (Array.isArray(v)) {
           if (matchId) {
-            const found = v.find((item: any) => item?.id === matchId || item?.match_id === matchId);
+            // CRITICAL FIX: Check multiple possible ID fields (id, match_id, external_id)
+            const found = v.find((item: any) => 
+              String(item?.id || '') === String(matchId) || 
+              String(item?.match_id || '') === String(matchId) ||
+              String(item?.external_id || '') === String(matchId)
+            );
             if (found) {
               logger.debug(`[DetailLive] matched detail_live by id match_id=${matchId} (len=${v.length}, key=1)`);
               return found;
             }
             // CRITICAL: If matchId is not found in the array, return null instead of v[0]
-            logger.warn(`[DetailLive] match_id=${matchId} not found in detail_live results (len=${v.length}, key=1)`);
+            logger.warn(`[DetailLive] match_id=${matchId} not found in detail_live results (len=${v.length}, key=1). Checked: id, match_id, external_id`);
             return null;
           }
           return null;
