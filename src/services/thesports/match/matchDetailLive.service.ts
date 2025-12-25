@@ -589,18 +589,37 @@ export class MatchDetailLiveService {
         // CRITICAL FIX: Set first_half_kickoff_ts for status 2, 3, 4, 5, 7 if NULL
         // This ensures minute engine can calculate minutes even if transition was missed
         if ((live.statusId === 2 || live.statusId === 3 || live.statusId === 4 || live.statusId === 5 || live.statusId === 7) && existing.first_half_kickoff_ts === null) {
-          // Try to get match_time from existing record as fallback
-          const existingMatchTimeResult = await client.query(
-            `SELECT match_time FROM ts_matches WHERE external_id = $1`,
-            [match_id]
-          );
-          const matchTime = existingMatchTimeResult.rows[0]?.match_time || kickoffTimeToUse;
-          const finalKickoffTime = live.liveKickoffTime !== null ? live.liveKickoffTime : matchTime;
+          // CRITICAL FIX: Priority order for first_half_kickoff_ts:
+          // 1. live.liveKickoffTime (provider's actual kickoff time from score[4])
+          // 2. ingestionTs (current time - maç şu an canlı, bu zamanı kullan)
+          // 3. match_time (fallback - planlanan başlangıç zamanı, gerçek başlangıç değil)
+          // IMPORTANT: If match is already live (status 2), use ingestionTs, not match_time
+          // match_time is the scheduled start time, not the actual start time
+          let finalKickoffTime: number;
+          let source: string;
+          
+          if (live.liveKickoffTime !== null) {
+            finalKickoffTime = live.liveKickoffTime;
+            source = 'liveKickoff';
+          } else if (live.statusId === 2) {
+            // Match is currently in FIRST_HALF - use ingestionTs (current time) as best estimate
+            // This ensures minute calculation works even if provider doesn't send kickoff time
+            finalKickoffTime = ingestionTs;
+            source = 'ingestionTs_live';
+          } else {
+            // For status 3, 4, 5, 7 - match already started, use match_time as fallback
+            const existingMatchTimeResult = await client.query(
+              `SELECT match_time FROM ts_matches WHERE external_id = $1`,
+              [match_id]
+            );
+            const matchTime = existingMatchTimeResult.rows[0]?.match_time || ingestionTs;
+            finalKickoffTime = matchTime;
+            source = 'match_time_fallback';
+          }
           
           setParts.push(`first_half_kickoff_ts = $${i++}`);
           values.push(finalKickoffTime);
           firstHalfKickoffToUse = finalKickoffTime; // Track the new value for minute calculation
-          const source = live.liveKickoffTime !== null ? 'liveKickoff' : (matchTime !== kickoffTimeToUse ? 'match_time' : 'now');
           logger.info(`[KickoffTS] set first_half_kickoff_ts=${finalKickoffTime} match_id=${match_id} source=${source} status=${live.statusId}`);
         } else if (live.statusId === 2 && (existingStatusId === null || existingStatusId === 1)) {
           // Original transition logic (for logging)
