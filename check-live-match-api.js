@@ -1,6 +1,7 @@
 /**
  * Check live matches API response to see minute values
  */
+const http = require('http');
 const https = require('https');
 
 const API_URL = process.env.VITE_API_URL || 'http://142.93.103.128:3000';
@@ -9,8 +10,10 @@ async function checkLiveMatches() {
   console.log(`\n🔍 Checking live matches from: ${API_URL}/api/matches/live\n`);
   
   const url = new URL('/api/matches/live', API_URL);
+  const isHttps = url.protocol === 'https:';
+  const httpModule = isHttps ? https : http;
   
-  https.get(url.toString(), (res) => {
+  httpModule.get(url.toString(), (res) => {
     let data = '';
     
     res.on('data', (chunk) => {
