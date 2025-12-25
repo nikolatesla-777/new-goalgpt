@@ -403,6 +403,29 @@ export class MatchDetailLiveService {
     const resp = await this.getMatchDetailLive({ match_id }, { forceRefresh: true });
     const live = this.extractLiveFields(resp, match_id);
 
+    // CRITICAL FIX: Log when END status is detected but not extracted
+    if (resp?.results && Array.isArray(resp.results)) {
+      const foundMatch = resp.results.find((m: any) => 
+        String(m?.id || m?.match_id) === String(match_id)
+      );
+      if (foundMatch) {
+        const providerStatus = Array.isArray(foundMatch.score) ? foundMatch.score[1] : foundMatch.status_id;
+        if (providerStatus === 8 && live.statusId !== 8) {
+          logger.warn(
+            `[DetailLive] CRITICAL: Provider says END (8) for ${match_id} but extractLiveFields returned statusId=${live.statusId}. ` +
+            `Forcing status extraction from score array.`
+          );
+          // Force extract status from score array if available
+          if (Array.isArray(foundMatch.score) && foundMatch.score.length >= 2) {
+            live.statusId = foundMatch.score[1];
+            live.homeScoreDisplay = Array.isArray(foundMatch.score[2]) ? foundMatch.score[2][0] : live.homeScoreDisplay;
+            live.awayScoreDisplay = Array.isArray(foundMatch.score[3]) ? foundMatch.score[3][0] : live.awayScoreDisplay;
+            logger.info(`[DetailLive] Fixed extraction: statusId=${live.statusId}, score=${live.homeScoreDisplay}-${live.awayScoreDisplay}`);
+          }
+        }
+      }
+    }
+
     // Optimistic locking check (dual timestamp system)
     const ingestionTs = Math.floor(Date.now() / 1000);
     // Use override from data/update if provided, otherwise use detail_live updateTime
