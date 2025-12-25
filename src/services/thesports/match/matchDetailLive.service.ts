@@ -435,7 +435,18 @@ export class MatchDetailLiveService {
 
     // CRITICAL: If match_id not found in array response AND no providerUpdateTimeOverride,
     // we cannot update (no data source)
+    // BUT: If root is null but response has results, log full response for debugging
     if (live.statusId === null && live.homeScoreDisplay === null && live.awayScoreDisplay === null) {
+      // Log full response structure for debugging
+      if (resp?.results) {
+        logger.warn(
+          `[DetailLive] Match ${match_id} not found in detail_live response. ` +
+          `Response structure: results type=${Array.isArray(resp.results) ? 'array' : typeof resp.results}, ` +
+          `length=${Array.isArray(resp.results) ? resp.results.length : 'N/A'}, ` +
+          `keys=${resp.results && typeof resp.results === 'object' ? Object.keys(resp.results).join(',') : 'N/A'}`
+        );
+      }
+      
       // If we have providerUpdateTimeOverride from data/update, we can still do a minimal update
       // (just provider_update_time and last_event_ts) to track that we processed this update
       if (providerUpdateTimeOverride !== null) {

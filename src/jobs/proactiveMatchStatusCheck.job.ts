@@ -160,15 +160,19 @@ export class ProactiveMatchStatusCheckWorker {
                       const ingestionTs = Math.floor(Date.now() / 1000);
                       
                       // Update if:
-                      // 1. Status changed (diaryStatusId != 1 and != existing.status_id)
+                      // 1. Status changed (diaryStatusId != existing.status_id) - CRITICAL: Even if diaryStatusId = 1, if match_time passed, accept provider status
                       // 2. Score changed (even if status still 1)
                       // 3. Minute changed (even if status still 1)
-                      const statusChanged = diaryStatusId !== null && diaryStatusId !== 1 && diaryStatusId !== existing.status_id;
+                      // 4. Match time passed and status is still 1 - force check (provider might have updated status)
+                      const matchTimePassed = match.match_time <= nowTs;
+                      const statusChanged = diaryStatusId !== null && diaryStatusId !== existing.status_id;
+                      // CRITICAL FIX: If match_time passed and diary shows status != 1, always update (even if existing is 1)
+                      const shouldForceUpdate = matchTimePassed && diaryStatusId !== null && diaryStatusId !== 1 && existing.status_id === 1;
                       const scoreChanged = (diaryHomeScore !== null && diaryHomeScore !== existing.home_score_regular) ||
                                          (diaryAwayScore !== null && diaryAwayScore !== existing.away_score_regular);
                       const minuteChanged = diaryMinute !== null && diaryMinute !== existing.minute;
                       
-                      if (statusChanged || scoreChanged || minuteChanged) {
+                      if (statusChanged || shouldForceUpdate || scoreChanged || minuteChanged) {
                         const updateQuery = `
                           UPDATE ts_matches
                           SET 
