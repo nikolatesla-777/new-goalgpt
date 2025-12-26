@@ -243,7 +243,10 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     // Handle multiple response formats:
     // - live-stats: { stats: [...], incidents: [...] }
     // - team-stats: { results: [...] }
-    const stats = data?.stats || data?.results || [];
+    const rawStats = data?.stats || data?.results || [];
+
+    // Sort and filter unknown stats
+    const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
 
     // If no data from API, show basic match stats
     if (!stats.length && match) {
@@ -462,61 +465,59 @@ function LineupContent({ data, match }: { data: any; match: Match }) {
 }
 
 // Helper function - TheSports API stat types
-// Reference: /match/detail_live and /match/team_stats/detail endpoint response types
-// CRITICAL: These mappings are based on actual TheSports API documentation
+// CRITICAL: These mappings are based on official TheSports API documentation (TechnicalStatistics & HalfTimeStatistics)
 function getStatName(type: number): string {
     const statNames: Record<number, string> = {
-        // Real-time data stats (detail_live) - Basic match stats
-        1: 'Korner',
-        2: 'Sarı Kart',
-        3: 'Kırmızı Kart',
-        4: 'İsabetli Şut',
-        5: 'İsabetsiz Şut',
-        6: 'Atak',
-        7: 'Tehlikeli Atak',
-        8: 'Top Hakimiyeti',
-        9: 'Penaltı',
+        // Basic match stats (from detail_live)
+        1: 'Gol',
+        2: 'Korner',
+        3: 'Sarı Kart',
+        4: 'Kırmızı Kart',
+        5: 'Ofsayt',
+        6: 'Serbest Vuruş',
+        7: 'Aut',
+        8: 'Penaltı',
+        9: 'Oyuncu Değişikliği',
+        21: 'İsabetli Şut',
+        22: 'İsabetsiz Şut',
+        23: 'Atak',
+        24: 'Tehlikeli Atak',
+        25: 'Top Hakimiyeti (%)',
+        37: 'Engellenen Şut',
 
-        // Team stats (team_stats/detail) - Detailed statistics
-        10: 'Toplam Şut',
-        11: 'Toplam Pas',
-        12: 'İsabetli Pas',
-        13: 'Kilit Pas',
-        14: 'Müdahale',
-        15: 'Top Çalma',
-        16: 'Faul',
-        17: 'Ofsayt',
-        18: 'İsabetli Orta',
-        19: 'Uzun Pas',
-        20: 'Uzaklaştırma',
-        21: 'Bloke Şut',
-
-        // Extended stats (some APIs return these)
-        22: 'Pas İsabet Oranı',
-        23: 'Kurtarış',
-        24: 'Şut Bloğu',
-        25: 'Topa Sahip Olma',
-        26: 'Gol Vuruşu',
-        27: 'Aut',
-        28: 'Top Kaybı',
-        29: 'İkili Mücadele',
-        30: 'Kazanılan İkili Mücadele',
-        31: 'Havada Kazanılan',
-        32: 'Kaleci Çıkışı',
-        33: 'Ceza Sahası Korner',
-        34: 'Serbest Vuruş',
-        35: 'Tehlikeli Serbest Vuruş',
-
-        // Attack analysis
-        37: 'Topla Oynama',
-        38: 'Gol Pozisyonu',
-        39: 'Önemli Pozisyon',
-        40: 'Kaçan Pozisyon',
-
-        // Penalty related
-        41: 'Kazanılan Penaltı',
-        42: 'Kaçırılan Penaltı',
-        43: 'Kurtarılan Penaltı',
+        // Detailed stats (from team_stats / half_team_stats)
+        33: 'Top Sürme',
+        34: 'Başarılı Top Sürme',
+        36: 'Uzaklaştırma',
+        38: 'Top Çalma',
+        39: 'Müdahale',
+        40: 'Toplam Pas',
+        41: 'İsabetli Pas',
+        42: 'Kilit Pas',
+        43: 'Orta',
+        44: 'İsabetli Orta',
+        45: 'Uzun Pas',
+        46: 'İsabetli Uzun Pas',
+        51: 'Faul',
+        52: 'Kurtarış',
+        63: 'Serbest Vuruş',
+        69: 'Direkten Dönen',
+        83: 'Toplam Şut'
     };
-    return statNames[type] || `İstatistik ${type}`;
+    return statNames[type] || '';
+}
+
+/**
+ * Helper function to sort statistics in a logical order
+ */
+function sortStats(stats: any[]): any[] {
+    const order = [25, 21, 22, 2, 3, 4, 5, 23, 24, 40, 41, 51, 52]; // Possession, Shots, Corner, Cards, Offside, Attacks, Passes, Fouls, Saves
+    return [...stats].sort((a, b) => {
+        const indexA = order.indexOf(a.type);
+        const indexB = order.indexOf(b.type);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.type - b.type;
+    });
 }

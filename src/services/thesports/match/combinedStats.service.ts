@@ -16,31 +16,42 @@ import { MatchDetailLiveService } from './matchDetailLive.service';
 import { MatchTeamStatsService } from './matchTeamStats.service';
 
 // Stat type mapping for human-readable names
+// Based on official TheSports API documentation for detail_live and team_stats
 export const STAT_TYPE_MAP: Record<number, { name: string; nameTr: string }> = {
-    // Basic stats from detail_live
-    1: { name: 'Corner Kicks', nameTr: 'Korner' },
-    2: { name: 'Yellow Cards', nameTr: 'Sarı Kart' },
-    3: { name: 'Red Cards', nameTr: 'Kırmızı Kart' },
-    4: { name: 'Shots on Target', nameTr: 'İsabetli Şut' },
-    5: { name: 'Shots off Target', nameTr: 'İsabetsiz Şut' },
-    6: { name: 'Attacks', nameTr: 'Atak' },
-    7: { name: 'Dangerous Attacks', nameTr: 'Tehlikeli Atak' },
-    8: { name: 'Ball Possession', nameTr: 'Top Hakimiyeti' },
-    9: { name: 'Penalty', nameTr: 'Penaltı' },
-    21: { name: 'Blocked Shots', nameTr: 'Bloke Şut' },
+    // Basic stats (detail_live / TechnicalStatistics enum)
+    1: { name: 'Goals', nameTr: 'Gol' },
+    2: { name: 'Corner Kicks', nameTr: 'Korner' },
+    3: { name: 'Yellow Cards', nameTr: 'Sarı Kart' },
+    4: { name: 'Red Cards', nameTr: 'Kırmızı Kart' },
+    5: { name: 'Offsides', nameTr: 'Ofsayt' },
+    6: { name: 'Free Kicks', nameTr: 'Serbest Vuruş' },
+    7: { name: 'Goal Kicks', nameTr: 'Aut' },
+    8: { name: 'Penalties', nameTr: 'Penaltı' },
+    9: { name: 'Substitutions', nameTr: 'Oyuncu Değişikliği' },
+    21: { name: 'Shots on Target', nameTr: 'İsabetli Şut' },
+    22: { name: 'Shots off Target', nameTr: 'İsabetsiz Şut' },
+    23: { name: 'Attacks', nameTr: 'Atak' },
+    24: { name: 'Dangerous Attacks', nameTr: 'Tehlikeli Atak' },
+    25: { name: 'Ball Possession (%)', nameTr: 'Top Hakimiyeti' },
+    37: { name: 'Blocked Shots', nameTr: 'Engellenen Şut' },
 
-    // Detailed stats from team_stats
-    10: { name: 'Total Shots', nameTr: 'Toplam Şut' },
-    11: { name: 'Total Passes', nameTr: 'Toplam Pas' },
-    12: { name: 'Accurate Passes', nameTr: 'İsabetli Pas' },
-    13: { name: 'Key Passes', nameTr: 'Kilit Pas' },
-    14: { name: 'Tackles', nameTr: 'Müdahale' },
-    15: { name: 'Interceptions', nameTr: 'Top Çalma' },
-    16: { name: 'Fouls', nameTr: 'Faul' },
-    17: { name: 'Offsides', nameTr: 'Ofsayt' },
-    18: { name: 'Accurate Crosses', nameTr: 'İsabetli Orta' },
-    19: { name: 'Long Balls', nameTr: 'Uzun Pas' },
-    20: { name: 'Clearances', nameTr: 'Uzaklaştırma' },
+    // Detailed stats (team_stats / HalfTimeStatistics enum)
+    33: { name: 'Dribbles', nameTr: 'Top Sürme' },
+    34: { name: 'Successful Dribbles', nameTr: 'Başarılı Top Sürme' },
+    36: { name: 'Clearances', nameTr: 'Uzaklaştırma' },
+    38: { name: 'Interceptions', nameTr: 'Top Çalma' },
+    39: { name: 'Tackles', nameTr: 'Müdahale' },
+    40: { name: 'Total Passes', nameTr: 'Toplam Pas' },
+    41: { name: 'Accurate Passes', nameTr: 'İsabetli Pas' },
+    42: { name: 'Key Passes', nameTr: 'Kilit Pas' },
+    43: { name: 'Crosses', nameTr: 'Orta' },
+    44: { name: 'Accurate Crosses', nameTr: 'İsabetli Orta' },
+    45: { name: 'Long Balls', nameTr: 'Uzun Pas' },
+    46: { name: 'Accurate Long Balls', nameTr: 'İsabetli Uzun Pas' },
+    51: { name: 'Fouls', nameTr: 'Faul' },
+    52: { name: 'Saves', nameTr: 'Kurtarış' },
+    69: { name: 'Hit Woodwork', nameTr: 'Direkten Dönen' },
+    83: { name: 'Total Shots', nameTr: 'Toplam Şut' }
 };
 
 export interface CombinedStatItem {

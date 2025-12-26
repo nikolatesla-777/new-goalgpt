@@ -23,7 +23,7 @@ export enum TechnicalStatistics {
   OWN_GOAL = 17,               // Own goal
   INJURY_TIME = 19,            // Injury time
   SHOTS_ON_TARGET = 21,        // Shots on target
-  SHOTS_OFF_TARGET = 22,       // Shots off target
+  SHOTS_OFF_TARGET = 22,       // Shots off target (actually 5 in some endpoints, but consistent with enum)
   ATTACKS = 23,                // Attacks
   DANGEROUS_ATTACK = 24,       // Dangerous Attack
   BALL_POSSESSION = 25,        // Ball possession
@@ -32,23 +32,26 @@ export enum TechnicalStatistics {
   VAR = 28,                    // VAR (Video assistant referee)
   PENALTY_SHOOTOUT = 29,       // Penalty (Penalty Shoot-out)
   PENALTY_MISSED_SHOOTOUT = 30, // Penalty missed (Penalty Shoot-out)
-  BLOCKED_SHOTS = 37           // Blocked shots
+  SHOT_ON_POST = 34,           // Shot on post
+  BLOCKED_SHOTS = 37,          // Blocked shots
+  FOULS = 42,                  // Fouls (Common in some endpoints)
+  SAVES = 43                   // Saves (Common in some endpoints)
 }
 
 /**
  * Check if statistic is a goal event
  */
 export function isGoalStatistic(stat: TechnicalStatistics): boolean {
-  return stat === TechnicalStatistics.GOAL || 
-         stat === TechnicalStatistics.OWN_GOAL;
+  return stat === TechnicalStatistics.GOAL ||
+    stat === TechnicalStatistics.OWN_GOAL;
 }
 
 /**
  * Check if statistic is a card event
  */
 export function isCardStatistic(stat: TechnicalStatistics): boolean {
-  return stat === TechnicalStatistics.YELLOW_CARD || 
-         stat === TechnicalStatistics.RED_CARD || 
-         stat === TechnicalStatistics.CARD_UPGRADE_CONFIRMED;
+  return stat === TechnicalStatistics.YELLOW_CARD ||
+    stat === TechnicalStatistics.RED_CARD ||
+    stat === TechnicalStatistics.CARD_UPGRADE_CONFIRMED;
 }
 
