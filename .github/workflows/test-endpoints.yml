@@ -1,0 +1,25 @@
+name: Test All Endpoints
+
+on:
+  workflow_dispatch:  # Manuel tetikleme
+  schedule:
+    - cron: '0 2 * * *'  # Her gün saat 02:00'de çalış (opsiyonel)
+
+jobs:
+  test-endpoints:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Endpoints on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 142.93.103.128
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /var/www/goalgpt
+            git pull origin main
+            npm install
+            npm run test:all-endpoints > /tmp/endpoint-test-results.txt 2>&1
+            echo "=== Test Results ==="
+            cat /tmp/endpoint-test-results.txt
+
