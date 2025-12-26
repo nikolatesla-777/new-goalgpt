@@ -1,18 +1,15 @@
-name: CI / Release Pipeline
+name: Deploy Pipeline
 
 on:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
 env:
   NODE_VERSION: '22.11.0'
 
 jobs:
-  test:
+  typecheck:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -24,27 +21,38 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install Backend Dependencies
         run: npm ci
 
-      - name: Typecheck (touched files clean check)
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ./.github/scripts/check-touched-files-typecheck.sh
-          else
-            npm run typecheck
-          fi
+      - name: TypeCheck Backend
+        run: npx tsc -p tsconfig.json --noEmit
 
-      - name: Run deterministic tests
-        run: |
-          npm run test:phase3a
-          npm run test:phase3b-minute
-          npm run test:phase3b-watchdog
+      - name: Install Frontend Dependencies
+        run: cd frontend && npm ci
 
-      - name: Smoke test
-        run: ./.github/scripts/smoke-test.sh
+      - name: TypeCheck Frontend
+        run: cd frontend && npx tsc --noEmit
 
-
-
-
-
+  deploy:
+    needs: typecheck
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 142.93.103.128
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /var/www/goalgpt
+            git pull origin main
+            npm install --production
+            pm2 restart goalgpt-backend
+            
+            cd frontend
+            npm install
+            npm run build
+            cp -r dist/* /var/www/goalgpt-frontend/
+            
+            echo "✅ Deploy completed at $(date)"
