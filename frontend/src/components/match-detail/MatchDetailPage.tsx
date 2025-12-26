@@ -308,8 +308,6 @@ function H2HContent({ data }: { data: any }) {
 
     const summary = data.summary;
     const h2hMatches = data.h2hMatches || [];
-    const homeForm = data.homeRecentForm || [];
-    const awayForm = data.awayRecentForm || [];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
