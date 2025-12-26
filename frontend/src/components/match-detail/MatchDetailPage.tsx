@@ -420,61 +420,61 @@ function LineupContent({ data, match }: { data: any; match: Match }) {
 }
 
 // Helper function - TheSports API stat types
-// Reference: AIscore görsellerindeki istatistik türleri eşleştirildi
+// Reference: /match/detail_live and /match/team_stats/detail endpoint response types
+// CRITICAL: These mappings are based on actual TheSports API documentation
 function getStatName(type: number): string {
     const statNames: Record<number, string> = {
-        // Şut istatistikleri
-        1: 'Engellenen Şut',
-        2: 'Şut',
-        3: 'İsabetli Şut',
-        4: 'Bloke',
-        5: 'Ceza Sahası İçinden Şut',
-        6: 'Ceza Sahası Dışından Şut',
-        7: 'Kurtarış',
+        // Real-time data stats (detail_live) - Basic match stats
+        1: 'Korner',
+        2: 'Sarı Kart',
+        3: 'Kırmızı Kart',
+        4: 'İsabetli Şut',
+        5: 'İsabetsiz Şut',
+        6: 'Atak',
+        7: 'Tehlikeli Atak',
+        8: 'Top Hakimiyeti',
+        9: 'Penaltı',
 
-        // Korner ve set parçaları
-        8: 'Korner',
-        9: 'Köşe Vuruşu',
-        10: 'Serbest Vuruş',
+        // Team stats (team_stats/detail) - Detailed statistics
+        10: 'Toplam Şut',
+        11: 'Toplam Pas',
+        12: 'İsabetli Pas',
+        13: 'Kilit Pas',
+        14: 'Müdahale',
+        15: 'Top Çalma',
+        16: 'Faul',
+        17: 'Ofsayt',
+        18: 'İsabetli Orta',
+        19: 'Uzun Pas',
+        20: 'Uzaklaştırma',
+        21: 'Bloke Şut',
 
-        // Pas istatistikleri
-        11: 'Kilit Pas',
-        12: 'Uzun Pas',
-        13: 'İsabetli Uzun Top',
-        14: 'Orta',
-        15: 'Doğru Orta',
-
-        // Kartlar
-        21: 'Sarı Kart',
-        22: 'Kırmızı Kart',
-
-        // Pas detayları
-        23: 'Toplam Pas',
-        24: 'İsabetli Pas',
-        25: 'Topa Sahip Olma %',
-        26: 'Faul',
-        27: 'Ofsayt',
-
-        // Mücadele istatistikleri
+        // Extended stats (some APIs return these)
+        22: 'Pas İsabet Oranı',
+        23: 'Kurtarış',
+        24: 'Şut Bloğu',
+        25: 'Topa Sahip Olma',
+        26: 'Gol Vuruşu',
+        27: 'Aut',
         28: 'Top Kaybı',
         29: 'İkili Mücadele',
-        30: 'Havada İkili Mücadele',
-        31: 'Zeminde İkili Mücadele',
-        32: 'Top Kesme',
-        33: 'Baskıyı Kırma',
-        34: 'Kale Terkedişi',
+        30: 'Kazanılan İkili Mücadele',
+        31: 'Havada Kazanılan',
+        32: 'Kaleci Çıkışı',
+        33: 'Ceza Sahası Korner',
+        34: 'Serbest Vuruş',
+        35: 'Tehlikeli Serbest Vuruş',
 
-        // Atak istatistikleri
-        37: 'Atak',
-        38: 'Tehlikeli Atak',
+        // Attack analysis
+        37: 'Topla Oynama',
+        38: 'Gol Pozisyonu',
+        39: 'Önemli Pozisyon',
+        40: 'Kaçan Pozisyon',
 
-        // Penaltı
+        // Penalty related
         41: 'Kazanılan Penaltı',
         42: 'Kaçırılan Penaltı',
-
-        // Diğer
-        45: 'Au Taç',
-        46: 'Kaleci Vuruşu',
+        43: 'Kurtarılan Penaltı',
     };
     return statNames[type] || `İstatistik ${type}`;
 }

@@ -647,7 +647,22 @@ export const getMatchLiveStats = async (
     }
 
     // 2. Add/override with team stats (team_stats/detail) - higher priority (more detailed)
-    const teamStatsArray = teamStatsResponse?.result?.stats || [];
+    // Handle multiple response formats: results[], result.stats, or results[0].stats
+    let teamStatsArray: any[] = [];
+    if (teamStatsResponse) {
+      const resp = teamStatsResponse as any;
+      if (resp.result?.stats && Array.isArray(resp.result.stats)) {
+        teamStatsArray = resp.result.stats;
+      } else if (resp.results && Array.isArray(resp.results)) {
+        // Find match in results array
+        const matchData = resp.results.find((r: any) => r.id === match_id || r.match_id === match_id);
+        if (matchData?.stats && Array.isArray(matchData.stats)) {
+          teamStatsArray = matchData.stats;
+        } else if (resp.results[0]?.stats && Array.isArray(resp.results[0].stats)) {
+          teamStatsArray = resp.results[0].stats;
+        }
+      }
+    }
     if (Array.isArray(teamStatsArray)) {
       for (const stat of teamStatsArray) {
         if (stat.type !== undefined) {
