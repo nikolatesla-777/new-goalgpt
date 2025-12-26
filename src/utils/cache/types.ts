@@ -9,6 +9,8 @@ export enum CacheKeyPrefix {
 }
 
 export enum CacheTTL {
+  TenSeconds = 10,
+  ThirtySeconds = 30,
   Minute = 60,
   FiveMinutes = 5 * 60,
   TenMinutes = 10 * 60,

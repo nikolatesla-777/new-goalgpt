@@ -197,11 +197,11 @@ export function MatchList({ view, date }: MatchListProps) {
   useEffect(() => {
     fetchMatches();
 
-    // CRITICAL: Poll every 60 seconds as fallback (WebSocket is primary)
-    // WebSocket handles instant updates, polling is fallback only
+    // CRITICAL: Poll every 10 seconds for real-time score updates
+    // Reduced from 60s to 10s for faster live match updates
     const interval = setInterval(() => {
       fetchMatches();
-    }, 60000);
+    }, 10000);
 
     return () => {
       clearInterval(interval);

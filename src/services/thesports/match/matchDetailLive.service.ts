@@ -77,8 +77,8 @@ export class MatchDetailLiveService {
         }
       },
       {
-        ttl: CacheTTL.Minute, // Live data, short cache
-        staleTtl: CacheTTL.FiveMinutes, // Serve stale data if API fails
+        ttl: CacheTTL.TenSeconds, // Live data, ultra-short cache for real-time scores
+        staleTtl: CacheTTL.Minute, // Serve stale data if API fails
       }
     );
   }
@@ -101,8 +101,8 @@ export class MatchDetailLiveService {
         return response?.results || [];
       },
       {
-        ttl: CacheTTL.Minute, // Short cache for real-time data
-        staleTtl: CacheTTL.FiveMinutes,
+        ttl: CacheTTL.TenSeconds, // Ultra-short cache for real-time scores
+        staleTtl: CacheTTL.Minute,
       }
     );
 
