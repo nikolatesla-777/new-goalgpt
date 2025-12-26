@@ -1,9 +1,12 @@
 name: Test All Endpoints
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/scripts/test-all-endpoints.ts'
+      - '.github/workflows/test-endpoints.yml'
   workflow_dispatch:  # Manuel tetikleme
-  schedule:
-    - cron: '0 2 * * *'  # Her gün saat 02:00'de çalış (opsiyonel)
 
 jobs:
   test-endpoints:
