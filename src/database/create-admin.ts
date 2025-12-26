@@ -1,3 +1,4 @@
+// @ts-ignore
 import bcrypt from 'bcryptjs';
 import { pool } from './connection';
 import { logger } from '../utils/logger';
@@ -55,4 +56,3 @@ if (require.main === module) {
 }
 
 export { createAdmin };
-

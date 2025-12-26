@@ -79,7 +79,7 @@ async function layerASnapshot(): Promise<SnapshotState> {
   }
 
   const data = await response.json();
-  const matches: LiveMatch[] = data?.data?.results || data?.results || [];
+  const matches: LiveMatch[] = (data as any)?.data?.results || (data as any)?.results || [];
 
   const anomalies = {
     minute_text_null: [] as string[],
@@ -224,7 +224,7 @@ async function query3DbVsApiDiff(): Promise<{
   // Get API live matches
   const response = await fetch(`${STAGING_HTTP_BASE}/api/matches/live`);
   const data = await response.json();
-  const apiMatches: LiveMatch[] = data?.data?.results || data?.results || [];
+  const apiMatches: LiveMatch[] = (data as any)?.data?.results || (data as any)?.results || [];
   const apiIds = new Set(apiMatches.map(m => m.external_id));
 
   // Find DB matches not in API
@@ -301,15 +301,15 @@ function writeIncidentSnapshot(
 
 **Affected external_ids:**
 ${[
-  ...snapshot.anomalies.minute_text_null,
-  ...snapshot.anomalies.minute_regression.map(a => a.id),
-  ...snapshot.anomalies.status_regression.map(a => a.id),
-  ...snapshot.anomalies.score_change_no_timestamp.map(a => a.id),
-  ...query3Results.dbNotInApi.slice(0, 10),
-]
-  .filter((v, i, a) => a.indexOf(v) === i)
-  .map(id => `- ${id}`)
-  .join('\n')}
+      ...snapshot.anomalies.minute_text_null,
+      ...snapshot.anomalies.minute_regression.map(a => a.id),
+      ...snapshot.anomalies.status_regression.map(a => a.id),
+      ...snapshot.anomalies.score_change_no_timestamp.map(a => a.id),
+      ...query3Results.dbNotInApi.slice(0, 10),
+    ]
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .map(id => `- ${id}`)
+      .join('\n')}
 
 **Query 1 Results (Kickoff Timestamps):**
 \`\`\`json
@@ -399,7 +399,7 @@ async function runObserver(): Promise<void> {
 
     // Run DB queries (3 proofs as required)
     logger.info('Running DB proofs: Query 1 (kickoff timestamps), Query 2 (kickoff NULL scan), Query 3 (DB vs API diff)');
-    
+
     const query1Results = affectedIds.length > 0 ? await query1KickoffTimestamps(affectedIds.slice(0, 20)) : '[]';
     const query2Results = await query2KickoffNullScan();
     const query3Results = await query3DbVsApiDiff();

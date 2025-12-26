@@ -367,3 +367,4 @@ Aşağıdaki endpoint'ler API dokümantasyonunda var ama kodda kullanılmıyor:
 
 
 
+

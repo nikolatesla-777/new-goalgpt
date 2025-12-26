@@ -1,11 +1,13 @@
+import { useNavigate } from 'react-router-dom';
 import type { Match } from '../api/matches';
-import { isLiveMatch, isFinishedMatch, getMatchStatusText, formatMatchTime, formatMatchMinute, MatchState } from '../utils/matchStatus';
+import { isLiveMatch, isFinishedMatch, getMatchStatusText, formatMatchTime, MatchState } from '../utils/matchStatus';
 
 interface MatchCardProps {
   match: Match;
 }
 
 export function MatchCard({ match }: MatchCardProps) {
+  const navigate = useNavigate();
   // CRITICAL FIX: Safety checks
   if (!match || typeof match !== 'object' || !match.id) {
     console.error('❌ [MatchCard] Invalid match object:', match);
@@ -25,21 +27,21 @@ export function MatchCard({ match }: MatchCardProps) {
   // Contract: minute_text is always a string (never null), backend guarantees this
   // Defensive fallback: if missing, show "—"
   const minuteText = match.minute_text || "—";
-  
+
   // Phase 4-4: Stale badge detection (informational only, no actions)
   // Use backend-provided age_sec if available, otherwise calculate from updated_at (fallback)
   const matchTime = match.match_time ?? 0;
   const updatedAt = match.updated_at;
   const ageSec = match.age_sec ?? (updatedAt ? Math.floor((Date.now() - new Date(updatedAt).getTime()) / 1000) : null);
   const staleReason = match.stale_reason;
-  
+
   // Determine threshold based on status (Phase 4-3 compatible)
   const getStaleThreshold = (statusId: number, minute: number | null): number => {
     if (statusId === 3) return 900; // HALF_TIME: 15 minutes
     if (statusId === 4 && minute !== null && minute >= 45) return 180; // SECOND_HALF with progress: 3 minutes
     return 120; // LIVE matches: 2 minutes
   };
-  
+
   const isStale = isLive && ageSec !== null && ageSec > getStaleThreshold(status, match.minute ?? null);
 
   // Score fields may come from different backends/serializers (regular vs display). Normalize safely.
@@ -66,10 +68,15 @@ export function MatchCard({ match }: MatchCardProps) {
     backgroundColor: isLive ? '#fef2f2' : isFinished ? '#f9fafb' : 'white',
     boxShadow: isLive ? '0 4px 6px rgba(0,0,0,0.1)' : 'none',
     transition: 'all 0.2s',
+    cursor: 'pointer',
+  };
+
+  const handleClick = () => {
+    navigate(`/match/${match.id}`);
   };
 
   return (
-    <div style={cardStyle}>
+    <div style={cardStyle} onClick={handleClick}>
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -119,15 +126,23 @@ export function MatchCard({ match }: MatchCardProps) {
               )}
               {/* Phase 4-4: Stale badge (informational only) */}
               {isStale && (
-                <span style={{
-                  padding: '4px 8px',
-                  backgroundColor: '#fbbf24',
-                  color: '#78350f',
-                  fontSize: '0.75rem',
-                  fontWeight: 'bold',
-                  borderRadius: '4px',
-                  title: staleReason ? `Stale: ${staleReason}` : `Güncelleme gecikiyor (${ageSec}s)`,
-                }}>
+                <span
+                  style={{
+                    padding: '4px 8px',
+                    backgroundColor: '#fbbf24',
+                    color: '#78350f',
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                  title={staleReason ? `Stale: ${staleReason}` : `Güncelleme gecikiyor (${ageSec}s)`}
+                >
+                  <span
+                    className="animate-pulse flex h-2 w-2 rounded-full bg-red-400 opacity-75"
+                  ></span>
                   ⚠️ Güncelleme gecikiyor
                 </span>
               )}
@@ -149,9 +164,9 @@ export function MatchCard({ match }: MatchCardProps) {
             {matchTime > 0 ? formatMatchTime(matchTime) : 'Tarih yok'}
           </span>
         </div>
-          <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-            {getMatchStatusText(status)}
-          </span>
+        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+          {getMatchStatusText(status)}
+        </span>
       </div>
 
       <div style={{
@@ -291,7 +306,7 @@ export function MatchCard({ match }: MatchCardProps) {
               })()}
             </div>
           </div>
-          
+
           {/* Live Incidents Icons (Red Cards, Yellow Cards, Corners) */}
           {(() => {
             const homeRed = homeRedCards;
@@ -300,13 +315,13 @@ export function MatchCard({ match }: MatchCardProps) {
             const awayYellow = awayYellowCards;
             const homeCornersCount = homeCorners;
             const awayCornersCount = awayCorners;
-            
+
             const hasIncidents = (homeRed && homeRed > 0) || (awayRed && awayRed > 0) ||
-                                (homeYellow && homeYellow > 0) || (awayYellow && awayYellow > 0) ||
-                                (homeCornersCount && homeCornersCount > 0) || (awayCornersCount && awayCornersCount > 0);
-            
+              (homeYellow && homeYellow > 0) || (awayYellow && awayYellow > 0) ||
+              (homeCornersCount && homeCornersCount > 0) || (awayCornersCount && awayCornersCount > 0);
+
             if (!hasIncidents) return null;
-            
+
             return (
               <div style={{
                 display: 'flex',

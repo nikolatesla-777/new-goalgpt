@@ -18,7 +18,7 @@ export function MatchList({ view, date }: MatchListProps) {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const isFetchingRef = useRef(false);
-  const fetchRef = useRef<() => Promise<void>>(async () => {});
+  const fetchRef = useRef<() => Promise<void>>(async () => { });
 
   // CRITICAL FIX: Ensure matches is always an array (never null/undefined)
   const safeMatches = Array.isArray(matches) ? matches : [];
@@ -31,7 +31,7 @@ export function MatchList({ view, date }: MatchListProps) {
     try {
       setError(null);
       setLoading(true);
-      
+
       let response;
       if (view === 'recent') {
         // Progressive loading: start with 50, then load more
@@ -56,23 +56,23 @@ export function MatchList({ view, date }: MatchListProps) {
         console.error('❌ [MatchList] Response has error:', response.err);
         throw new Error(response.err);
       }
-      
+
       // CRITICAL FIX: Ensure response.results is always an array before setting state
       console.log('🔄 [MatchList] Setting matches - response type:', typeof response);
       console.log('🔄 [MatchList] Setting matches - has results:', !!response?.results);
       console.log('🔄 [MatchList] Setting matches - results is array:', Array.isArray(response?.results));
       console.log('🔄 [MatchList] Setting matches - results count:', response?.results?.length || 0);
-      
+
       // Safety check: ensure we have a valid array
       if (response && typeof response === 'object' && 'results' in response) {
         const results = response.results;
         if (Array.isArray(results)) {
           // Filter for live matches if view is 'live'
-          const filteredResults = view === 'live' 
+          const filteredResults = view === 'live'
             ? results.filter((match: Match) => {
-                const status = match.status_id ?? match.status ?? 0;
-                return isLiveMatch(status);
-              })
+              const status = match.status ?? 0;
+              return isLiveMatch(status);
+            })
             : results;
           console.log('✅ [MatchList] Setting', filteredResults.length, 'matches' + (view === 'live' ? ' (live)' : ''));
           setMatches(filteredResults);
@@ -109,33 +109,33 @@ export function MatchList({ view, date }: MatchListProps) {
       console.error('❌ [MatchList] safeMatches is not an array:', typeof safeMatches, safeMatches);
       return [];
     }
-    
+
     console.log('🔄 [MatchList] Grouping matches - total:', safeMatches.length);
     const grouped = new Map<string | null, { competition: Competition | null; matches: Match[] }>();
-    
+
     safeMatches.forEach((match) => {
       // CRITICAL FIX: Validate match object before processing
       if (!match || typeof match !== 'object' || !match.id) {
         console.warn('⚠️ [MatchList] Invalid match object:', match);
         return;
       }
-      
+
       const compId = match.competition_id || null;
       const comp = match.competition || null;
-      
+
       if (!grouped.has(compId)) {
         grouped.set(compId, { competition: comp, matches: [] });
       }
       grouped.get(compId)!.matches.push(match);
     });
-    
+
     // Sort competitions alphabetically by name
     const sorted = Array.from(grouped.entries()).sort((a, b) => {
       const nameA = a[1].competition?.name || 'Bilinmeyen Lig';
       const nameB = b[1].competition?.name || 'Bilinmeyen Lig';
       return nameA.localeCompare(nameB, 'tr');
     });
-    
+
     console.log('✅ [MatchList] Grouped into', sorted.length, 'competitions');
     return sorted;
   }, [safeMatches]);
@@ -242,7 +242,7 @@ export function MatchList({ view, date }: MatchListProps) {
   if (error) {
     const isIPError = error.includes('IP is not authorized') || error.includes('IP is not authorized');
     const isRateLimitError = error.includes('Too Many Requests') || error.includes('too many requests') || error.includes('Çok fazla istek');
-    
+
     return (
       <div style={{
         border: `1px solid ${isIPError ? '#fbbf24' : isRateLimitError ? '#f59e0b' : '#ef4444'}`,

@@ -83,6 +83,61 @@ export class MatchDetailLiveService {
     );
   }
 
+  /**
+   * Get ALL live match stats (no match_id parameter)
+   * Returns stats, incidents, score for all currently live matches
+   * Cached for 30 seconds
+   */
+  async getAllLiveStats(): Promise<any[]> {
+    const cacheKey = `${CacheKeyPrefix.TheSports}:match:detail_live:all`;
+
+    // Try cache first
+    const cached = await getWithCacheFallback(
+      cacheKey,
+      async () => {
+        logger.info('Fetching ALL live match details (no match_id param)');
+        // Call detail_live WITHOUT match_id to get all live matches
+        const response = await this.client.get<any>('/match/detail_live');
+        return response?.results || [];
+      },
+      {
+        ttl: CacheTTL.Minute, // Short cache for real-time data
+        staleTtl: CacheTTL.FiveMinutes,
+      }
+    );
+
+    return cached || [];
+  }
+
+  /**
+   * Get specific match stats by filtering from all live matches
+   * This is more reliable than passing match_id to detail_live endpoint
+   */
+  async getMatchStatsFromLive(matchId: string): Promise<{
+    id: string;
+    stats: Array<{ type: number; home: number; away: number }>;
+    incidents: any[];
+    score: any[] | null;
+  } | null> {
+    const allLiveMatches = await this.getAllLiveStats();
+
+    // Find the specific match
+    const matchData = allLiveMatches.find((m: any) => m.id === matchId);
+
+    if (matchData) {
+      logger.info(`Found stats for match ${matchId}: ${matchData.stats?.length || 0} stats, ${matchData.incidents?.length || 0} incidents`);
+      return {
+        id: matchData.id,
+        stats: matchData.stats || [],
+        incidents: matchData.incidents || [],
+        score: matchData.score || null,
+      };
+    }
+
+    logger.warn(`Match ${matchId} not found in live data (may not be currently live)`);
+    return null;
+  }
+
   private extractLiveFields(resp: any, matchId?: string): {
     statusId: number | null;
     homeScoreDisplay: number | null;
@@ -206,21 +261,21 @@ export class MatchDetailLiveService {
       }
     }
 
-    if (homeScoreDisplay === null) {
+    if (homeScoreDisplay === null || isNaN(homeScoreDisplay)) {
       homeScoreDisplay =
-        (typeof root?.home_score === 'number' ? root.home_score : null) ??
-        (typeof root?.home_score_display === 'number' ? root.home_score_display : null) ??
-        (typeof root?.score?.home === 'number' ? root.score.home : null) ??
-        (typeof root?.match?.home_score === 'number' ? root.match.home_score : null) ??
+        (typeof root?.home_score === 'number' && !isNaN(root.home_score) ? root.home_score : null) ??
+        (typeof root?.home_score_display === 'number' && !isNaN(root.home_score_display) ? root.home_score_display : null) ??
+        (typeof root?.score?.home === 'number' && !isNaN(root.score.home) ? root.score.home : null) ??
+        (typeof root?.match?.home_score === 'number' && !isNaN(root.match.home_score) ? root.match.home_score : null) ??
         null;
     }
 
-    if (awayScoreDisplay === null) {
+    if (awayScoreDisplay === null || isNaN(awayScoreDisplay)) {
       awayScoreDisplay =
-        (typeof root?.away_score === 'number' ? root.away_score : null) ??
-        (typeof root?.away_score_display === 'number' ? root.away_score_display : null) ??
-        (typeof root?.score?.away === 'number' ? root.score.away : null) ??
-        (typeof root?.match?.away_score === 'number' ? root.match.away_score : null) ??
+        (typeof root?.away_score === 'number' && !isNaN(root.away_score) ? root.away_score : null) ??
+        (typeof root?.away_score_display === 'number' && !isNaN(root.away_score_display) ? root.away_score_display : null) ??
+        (typeof root?.score?.away === 'number' && !isNaN(root.score.away) ? root.score.away : null) ??
+        (typeof root?.match?.away_score === 'number' && !isNaN(root.match.away_score) ? root.match.away_score : null) ??
         null;
     }
 
@@ -287,7 +342,7 @@ export class MatchDetailLiveService {
       null;
 
     const minute =
-      typeof minuteRaw === 'number' && Number.isFinite(minuteRaw) && minuteRaw >= 0
+      typeof minuteRaw === 'number' && Number.isFinite(minuteRaw) && !isNaN(minuteRaw) && minuteRaw >= 0
         ? minuteRaw
         : null;
 
@@ -429,8 +484,9 @@ export class MatchDetailLiveService {
     const live = this.extractLiveFields(resp, match_id);
 
     // CRITICAL FIX: Log when END status is detected but not extracted
-    if (resp?.results && Array.isArray(resp.results)) {
-      const foundMatch = resp.results.find((m: any) =>
+    const results = (resp as any).results || (resp as any).result_list;
+    if (results && Array.isArray(results)) {
+      const foundMatch = (results as any[]).find((m: any) =>
         String(m?.id || m?.match_id) === String(match_id)
       );
       if (foundMatch) {
@@ -463,12 +519,13 @@ export class MatchDetailLiveService {
     // BUT: If root is null but response has results, log full response for debugging
     if (live.statusId === null && live.homeScoreDisplay === null && live.awayScoreDisplay === null) {
       // Log full response structure for debugging
-      if (resp?.results) {
+      const results = (resp as any).results || (resp as any).result_list;
+      if (results) {
         logger.warn(
           `[DetailLive] Match ${match_id} not found in detail_live response. ` +
-          `Response structure: results type=${Array.isArray(resp.results) ? 'array' : typeof resp.results}, ` +
-          `length=${Array.isArray(resp.results) ? resp.results.length : 'N/A'}, ` +
-          `keys=${resp.results && typeof resp.results === 'object' ? Object.keys(resp.results).join(',') : 'N/A'}`
+          `Response structure: results type=${Array.isArray(results) ? 'array' : typeof results}, ` +
+          `length=${Array.isArray(results) ? results.length : 'N/A'}, ` +
+          `keys=${results && typeof results === 'object' ? Object.keys(results).join(',') : 'N/A'}`
         );
       }
 
@@ -494,10 +551,13 @@ export class MatchDetailLiveService {
       await this.ensureReconcileSchema(client);
 
       // Read existing timestamps and status for transition detection
+      // CRITICAL FIX: Only query 'minute' column since 'match_minute' doesn't exist in schema
+      // The ensureReconcileSchema() already detected which column exists (this.minuteColumnName)
+      const minuteColumn = this.minuteColumnName || 'minute';
       const existingResult = await client.query(
         `SELECT provider_update_time, last_event_ts, status_id, match_time,
          first_half_kickoff_ts, second_half_kickoff_ts, overtime_kickoff_ts,
-         COALESCE(minute, match_minute) as minute
+         ${minuteColumn} as minute
          FROM ts_matches WHERE external_id = $1`,
         [match_id]
       );
@@ -740,14 +800,16 @@ export class MatchDetailLiveService {
         }
       }
 
+      // CRITICAL FIX: home_scores is JSONB, not PostgreSQL array
       if (live.homeScoreDisplay !== null) {
-        setParts.push(`home_scores = ARRAY[$${i++}]`);
-        values.push(live.homeScoreDisplay);
+        setParts.push(`home_scores = $${i++}::jsonb`);
+        values.push(JSON.stringify([live.homeScoreDisplay]));
       }
 
+      // CRITICAL FIX: away_scores is JSONB, not PostgreSQL array
       if (live.awayScoreDisplay !== null) {
-        setParts.push(`away_scores = ARRAY[$${i++}]`);
-        values.push(live.awayScoreDisplay);
+        setParts.push(`away_scores = $${i++}::jsonb`);
+        values.push(JSON.stringify([live.awayScoreDisplay]));
       }
 
       if (this.hasIncidentsColumn && live.incidents !== null) {

@@ -21,6 +21,7 @@ export class MatchWatchdogWorker {
   private matchWatchdogService: MatchWatchdogService;
   private matchDetailLiveService: MatchDetailLiveService;
   private matchRecentService: MatchRecentService;
+  private matchDiaryService: MatchDiaryService;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -28,6 +29,7 @@ export class MatchWatchdogWorker {
     this.matchWatchdogService = new MatchWatchdogService();
     this.matchDetailLiveService = matchDetailLiveService;
     this.matchRecentService = matchRecentService;
+    this.matchDiaryService = new MatchDiaryService((matchDetailLiveService as any).client);
   }
 
   /**
@@ -53,17 +55,17 @@ export class MatchWatchdogWorker {
       try {
         const recentListResponse = await this.matchRecentService.getMatchRecentList({ page: 1, limit: 500 }, true); // forceRefresh = true
         const recentListResults = recentListResponse?.results ?? [];
-        
+
         // Build map of ALL matches from recent/list (including END status=8)
         for (const match of recentListResults) {
-          const status = match.status_id ?? match.status ?? 0;
-          const matchId = match.id ?? match.match_id ?? match.external_id;
+          const status = (match as any).status_id ?? (match as any).status ?? 0;
+          const matchId = (match as any).id ?? (match as any).match_id ?? (match as any).external_id;
           if (matchId) {
-            const updateTime = match.update_time ?? match.updateTime ?? null;
+            const updateTime = (match as any).update_time ?? (match as any).updateTime ?? null;
             recentListAllMatches.set(matchId, { statusId: status, updateTime });
           }
         }
-        
+
         const liveCount = Array.from(recentListAllMatches.values()).filter(m => [2, 3, 4, 5, 7].includes(m.statusId)).length;
         const endCount = Array.from(recentListAllMatches.values()).filter(m => [8, 9, 10, 12].includes(m.statusId)).length;
         // Always log (even if empty) for observability
@@ -124,7 +126,7 @@ export class MatchWatchdogWorker {
         try {
           // Phase 5-S FIX: Check recent/list first - if match is finished (status=8) or not in list, transition to END
           const recentListMatch = recentListAllMatches.get(stale.matchId);
-          
+
           // CRITICAL FIX HATA #3: HALF_TIME (status 3) için özel kontrol
           // Devre arasından ikinci yarıya geçiş sırasında recent/list'te olmayabilir
           if (stale.statusId === 3 && !recentListMatch) {
@@ -132,13 +134,13 @@ export class MatchWatchdogWorker {
               `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list, ` +
               `checking detail_live for SECOND_HALF transition before END`
             );
-            
-            const { pool } = await import('../../database/connection');
+
+            const { pool } = await import('../database/connection');
             const client = await pool.connect();
             try {
               // Önce detail_live çek - SECOND_HALF olabilir
               const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(stale.matchId, null);
-              
+
               if (reconcileResult.updated && reconcileResult.rowCount > 0) {
                 // detail_live başarılı → status güncellendi (muhtemelen SECOND_HALF)
                 if (reconcileResult.statusId === 4) {
@@ -147,7 +149,7 @@ export class MatchWatchdogWorker {
                   );
                   successCount++;
                   reasons['half_time_to_second_half'] = (reasons['half_time_to_second_half'] || 0) + 1;
-                  
+
                   logEvent('info', 'watchdog.reconcile.done', {
                     match_id: stale.matchId,
                     result: 'success',
@@ -166,23 +168,23 @@ export class MatchWatchdogWorker {
                   continue; // Success - skip further processing
                 }
               }
-              
+
               // detail_live başarısız → match_time kontrolü yap
               const matchInfo = await client.query(
                 `SELECT match_time, first_half_kickoff_ts FROM ts_matches WHERE external_id = $1`,
                 [stale.matchId]
               );
-              
+
               if (matchInfo.rows.length > 0) {
                 const match = matchInfo.rows[0];
                 const nowTs = Math.floor(Date.now() / 1000);
                 const matchTime = match.match_time;
                 const firstHalfKickoff = match.first_half_kickoff_ts;
-                
+
                 // Calculate minimum time for match to be finished
                 // First half (45) + HT (15) + Second half (45) + margin (15) = 120 minutes
                 const minTimeForEnd = (firstHalfKickoff || matchTime) + (120 * 60);
-                
+
                 if (nowTs < minTimeForEnd) {
                   logger.warn(
                     `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list but match started ` +
@@ -198,18 +200,18 @@ export class MatchWatchdogWorker {
                     `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list and match started ` +
                     `${Math.floor((nowTs - matchTime) / 60)} minutes ago (>120 min). Transitioning to END.`
                   );
-                  
+
                   const updateResult = await client.query(
                     `UPDATE ts_matches 
                      SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
                      WHERE external_id = $2 AND status_id = 3`,
                     [nowTs, stale.matchId]
                   );
-                  
-                  if (updateResult.rowCount > 0) {
+
+                  if (updateResult.rowCount && updateResult.rowCount > 0) {
                     successCount++;
                     reasons['half_time_finished_safe'] = (reasons['half_time_finished_safe'] || 0) + 1;
-                    
+
                     logEvent('info', 'watchdog.reconcile.done', {
                       match_id: stale.matchId,
                       result: 'success',
@@ -233,11 +235,11 @@ export class MatchWatchdogWorker {
               client.release();
             }
           }
-          
+
           // Normal stale match processing (status 2, 4, 5, 7) - HATA #1 fix will be applied here
           if (!recentListMatch) {
             // Match not in recent/list - check match_time before transitioning to END
-            const { pool } = await import('../../database/connection');
+            const { pool } = await import('../database/connection');
             const client = await pool.connect();
             try {
               const matchInfo = await client.query(
@@ -245,21 +247,21 @@ export class MatchWatchdogWorker {
                  FROM ts_matches WHERE external_id = $1`,
                 [stale.matchId]
               );
-              
+
               if (matchInfo.rows.length === 0) {
                 continue; // Match not found, skip
               }
-              
+
               const match = matchInfo.rows[0];
               const nowTs = Math.floor(Date.now() / 1000);
               const matchTime = match.match_time;
-              
+
               // Calculate minimum time for match to be finished
               // Standard match: 90 minutes + 15 min HT = 105 minutes minimum
               // With overtime: up to 120 minutes
               // Safety margin: 150 minutes (2.5 hours) from match_time
               const minTimeForEnd = matchTime + (150 * 60); // 150 minutes in seconds
-              
+
               // If match started less than 150 minutes ago, DO NOT transition to END
               if (nowTs < minTimeForEnd) {
                 logger.warn(
@@ -275,18 +277,18 @@ export class MatchWatchdogWorker {
                   `[Watchdog] Match ${stale.matchId} not in recent/list and match_time (${matchTime}) ` +
                   `is ${Math.floor((nowTs - matchTime) / 60)} minutes ago (>150 min). Transitioning to END.`
                 );
-                
+
                 const updateResult = await client.query(
                   `UPDATE ts_matches 
                    SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
                    WHERE external_id = $2 AND status_id IN (2, 3, 4, 5, 7)`,
                   [nowTs, stale.matchId]
                 );
-                
-                if (updateResult.rowCount > 0) {
+
+                if (updateResult.rowCount && updateResult.rowCount > 0) {
                   successCount++;
                   reasons['finished_not_in_recent_list_safe'] = (reasons['finished_not_in_recent_list_safe'] || 0) + 1;
-                  
+
                   logEvent('info', 'watchdog.reconcile.done', {
                     match_id: stale.matchId,
                     result: 'success',
@@ -306,8 +308,8 @@ export class MatchWatchdogWorker {
           } else if ([8, 9, 10, 12].includes(recentListMatch.statusId)) {
             // Match is END in recent/list but LIVE in DB - transition to END
             logger.info(`[Watchdog] Match ${stale.matchId} is END (status ${recentListMatch.statusId}) in recent/list, transitioning DB to END`);
-            
-            const { pool } = await import('../../database/connection');
+
+            const { pool } = await import('../database/connection');
             const client = await pool.connect();
             try {
               const updateResult = await client.query(
@@ -322,11 +324,11 @@ export class MatchWatchdogWorker {
                   stale.matchId
                 ]
               );
-              
-              if (updateResult.rowCount > 0) {
+
+              if (updateResult.rowCount && updateResult.rowCount > 0) {
                 successCount++;
                 reasons['finished_in_recent_list'] = (reasons['finished_in_recent_list'] || 0) + 1;
-                
+
                 logEvent('info', 'watchdog.reconcile.done', {
                   match_id: stale.matchId,
                   result: 'success',
@@ -386,7 +388,7 @@ export class MatchWatchdogWorker {
         } catch (error: any) {
           const duration = Date.now() - reconcileStartTime;
           failCount++;
-          
+
           // Phase 5-S: Categorize failure reason
           let failureReason = 'unknown_error';
           if (error instanceof CircuitOpenError) {
@@ -428,7 +430,7 @@ export class MatchWatchdogWorker {
         try {
           // Phase 5-S FIX: Check if match is in recent/list first
           const recentListMatch = recentListAllMatches.get(match.matchId);
-          
+
           if (!recentListMatch) {
             // Match not in recent/list - try detail_live first, then diary as fallback
             logEvent('info', 'watchdog.reconcile.start', {
@@ -456,25 +458,25 @@ export class MatchWatchdogWorker {
                 });
                 continue;
               }
-              
+
               // detail_live failed - try diary as fallback (CRITICAL FIX)
               // Extract date from match_time
               const matchDate = new Date(match.matchTime * 1000);
               const dateStr = `${matchDate.getUTCFullYear()}${String(matchDate.getUTCMonth() + 1).padStart(2, '0')}${String(matchDate.getUTCDate()).padStart(2, '0')}`;
-              
+
               try {
                 const diaryResponse = await this.matchDiaryService.getMatchDiary({ date: dateStr, forceRefresh: true } as any);
-                const diaryMatch = (diaryResponse.results || []).find((m: any) => 
+                const diaryMatch = (diaryResponse.results || []).find((m: any) =>
                   String(m.id || m.external_id || m.match_id) === match.matchId
                 );
-                
+
                 if (diaryMatch) {
                   // CRITICAL FIX: Use diary data to update DB (provider-authoritative, no heuristic)
                   const diaryStatusId = diaryMatch.status_id ?? diaryMatch.status ?? null;
                   const diaryHomeScore = diaryMatch.home_score ?? null;
                   const diaryAwayScore = diaryMatch.away_score ?? null;
                   const diaryMinute = diaryMatch.minute !== null && diaryMatch.minute !== undefined ? Number(diaryMatch.minute) : null;
-                  
+
                   // CRITICAL: Update even if status is still 1 (score/minute might have changed)
                   // But prioritize status change if provider says status != 1
                   const client = await pool.connect();
@@ -483,20 +485,20 @@ export class MatchWatchdogWorker {
                       `SELECT provider_update_time, status_id, home_score_regular, away_score_regular, minute FROM ts_matches WHERE external_id = $1`,
                       [match.matchId]
                     );
-                    
+
                     if (existingResult.rows.length > 0) {
                       const existing = existingResult.rows[0];
                       const ingestionTs = Math.floor(Date.now() / 1000);
-                      
+
                       // Update if:
                       // 1. Status changed (diaryStatusId != 1 and != existing.status_id)
                       // 2. Score changed (even if status still 1)
                       // 3. Minute changed (even if status still 1)
                       const statusChanged = diaryStatusId !== null && diaryStatusId !== 1 && diaryStatusId !== existing.status_id;
                       const scoreChanged = (diaryHomeScore !== null && diaryHomeScore !== existing.home_score_regular) ||
-                                         (diaryAwayScore !== null && diaryAwayScore !== existing.away_score_regular);
+                        (diaryAwayScore !== null && diaryAwayScore !== existing.away_score_regular);
                       const minuteChanged = diaryMinute !== null && diaryMinute !== existing.minute;
-                      
+
                       if (statusChanged || scoreChanged || minuteChanged) {
                         const updateQuery = `
                           UPDATE ts_matches
@@ -518,18 +520,18 @@ export class MatchWatchdogWorker {
                               OR minute IS DISTINCT FROM $4
                             )
                         `;
-                        
+
                         const updateResult = await client.query(updateQuery, [
                           diaryStatusId,
                           diaryHomeScore,
                           diaryAwayScore,
-                          diaryMinute,
+                          diaryStatusId === 1 ? diaryMinute : null, // Reset minute if NOT_STARTED
                           ingestionTs,
                           ingestionTs,
                           match.matchId,
                         ]);
-                        
-                        if (updateResult.rowCount > 0) {
+
+                        if (updateResult.rowCount && updateResult.rowCount > 0) {
                           successCount++;
                           reasons['should_be_live_diary_fallback'] = (reasons['should_be_live_diary_fallback'] || 0) + 1;
                           logEvent('info', 'watchdog.reconcile.done', {
@@ -555,7 +557,7 @@ export class MatchWatchdogWorker {
               } catch (diaryError: any) {
                 logger.debug(`[Watchdog] Diary fallback failed for ${match.matchId}:`, diaryError.message);
               }
-              
+
               // Both detail_live and diary failed
               skippedCount++;
               reasons['not_in_recent_list_no_detail_data'] = (reasons['not_in_recent_list_no_detail_data'] || 0) + 1;
@@ -603,7 +605,7 @@ export class MatchWatchdogWorker {
           // Update status using optimistic locking (same pattern as reconcileMatchToDatabase)
           const client = await pool.connect();
           let statusUpdateSuccess = false;
-          
+
           try {
             // Read existing timestamps for optimistic locking
             const existingResult = await client.query(
@@ -651,7 +653,7 @@ export class MatchWatchdogWorker {
                 match.matchId,
               ]);
 
-              if (updateResult.rowCount > 0) {
+              if (updateResult.rowCount && updateResult.rowCount > 0) {
                 statusUpdateSuccess = true;
                 logger.info(`[Watchdog] Updated status for ${match.matchId} from 1 to ${recentListMatch.statusId} (from recent/list)`);
               }
@@ -735,7 +737,7 @@ export class MatchWatchdogWorker {
         } catch (error: any) {
           const duration = Date.now() - reconcileStartTime;
           failCount++;
-          
+
           // Phase 5-S: Categorize failure reason
           let failureReason = 'unknown_error';
           if (error instanceof CircuitOpenError) {

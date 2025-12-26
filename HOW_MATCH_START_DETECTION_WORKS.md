@@ -136,3 +136,4 @@ for (const match of matches) {
 - **TheSports'tan gelen `status_id`** kullanılıyor
 - `/match/detail_live` endpoint'i **tek gerçek kaynak**
 
+

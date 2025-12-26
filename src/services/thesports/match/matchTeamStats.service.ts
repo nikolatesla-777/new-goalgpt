@@ -1,7 +1,8 @@
 /**
  * Match Team Stats Service
  * 
- * Handles business logic for /match/team_stats/list endpoint
+ * Handles business logic for /match/team_stats/detail endpoint
+ * CRITICAL: Uses /detail endpoint (not /list) for specific match data
  */
 
 import { TheSportsClient } from '../client/thesports-client';
@@ -11,10 +12,11 @@ import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 
 export class MatchTeamStatsService {
-  constructor(private client: TheSportsClient) {}
+  constructor(private client: TheSportsClient) { }
 
   /**
    * Get match team stats with cache support
+   * CRITICAL: Uses /match/team_stats/detail (not /list) for specific match
    */
   async getMatchTeamStats(params: MatchTeamStatsParams): Promise<MatchTeamStatsResponse> {
     const { match_id } = params;
@@ -26,9 +28,10 @@ export class MatchTeamStatsService {
       return cached;
     }
 
-    logger.info(`Fetching match team stats: ${match_id}`);
+    logger.info(`Fetching match team stats (detail): ${match_id}`);
+    // CRITICAL FIX: Use /detail endpoint for specific match data
     const response = await this.client.get<MatchTeamStatsResponse>(
-      '/match/team_stats/list',
+      '/match/team_stats/detail',
       { match_id }
     );
 

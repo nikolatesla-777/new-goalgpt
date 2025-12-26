@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { TheSportsClient } from '../client/thesports-client';
 import { TeamDataService } from '../team/teamData.service';
 import { TeamLogoService } from '../team/teamLogo.service';
+import { CompetitionService } from '../competition/competition.service';
 import { MatchEnricherService } from './matchEnricher.service';
 import { MatchRecent } from '../../../types/thesports/match';
 import { MatchState } from '../../../types/thesports/enums';
@@ -22,7 +23,8 @@ async function testMatchEnricher() {
     const client = new TheSportsClient();
     const teamDataService = new TeamDataService(client);
     const teamLogoService = new TeamLogoService(client);
-    const matchEnricher = new MatchEnricherService(teamDataService, teamLogoService);
+    const competitionService = new CompetitionService(client);
+    const matchEnricher = new MatchEnricherService(teamDataService, teamLogoService, competitionService);
 
     // Create test matches
     const testMatches: MatchRecent[] = [

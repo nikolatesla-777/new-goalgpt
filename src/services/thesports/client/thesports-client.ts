@@ -48,7 +48,7 @@ export class TheSportsClient {
   private createAxiosInstance(): AxiosInstance {
     return axios.create({
       baseURL: this.config.baseUrl,
-      timeout: this.config.timeout || 5000, // Phase 4-2: Default 5s timeout
+      timeout: this.config.timeout || 30000, // Increased from 5s to 30s for stability
       headers: {
         Accept: 'application/json',
         'User-Agent': 'GoalGPT/1.0',

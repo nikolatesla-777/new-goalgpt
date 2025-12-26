@@ -46,7 +46,7 @@ export class ProactiveMatchStatusCheckWorker {
 
     try {
       const nowTs = Math.floor(Date.now() / 1000);
-      
+
       // TSİ-based today start (UTC-3 hours)
       const TSI_OFFSET_SECONDS = 3 * 3600;
       const nowDate = new Date(nowTs * 1000);
@@ -62,7 +62,7 @@ export class ProactiveMatchStatusCheckWorker {
       client = await pool.connect();
       try {
         const minTimeForEnd = nowTs - (150 * 60); // 150 minutes ago
-        
+
         const query = `
           SELECT 
             external_id,
@@ -107,8 +107,8 @@ export class ProactiveMatchStatusCheckWorker {
           try {
             checkedCount++;
             const minutesAgo = Math.floor((nowTs - match.match_time) / 60);
-            const checkReason = match.status_id === 1 
-              ? 'should_be_live' 
+            const checkReason = match.status_id === 1
+              ? 'should_be_live'
               : 'suspicious_end_verify_via_endpoint';
 
             logEvent('info', 'proactive.check.start', {
@@ -131,22 +131,22 @@ export class ProactiveMatchStatusCheckWorker {
                 // Extract date from match_time
                 const matchDate = new Date(match.match_time * 1000);
                 const dateStr = `${matchDate.getUTCFullYear()}${String(matchDate.getUTCMonth() + 1).padStart(2, '0')}${String(matchDate.getUTCDate()).padStart(2, '0')}`;
-                
+
                 const { MatchDiaryService } = await import('../services/thesports/match/matchDiary.service');
                 const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
                 const client = (this.matchDetailLiveService as any).client;
                 const diaryService = new MatchDiaryService(client);
                 const diaryResponse = await diaryService.getMatchDiary({ date: dateStr, forceRefresh: true } as any);
-                const diaryMatch = (diaryResponse.results || []).find((m: any) => 
+                const diaryMatch = (diaryResponse.results || []).find((m: any) =>
                   String(m.id || m.external_id || m.match_id) === match.external_id
                 );
-                
+
                 if (diaryMatch) {
                   const diaryStatusId = diaryMatch.status_id ?? diaryMatch.status ?? null;
                   const diaryHomeScore = diaryMatch.home_score ?? null;
                   const diaryAwayScore = diaryMatch.away_score ?? null;
                   const diaryMinute = diaryMatch.minute !== null && diaryMatch.minute !== undefined ? Number(diaryMatch.minute) : null;
-                  
+
                   // CRITICAL: Update if status changed OR score/minute changed (even if status still 1)
                   const dbClient = await pool.connect();
                   try {
@@ -154,11 +154,11 @@ export class ProactiveMatchStatusCheckWorker {
                       `SELECT provider_update_time, status_id, home_score_regular, away_score_regular, minute FROM ts_matches WHERE external_id = $1`,
                       [match.external_id]
                     );
-                    
+
                     if (existingResult.rows.length > 0) {
                       const existing = existingResult.rows[0];
                       const ingestionTs = Math.floor(Date.now() / 1000);
-                      
+
                       // Update if:
                       // 1. Status changed (diaryStatusId != existing.status_id) - CRITICAL: Even if diaryStatusId = 1, if match_time passed, accept provider status
                       // 2. Score changed (even if status still 1)
@@ -169,9 +169,9 @@ export class ProactiveMatchStatusCheckWorker {
                       // CRITICAL FIX: If match_time passed and diary shows status != 1, always update (even if existing is 1)
                       const shouldForceUpdate = matchTimePassed && diaryStatusId !== null && diaryStatusId !== 1 && existing.status_id === 1;
                       const scoreChanged = (diaryHomeScore !== null && diaryHomeScore !== existing.home_score_regular) ||
-                                         (diaryAwayScore !== null && diaryAwayScore !== existing.away_score_regular);
+                        (diaryAwayScore !== null && diaryAwayScore !== existing.away_score_regular);
                       const minuteChanged = diaryMinute !== null && diaryMinute !== existing.minute;
-                      
+
                       if (statusChanged || shouldForceUpdate || scoreChanged || minuteChanged) {
                         // CRITICAL FIX: If status is 2, 3, 4, 5, 7 and first_half_kickoff_ts is NULL, set it from match_time
                         const needsKickoffTs = (diaryStatusId === 2 || diaryStatusId === 3 || diaryStatusId === 4 || diaryStatusId === 5 || diaryStatusId === 7);
@@ -181,7 +181,7 @@ export class ProactiveMatchStatusCheckWorker {
                         );
                         const existingKickoffTs = existingKickoffResult.rows[0]?.first_half_kickoff_ts;
                         const shouldSetKickoffTs = needsKickoffTs && existingKickoffTs === null;
-                        
+
                         const updateQuery = `
                           UPDATE ts_matches
                           SET 
@@ -215,11 +215,16 @@ export class ProactiveMatchStatusCheckWorker {
                         if (shouldSetKickoffTs) {
                           updateParams.push(match.match_time); // Use match_time for first_half_kickoff_ts
                         }
-                        
+
                         const updateResult = await dbClient.query(updateQuery, updateParams);
-                        
-                        if (updateResult.rowCount > 0) {
-                          reconcileResult = { updated: true, rowCount: updateResult.rowCount, statusId: diaryStatusId, score: null };
+
+                        if (updateResult.rowCount && updateResult.rowCount > 0) {
+                          reconcileResult = {
+                            updated: true,
+                            rowCount: updateResult.rowCount || 0,
+                            statusId: diaryStatusId,
+                            score: null
+                          };
                         }
                       }
                     }

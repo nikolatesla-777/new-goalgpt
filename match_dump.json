@@ -1,0 +1,2914 @@
+[
+  {
+    "external_id": "dj2ryohle2wgq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766628000"
+  },
+  {
+    "external_id": "2y8m4zh5w12zql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766628000"
+  },
+  {
+    "external_id": "y39mp1h60k53moj",
+    "home_score_regular": null,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766637000"
+  },
+  {
+    "external_id": "vjxm8ghe5217r6o",
+    "home_score_regular": 0,
+    "away_score_regular": 0,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766638800"
+  },
+  {
+    "external_id": "y0or5jh8z0pkqwz",
+    "home_score_regular": 3,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766638800"
+  },
+  {
+    "external_id": "n54qllhnpk0gqvy",
+    "home_score_regular": 2,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 91,
+    "match_time": "1766638800"
+  },
+  {
+    "external_id": "x7lm7phj356dm2w",
+    "home_score_regular": 3,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766638800"
+  },
+  {
+    "external_id": "vjxm8ghe5205r6o",
+    "home_score_regular": null,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766641800"
+  },
+  {
+    "external_id": "8yomo4h1gzwzq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766646000"
+  },
+  {
+    "external_id": "6ypq3nhv7124md7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766646000"
+  },
+  {
+    "external_id": "2y8m4zh5w4kwql0",
+    "home_score_regular": 1,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766646300"
+  },
+  {
+    "external_id": "pxwrxlhyx2klryk",
+    "home_score_regular": null,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766649600"
+  },
+  {
+    "external_id": "3glrw7hn3lv9qdy",
+    "home_score_regular": 7,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766649600"
+  },
+  {
+    "external_id": "vjxm8ghe52z7r6o",
+    "home_score_regular": 3,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766649600"
+  },
+  {
+    "external_id": "n54qllhnpkogqvy",
+    "home_score_regular": 2,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 90,
+    "match_time": "1766649600"
+  },
+  {
+    "external_id": "318q66hx67dlqo9",
+    "home_score_regular": 4,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 26,
+    "match_time": "1766649600"
+  },
+  {
+    "external_id": "2y8m4zh51762ql0",
+    "home_score_regular": 5,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766653200"
+  },
+  {
+    "external_id": "k82rekhg0899rep",
+    "home_score_regular": 2,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766653200"
+  },
+  {
+    "external_id": "l5ergph4l3xpr8k",
+    "home_score_regular": null,
+    "away_score_regular": 3,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766654400"
+  },
+  {
+    "external_id": "8yomo4h1z83nq0j",
+    "home_score_regular": 1,
+    "away_score_regular": 3,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766655000"
+  },
+  {
+    "external_id": "x7lm7phj75e4m2w",
+    "home_score_regular": 1,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766656800"
+  },
+  {
+    "external_id": "n54qllhnpxo5qvy",
+    "home_score_regular": null,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766656800"
+  },
+  {
+    "external_id": "1l4rjnh9jex7m7v",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766656800"
+  },
+  {
+    "external_id": "l7oqdehg8eg7r51",
+    "home_score_regular": null,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766657700"
+  },
+  {
+    "external_id": "dj2ryohled7vq1z",
+    "home_score_regular": null,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766658000"
+  },
+  {
+    "external_id": "y39mp1h60kn2moj",
+    "home_score_regular": 6,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766658000"
+  },
+  {
+    "external_id": "l5ergph4l3zlr8k",
+    "home_score_regular": 5,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766658600"
+  },
+  {
+    "external_id": "3glrw7hn3l4zqdy",
+    "home_score_regular": 1,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 10,
+    "match_time": "1766659500"
+  },
+  {
+    "external_id": "6ypq3nhv75y3md7",
+    "home_score_regular": 1,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766660400"
+  },
+  {
+    "external_id": "dj2ryohley64q1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766660400"
+  },
+  {
+    "external_id": "965mkyhk24vlr1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766660400"
+  },
+  {
+    "external_id": "2y8m4zh5wjopql0",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766660400"
+  },
+  {
+    "external_id": "x7lm7phj35o2m2w",
+    "home_score_regular": null,
+    "away_score_regular": 4,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766660400"
+  },
+  {
+    "external_id": "pxwrxlhyx21yryk",
+    "home_score_regular": 1,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766661000"
+  },
+  {
+    "external_id": "6ypq3nhv7453md7",
+    "home_score_regular": 2,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766661000"
+  },
+  {
+    "external_id": "3glrw7hn3l14qdy",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766661300"
+  },
+  {
+    "external_id": "vjxm8ghe52g0r6o",
+    "home_score_regular": 3,
+    "away_score_regular": 4,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766661600"
+  },
+  {
+    "external_id": "pxwrxlhyx21oryk",
+    "home_score_regular": 1,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766662200"
+  },
+  {
+    "external_id": "l7oqdehg8ek0r51",
+    "home_score_regular": 1,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766662500"
+  },
+  {
+    "external_id": "pxwrxlhy32o4ryk",
+    "home_score_regular": 1,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766664000"
+  },
+  {
+    "external_id": "x7lm7phj35vzm2w",
+    "home_score_regular": 4,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766664000"
+  },
+  {
+    "external_id": "y0or5jh8z04dqwz",
+    "home_score_regular": null,
+    "away_score_regular": 6,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766664300"
+  },
+  {
+    "external_id": "y39mp1h64exwmoj",
+    "home_score_regular": 1,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766664900"
+  },
+  {
+    "external_id": "k82rekhgxj5xrep",
+    "home_score_regular": 1,
+    "away_score_regular": 4,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766664900"
+  },
+  {
+    "external_id": "dn1m1ghl8j8zmoe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766665800"
+  },
+  {
+    "external_id": "318q66hxjejdqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766665800"
+  },
+  {
+    "external_id": "318q66hxjekdqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766665800"
+  },
+  {
+    "external_id": "zp5rzghgxk2oq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766665800"
+  },
+  {
+    "external_id": "4jwq2ghnz1x3m0v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766665800"
+  },
+  {
+    "external_id": "2y8m4zh51y6dql0",
+    "home_score_regular": 2,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766665800"
+  },
+  {
+    "external_id": "jw2r09hk6ne2rz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766665800"
+  },
+  {
+    "external_id": "8yomo4h10pz7q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766665800"
+  },
+  {
+    "external_id": "l5ergph48gkwr8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766667000"
+  },
+  {
+    "external_id": "3glrw7hn31x2qdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766667600"
+  },
+  {
+    "external_id": "2y8m4zh5p49dql0",
+    "home_score_regular": 1,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766667600"
+  },
+  {
+    "external_id": "dn1m1ghlpogvmoe",
+    "home_score_regular": 1,
+    "away_score_regular": 3,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766668200"
+  },
+  {
+    "external_id": "318q66hx671lqo9",
+    "home_score_regular": 1,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766668500"
+  },
+  {
+    "external_id": "l5ergph4pg96r8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766669400"
+  },
+  {
+    "external_id": "l7oqdehg175pr51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766669400"
+  },
+  {
+    "external_id": "8yomo4h1gkw6q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": null,
+    "match_time": "1766669400"
+  },
+  {
+    "external_id": "8yomo4h1zndnq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766669400"
+  },
+  {
+    "external_id": "6ypq3nhv1x26md7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766669400"
+  },
+  {
+    "external_id": "jw2r09hk18oyrz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766669400"
+  },
+  {
+    "external_id": "dj2ryohl28zzq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766669400"
+  },
+  {
+    "external_id": "2y8m4zh51lk2ql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766669400"
+  },
+  {
+    "external_id": "6ypq3nhvny7omd7",
+    "home_score_regular": 2,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766671200"
+  },
+  {
+    "external_id": "k82rekhg0845rep",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766671200"
+  },
+  {
+    "external_id": "k82rekhg085yrep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 45,
+    "match_time": "1766673000"
+  },
+  {
+    "external_id": "1l4rjnh9j3w8m7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 107,
+    "match_time": "1766673000"
+  },
+  {
+    "external_id": "y0or5jh8z09jqwz",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766673000"
+  },
+  {
+    "external_id": "x7lm7phj35x5m2w",
+    "home_score_regular": 3,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766673000"
+  },
+  {
+    "external_id": "dn1m1ghl1920moe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766674200"
+  },
+  {
+    "external_id": "y39mp1h60k6emoj",
+    "home_score_regular": 1,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 100,
+    "match_time": "1766674800"
+  },
+  {
+    "external_id": "vjxm8ghew26nr6o",
+    "home_score_regular": 1,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 96,
+    "match_time": "1766674800"
+  },
+  {
+    "external_id": "y0or5jh8jpp8qwz",
+    "home_score_regular": null,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 96,
+    "match_time": "1766674800"
+  },
+  {
+    "external_id": "23xmvkh6w512qg8",
+    "home_score_regular": 1,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 96,
+    "match_time": "1766674800"
+  },
+  {
+    "external_id": "8yomo4h1zl3oq0j",
+    "home_score_regular": null,
+    "away_score_regular": 3,
+    "status_id": 8,
+    "minute": 98,
+    "match_time": "1766675100"
+  },
+  {
+    "external_id": "6ypq3nhv1y3ymd7",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 97,
+    "match_time": "1766676300"
+  },
+  {
+    "external_id": "vjxm8ghe5gn1r6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 97,
+    "match_time": "1766678400"
+  },
+  {
+    "external_id": "6ypq3nhv752dmd7",
+    "home_score_regular": 2,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766680200"
+  },
+  {
+    "external_id": "pxwrxlhyx16oryk",
+    "home_score_regular": 1,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766682000"
+  },
+  {
+    "external_id": "l7oqdehg86x4r51",
+    "home_score_regular": null,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 97,
+    "match_time": "1766682000"
+  },
+  {
+    "external_id": "4wyrn4h6oewzq86",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766682000"
+  },
+  {
+    "external_id": "l5ergph4l3dor8k",
+    "home_score_regular": 2,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 98,
+    "match_time": "1766682000"
+  },
+  {
+    "external_id": "dj2ryohled0nq1z",
+    "home_score_regular": null,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 99,
+    "match_time": "1766682000"
+  },
+  {
+    "external_id": "jw2r09hk6n3nrz8",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766682000"
+  },
+  {
+    "external_id": "4jwq2ghnz03lm0v",
+    "home_score_regular": 1,
+    "away_score_regular": 4,
+    "status_id": 8,
+    "minute": 101,
+    "match_time": "1766683200"
+  },
+  {
+    "external_id": "ednm9whwe5w0ryo",
+    "home_score_regular": null,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 97,
+    "match_time": "1766683800"
+  },
+  {
+    "external_id": "y39mp1h69d0kmoj",
+    "home_score_regular": 2,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 100,
+    "match_time": "1766683800"
+  },
+  {
+    "external_id": "l5ergph4l563r8k",
+    "home_score_regular": null,
+    "away_score_regular": 2,
+    "status_id": 8,
+    "minute": 98,
+    "match_time": "1766683800"
+  },
+  {
+    "external_id": "dj2ryohleypgq1z",
+    "home_score_regular": 3,
+    "away_score_regular": null,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766685600"
+  },
+  {
+    "external_id": "zp5rzghg0kvdq82",
+    "home_score_regular": 1,
+    "away_score_regular": 3,
+    "status_id": 8,
+    "minute": 95,
+    "match_time": "1766685600"
+  },
+  {
+    "external_id": "x7lm7phjn66zm2w",
+    "home_score_regular": null,
+    "away_score_regular": 1,
+    "status_id": 8,
+    "minute": 98,
+    "match_time": "1766685600"
+  },
+  {
+    "external_id": "2y8m4zh5w491ql0",
+    "home_score_regular": null,
+    "away_score_regular": 2,
+    "status_id": 4,
+    "minute": 93,
+    "match_time": "1766687400"
+  },
+  {
+    "external_id": "pxwrxlhyvpgwryk",
+    "home_score_regular": 3,
+    "away_score_regular": 1,
+    "status_id": 4,
+    "minute": 95,
+    "match_time": "1766687400"
+  },
+  {
+    "external_id": "dn1m1ghlpozvmoe",
+    "home_score_regular": 3,
+    "away_score_regular": 1,
+    "status_id": 4,
+    "minute": 81,
+    "match_time": "1766688300"
+  },
+  {
+    "external_id": "jw2r09hk0ykvrz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766703600"
+  },
+  {
+    "external_id": "6ypq3nhvnpnlmd7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766714400"
+  },
+  {
+    "external_id": "l7oqdehg393nr51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766714400"
+  },
+  {
+    "external_id": "dj2ryohlx9xyq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766714400"
+  },
+  {
+    "external_id": "pxwrxlhy303vryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766714400"
+  },
+  {
+    "external_id": "zp5rzghg629dq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766714400"
+  },
+  {
+    "external_id": "8yomo4h1g5l5q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766714400"
+  },
+  {
+    "external_id": "jw2r09hk6pdxrz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766719800"
+  },
+  {
+    "external_id": "n54qllhnpk64qvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766725200"
+  },
+  {
+    "external_id": "23xmvkh6pgj2qg8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766725200"
+  },
+  {
+    "external_id": "l7oqdehg8ez0r51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766727000"
+  },
+  {
+    "external_id": "vjxm8ghew7w9r6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766732400"
+  },
+  {
+    "external_id": "2y8m4zh5pepgql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766732400"
+  },
+  {
+    "external_id": "8yomo4h1464vq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766732400"
+  },
+  {
+    "external_id": "3glrw7hnpgplqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766732400"
+  },
+  {
+    "external_id": "zp5rzghg62edq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766736000"
+  },
+  {
+    "external_id": "ednm9whw2dlyryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766736000"
+  },
+  {
+    "external_id": "1l4rjnh9j3ppm7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766736000"
+  },
+  {
+    "external_id": "4jwq2ghnz0djm0v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766736000"
+  },
+  {
+    "external_id": "jw2r09hk7wl9rz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766738100"
+  },
+  {
+    "external_id": "dj2ryohled3nq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766738700"
+  },
+  {
+    "external_id": "y39mp1h605g3moj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766738700"
+  },
+  {
+    "external_id": "dn1m1ghlpey3moe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766738700"
+  },
+  {
+    "external_id": "1l4rjnh9j3dpm7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "2y8m4zh5w4d1ql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "318q66hx60yvqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "4jwq2ghnz05jm0v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "pxwrxlhyx2oeryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "3glrw7hn3l5pqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "1l4rjnh928nom7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "8yomo4h1g5j5q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "6ypq3nhv74dgmd7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "pxwrxlhyx2weryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "318q66hx67plqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "dn1m1ghlpoyvmoe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "l5ergph4l5x3r8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "jw2r09hk6pyxrz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "318q66hx673lqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "6ypq3nhv74ygmd7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766739600"
+  },
+  {
+    "external_id": "3glrw7hn3lepqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766741400"
+  },
+  {
+    "external_id": "vjxm8ghe52o5r6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766743200"
+  },
+  {
+    "external_id": "8yomo4h14lgjq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": 28,
+    "match_time": "1766743200"
+  },
+  {
+    "external_id": "x7lm7phj35dzm2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766744100"
+  },
+  {
+    "external_id": "965mkyhk2gj7r1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766745000"
+  },
+  {
+    "external_id": "ednm9whw2dj8ryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766745000"
+  },
+  {
+    "external_id": "3glrw7hnpx22qdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766745000"
+  },
+  {
+    "external_id": "vjxm8ghewnd1r6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766746800"
+  },
+  {
+    "external_id": "2y8m4zh5wj7zql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766746800"
+  },
+  {
+    "external_id": "6ypq3nhv7584md7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766746800"
+  },
+  {
+    "external_id": "dn1m1ghlpe96moe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766746800"
+  },
+  {
+    "external_id": "8yomo4h1gk8zq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766746800"
+  },
+  {
+    "external_id": "y0or5jh8z0d8qwz",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766746800"
+  },
+  {
+    "external_id": "n54qllhnpky4qvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766747700"
+  },
+  {
+    "external_id": "23xmvkh6pgz2qg8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766748600"
+  },
+  {
+    "external_id": "8yomo4h1gklgq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766748600"
+  },
+  {
+    "external_id": "3glrw7hn3124qdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766748600"
+  },
+  {
+    "external_id": "l7oqdehg8ew0r51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766748600"
+  },
+  {
+    "external_id": "6ypq3nhvn4oymd7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "x7lm7phj08wkm2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "dn1m1ghl307lmoe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "l7oqdehg0xdgr51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "y0or5jh86ep2qwz",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "x7lm7phj7y3lm2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "pxwrxlhyx1n7ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "3glrw7hn3196qdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "vjxm8ghe5g0wr6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "965mkyhk2g9vr1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "y39mp1h60k82moj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "k82rekhg08d5rep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "x7lm7phj8066m2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "4wyrn4h6o7p8q86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766750400"
+  },
+  {
+    "external_id": "n54qllhn1x0lqvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766751300"
+  },
+  {
+    "external_id": "318q66hxg396qo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766751300"
+  },
+  {
+    "external_id": "23xmvkh69d57qg8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766751600"
+  },
+  {
+    "external_id": "3glrw7hno27vqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766751600"
+  },
+  {
+    "external_id": "pxwrxlhyv854ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766751600"
+  },
+  {
+    "external_id": "zp5rzghg4zlyq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766751900"
+  },
+  {
+    "external_id": "y39mp1h60kx5moj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "4jwq2ghnkz71m0v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "ednm9whw946nryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "6ypq3nhvw7pgmd7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "23xmvkh645x9qg8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "dj2ryohlxeypq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "vjxm8ghe5gd0r6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "dn1m1ghlpodvmoe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "4wyrn4h6o718q86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "pxwrxlhyz427ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "8yomo4h1xj6kq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752200"
+  },
+  {
+    "external_id": "vjxm8ghexdlnr6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766752800"
+  },
+  {
+    "external_id": "y0or5jh80265qwz",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753100"
+  },
+  {
+    "external_id": "pxwrxlhy2ke0ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753100"
+  },
+  {
+    "external_id": "3glrw7hnlv6eqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753100"
+  },
+  {
+    "external_id": "vjxm8ghe2z36r6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753100"
+  },
+  {
+    "external_id": "x7lm7phj518ym2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753100"
+  },
+  {
+    "external_id": "pxwrxlhy38x8ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753100"
+  },
+  {
+    "external_id": "dn1m1ghlpnx8moe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753100"
+  },
+  {
+    "external_id": "k82rekhg09p9rep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753100"
+  },
+  {
+    "external_id": "y0or5jh8026pqwz",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753400"
+  },
+  {
+    "external_id": "n54qllhnko1oqvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753400"
+  },
+  {
+    "external_id": "1l4rjnh95zw6m7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766753400"
+  },
+  {
+    "external_id": "318q66hx7n9kqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "pxwrxlhyjd27ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "4wyrn4h670j0q86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "l7oqdehgedv8r51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "965mkyhkeo55r1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "4wyrn4h64l2yq86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "k82rekhgox60rep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "8yomo4h1vg65q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "jw2r09hkp943rz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "y0or5jh8o63wqwz",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "l7oqdehged58r51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "3glrw7hnl0xxqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 9,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "l5ergph45y0kr8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "l7oqdehge2y9r51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "dj2ryohlx4x0q1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "6ypq3nhvnenjmd7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "318q66hx0p2zqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "dj2ryohlgx40q1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "y0or5jh8o0yxqwz",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "pxwrxlhy3ejwryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "3glrw7hnp6y5qdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "vjxm8ghew38dr6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "x7lm7phj78w6m2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "n54qllhnz18lqvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 13,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "jw2r09hk090grz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "pxwrxlhy3e36ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "3glrw7hnp238qdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "ednm9whw2dpyryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "965mkyhk2g0vr1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "x7lm7phj3ol1m2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754000"
+  },
+  {
+    "external_id": "x7lm7phjpx8lm2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766754300"
+  },
+  {
+    "external_id": "l7oqdehg20xgr51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766755200"
+  },
+  {
+    "external_id": "318q66hx05e4qo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766755800"
+  },
+  {
+    "external_id": "zp5rzghg678jq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766755800"
+  },
+  {
+    "external_id": "6ypq3nhvzn02md7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "ednm9whw0x06ryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "y39mp1h64w44moj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "vjxm8ghe5265r6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "1l4rjnh9z5xem7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "jw2r09hkx0ldrz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "l7oqdehg43nkr51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "dj2ryohljxk6q1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "3glrw7hnokjdqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "l7oqdehg320er51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "dj2ryohlx4g5q1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "8yomo4h14xv4q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "pxwrxlhy3ej5ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "3glrw7hnp6ynqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "2y8m4zh5px8xql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "vjxm8ghew38kr6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "6ypq3nhvnew7md7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "n54qllhnx18xqvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "y0or5jh8e634qwz",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "23xmvkh6d9kkqg8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "zp5rzghgz4pxq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "2y8m4zh5gp3oql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "vjxm8ghej38vr6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766757600"
+  },
+  {
+    "external_id": "dn1m1ghl0g52moe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766758500"
+  },
+  {
+    "external_id": "dj2ryohlgp57q1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766759400"
+  },
+  {
+    "external_id": "6ypq3nhvw8gdmd7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766759400"
+  },
+  {
+    "external_id": "8yomo4h1247dq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766759400"
+  },
+  {
+    "external_id": "2y8m4zh587n7ql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766759400"
+  },
+  {
+    "external_id": "8yomo4h1v896q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766759400"
+  },
+  {
+    "external_id": "1l4rjnh9j30pm7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766759400"
+  },
+  {
+    "external_id": "4jwq2ghnz0jjm0v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766759400"
+  },
+  {
+    "external_id": "965mkyhk2gxvr1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766759400"
+  },
+  {
+    "external_id": "x7lm7phjpyz4m2w",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766760900"
+  },
+  {
+    "external_id": "4jwq2ghnkg8wm0v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l7oqdehg6k2lr51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dj2ryohly042q1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4wyrn4h6ek39q86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "n54qllhnepxeqvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "zp5rzghg73ngq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "1l4rjnh91n8nm7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l5ergph4el73r8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "jw2r09hkj6gxrz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "ednm9whw95jpryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "965mkyhk48j9r1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "k82rekhg925prep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "ednm9whw9o3jryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "2y8m4zh5j9x4ql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "8yomo4h1kox9q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "y39mp1h65dxnmoj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "318q66hx089eqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dn1m1ghle95wmoe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4wyrn4h6eyjjq86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l5ergph43kzgr8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "jw2r09hkn584rz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "n54qllhne3oyqvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "23xmvkh6o2njqg8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "zp5rzghg7olvq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "1l4rjnh91gw7m7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "965mkyhk4w6pr1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "y39mp1h65npxmoj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "k82rekhg94nlrep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dn1m1ghlez74moe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4wyrn4h6en2eq86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l5ergph436yvr8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dj2ryohlyzoxq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "8yomo4h1kdp3q0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "1l4rjnh9zy0em7v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "965mkyhk3lx5r1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "318q66hx4kg9qo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "jw2r09hkj16nrz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l7oqdehg0184r51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "8yomo4h1vzgzq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "6ypq3nhvw174md7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "318q66hx4g2wqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "pxwrxlhy1k4lryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "23xmvkh6dvjkqg8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "zp5rzghgzy9xq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "ednm9whwz846ryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "y39mp1h6jvn4moj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "318q66hxvzpwqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l5ergph4v06dr8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dn1m1ghl3106moe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4wyrn4h649ozq86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l5ergph4eplor8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dj2ryohlg2egq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "pxwrxlhyjvx7ryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "y39mp1h6y4w4moj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "jw2r09hkj09grz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "k82rekhgyz40rep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dn1m1ghlnvzlmoe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4wyrn4h6dznyq86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "k82rekhgo1x7rep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "2y8m4zh581wzql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l5ergph4e8ydr8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l7oqdehg032zr51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "2y8m4zh58pxyql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "8yomo4h1v4xpq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "318q66hx461lqo9",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dn1m1ghl3pgvmoe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4wyrn4h64o58q86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l7oqdehg0890r51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dj2ryohlge9nq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "2y8m4zh58we1ql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "pxwrxlhyjx0eryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "3glrw7hny3gpqdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l5ergph4eg5or8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l7oqdehg07e4r51",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "8yomo4h1vn5zq0j",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "3glrw7hnydl6qdy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "n54qllhnk2eyqvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dn1m1ghl0yxxmoe",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dj2ryohlx6poq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "y39mp1h60ke2moj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "2y8m4zh58l4zql0",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "6ypq3nhvwx44md7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "pxwrxlhyvgxeryk",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dj2ryohl439vq1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "dj2ryohlxl70q1z",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "l5ergph48xdjr8k",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "y39mp1h605x9moj",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "k82rekhg08j5rep",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "vjxm8ghe8y2wr6o",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "6ypq3nhv1k3omd7",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4wyrn4h6lpw5q86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "jw2r09hk0y3vrz8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4wyrn4h6o7n8q86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "4jwq2ghnvoj0m0v",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766761200"
+  },
+  {
+    "external_id": "n54qllhn12l3qvy",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766763000"
+  },
+  {
+    "external_id": "ednm9whwxkjnryo",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766763000"
+  },
+  {
+    "external_id": "y0or5jh8j4n2qwz",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766763000"
+  },
+  {
+    "external_id": "23xmvkh693elqg8",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766763000"
+  },
+  {
+    "external_id": "zp5rzghg4jneq82",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766763000"
+  },
+  {
+    "external_id": "965mkyhk57j6r1g",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766763000"
+  },
+  {
+    "external_id": "4wyrn4h6odw9q86",
+    "home_score_regular": null,
+    "away_score_regular": null,
+    "status_id": 1,
+    "minute": null,
+    "match_time": "1766763900"
+  }
+]

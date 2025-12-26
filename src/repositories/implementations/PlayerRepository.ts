@@ -70,8 +70,9 @@ export class PlayerRepository extends BaseRepository<Player> {
       uid?: string | null;
       updated_at?: number;
     }>,
-    batchSize: number = 1000
+    conflictKeyOrBatchSize: string | number = 1000
   ): Promise<Player[]> {
+    const batchSize = typeof conflictKeyOrBatchSize === 'number' ? conflictKeyOrBatchSize : 1000;
     if (players.length === 0) return [];
 
     const client = await pool.connect();
@@ -88,7 +89,7 @@ export class PlayerRepository extends BaseRepository<Player> {
         for (const player of batch) {
           // CRITICAL: Convert team_id "0" to NULL (Free Agent/Retired)
           const teamId = player.team_id === '0' || player.team_id === '' ? null : (player.team_id || null);
-          
+
           // Determine if this is a duplicate based on uid field
           const isDuplicate = !!(player.uid && player.uid.trim() !== '');
 

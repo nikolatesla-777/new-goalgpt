@@ -15,6 +15,10 @@ import {
   getMatchPlayerStats,
   getLiveMatches,
   getShouldBeLiveMatches,
+  getMatchAnalysis,
+  getMatchTrend,
+  getMatchHalfStats,
+  getMatchLiveStats,
 } from '../controllers/match.controller';
 
 export default async function matchRoutes(
@@ -77,5 +81,29 @@ export default async function matchRoutes(
    * Get match player stats
    */
   fastify.get('/:match_id/player-stats', getMatchPlayerStats);
+
+  /**
+   * GET /api/matches/:match_id/analysis
+   * Get match analysis (H2H, historical confrontation)
+   */
+  fastify.get('/:match_id/analysis', getMatchAnalysis);
+
+  /**
+   * GET /api/matches/:match_id/trend
+   * Get match trend (minute-by-minute data)
+   */
+  fastify.get('/:match_id/trend', getMatchTrend);
+
+  /**
+   * GET /api/matches/:match_id/half-stats
+   * Get match half-time stats (first/second half statistics)
+   */
+  fastify.get('/:match_id/half-stats', getMatchHalfStats);
+
+  /**
+   * GET /api/matches/:match_id/live-stats
+   * Get match live stats (from detail_live feed - real-time stats)
+   */
+  fastify.get('/:match_id/live-stats', getMatchLiveStats);
 }
 

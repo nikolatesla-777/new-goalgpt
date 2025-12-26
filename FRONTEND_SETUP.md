@@ -146,3 +146,4 @@ server {
 - Browser console'da hata var mı kontrol et
 
 
+

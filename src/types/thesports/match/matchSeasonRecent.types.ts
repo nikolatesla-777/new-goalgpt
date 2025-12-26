@@ -7,8 +7,8 @@
 import { MatchRecent } from './matchRecent.types';
 
 export interface MatchSeasonRecent extends MatchRecent {
-  season_id: string;
-  competition_id: string;
+  season_id?: string;
+  competition_id?: string;
 }
 
 export interface MatchSeasonRecentResponse {

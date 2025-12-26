@@ -39,7 +39,14 @@ export class TeamLogoService {
     const resultsExtra = await this.getResultsExtraFromCache();
     if (resultsExtra?.team?.[teamId]?.logo_url) {
       const logoUrl = resultsExtra.team[teamId].logo_url!;
-      await this.repository.update(team.id, { logo_url: logoUrl });
+      if (team?.id) {
+        await this.repository.update(team.id, { logo_url: logoUrl });
+      } else {
+        await this.repository.createOrUpdate({
+          external_id: teamId,
+          logo_url: logoUrl,
+        });
+      }
       return logoUrl;
     }
 
@@ -57,7 +64,7 @@ export class TeamLogoService {
     // 4. Fallback URL pattern
     const fallbackLogoUrl = this.buildFallbackLogoUrl(teamId);
     const isValid = await this.validateLogoUrl(fallbackLogoUrl);
-    
+
     if (isValid) {
       if (team) {
         await this.repository.update(team.id, { logo_url: fallbackLogoUrl });

@@ -108,3 +108,4 @@ cd /var/www/goalgpt && node -e "const {Pool}=require('pg');require('dotenv').con
 - Sonrasında matches endpoint'leri data döndürecek
 
 
+

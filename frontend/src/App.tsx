@@ -1,13 +1,13 @@
 import { useState } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { MatchList } from './components/MatchList';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { MatchDetailPage } from './components/match-detail/MatchDetailPage';
 
-function App() {
+function HomePage() {
   const [view, setView] = useState<'recent' | 'diary' | 'live'>('diary');
-  // Default to today's date
   const today = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState<string>(today);
-
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
@@ -18,8 +18,8 @@ function App() {
           </h1>
           <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.25rem', margin: 0 }}>
             TheSports API - Anlık Güncellemeler
-        </p>
-      </div>
+          </p>
+        </div>
       </header>
 
       <nav style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -102,6 +102,17 @@ function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/match/:matchId" element={<MatchDetailPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

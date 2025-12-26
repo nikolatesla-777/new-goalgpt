@@ -45,14 +45,14 @@ export class CountrySyncService {
    */
   async syncAllCountries(): Promise<{ total: number; synced: number; errors: number }> {
     logger.info('Starting country sync from TheSports API...');
-    
+
     let totalFetched = 0;
     let totalSynced = 0;
     let totalErrors = 0;
 
     try {
       logger.info('Fetching countries from /country/list...');
-      
+
       const response = await axios.get<CountryListResponse>(
         `${this.baseUrl}/country/list`,
         {
@@ -70,7 +70,7 @@ export class CountrySyncService {
       if (data.err || (data.code && data.code !== 200 && data.code !== 0)) {
         const errorMsg = data.err || data.msg || 'Unknown error';
         logger.warn(`TheSports API error: ${errorMsg}`);
-        
+
         // If rate limited, wait and retry
         if (data.code === 429 || errorMsg.toLowerCase().includes('too many requests')) {
           logger.warn('Rate limit hit, waiting 60 seconds...');
@@ -78,7 +78,7 @@ export class CountrySyncService {
           // Retry once
           return this.syncAllCountries();
         }
-        
+
         return {
           total: 0,
           synced: 0,
@@ -101,9 +101,9 @@ export class CountrySyncService {
       // Transform and save to database
       const countriesToSave = countries.map(country => ({
         external_id: country.id,
-        category_id: country.category_id || null,
+        category_id: country.category_id || undefined,
         name: country.name,
-        logo: country.logo || null,
+        logo: country.logo || undefined,
         updated_at: country.updated_at,
       }));
 
@@ -118,7 +118,7 @@ export class CountrySyncService {
 
     } catch (error: any) {
       logger.error(`Error fetching countries:`, error.message);
-      
+
       // If rate limited, wait and retry
       if (error.response?.status === 429 || error.message?.includes('429')) {
         logger.warn('Rate limit hit, waiting 60 seconds...');
@@ -126,7 +126,7 @@ export class CountrySyncService {
         // Retry once
         return this.syncAllCountries();
       }
-      
+
       totalErrors = 1;
     }
 
@@ -145,13 +145,14 @@ export class CountrySyncService {
    */
   async syncIncremental(lastSyncTime?: number): Promise<{ total: number; synced: number }> {
     logger.info('Starting incremental country sync...');
-    
+
     // Since /country/list doesn't support time parameter,
     // we'll do a full sync but the upsert will only update changed records
     const result = await this.syncAllCountries();
     return { total: result.total, synced: result.synced };
   }
 }
+
 
 
 

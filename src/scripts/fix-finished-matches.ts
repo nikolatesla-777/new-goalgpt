@@ -14,7 +14,7 @@ dotenv.config();
 async function fixFinishedMatches() {
   const client = await pool.connect();
   const theSportsClient = new TheSportsClient();
-  
+
   try {
     // Find matches in second half (status 4) that might be finished
     // Check matches starting at 18:30 and 19:00
@@ -33,40 +33,40 @@ async function fixFinishedMatches() {
         AND match_time < $2
       ORDER BY match_time DESC
     `;
-    
+
     // 18:30 matches: 1766156400 to 1766158200
     // 19:00 matches: 1766158200 to 1766160000
     const start18_30 = 1766156400;
     const end19_00 = 1766160000;
-    
+
     const result = await client.query(query, [start18_30, end19_00]);
     const matches = result.rows;
-    
+
     logger.info(`Found ${matches.length} matches in SECOND_HALF (status 4) for 18:30-19:00`);
-    
+
     let updated = 0;
     let errors = 0;
-    
+
     for (const match of matches) {
       try {
         const matchId = match.external_id;
         const matchTime = parseInt(match.match_time) || 0;
         const liveKickoff = parseInt(match.live_kickoff_time) || matchTime;
-        
+
         // Calculate elapsed time since second half started
         const elapsedSinceSecondHalf = (now - liveKickoff) / 60;
         const calculatedMinute = 45 + Math.floor(elapsedSinceSecondHalf);
-        
+
         // If calculated minute is > 90, check API for actual status
         if (calculatedMinute > 90) {
           logger.info(`Match ${matchId} shows ${calculatedMinute} minutes, checking API...`);
-          
+
           try {
             const apiResponse = await theSportsClient.get('/match/detail_live', { match_id: matchId });
-            
-            if (apiResponse && apiResponse.result) {
-              const apiStatus = apiResponse.result.status || apiResponse.result.status_id;
-              
+
+            if (apiResponse && (apiResponse as any).result) {
+              const apiStatus = (apiResponse as any).result.status || (apiResponse as any).result.status_id;
+
               // Status 8 = END, Status 10 = FINISHED
               if (apiStatus === 8 || apiStatus === 10 || apiStatus === 12) {
                 // Update status to END (8)
@@ -76,7 +76,7 @@ async function fixFinishedMatches() {
                    WHERE external_id = $1`,
                   [matchId]
                 );
-                
+
                 logger.info(
                   `✅ Updated match ${matchId} to END (status 8): ` +
                   `API status=${apiStatus}, calculated_minute=${calculatedMinute}`
@@ -94,7 +94,7 @@ async function fixFinishedMatches() {
                    WHERE external_id = $1`,
                   [matchId]
                 );
-                
+
                 logger.info(
                   `✅ Updated match ${matchId} to END (status 8) - assumed finished: ` +
                   `calculated_minute=${calculatedMinute}`
@@ -112,7 +112,7 @@ async function fixFinishedMatches() {
                  WHERE external_id = $1`,
                 [matchId]
               );
-              
+
               logger.info(
                 `✅ Updated match ${matchId} to END (status 8) - API failed, assumed finished: ` +
                 `calculated_minute=${calculatedMinute}`
@@ -121,18 +121,18 @@ async function fixFinishedMatches() {
             }
           }
         }
-        
+
         // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 200));
-        
+
       } catch (error: any) {
         logger.error(`Error processing match ${match.external_id}:`, error.message);
         errors++;
       }
     }
-    
+
     logger.info(`✅ Updated ${updated} matches to END (status 8), ${errors} errors`);
-    
+
     // Show results
     const resultQuery = `
       SELECT 
@@ -146,7 +146,7 @@ async function fixFinishedMatches() {
       WHERE match_time >= $1 AND match_time < $2
       ORDER BY match_time ASC
     `;
-    
+
     const results = await client.query(resultQuery, [start18_30, end19_00]);
     logger.info(`\n=== RESULTS ===`);
     for (const row of results.rows) {
@@ -161,7 +161,7 @@ async function fixFinishedMatches() {
         `minute=${minute}, score=${row.home_score_regular}-${row.away_score_regular}`
       );
     }
-    
+
   } finally {
     client.release();
   }

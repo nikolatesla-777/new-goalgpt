@@ -138,23 +138,23 @@ export async function getRecentMatches(params?: {
 
   const url = `${API_BASE_URL}/matches/recent?${queryParams}`;
   const response = await fetch(url);
-  
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
   }
-  
+
   const data: ApiResponse<MatchRecentResponse> = await response.json();
-  
+
   if (!data.success) {
     throw new Error(data.message || 'Failed to fetch recent matches');
   }
-  
+
   // Check for TheSports API error
   if (data.data.err) {
     throw new Error(data.data.err);
   }
-  
+
   return data.data;
 }
 
@@ -165,34 +165,34 @@ export async function getRecentMatches(params?: {
  */
 export async function getLiveMatches(): Promise<MatchDiaryResponse> {
   const url = `${API_BASE_URL}/matches/live`;
-  
+
   // Add timeout (60 seconds) to prevent hanging
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 60000);
-  
+
   try {
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
     }
-    
+
     const data: ApiResponse<MatchDiaryResponse> = await response.json();
-  
-  if (!data.success) {
-    throw new Error(data.message || 'Failed to fetch live matches');
-  }
-  
-  // Check for TheSports API error
-  if (data.data.err) {
-    throw new Error(data.data.err);
-  }
-  
-  // CRITICAL FIX: Ensure results is always an array
-  const results = Array.isArray(data.data?.results) ? data.data.results : [];
-  
+
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch live matches');
+    }
+
+    // Check for TheSports API error
+    if (data.data.err) {
+      throw new Error(data.data.err);
+    }
+
+    // CRITICAL FIX: Ensure results is always an array
+    const results = Array.isArray(data.data?.results) ? data.data.results : [];
+
     return {
       results,
       err: data.data?.err ?? undefined,
@@ -222,13 +222,13 @@ export async function getMatchDiary(date?: string): Promise<MatchDiaryResponse> 
   console.log('🔍 [getMatchDiary] Date param:', date);
 
   const response = await fetch(fullUrl);
-  
+
   if (!response.ok) {
     const errorText = await response.text();
     console.error('❌ [getMatchDiary] HTTP Error:', response.status, errorText);
     throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
   }
-  
+
   const data: ApiResponse<MatchDiaryResponse> = await response.json();
   console.log('📦 [getMatchDiary] Response structure:', {
     success: data.success,
@@ -240,32 +240,181 @@ export async function getMatchDiary(date?: string): Promise<MatchDiaryResponse> 
     dataType: typeof data.data,
     isArray: Array.isArray(data.data),
   });
-  
+
   if (!data.success) {
     console.error('❌ [getMatchDiary] API returned success=false:', data.message);
     throw new Error(data.message || 'Failed to fetch match diary');
   }
-  
+
   // CRITICAL FIX: Ensure we unwrap the data correctly
   // Backend returns: { success: true, data: { results: [...], err: null } }
   // We need to return: { results: [...], err: null }
   const responseData = data.data;
-  
+
   // Check for TheSports API error
   if (responseData?.err) {
     console.error('❌ [getMatchDiary] TheSports API error:', responseData.err);
     throw new Error(responseData.err);
   }
-  
+
   // CRITICAL FIX: Ensure results is always an array
   const results = Array.isArray(responseData?.results) ? responseData.results : [];
-  
+
   console.log('✅ [getMatchDiary] Returning data with', results.length, 'matches');
-  
+
   // Return safe structure: always return { results: array, err?: string }
   return {
     results,
     err: responseData?.err ?? undefined,
     total: responseData?.total,
   };
+}
+
+// ===== MATCH DETAIL API FUNCTIONS =====
+
+/**
+ * Get match analysis (H2H - Head to Head)
+ */
+export async function getMatchAnalysis(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/analysis`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchAnalysis] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get match trend (minute-by-minute data)
+ */
+export async function getMatchTrend(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/trend`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchTrend] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get match half-time stats
+ */
+export async function getMatchHalfStats(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/half-stats`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchHalfStats] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get match lineup
+ */
+export async function getMatchLineup(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/lineup`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchLineup] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get match team stats (from live stats feed for real-time data)
+ */
+export async function getMatchTeamStats(matchId: string): Promise<any> {
+  // Try live stats first (for currently live matches)
+  const liveUrl = `${API_BASE_URL}/matches/${matchId}/live-stats`;
+  const teamStatsUrl = `${API_BASE_URL}/matches/${matchId}/team-stats`;
+
+  try {
+    // First try live stats (more comprehensive for live matches)
+    const liveResponse = await fetch(liveUrl);
+    if (liveResponse.ok) {
+      const liveData: ApiResponse<any> = await liveResponse.json();
+      if (liveData.data?.stats?.length > 0) {
+        console.log('[getMatchTeamStats] Got stats from live feed:', liveData.data.stats.length);
+        return liveData.data;
+      }
+    }
+
+    // Fallback to team-stats endpoint
+    const response = await fetch(teamStatsUrl);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchTeamStats] Error:', error);
+    throw error;
+  }
+}
+
+
+/**
+ * Get match detail live (score, events, stats)
+ */
+export async function getMatchDetailLive(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/detail-live`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchDetailLive] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get season standings
+ */
+export async function getSeasonStandings(seasonId: string): Promise<any> {
+  const url = `${API_BASE_URL}/seasons/${seasonId}/standings`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getSeasonStandings] Error:', error);
+    throw error;
+  }
 }

@@ -14,11 +14,16 @@ import { MatchSeasonRecentService } from '../services/thesports/match/matchSeaso
 import { MatchLineupService } from '../services/thesports/match/matchLineup.service';
 import { MatchTeamStatsService } from '../services/thesports/match/matchTeamStats.service';
 import { MatchPlayerStatsService } from '../services/thesports/match/matchPlayerStats.service';
+import { MatchAnalysisService } from '../services/thesports/match/matchAnalysis.service';
+import { MatchTrendService } from '../services/thesports/match/matchTrend.service';
+import { MatchHalfStatsService } from '../services/thesports/match/matchHalfStats.service';
+import { SeasonStandingsService } from '../services/thesports/season/standings.service';
 import { TheSportsClient } from '../services/thesports/client/thesports-client';
 import { MatchSyncService } from '../services/thesports/match/matchSync.service';
 import { TeamDataService } from '../services/thesports/team/teamData.service';
 import { CompetitionService } from '../services/thesports/competition/competition.service';
-import { MatchRecentParams, MatchDiaryParams, MatchDetailLiveParams, MatchSeasonRecentParams, MatchLineupParams, MatchTeamStatsParams, MatchPlayerStatsParams } from '../types/thesports/match';
+import { MatchRecentParams, MatchDiaryParams, MatchDetailLiveParams, MatchSeasonRecentParams, MatchLineupParams, MatchTeamStatsParams, MatchPlayerStatsParams, MatchAnalysisParams, MatchTrendParams, MatchHalfStatsParams } from '../types/thesports/match';
+import { SeasonStandingsParams } from '../types/thesports/season/seasonStandings.types';
 import { logger } from '../utils/logger';
 import { generateMinuteText } from '../utils/matchMinuteText';
 
@@ -32,6 +37,10 @@ const matchSeasonRecentService = new MatchSeasonRecentService(theSportsClient);
 const matchLineupService = new MatchLineupService(theSportsClient);
 const matchTeamStatsService = new MatchTeamStatsService(theSportsClient);
 const matchPlayerStatsService = new MatchPlayerStatsService(theSportsClient);
+const matchAnalysisService = new MatchAnalysisService(theSportsClient);
+const matchTrendService = new MatchTrendService(theSportsClient);
+const matchHalfStatsService = new MatchHalfStatsService(theSportsClient);
+const seasonStandingsService = new SeasonStandingsService(theSportsClient);
 const teamDataService = new TeamDataService(theSportsClient);
 const competitionService = new CompetitionService(theSportsClient);
 const matchSyncService = new MatchSyncService(teamDataService, competitionService);
@@ -106,7 +115,7 @@ export const getMatchRecentList = async (
       const statusId = match.status_id ?? match.status ?? match.match_status ?? 1;
       const minute = match.minute !== null && match.minute !== undefined ? Number(match.minute) : null;
       const minuteText = generateMinuteText(minute, statusId);
-      
+
       return {
         ...match,
         // Phase 4-4: CRITICAL - Always generate minute_text, never forward null from API/DB
@@ -202,12 +211,12 @@ export const getMatchDiary = async (
     // Step 1: Query from database ONLY (DB-only mode)
     // CRITICAL: No API fallback - if DB is empty, return empty results
     const dbResult = await matchDatabaseService.getMatchesByDate(dbDate);
-    
+
     // Step 2: Return database results (even if empty)
     const normalized = (dbResult.results || []).map(normalizeDbMatch);
-    
+
     logger.info(`📊 [MatchDiary] Returning ${normalized.length} matches from database for ${dbDate} (DB-only mode, no API fallback)`);
-    
+
     reply.send({
       success: true,
       data: {
@@ -480,6 +489,197 @@ export const getLiveMatches = async (
       },
     });
   } catch (error: any) {
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Get match analysis (H2H)
+ * GET /api/matches/:match_id/analysis
+ */
+export const getMatchAnalysis = async (
+  request: FastifyRequest<{ Params: { match_id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { match_id } = request.params;
+    const params: MatchAnalysisParams = { match_id };
+
+    const result = await matchAnalysisService.getMatchAnalysis(params);
+
+    reply.send({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('[MatchController] Error in getMatchAnalysis:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Get match trend (live or detail)
+ * GET /api/matches/:match_id/trend
+ */
+export const getMatchTrend = async (
+  request: FastifyRequest<{ Params: { match_id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { match_id } = request.params;
+    const params: MatchTrendParams = { match_id };
+
+    const result = await matchTrendService.getMatchTrendDetail(params);
+
+    reply.send({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('[MatchController] Error in getMatchTrend:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Get match half stats
+ * GET /api/matches/:match_id/half-stats
+ */
+export const getMatchHalfStats = async (
+  request: FastifyRequest<{ Params: { match_id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { match_id } = request.params;
+    const params: MatchHalfStatsParams = { match_id };
+
+    const result = await matchHalfStatsService.getMatchHalfStatsDetail(params);
+
+    reply.send({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('[MatchController] Error in getMatchHalfStats:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Get season standings
+ * GET /api/seasons/:season_id/standings
+ */
+export const getSeasonStandings = async (
+  request: FastifyRequest<{ Params: { season_id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { season_id } = request.params;
+    const params: SeasonStandingsParams = { season_id };
+
+    const result = await seasonStandingsService.getSeasonStandings(params);
+
+    reply.send({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('[MatchController] Error in getSeasonStandings:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Get match live stats (COMBINED from /match/detail_live AND /match/team_stats)
+ * GET /api/matches/:match_id/live-stats
+ * Returns combined stats from:
+ * 1. Real-time Data (corner, cards, shots, attacks, possession)
+ * 2. Match Team Statistics (passes, tackles, interceptions, crosses)
+ */
+export const getMatchLiveStats = async (
+  request: FastifyRequest<{ Params: { match_id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { match_id } = request.params;
+
+    // Fetch BOTH data sources in parallel
+    const [liveStats, teamStatsResponse] = await Promise.all([
+      matchDetailLiveService.getMatchStatsFromLive(match_id).catch(err => {
+        logger.warn(`[CombinedStats] detail_live failed for ${match_id}:`, err.message);
+        return null;
+      }),
+      matchTeamStatsService.getMatchTeamStats({ match_id }).catch(err => {
+        logger.warn(`[CombinedStats] team_stats failed for ${match_id}:`, err.message);
+        return null;
+      }),
+    ]);
+
+    // Merge stats from both sources
+    const statsMap = new Map<number, { type: number; home: number; away: number }>();
+
+    // 1. Add real-time stats (detail_live) - lower priority
+    if (liveStats?.stats && Array.isArray(liveStats.stats)) {
+      for (const stat of liveStats.stats) {
+        if (stat.type !== undefined) {
+          statsMap.set(stat.type, {
+            type: stat.type,
+            home: stat.home ?? 0,
+            away: stat.away ?? 0,
+          });
+        }
+      }
+    }
+
+    // 2. Add/override with team stats (team_stats/detail) - higher priority (more detailed)
+    const teamStatsArray = teamStatsResponse?.result?.stats || [];
+    if (Array.isArray(teamStatsArray)) {
+      for (const stat of teamStatsArray) {
+        if (stat.type !== undefined) {
+          statsMap.set(stat.type, {
+            type: stat.type,
+            home: stat.home ?? 0,
+            away: stat.away ?? 0,
+          });
+        }
+      }
+    }
+
+    // Convert map to sorted array (by type)
+    const combinedStats = Array.from(statsMap.values()).sort((a, b) => a.type - b.type);
+
+    logger.info(`[CombinedStats] ${match_id}: detail_live=${liveStats?.stats?.length || 0}, team_stats=${teamStatsArray.length}, combined=${combinedStats.length}`);
+
+    reply.send({
+      success: true,
+      data: {
+        match_id: liveStats?.id || match_id,
+        stats: combinedStats,
+        incidents: liveStats?.incidents || [],
+        score: liveStats?.score || null,
+        sources: {
+          detail_live: liveStats?.stats?.length || 0,
+          team_stats: teamStatsArray.length,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error('[MatchController] Error in getMatchLiveStats:', error);
     reply.status(500).send({
       success: false,
       message: error.message || 'Internal server error',

@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { logger } from './utils/logger';
 import { logEvent } from './utils/obsLogger';
 import matchRoutes from './routes/match.routes';
+import seasonRoutes from './routes/season.routes';
 import healthRoutes from './routes/health.routes';
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -121,7 +122,7 @@ fastify.addHook('onRequest', async (request, reply) => {
 fastify.get('/ws', { websocket: true }, (connection, req) => {
   frontendConnections.add(connection);
   logger.info(`Frontend WebSocket connected. Total connections: ${frontendConnections.size}`);
-  
+
   connection.socket.on('close', () => {
     frontendConnections.delete(connection);
     logger.info(`Frontend WebSocket disconnected. Total connections: ${frontendConnections.size}`);
@@ -132,12 +133,12 @@ fastify.get('/ws', { websocket: true }, (connection, req) => {
 fastify.addHook('onSend', async (request, reply) => {
   // Existing CSP header
   reply.header('Content-Security-Policy', "script-src 'self' 'unsafe-eval' 'unsafe-inline' http://localhost:*; object-src 'none';");
-  
+
   // Standard security headers
   reply.header('X-Frame-Options', 'DENY');
   reply.header('X-Content-Type-Options', 'nosniff');
   reply.header('X-XSS-Protection', '1; mode=block');
-  
+
   // HSTS only if HTTPS (or behind proxy with forwarded proto)
   const isHttps = request.protocol === 'https' || request.headers['x-forwarded-proto'] === 'https';
   if (isHttps) {
@@ -168,6 +169,7 @@ fastify.get('/', async (request, reply) => {
 
 // Register routes
 fastify.register(matchRoutes, { prefix: '/api/matches' });
+fastify.register(seasonRoutes, { prefix: '/api/seasons' });
 fastify.register(healthRoutes); // Health and readiness endpoints
 
 // Error handler
@@ -214,7 +216,7 @@ const start = async () => {
     logEvent('info', 'server.listening', { port: PORT, host: HOST });
 
     const theSportsClient = new TheSportsClient();
-    
+
     // CRITICAL: Bootstrap system before starting MQTT
     // Bootstrap MUST complete successfully before MQTT connection
     // CRITICAL FIX: Allow server to start even if bootstrap fails (for placeholder DB setup)
@@ -228,11 +230,11 @@ const start = async () => {
     } catch (error: any) {
       // CRITICAL FIX: If bootstrap fails due to database connection (placeholder DB),
       // allow server to start anyway. Bootstrap will retry when database is configured.
-      const isDbConnectionError = error.message?.includes('getaddrinfo') || 
-                                  error.message?.includes('EAI_AGAIN') ||
-                                  error.message?.includes('placeholder') ||
-                                  error.message?.includes('Connection');
-      
+      const isDbConnectionError = error.message?.includes('getaddrinfo') ||
+        error.message?.includes('EAI_AGAIN') ||
+        error.message?.includes('placeholder') ||
+        error.message?.includes('Connection');
+
       if (isDbConnectionError) {
         logger.warn('⚠️ Bootstrap failed due to database connection (placeholder DB). Server will start without bootstrap.');
         logger.warn('⚠️ MQTT connection will NOT start until database is configured.');
@@ -256,11 +258,11 @@ const start = async () => {
     // Initialize WebSocket service (ONLY after bootstrap completes successfully)
     if (bootstrapSuccess) {
       websocketService = new WebSocketService();
-      
+
       // Register event handlers - push to frontend when goal/score changes
       websocketService.onEvent((event) => {
         logger.info(`WebSocket Event: ${event.type} for match ${event.matchId}`);
-        
+
         // CRITICAL: Push event to all connected frontend clients
         const message = JSON.stringify({
           type: event.type,
@@ -268,7 +270,7 @@ const start = async () => {
           data: event,
           timestamp: Date.now(),
         });
-        
+
         frontendConnections.forEach((conn) => {
           try {
             conn.socket.send(message);
@@ -278,7 +280,7 @@ const start = async () => {
           }
         });
       });
-      
+
       // CRITICAL: Also push score updates directly when MQTT receives score messages
       // We'll hook into the WebSocketService to emit SCORE_CHANGE events
       // This is handled by the existing onEvent handler above
@@ -426,7 +428,7 @@ const shutdown = async (signal?: string) => {
 
     // Close HTTP server
     try {
-  await fastify.close();
+      await fastify.close();
       logger.info('✅ HTTP server closed');
     } catch (e: any) {
       logger.error('Failed to close Fastify server:', e);
@@ -435,7 +437,7 @@ const shutdown = async (signal?: string) => {
     // Phase 4-5 WS4: Structured logging for shutdown completion
     logEvent('info', 'shutdown.done', { signal: signal || 'unknown' });
     logger.info('✅ Shutdown complete');
-    
+
     // Ensure logs are flushed before exit (Winston file transport may be async)
     // Winston logger.end() ensures all transports finish writing
     await new Promise<void>((resolve) => {
@@ -443,8 +445,8 @@ const shutdown = async (signal?: string) => {
         resolve();
       });
     });
-    
-  process.exit(0);
+
+    process.exit(0);
   } catch (err: any) {
     logger.error('❌ Shutdown error:', err);
     process.exit(1);

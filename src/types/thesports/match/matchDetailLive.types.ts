@@ -24,13 +24,19 @@ export interface MatchDetailLive {
   temperature?: number;
   // Live-specific fields
   current_minute?: number;
+  minute?: number;
+  status_id?: number;
+  update_time?: number;
+  provider_update_time?: number;
   injury_time?: number;
   home_team_stats?: any;
   away_team_stats?: any;
 }
 
 export interface MatchDetailLiveResponse {
-  result: MatchDetailLive;
+  result?: MatchDetailLive;
+  results?: MatchDetailLive[];
+  result_list?: MatchDetailLive[];
 }
 
 export interface MatchDetailLiveParams {

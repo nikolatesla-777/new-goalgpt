@@ -50,7 +50,15 @@ export class MatchMinuteService {
     // Status 4 (SECOND_HALF)
     if (statusId === 4) {
       if (secondHalfKickoffTs === null) {
-        logger.warn(`[MinuteEngine] Cannot calculate minute for status 4: second_half_kickoff_ts is NULL`);
+        // FALLBACK: If second_half_kickoff_ts is missing, estimate from first_half
+        // Usually second half starts ~60 minutes after first half kickoff (45m play + 15m break)
+        if (firstHalfKickoffTs !== null) {
+          const estimatedSecondHalfStart = firstHalfKickoffTs + 3600; // 60 minutes
+          const calculated = 45 + Math.floor((nowTs - estimatedSecondHalfStart) / 60) + 1;
+          logger.debug(`[MinuteEngine] Using fallback for status 4 (estimated_start=${estimatedSecondHalfStart}): minute=${calculated}`);
+          return Math.max(calculated, 46); // Clamp min 46
+        }
+        logger.warn(`[MinuteEngine] Cannot calculate minute for status 4: both second_half_kickoff_ts and first_half_kickoff_ts are NULL`);
         return null;
       }
       const calculated = 45 + Math.floor((nowTs - secondHalfKickoffTs) / 60) + 1;
@@ -114,7 +122,7 @@ export class MatchMinuteService {
     const client = await pool.connect();
     try {
       const nowTs = Math.floor(Date.now() / 1000);
-      
+
       // CRITICAL: Do NOT update updated_at - only minute and last_minute_update_ts
       const query = `
         UPDATE ts_matches

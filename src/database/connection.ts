@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import dotenv from 'dotenv';
 import { logger } from '../utils/logger';
 
@@ -13,49 +13,110 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'goalgpt',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
-  max: parseInt(process.env.DB_MAX_CONNECTIONS || '20'),
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, // Increased for Supabase
+  max: parseInt(process.env.DB_MAX_CONNECTIONS || '10'), // Reduced for stability
+  min: 2, // Keep minimum connections alive
+  idleTimeoutMillis: 60000, // Increased to 60 seconds
+  connectionTimeoutMillis: 15000, // Increased for Supabase stability
+
+  // CRITICAL: Keep-alive settings to prevent connection drops
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+
+  // CRITICAL: Statement timeout to prevent hanging queries
+  statement_timeout: 30000, // 30 seconds max per query
+  query_timeout: 30000,
+
   // CRITICAL: Supabase requires SSL
   ssl: isSupabase
     ? {
-        rejectUnauthorized: false, // Supabase uses self-signed certificates
-      }
+      rejectUnauthorized: false, // Supabase uses self-signed certificates
+    }
     : false,
   // CRITICAL: Connection pooling mode for Supabase
   ...(isSupabase && {
-    // Supabase connection pooling specific settings
     application_name: 'goalgpt-backend',
   }),
 });
 
-pool.on('error', (err: any) => {
-  // CRITICAL FIX: Don't exit on connection errors - these are expected during network hiccups
-  // Only log the error - pool will automatically retry connections
-  // Connection errors (ECONNRESET, ETIMEDOUT) are normal in production environments
-  // and should not crash the entire backend
-  logger.warn('Database pool error (non-fatal, pool will retry):', {
+// CRITICAL: Global error handler - prevents crash on connection errors
+pool.on('error', (err: Error, client: PoolClient) => {
+  // Log but don't crash - pool will auto-reconnect
+  logger.warn('Database pool error (non-fatal, pool will reconnect):', {
     message: err.message,
-    code: err.code,
-    errno: err.errno,
+    name: err.name,
   });
-  
-  // Only exit on truly critical errors (invalid connection string, auth failures)
-  // These are unlikely to recover automatically
-  const isCriticalError = err.code === '28P01' || // invalid_password
-                          err.code === '28000' || // invalid_authorization_specification
-                          err.code === '3D000' || // invalid_catalog_name (database doesn't exist)
-                          err.message?.includes('password authentication failed') ||
-                          err.message?.includes('database') && err.message?.includes('does not exist');
-  
-  if (isCriticalError) {
-    logger.error('CRITICAL database error - exiting:', err);
-    process.exit(-1);
+
+  // Release the errored client if possible
+  try {
+    if (client) {
+      client.release(true); // true = destroy client, don't return to pool
+    }
+  } catch (releaseErr) {
+    // Ignore release errors
   }
-  
-  // For connection errors (ECONNRESET, ETIMEDOUT, etc.), just log and continue
-  // The pool will automatically retry connections
 });
+
+// CRITICAL: Handle client errors before they become unhandled
+pool.on('connect', (client: PoolClient) => {
+  client.on('error', (err: Error) => {
+    logger.warn('PostgreSQL client error (connection will be recreated):', {
+      message: err.message,
+    });
+  });
+});
+
+// CRITICAL: Log when connections are removed from pool
+pool.on('remove', () => {
+  logger.debug('PostgreSQL client removed from pool, will create new if needed');
+});
+
+/**
+ * Safe query wrapper with auto-retry on connection errors
+ */
+export async function safeQuery<T = any>(
+  text: string,
+  params?: any[],
+  retries = 2
+): Promise<T[]> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let client: PoolClient | null = null;
+    try {
+      client = await pool.connect();
+      const result = await client.query(text, params);
+      client.release();
+      return result.rows as T[];
+    } catch (err: any) {
+      lastError = err;
+
+      // Release client with error flag (destroys connection)
+      if (client) {
+        try {
+          client.release(true);
+        } catch (_) { }
+      }
+
+      // Only retry on connection errors, not SQL errors
+      const isConnectionError =
+        err.code === 'ECONNRESET' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ENOTFOUND' ||
+        err.message?.includes('Connection terminated') ||
+        err.message?.includes('timeout') ||
+        err.message?.includes('connect');
+
+      if (!isConnectionError || attempt === retries) {
+        throw err;
+      }
+
+      logger.warn(`Database query failed (attempt ${attempt + 1}/${retries + 1}), retrying...`);
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1))); // Backoff
+    }
+  }
+
+  throw lastError;
+}
 
 export async function connectDatabase() {
   try {
@@ -71,4 +132,3 @@ export async function connectDatabase() {
 }
 
 export { pool };
-

@@ -8,10 +8,13 @@ import { MatchState } from '../enums';
 
 export interface MatchRecent {
   id: string;
+  match_id?: string;
+  external_id?: string;
   home_team_id: string;
   away_team_id: string;
   match_time: number; // Unix timestamp
   status: MatchState;
+  status_id?: number;
   home_score?: number;
   away_score?: number;
   competition_id?: string;
@@ -22,6 +25,11 @@ export interface MatchRecent {
   referee?: string;
   weather?: string;
   temperature?: number;
+  updated_at?: number;
+  update_time?: number;
+  minute?: number;
+  home_scores?: number[];
+  away_scores?: number[];
 }
 
 export interface Pagination {
@@ -35,13 +43,18 @@ export interface ResultsExtra {
   team?: {
     [teamId: string]: {
       name?: string;
+      name_en?: string;
+      logo?: string;
       logo_url?: string;
       short_name?: string;
+      id?: string;
     };
-  };
+  } | any[]; // Support both object and array formats
   competition?: {
     [competitionId: string]: {
       name?: string;
+      name_en?: string;
+      logo?: string;
       logo_url?: string;
     };
   };
