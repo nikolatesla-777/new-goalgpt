@@ -273,7 +273,7 @@ export async function getMatchDiary(date?: string): Promise<MatchDiaryResponse> 
 // ===== MATCH DETAIL API FUNCTIONS =====
 
 /**
- * Get match analysis (H2H - Head to Head)
+ * Get match analysis (H2H - Head to Head) - Legacy endpoint
  */
 export async function getMatchAnalysis(matchId: string): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/analysis`;
@@ -287,6 +287,26 @@ export async function getMatchAnalysis(matchId: string): Promise<any> {
     return data.data;
   } catch (error) {
     console.error('[getMatchAnalysis] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get match H2H data (from database with API fallback)
+ * Returns structured H2H data including summary, previous matches, and recent form
+ */
+export async function getMatchH2H(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/h2h`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchH2H] Error:', error);
     throw error;
   }
 }

@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-    getMatchAnalysis,
+    getMatchH2H,
     getMatchTeamStats,
     getMatchLineup,
     getSeasonStandings,
@@ -71,7 +71,7 @@ export function MatchDetailPage() {
                         result = await getMatchTeamStats(matchId);
                         break;
                     case 'h2h':
-                        result = await getMatchAnalysis(matchId);
+                        result = await getMatchH2H(matchId);
                         break;
                     case 'standings':
                         if (match.season_id) {
@@ -298,9 +298,7 @@ function StatRow({ label, home, away }: { label: string; home: any; away: any })
 
 // H2H Content
 function H2HContent({ data }: { data: any }) {
-    const h2hData = data?.results || data;
-
-    if (!h2hData || Object.keys(h2hData).length === 0) {
+    if (!data) {
         return (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280', backgroundColor: 'white', borderRadius: '12px' }}>
                 H2H verisi bulunamadı
@@ -308,12 +306,58 @@ function H2HContent({ data }: { data: any }) {
         );
     }
 
+    const summary = data.summary;
+    const h2hMatches = data.h2hMatches || [];
+    const homeForm = data.homeRecentForm || [];
+    const awayForm = data.awayRecentForm || [];
+
     return (
-        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px' }}>
-            <h3 style={{ margin: '0 0 16px', fontWeight: '600' }}>Karşılıklı Maçlar</h3>
-            <pre style={{ fontSize: '12px', overflow: 'auto', backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px' }}>
-                {JSON.stringify(h2hData, null, 2)}
-            </pre>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* H2H Summary */}
+            {summary && summary.total > 0 && (
+                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
+                    <h3 style={{ margin: '0 0 16px', fontWeight: '600' }}>Karşılıklı Maçlar Özeti</h3>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', fontSize: '18px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontWeight: 'bold', color: '#3b82f6', fontSize: '24px' }}>{summary.homeWins}</div>
+                            <div style={{ color: '#6b7280', fontSize: '14px' }}>Ev Kazandı</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontWeight: 'bold', color: '#9ca3af', fontSize: '24px' }}>{summary.draws}</div>
+                            <div style={{ color: '#6b7280', fontSize: '14px' }}>Berabere</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontWeight: 'bold', color: '#ef4444', fontSize: '24px' }}>{summary.awayWins}</div>
+                            <div style={{ color: '#6b7280', fontSize: '14px' }}>Dep Kazandı</div>
+                        </div>
+                    </div>
+                    <div style={{ marginTop: '12px', color: '#6b7280' }}>
+                        Toplam {summary.total} maç
+                    </div>
+                </div>
+            )}
+
+            {/* Previous H2H Matches */}
+            {h2hMatches.length > 0 && (
+                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px' }}>
+                    <h4 style={{ margin: '0 0 12px', fontWeight: '600' }}>Son Karşılaşmalar</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {h2hMatches.slice(0, 5).map((match: any, idx: number) => (
+                            <div key={idx} style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '14px', color: '#6b7280' }}>{match.date || match.match_time}</span>
+                                <span style={{ fontWeight: '600' }}>{match.home_score ?? '-'} - {match.away_score ?? '-'}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* If no data at all */}
+            {!summary && h2hMatches.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280', backgroundColor: 'white', borderRadius: '12px' }}>
+                    H2H verisi bulunamadı
+                </div>
+            )}
         </div>
     );
 }
