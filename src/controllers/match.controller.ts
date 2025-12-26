@@ -701,3 +701,96 @@ export const getMatchLiveStats = async (
     });
   }
 };
+
+/**
+ * Trigger pre-sync for today's matches
+ * POST /api/admin/pre-sync
+ * Syncs H2H, lineups, standings, and compensation data
+ */
+export const triggerPreSync = async (
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
+    const preSyncService = new DailyPreSyncService(theSportsClient);
+
+    // Get today's matches from database
+    const today = new Date().toISOString().split('T')[0];
+    const dbResult = await matchDatabaseService.getMatchesByDate(today);
+    const matches = dbResult.results || [];
+
+    const matchIds = matches.map((m: any) => m.external_id || m.id).filter(Boolean);
+    const seasonIds = matches.map((m: any) => m.season_id).filter(Boolean);
+
+    logger.info(`Triggering pre-sync for ${matchIds.length} matches, ${seasonIds.length} seasons`);
+
+    const result = await preSyncService.runPreSync(matchIds, seasonIds);
+
+    reply.send({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('[MatchController] Error in triggerPreSync:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Get H2H data (reads from database first, then API fallback)
+ * GET /api/matches/:match_id/h2h
+ */
+export const getMatchH2H = async (
+  request: FastifyRequest<{ Params: { match_id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { match_id } = request.params;
+
+    // Try database first
+    const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
+    const preSyncService = new DailyPreSyncService(theSportsClient);
+
+    let h2hData = await preSyncService.getH2HFromDb(match_id);
+
+    // If not in DB, try API and save
+    if (!h2hData) {
+      logger.info(`H2H not in DB for ${match_id}, fetching from API`);
+      await preSyncService.syncH2HToDb(match_id);
+      h2hData = await preSyncService.getH2HFromDb(match_id);
+    }
+
+    if (h2hData) {
+      reply.send({
+        success: true,
+        data: {
+          summary: {
+            total: h2hData.total_matches,
+            homeWins: h2hData.home_wins,
+            draws: h2hData.draws,
+            awayWins: h2hData.away_wins,
+          },
+          h2hMatches: h2hData.h2h_matches || [],
+          homeRecentForm: h2hData.home_recent_form || [],
+          awayRecentForm: h2hData.away_recent_form || [],
+        },
+      });
+    } else {
+      reply.send({
+        success: true,
+        data: null,
+        message: 'No H2H data available for this match',
+      });
+    }
+  } catch (error: any) {
+    logger.error('[MatchController] Error in getMatchH2H:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};

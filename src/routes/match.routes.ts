@@ -19,6 +19,8 @@ import {
   getMatchTrend,
   getMatchHalfStats,
   getMatchLiveStats,
+  triggerPreSync,
+  getMatchH2H,
 } from '../controllers/match.controller';
 
 export default async function matchRoutes(
@@ -59,6 +61,12 @@ export default async function matchRoutes(
   fastify.get('/season/recent', getMatchSeasonRecent);
 
   /**
+   * POST /api/matches/admin/pre-sync
+   * Trigger pre-sync for today's matches (H2H, lineups, standings, compensation)
+   */
+  fastify.post('/admin/pre-sync', triggerPreSync);
+
+  /**
    * GET /api/matches/:match_id/detail-live
    * Get match detail live
    */
@@ -89,6 +97,12 @@ export default async function matchRoutes(
   fastify.get('/:match_id/analysis', getMatchAnalysis);
 
   /**
+   * GET /api/matches/:match_id/h2h
+   * Get match H2H data (from database with API fallback)
+   */
+  fastify.get('/:match_id/h2h', getMatchH2H);
+
+  /**
    * GET /api/matches/:match_id/trend
    * Get match trend (minute-by-minute data)
    */
@@ -106,4 +120,3 @@ export default async function matchRoutes(
    */
   fastify.get('/:match_id/live-stats', getMatchLiveStats);
 }
-
