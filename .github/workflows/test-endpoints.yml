@@ -1,12 +1,7 @@
 name: Test All Endpoints
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/scripts/test-all-endpoints.ts'
-      - '.github/workflows/test-endpoints.yml'
-  workflow_dispatch:  # Manuel tetikleme
+  workflow_dispatch:  # Manuel tetikleme (GitHub Actions UI'dan)
 
 jobs:
   test-endpoints:
