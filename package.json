@@ -17,6 +17,7 @@
     "test:phase3b-minute": "tsx src/scripts/test-phase3b-minute.ts",
     "test:phase3b-watchdog": "tsx src/scripts/test-phase3b-watchdog.ts",
     "test:phase4-3-freeze": "tsx src/scripts/test-phase4-3-freeze.ts",
+    "test:all-endpoints": "tsx src/scripts/test-all-endpoints.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
