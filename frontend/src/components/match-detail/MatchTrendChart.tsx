@@ -2,20 +2,13 @@
  * Match Trend Chart Component
  * 
  * Displays offensive intensity trend visualization for home and away teams
- * Design: Minimal Flat UI/UX (Dark Theme)
- * Features:
- * - Home momentum (Top, Green)
- * - Away momentum (Bottom, Blue)
- * - Event overlays (Goals, Cards) on the timeline
+ * Based on /match/trend/detail endpoint data
  */
 
-import { useMemo } from 'react';
-
-// Types for Trend Data
 interface TrendPoint {
     minute: number;
-    home_value: number;
-    away_value: number;
+    home_value: number;  // Positive for home
+    away_value: number;  // Negative for away
 }
 
 interface MatchTrendData {
@@ -25,267 +18,338 @@ interface MatchTrendData {
     overtime?: TrendPoint[];
 }
 
-// Types for Incidents (Events)
-export interface Incident {
-    type: number;      // 1:Goal, 2:Corner, 3:Yellow Card, 4:Red Card, etc.
-    position: number;  // 1:Home, 2:Away
-    time: number;      // Minute
-    player_name?: string;
-}
-
 interface MatchTrendChartProps {
     data: MatchTrendData | null;
-    incidents?: Incident[];
     homeTeamName?: string;
     awayTeamName?: string;
     homeTeamLogo?: string | null;
     awayTeamLogo?: string | null;
 }
 
-export function MatchTrendChart({
-    data,
-    incidents = [],
-    homeTeamName = 'Ev Sahibi',
-    awayTeamName = 'Deplasman',
-    homeTeamLogo,
-    awayTeamLogo
-}: MatchTrendChartProps) {
+export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName = 'Deplasman', homeTeamLogo, awayTeamLogo }: MatchTrendChartProps) {
+    // Handle API response format: data can be MatchTrendData directly or wrapped in results
+    let trendData: MatchTrendData | null = null;
+    if (data) {
+        // If data has results property (API response wrapper)
+        if ((data as any).results) {
+            const results = (data as any).results;
+            // results can be single object or array
+            const extracted = Array.isArray(results) ? results[0] : results;
+            // Only use if it has actual data (not empty object)
+            if (extracted && (
+                (extracted.first_half && extracted.first_half.length > 0) || 
+                (extracted.second_half && extracted.second_half.length > 0) || 
+                (extracted.overtime && extracted.overtime.length > 0)
+            )) {
+                trendData = extracted;
+            }
+        } else {
+            // Direct MatchTrendData - check if it has data
+            const direct = data as MatchTrendData;
+            if (direct && (
+                (direct.first_half && direct.first_half.length > 0) || 
+                (direct.second_half && direct.second_half.length > 0) || 
+                (direct.overtime && direct.overtime.length > 0)
+            )) {
+                trendData = direct;
+            }
+        }
+    }
 
-    // Process trend data
-    const trendData = useMemo(() => {
-        if (!data) return null;
-        const raw = (data as any).results ?
-            (Array.isArray((data as any).results) ? (data as any).results[0] : (data as any).results) :
-            data;
-
-        if (!raw || (!raw.first_half?.length && !raw.second_half?.length)) return null;
-        return raw as MatchTrendData;
-    }, [data]);
-
-    if (!trendData) {
+    if (!trendData || (!trendData.first_half?.length && !trendData.second_half?.length)) {
         return (
-            <div className="flex flex-col items-center justify-center p-8 bg-[#111214] rounded-lg border border-gray-800/50 text-gray-500">
-                <span className="text-xl mb-2">📉</span>
-                <span className="text-xs font-medium">Trend verisi mevcut değil</span>
+            <div style={{
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#6b7280',
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb'
+            }}>
+                Trend verisi bulunamadı
             </div>
         );
     }
 
-    // Combine points
-    const allPoints = [
-        ...(trendData.first_half || []),
-        ...(trendData.second_half || []).map(p => ({ ...p })),
-        ...(trendData.overtime || [])
+    // Combine all halves
+    const firstHalf = trendData.first_half || [];
+    const secondHalf = trendData.second_half || [];
+    const overtime = trendData.overtime || [];
+    
+    // Combine all points with half indicators
+    const allPoints: (TrendPoint & { half: 'first' | 'second' | 'overtime' })[] = [
+        ...firstHalf.map(p => ({ ...p, half: 'first' as const })),
+        ...secondHalf.map(p => ({ ...p, half: 'second' as const })),
+        ...overtime.map(p => ({ ...p, half: 'overtime' as const }))
     ];
 
-    if (allPoints.length === 0) return null;
+    if (allPoints.length === 0) {
+        return (
+            <div style={{
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#6b7280',
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb'
+            }}>
+                Trend verisi bulunamadı
+            </div>
+        );
+    }
 
-    // SCALING & CONSTANTS
-    const dataMax = Math.max(...allPoints.map(p => Math.max(p.home_value, p.away_value)));
-    const MAX_SCALE = Math.max(dataMax, 80);
+    // Find max absolute values for scaling
+    const maxHomeValue = Math.max(...allPoints.map(p => Math.abs(p.home_value || 0)), 1);
+    const maxAwayValue = Math.max(...allPoints.map(p => Math.abs(p.away_value || 0)), 1);
+    const maxValue = Math.max(maxHomeValue, maxAwayValue, 50); // Minimum scale of 50
 
-    const CHART_HEIGHT = 200;
-    const CHART_WIDTH = 1000;
-    const PADDING_X = 40;
-    const PADDING_Y = 12;
-    const DRAW_HEIGHT = (CHART_HEIGHT - (PADDING_Y * 2)) / 2;
-    const CENTER_Y = CHART_HEIGHT / 2;
+    // Chart dimensions
+    const chartWidth = 1000;
+    const chartHeight = 400;
+    const logoAreaWidth = 140;
+    const padding = { top: 20, right: 20, bottom: 60, left: 20 };
+    const plotWidth = chartWidth - padding.left - padding.right - logoAreaWidth;
+    const plotHeight = chartHeight - padding.top - padding.bottom;
+    const centerY = padding.top + plotHeight / 2;
+    const plotStartX = padding.left + logoAreaWidth;
 
-    const maxMinute = Math.max(90, allPoints[allPoints.length - 1]?.minute || 90);
-    const stepX = (CHART_WIDTH - (PADDING_X * 2)) / maxMinute;
+    // Scale factors - Bar chart: each minute gets a bar
+    const barWidth = plotWidth / Math.max(allPoints.length, 1);
+    const scaleY = plotHeight / 2 / maxValue;
 
-    // Helper: Incident Icons
-    const getEventIcon = (type: number) => {
-        switch (type) {
-            case 1: return '⚽'; // Goal
-            case 2: return '🚩'; // Corner
-            case 3: return '🟨'; // Yellow
-            case 4: return '🟥'; // Red
-            default: return null;
-        }
-    };
+    const maxMinute = allPoints[allPoints.length - 1]?.minute || 90;
 
-    const relevantIncidents = incidents.filter(i => [1, 2, 3, 4].includes(i.type));
+    // Find HT position (after first half ends)
+    const htIndex = firstHalf.length > 0 ? firstHalf.length : 0;
+    const htPosition = htIndex * barWidth;
 
     return (
-        <div className="w-full bg-[#111214] rounded-lg border border-gray-800/50 overflow-hidden">
-            {/* Minimal Header */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800/30">
-                {/* Home Team */}
-                <div className="flex items-center gap-2 w-1/3 min-w-0">
-                    {homeTeamLogo ? (
-                        <div className="w-5 h-5 rounded-full bg-gray-800/50 p-0.5 flex-shrink-0">
-                            <img src={homeTeamLogo} alt={homeTeamName} className="w-full h-full object-contain" />
-                        </div>
-                    ) : (
-                        <div className="w-5 h-5 rounded-full bg-gray-800/50 flex-shrink-0" />
-                    )}
-                    <span className="text-white font-medium text-xs truncate">{homeTeamName}</span>
-                </div>
-
-                {/* Center Badge */}
-                <div className="flex flex-col items-center justify-center w-1/3 flex-shrink-0">
-                    <span className="text-[9px] uppercase tracking-wider text-gray-500 font-semibold">Maç İvmesi</span>
-                </div>
-
-                {/* Away Team */}
-                <div className="flex items-center justify-end gap-2 w-1/3 min-w-0">
-                    <span className="text-white font-medium text-xs truncate text-right">{awayTeamName}</span>
-                    {awayTeamLogo ? (
-                        <div className="w-5 h-5 rounded-full bg-gray-800/50 p-0.5 flex-shrink-0">
-                            <img src={awayTeamLogo} alt={awayTeamName} className="w-full h-full object-contain" />
-                        </div>
-                    ) : (
-                        <div className="w-5 h-5 rounded-full bg-gray-800/50 flex-shrink-0" />
-                    )}
-                </div>
-            </div>
-
-            {/* Chart Container */}
-            <div className="relative w-full overflow-hidden" style={{ minHeight: '220px' }}>
-                {/* Scrollable Area */}
-                <div className="overflow-x-auto w-full h-full no-scrollbar">
-                    <div className="min-w-[800px] h-full p-3">
-                        <svg
-                            viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-                            preserveAspectRatio="none"
-                            className="w-full h-full select-none"
-                        >
-                            <defs>
-                                {/* Soft Flat Gradients */}
-                                <linearGradient id="flatHome" x1="0" y1="1" x2="0" y2="0">
-                                    <stop offset="0%" stopColor="#22c55e" stopOpacity="1.0" />
-                                    <stop offset="100%" stopColor="#4ade80" stopOpacity="0.8" />
-                                </linearGradient>
-                                <linearGradient id="flatAway" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="1.0" />
-                                    <stop offset="100%" stopColor="#60a5fa" stopOpacity="0.8" />
-                                </linearGradient>
-                            </defs>
-
-                            {/* Center Baseline */}
-                            <line
-                                x1={PADDING_X} y1={CENTER_Y}
-                                x2={CHART_WIDTH - PADDING_X} y2={CENTER_Y}
-                                stroke="#27272a" strokeWidth="0.5"
+        <div style={{
+            backgroundColor: '#1f2937',
+            borderRadius: '12px',
+            padding: '0',
+            overflowX: 'auto'
+        }}>
+            <div style={{ position: 'relative', width: chartWidth, height: chartHeight }}>
+                {/* Logo Area - Left Side */}
+                <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: logoAreaWidth,
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    padding: '20px 12px'
+                }}>
+                    {/* Home Team Logo & Name */}
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        {homeTeamLogo && (
+                            <img
+                                src={homeTeamLogo}
+                                alt={homeTeamName}
+                                style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    objectFit: 'contain'
+                                }}
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                }}
                             />
+                        )}
+                        <div style={{
+                            color: '#10b981',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            textAlign: 'center',
+                            lineHeight: '1.2'
+                        }}>
+                            {homeTeamName}
+                        </div>
+                    </div>
 
-                            {/* HT Line */}
-                            <line
-                                x1={PADDING_X + 45 * stepX} y1={PADDING_Y}
-                                x2={PADDING_X + 45 * stepX} y2={CHART_HEIGHT - PADDING_Y - 15}
-                                stroke="#3f3f46" strokeWidth="0.5" strokeDasharray="2 2"
+                    {/* Away Team Logo & Name */}
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        {awayTeamLogo && (
+                            <img
+                                src={awayTeamLogo}
+                                alt={awayTeamName}
+                                style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    objectFit: 'contain'
+                                }}
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                }}
                             />
-                            <text x={PADDING_X + 45 * stepX} y={PADDING_Y - 3} textAnchor="middle" fill="#52525b" fontSize="9" fontWeight="500">HT</text>
-
-                            {/* BARS */}
-                            {allPoints.map((p, i) => {
-                                const x = PADDING_X + p.minute * stepX;
-                                const homeH = Math.max(0, Math.min((p.home_value / MAX_SCALE) * DRAW_HEIGHT, DRAW_HEIGHT));
-                                const awayH = Math.max(0, Math.min((p.away_value / MAX_SCALE) * DRAW_HEIGHT, DRAW_HEIGHT));
-                                const barW = Math.max(stepX * 0.65, 2.5); // Thinner, more minimal bars
-
-                                return (
-                                    <g key={i}>
-                                        {/* Home Bar */}
-                                        {homeH > 0 && (
-                                            <rect
-                                                x={x - barW / 2}
-                                                y={CENTER_Y - homeH}
-                                                width={barW}
-                                                height={homeH}
-                                                fill="url(#flatHome)"
-                                                rx="1"
-                                            />
-                                        )}
-                                        {/* Away Bar */}
-                                        {awayH > 0 && (
-                                            <rect
-                                                x={x - barW / 2}
-                                                y={CENTER_Y}
-                                                width={barW}
-                                                height={awayH}
-                                                fill="url(#flatAway)"
-                                                rx="1"
-                                            />
-                                        )}
-                                    </g>
-                                );
-                            })}
-
-                            {/* EVENTS OVERLAY */}
-                            {relevantIncidents.map((ev, idx) => {
-                                const minute = Math.min(ev.time, maxMinute);
-                                const icon = getEventIcon(ev.type);
-                                if (!icon) return null;
-
-                                const x = PADDING_X + minute * stepX;
-                                const isHome = ev.position === 1;
-
-                                const y = isHome ? PADDING_Y + 8 : CHART_HEIGHT - PADDING_Y - 20;
-
-                                return (
-                                    <g key={`ev-${idx}`}>
-                                        <line
-                                            x1={x} y1={CENTER_Y}
-                                            x2={x} y2={isHome ? y + 10 : y - 10}
-                                            stroke={isHome ? '#22c55e' : '#3b82f6'}
-                                            strokeWidth="1"
-                                            strokeOpacity="0.3"
-                                            strokeDasharray="2 2"
-                                        />
-                                        <circle
-                                            cx={x} cy={y} r="7"
-                                            fill="#18181b"
-                                            stroke={isHome ? '#22c55e' : '#3b82f6'} strokeWidth="1"
-                                        />
-                                        <text
-                                            x={x} y={y} dy="2.5"
-                                            textAnchor="middle"
-                                            fontSize="9"
-                                        >
-                                            {icon}
-                                        </text>
-                                    </g>
-                                );
-                            })}
-
-                            {/* TIMELINE LABELS */}
-                            {[0, 15, 30, 45, 60, 75, 90].map(m => (
-                                <text
-                                    key={m}
-                                    x={PADDING_X + m * stepX}
-                                    y={CHART_HEIGHT - 3}
-                                    textAnchor="middle"
-                                    fontSize="9"
-                                    fill="#52525b"
-                                    fontWeight="400"
-                                >
-                                    {m}'
-                                </text>
-                            ))}
-                        </svg>
+                        )}
+                        <div style={{
+                            color: '#8b5cf6',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            textAlign: 'center',
+                            lineHeight: '1.2'
+                        }}>
+                            {awayTeamName}
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Flat Footer Legend */}
-            <div className="flex items-center justify-center gap-6 py-2 bg-gray-900/30 border-t border-gray-800/30">
-                <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-sm bg-green-500"></div>
-                    <span className="text-[10px] text-gray-400">Ev Sahibi</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-sm bg-blue-500"></div>
-                    <span className="text-[10px] text-gray-400">Deplasman</span>
-                </div>
-                <div className="w-px h-2.5 bg-gray-800/50"></div>
-                <div className="flex items-center gap-2.5 text-[10px] text-gray-500">
-                    <span className="flex items-center gap-1">⚽</span>
-                    <span className="flex items-center gap-1">🚩</span>
-                    <span className="flex items-center gap-1">🟨</span>
-                </div>
+                {/* Chart SVG */}
+                <svg
+                    width={chartWidth}
+                    height={chartHeight}
+                    style={{ display: 'block' }}
+                >
+                    {/* Home team background (top half) */}
+                    <rect
+                        x={plotStartX}
+                        y={padding.top}
+                        width={plotWidth}
+                        height={plotHeight / 2}
+                        fill="rgba(16, 185, 129, 0.1)"
+                    />
+
+                    {/* Away team background (bottom half) */}
+                    <rect
+                        x={plotStartX}
+                        y={centerY}
+                        width={plotWidth}
+                        height={plotHeight / 2}
+                        fill="rgba(139, 92, 246, 0.1)"
+                    />
+
+                    {/* Center line (neutral line) */}
+                    <line
+                        x1={plotStartX}
+                        y1={centerY}
+                        x2={plotStartX + plotWidth}
+                        y2={centerY}
+                        stroke="rgba(255, 255, 255, 0.2)"
+                        strokeWidth="1"
+                    />
+
+                    {/* HT marker (vertical line) */}
+                    {htPosition > 0 && (
+                        <line
+                            x1={plotStartX + htPosition}
+                            y1={padding.top}
+                            x2={plotStartX + htPosition}
+                            y2={padding.top + plotHeight}
+                            stroke="rgba(255, 255, 255, 0.3)"
+                            strokeWidth="2"
+                        />
+                    )}
+
+                    {/* Bars for each minute */}
+                    {allPoints.map((point, index) => {
+                        const barSpacing = 2; // Space between bars
+                        const actualBarWidth = barWidth - barSpacing;
+                        const x = plotStartX + index * barWidth + barSpacing / 2;
+                        const homeBarHeight = (point.home_value || 0) * scaleY;
+                        const awayBarHeight = (point.away_value || 0) * scaleY;
+                        
+                        return (
+                            <g key={index}>
+                                {/* Home team bar (upward, green) */}
+                                {homeBarHeight > 0 && (
+                                    <rect
+                                        x={x}
+                                        y={centerY - homeBarHeight}
+                                        width={actualBarWidth}
+                                        height={homeBarHeight}
+                                        fill="#10b981"
+                                        rx="1"
+                                    />
+                                )}
+                                
+                                {/* Away team bar (downward, purple) */}
+                                {awayBarHeight > 0 && (
+                                    <rect
+                                        x={x}
+                                        y={centerY}
+                                        width={actualBarWidth}
+                                        height={awayBarHeight}
+                                        fill="#8b5cf6"
+                                        rx="1"
+                                    />
+                                )}
+                            </g>
+                        );
+                    })}
+
+                    {/* Time markers on bottom */}
+                    {[0, 15, 30, 45, 60, 75, 90].filter(m => m <= maxMinute).map((minute) => {
+                        const point = allPoints.find(p => p.minute === minute);
+                        if (!point) return null;
+                        const index = allPoints.indexOf(point);
+                        const x = plotStartX + index * barWidth + barWidth / 2;
+                        const label = minute === 45 ? 'HT' : minute === 90 ? 'FT' : `${minute}'`;
+                        
+                        return (
+                            <g key={minute}>
+                                <line
+                                    x1={x}
+                                    y1={padding.top + plotHeight}
+                                    x2={x}
+                                    y2={padding.top + plotHeight + 5}
+                                    stroke="rgba(255, 255, 255, 0.4)"
+                                    strokeWidth="1"
+                                />
+                                <text
+                                    x={x}
+                                    y={padding.top + plotHeight + 20}
+                                    textAnchor="middle"
+                                    fontSize="11"
+                                    fill="rgba(255, 255, 255, 0.7)"
+                                >
+                                    {label}
+                                </text>
+                            </g>
+                        );
+                    })}
+
+                    {/* HT label */}
+                    {htPosition > 0 && (
+                        <text
+                            x={plotStartX + htPosition}
+                            y={padding.top - 5}
+                            textAnchor="middle"
+                            fontSize="11"
+                            fontWeight="600"
+                            fill="rgba(255, 255, 255, 0.7)"
+                        >
+                            HT
+                        </text>
+                    )}
+
+                    {/* FT label */}
+                    <text
+                        x={plotStartX + plotWidth}
+                        y={padding.top - 5}
+                        textAnchor="end"
+                        fontSize="11"
+                        fontWeight="600"
+                        fill="rgba(255, 255, 255, 0.7)"
+                    >
+                        FT
+                    </text>
+                </svg>
             </div>
         </div>
     );
 }
+
