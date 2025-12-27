@@ -13,8 +13,10 @@ import {
     getMatchLineup,
     getSeasonStandings,
     getMatchDiary,
+    getMatchTrend,
 } from '../../api/matches';
 import type { Match } from '../../api/matches';
+import { MatchTrendChart } from './MatchTrendChart';
 
 type TabType = 'stats' | 'h2h' | 'standings' | 'lineup';
 
@@ -28,6 +30,7 @@ export function MatchDetailPage() {
     const [tabLoading, setTabLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [tabData, setTabData] = useState<any>(null);
+    const [trendData, setTrendData] = useState<any>(null);
 
     // Fetch match info
     useEffect(() => {
@@ -68,18 +71,27 @@ export function MatchDetailPage() {
                 let result;
                 switch (activeTab) {
                     case 'stats':
-                        result = await getMatchTeamStats(matchId);
+                        // Fetch both stats and trend data for stats tab
+                        const [statsResult, trendResult] = await Promise.allSettled([
+                            getMatchTeamStats(matchId),
+                            getMatchTrend(matchId).catch(() => null) // Don't fail if trend fails
+                        ]);
+                        result = statsResult.status === 'fulfilled' ? statsResult.value : null;
+                        setTrendData(trendResult.status === 'fulfilled' ? trendResult.value : null);
                         break;
                     case 'h2h':
                         result = await getMatchH2H(matchId);
+                        setTrendData(null);
                         break;
                     case 'standings':
                         if (match.season_id) {
                             result = await getSeasonStandings(match.season_id);
                         }
+                        setTrendData(null);
                         break;
                     case 'lineup':
                         result = await getMatchLineup(matchId);
+                        setTrendData(null);
                         break;
                 }
                 setTabData(result);
@@ -227,7 +239,7 @@ export function MatchDetailPage() {
                     </div>
                 ) : (
                     <>
-                        {activeTab === 'stats' && <StatsContent data={tabData} match={match} />}
+                        {activeTab === 'stats' && <StatsContent data={tabData} match={match} trendData={trendData} />}
                         {activeTab === 'h2h' && <H2HContent data={tabData} />}
                         {activeTab === 'standings' && <StandingsContent data={tabData} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
                         {activeTab === 'lineup' && <LineupContent data={tabData} match={match} />}
@@ -239,7 +251,7 @@ export function MatchDetailPage() {
 }
 
 // Stats Tab Content
-function StatsContent({ data, match }: { data: any; match: Match }) {
+function StatsContent({ data, match, trendData }: { data: any; match: Match; trendData?: any }) {
     // Handle multiple response formats:
     // - live-stats: { stats: [...], incidents: [...] }
     // - team-stats: { results: [...] }
@@ -247,6 +259,9 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
 
     // Sort and filter unknown stats
     const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
+
+    // Extract trend data from API response (already extracted by getMatchTrend API function)
+    const trend = trendData;
 
     // If no data from API, show basic match stats
     if (!stats.length && match) {
@@ -258,22 +273,45 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
         ];
 
         return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <p style={{ textAlign: 'center', color: '#6b7280', marginBottom: '16px' }}>
-                    {data?.message || 'Detaylı istatistik verisi bulunamadı. Temel bilgiler gösteriliyor.'}
-                </p>
-                {basicStats.map((stat, idx) => (
-                    <StatRow key={idx} label={stat.label} home={stat.home} away={stat.away} />
-                ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Trend Chart */}
+                {trend && (
+                    <MatchTrendChart
+                        data={trend}
+                        homeTeamName={match.home_team?.name}
+                        awayTeamName={match.away_team?.name}
+                    />
+                )}
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <p style={{ textAlign: 'center', color: '#6b7280', marginBottom: '16px' }}>
+                        {data?.message || 'Detaylı istatistik verisi bulunamadı. Temel bilgiler gösteriliyor.'}
+                    </p>
+                    {basicStats.map((stat, idx) => (
+                        <StatRow key={idx} label={stat.label} home={stat.home} away={stat.away} />
+                    ))}
+                </div>
             </div>
         );
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {stats.map((stat: any, idx: number) => (
-                <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
-            ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Trend Chart - Show at the top */}
+            {trend && (
+                <MatchTrendChart
+                    data={trend}
+                    homeTeamName={match.home_team?.name}
+                    awayTeamName={match.away_team?.name}
+                />
+            )}
+            
+            {/* Stats List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {stats.map((stat: any, idx: number) => (
+                    <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
+                ))}
+            </div>
         </div>
     );
 }

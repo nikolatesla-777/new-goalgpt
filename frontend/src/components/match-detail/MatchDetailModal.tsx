@@ -12,7 +12,9 @@ import {
     getMatchTeamStats,
     getMatchLineup,
     getSeasonStandings,
+    getMatchTrend,
 } from '../../api/matches';
+import { MatchTrendChart } from './MatchTrendChart';
 
 interface MatchDetailModalProps {
     match: Match;
@@ -26,6 +28,7 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<any>(null);
+    const [trendData, setTrendData] = useState<any>(null);
 
     const matchId = (match as any).external_id || (match as any).match_id || match.id;
     const seasonId = match.season_id;
@@ -40,10 +43,17 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                 let result;
                 switch (activeTab) {
                     case 'stats':
-                        result = await getMatchTeamStats(matchId);
+                        // Fetch both stats and trend data for stats tab
+                        const [statsResult, trendResult] = await Promise.allSettled([
+                            getMatchTeamStats(matchId),
+                            getMatchTrend(matchId).catch(() => null) // Don't fail if trend fails
+                        ]);
+                        result = statsResult.status === 'fulfilled' ? statsResult.value : null;
+                        setTrendData(trendResult.status === 'fulfilled' ? trendResult.value : null);
                         break;
                     case 'h2h':
                         result = await getMatchAnalysis(matchId);
+                        setTrendData(null);
                         break;
                     case 'standings':
                         if (seasonId) {
@@ -52,9 +62,11 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                             setError('Sezon bilgisi bulunamadı');
                             return;
                         }
+                        setTrendData(null);
                         break;
                     case 'lineup':
                         result = await getMatchLineup(matchId);
+                        setTrendData(null);
                         break;
                 }
                 setData(result);
@@ -237,7 +249,7 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
 
                     {!loading && !error && data && (
                         <div>
-                            {activeTab === 'stats' && <StatsContent data={data} />}
+                            {activeTab === 'stats' && <StatsContent data={data} match={match} trendData={trendData} />}
                             {activeTab === 'h2h' && <H2HContent data={data} />}
                             {activeTab === 'standings' && <StandingsContent data={data} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
                             {activeTab === 'lineup' && <LineupContent data={data} />}
@@ -256,38 +268,62 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
 }
 
 // Stats Tab Content
-function StatsContent({ data }: { data: any }) {
+function StatsContent({ data, match, trendData }: { data: any; match?: Match; trendData?: any }) {
     const stats = data?.results || [];
 
     if (!stats.length) {
-        return <div style={{ textAlign: 'center', color: '#6b7280' }}>İstatistik verisi bulunamadı</div>;
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Trend Chart */}
+                {trendData && match && (
+                    <MatchTrendChart
+                        data={trendData}
+                        homeTeamName={match.home_team?.name}
+                        awayTeamName={match.away_team?.name}
+                    />
+                )}
+                <div style={{ textAlign: 'center', color: '#6b7280' }}>İstatistik verisi bulunamadı</div>
+            </div>
+        );
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {stats.map((stat: any, idx: number) => (
-                <div
-                    key={idx}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '8px',
-                        backgroundColor: '#f9fafb',
-                        borderRadius: '8px',
-                    }}
-                >
-                    <span style={{ flex: 1, textAlign: 'right', fontWeight: '600' }}>
-                        {stat.home ?? '-'}
-                    </span>
-                    <span style={{ flex: 2, textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
-                        {getStatName(stat.type)}
-                    </span>
-                    <span style={{ flex: 1, textAlign: 'left', fontWeight: '600' }}>
-                        {stat.away ?? '-'}
-                    </span>
-                </div>
-            ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Trend Chart - Show at the top */}
+            {trendData && match && (
+                <MatchTrendChart
+                    data={trendData}
+                    homeTeamName={match.home_team?.name}
+                    awayTeamName={match.away_team?.name}
+                />
+            )}
+            
+            {/* Stats List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {stats.map((stat: any, idx: number) => (
+                    <div
+                        key={idx}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '8px',
+                            backgroundColor: '#f9fafb',
+                            borderRadius: '8px',
+                        }}
+                    >
+                        <span style={{ flex: 1, textAlign: 'right', fontWeight: '600' }}>
+                            {stat.home ?? '-'}
+                        </span>
+                        <span style={{ flex: 2, textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
+                            {getStatName(stat.type)}
+                        </span>
+                        <span style={{ flex: 1, textAlign: 'left', fontWeight: '600' }}>
+                            {stat.away ?? '-'}
+                        </span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
