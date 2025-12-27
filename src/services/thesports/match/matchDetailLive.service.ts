@@ -515,37 +515,8 @@ export class MatchDetailLiveService {
       : live.updateTime;
 
     // CRITICAL: If match_id not found in array response AND no providerUpdateTimeOverride,
-    // we cannot update (no data source)
+    // we need to check if match should be transitioned to END
     // BUT: If root is null but response has results, log full response for debugging
-    if (live.statusId === null && live.homeScoreDisplay === null && live.awayScoreDisplay === null) {
-      // Log full response structure for debugging
-      const results = (resp as any).results || (resp as any).result_list;
-      if (results) {
-        logger.warn(
-          `[DetailLive] Match ${match_id} not found in detail_live response. ` +
-          `Response structure: results type=${Array.isArray(results) ? 'array' : typeof results}, ` +
-          `length=${Array.isArray(results) ? results.length : 'N/A'}, ` +
-          `keys=${results && typeof results === 'object' ? Object.keys(results).join(',') : 'N/A'}`
-        );
-      }
-
-      // If we have providerUpdateTimeOverride from data/update, we can still do a minimal update
-      // (just provider_update_time and last_event_ts) to track that we processed this update
-      if (providerUpdateTimeOverride !== null) {
-        logger.info(
-          `[DetailLive] No usable data for ${match_id} but providerUpdateTimeOverride provided, ` +
-          `performing minimal update (provider_update_time + last_event_ts only)`
-        );
-        // Continue to minimal update path below
-      } else {
-        logEvent('warn', 'detail_live.reconcile.no_data', {
-          match_id,
-          reason: 'match not found in response array',
-        });
-        return { updated: false, rowCount: 0, statusId: null, score: null, providerUpdateTime: null };
-      }
-    }
-
     const client = await pool.connect();
     try {
       await this.ensureReconcileSchema(client);
@@ -568,9 +539,96 @@ export class MatchDetailLiveService {
       }
 
       const existing = existingResult.rows[0];
+      const existingStatusId = existing.status_id;
+      const matchTime = existing.match_time;
+      const nowTs = Math.floor(Date.now() / 1000);
+
+      // CRITICAL FIX: If provider didn't return match data AND match is currently LIVE status,
+      // check if enough time has passed to safely transition to END
+      if (live.statusId === null && live.homeScoreDisplay === null && live.awayScoreDisplay === null) {
+        // Log full response structure for debugging
+        const results = (resp as any).results || (resp as any).result_list;
+        if (results) {
+          logger.warn(
+            `[DetailLive] Match ${match_id} not found in detail_live response. ` +
+            `Response structure: results type=${Array.isArray(results) ? 'array' : typeof results}, ` +
+            `length=${Array.isArray(results) ? results.length : 'N/A'}, ` +
+            `keys=${results && typeof results === 'object' ? Object.keys(results).join(',') : 'N/A'}`
+          );
+        }
+
+        // If we have providerUpdateTimeOverride from data/update, we can still do a minimal update
+        // (just provider_update_time and last_event_ts) to track that we processed this update
+        if (providerUpdateTimeOverride !== null) {
+          logger.info(
+            `[DetailLive] No usable data for ${match_id} but providerUpdateTimeOverride provided, ` +
+            `performing minimal update (provider_update_time + last_event_ts only)`
+          );
+          // Continue to minimal update path below
+        } else if ([2, 3, 4, 5, 7].includes(existingStatusId) && matchTime !== null) {
+          // CRITICAL FIX: Match is LIVE in DB but provider didn't return it
+          // This likely means match has finished. Check if enough time has passed (150 minutes)
+          // Standard match: 90 minutes + 15 min HT = 105 minutes, with overtime: up to 120 minutes
+          // Safety margin: 150 minutes (2.5 hours) from match_time
+          const minTimeForEnd = matchTime + (150 * 60); // 150 minutes in seconds
+
+          if (nowTs >= minTimeForEnd) {
+            // Match time is old enough (>150 min), safe to transition to END
+            logger.info(
+              `[DetailLive] Match ${match_id} not found in provider response and match_time (${matchTime}) ` +
+              `is ${Math.floor((nowTs - matchTime) / 60)} minutes ago (>150 min). ` +
+              `Transitioning from status ${existingStatusId} to END (8).`
+            );
+
+            const updateResult = await client.query(
+              `UPDATE ts_matches 
+               SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT,
+                   ${minuteColumn} = NULL
+               WHERE external_id = $2 AND status_id IN (2, 3, 4, 5, 7)`,
+              [nowTs, match_id]
+            );
+
+            if (updateResult.rowCount && updateResult.rowCount > 0) {
+              logEvent('info', 'detail_live.reconcile.done', {
+                match_id,
+                duration_ms: Date.now() - t0,
+                rowCount: updateResult.rowCount,
+                status_id: 8,
+                reason: 'finished_not_in_provider_response',
+              });
+              return { updated: true, rowCount: updateResult.rowCount, statusId: 8, score: null, providerUpdateTime: null };
+            }
+          } else {
+            // Match time is not old enough, don't transition to END yet
+            logger.info(
+              `[DetailLive] Match ${match_id} not found in provider response but match_time (${matchTime}) ` +
+              `is only ${Math.floor((nowTs - matchTime) / 60)} minutes ago (<150 min). ` +
+              `Not transitioning to END yet. Will retry later.`
+            );
+            logEvent('warn', 'detail_live.reconcile.no_data', {
+              match_id,
+              reason: 'match not found in response array - too recent to mark as finished',
+              existing_status: existingStatusId,
+              minutes_since_match_time: Math.floor((nowTs - matchTime) / 60),
+            });
+            return { updated: false, rowCount: 0, statusId: null, score: null, providerUpdateTime: null };
+          }
+        } else {
+          // Match is not LIVE or match_time is null - cannot transition to END
+          logEvent('warn', 'detail_live.reconcile.no_data', {
+            match_id,
+            reason: 'match not found in response array',
+            existing_status: existingStatusId,
+          });
+          return { updated: false, rowCount: 0, statusId: null, score: null, providerUpdateTime: null };
+        }
+      }
+
+      // Continue with normal reconciliation flow below
+      // Note: existing, existingStatusId, matchTime, nowTs are already defined above
+
       const existingProviderTime = existing.provider_update_time;
       const existingEventTime = existing.last_event_ts;
-      const existingStatusId = existing.status_id;
 
       // CRITICAL FIX: Allow status transitions even if timestamps suggest stale data
       // Status transitions (e.g., 1→2, 2→3, 3→4) are critical and should always be applied
