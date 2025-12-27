@@ -266,7 +266,19 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     // Handle multiple response formats:
     // - live-stats: { stats: [...], incidents: [...] }
     // - team-stats: { results: [...] }
-    const rawStats = data?.stats || data?.results || [];
+    // CRITICAL: Ensure rawStats is always an array
+    let rawStats: any[] = [];
+    if (data?.stats && Array.isArray(data.stats)) {
+        rawStats = data.stats;
+    } else if (data?.results) {
+        // results can be array (team-stats) or object (trend data, etc.)
+        if (Array.isArray(data.results)) {
+            rawStats = data.results;
+        } else {
+            // results is an object (not stats data), use empty array
+            rawStats = [];
+        }
+    }
 
     // Sort and filter unknown stats
     const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
