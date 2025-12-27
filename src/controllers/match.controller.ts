@@ -540,7 +540,7 @@ export const getMatchTrend = async (
     const params: MatchTrendParams = { match_id };
 
     // Get match status from database to determine which endpoint to use
-    const { pool } = await import('../../database/connection');
+    const { pool } = await import('../database/connection');
     const client = await pool.connect();
     let matchStatus: number | undefined;
     try {
