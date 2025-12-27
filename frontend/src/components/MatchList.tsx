@@ -199,9 +199,10 @@ export function MatchList({ view, date }: MatchListProps) {
 
     // CRITICAL: Poll every 10 seconds for real-time score updates
     // Reduced from 60s to 10s for faster live match updates
+    // CRITICAL: If 502 error, retry more frequently (every 3 seconds) to catch backend when it comes back
     const interval = setInterval(() => {
       fetchMatches();
-    }, 10000);
+    }, error && error.includes('502') ? 3000 : 10000);
 
     return () => {
       clearInterval(interval);
@@ -246,29 +247,29 @@ export function MatchList({ view, date }: MatchListProps) {
 
     return (
       <div style={{
-        border: `1px solid ${isIPError ? '#fbbf24' : isRateLimitError ? '#f59e0b' : '#ef4444'}`,
+        border: `1px solid ${is502Error ? '#3b82f6' : isIPError ? '#fbbf24' : isRateLimitError ? '#f59e0b' : '#ef4444'}`,
         borderRadius: '8px',
         padding: '1.5rem',
-        backgroundColor: isIPError ? '#fef3c7' : isRateLimitError ? '#fef3c7' : '#fee2e2',
+        backgroundColor: is502Error ? '#eff6ff' : isIPError ? '#fef3c7' : isRateLimitError ? '#fef3c7' : '#fee2e2',
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
           <div style={{ flexShrink: 0, fontSize: '24px' }}>
-            {isIPError ? '⚠️' : isRateLimitError ? '⏱️' : '❌'}
+            {is502Error ? '⏳' : isIPError ? '⚠️' : isRateLimitError ? '⏱️' : '❌'}
           </div>
           <div style={{ flex: 1 }}>
             <h3 style={{
               fontWeight: '600',
               marginBottom: '4px',
-              color: isIPError ? '#92400e' : isRateLimitError ? '#92400e' : '#991b1b',
+              color: is502Error ? '#1e40af' : isIPError ? '#92400e' : isRateLimitError ? '#92400e' : '#991b1b',
             }}>
-              {isIPError ? 'IP Yetkilendirme Hatası' : isRateLimitError ? 'Rate Limit Aşıldı' : 'Hata'}
+              {is502Error ? 'Backend Hazır Değil' : isIPError ? 'IP Yetkilendirme Hatası' : isRateLimitError ? 'Rate Limit Aşıldı' : 'Hata'}
             </h3>
             <p style={{
               fontSize: '0.875rem',
-              color: isIPError ? '#78350f' : isRateLimitError ? '#78350f' : '#7f1d1d',
+              color: is502Error ? '#1e3a8a' : isIPError ? '#78350f' : isRateLimitError ? '#78350f' : '#7f1d1d',
               marginBottom: '12px',
             }}>
-              {error}
+              {is502Error ? 'Sistem güncelleniyor. Lütfen birkaç saniye bekleyin, otomatik olarak tekrar denenecek.' : error}
             </p>
             {isRateLimitError && (
               <div style={{
