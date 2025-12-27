@@ -51,3 +51,4 @@ Workflow tetiklendikten sonra:
 - VPS'e bağlanma ve script çalıştırma: ~1-2 dakika
 - Toplam: ~2-3 dakika
 
+

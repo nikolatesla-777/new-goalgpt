@@ -3,11 +3,12 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { MatchList } from './components/MatchList';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MatchDetailPage } from './components/match-detail/MatchDetailPage';
+import { getTodayInTurkey } from './utils/dateUtils';
 
 function HomePage() {
   const [view, setView] = useState<'recent' | 'diary' | 'live'>('diary');
-  const today = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState<string>(today);
+  // Use Turkish timezone for date (UTC+3)
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayInTurkey());
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>

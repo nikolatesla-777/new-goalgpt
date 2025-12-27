@@ -61,3 +61,4 @@ echo "✅ Deploy completed"
 ✅ Karmaşık logic yok, hata yok  
 ✅ Backend hızla tekrar başlar  
 
+

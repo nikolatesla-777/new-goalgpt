@@ -93,6 +93,7 @@ export class CompetitionService {
         type: dbCompetition.type || null,
         category_id: dbCompetition.category_id || null,
         country_id: dbCompetition.country_id || null,
+        country_name: dbCompetition.country_name || undefined, // From ts_countries JOIN
         cur_season_id: dbCompetition.cur_season_id || null,
         cur_stage_id: dbCompetition.cur_stage_id || null,
         primary_color: dbCompetition.primary_color || null,
@@ -150,13 +151,14 @@ export class CompetitionService {
           type: dbComp.type || null,
           category_id: dbComp.category_id || null,
           country_id: dbComp.country_id || null,
+          country_name: dbComp.country_name || undefined, // From ts_countries JOIN
           cur_season_id: dbComp.cur_season_id || null,
           cur_stage_id: dbComp.cur_stage_id || null,
           primary_color: dbComp.primary_color || null,
           secondary_color: dbComp.secondary_color || null,
         };
         map.set(dbComp.external_id, competition);
-        
+
         // Cache it
         const cacheKey = `${CacheKeyPrefix.TheSports}:competition:${dbComp.external_id}`;
         await cacheService.set(cacheKey, competition, CacheTTL.Day);
@@ -182,7 +184,7 @@ export class CompetitionService {
         logger.warn(`Failed to fetch competition list from API: ${error.message}`);
       }
     }
-    
+
     return map;
   }
 
@@ -206,11 +208,11 @@ export class CompetitionService {
         category_id?: string | null;
         type?: number | null;
       }> = [];
-      
+
       // Prepare competitions for DB save
       for (const [compId, compData] of Object.entries(competitions)) {
         if (!compId || compId === '0' || compId === '') continue;
-        
+
         const competition: Competition = {
           id: compId,
           name: compData.name || compData.name_en || compData.name_cn || 'Unknown Competition',

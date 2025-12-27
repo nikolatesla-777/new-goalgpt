@@ -301,6 +301,40 @@ export async function getMatchDiary(date?: string): Promise<MatchDiaryResponse> 
   };
 }
 
+/**
+ * Get single match by ID
+ * Fetches match directly from database by external_id (works for any date)
+ */
+export async function getMatchById(matchId: string): Promise<Match> {
+  const url = `${API_BASE_URL}/matches/${matchId}`;
+
+  try {
+    const response = await retryFetch(url);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Match not found');
+      }
+      const errorText = await response.text();
+      if (response.status === 502 || response.status === 503 || response.status === 504) {
+        throw new Error(`HTTP ${response.status}: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
+      }
+      throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+    }
+
+    const data: ApiResponse<Match> = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch match');
+    }
+
+    return data.data;
+  } catch (error: any) {
+    console.error('[getMatchById] Error:', error);
+    throw error;
+  }
+}
+
 // ===== MATCH DETAIL API FUNCTIONS =====
 
 /**
@@ -434,6 +468,7 @@ export async function getMatchTeamStats(matchId: string): Promise<any> {
 
 /**
  * Get match detail live (score, events, stats)
+ * API returns all live matches, so we filter for the specific matchId
  */
 export async function getMatchDetailLive(matchId: string): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/detail-live`;
@@ -444,7 +479,22 @@ export async function getMatchDetailLive(matchId: string): Promise<any> {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
-    return data.data;
+
+    // API returns array of all live matches, find the specific match
+    const results = data.data?.results || [];
+    const matchData = results.find((m: any) => m.id === matchId);
+
+    if (matchData) {
+      return {
+        incidents: matchData.incidents || [],
+        stats: matchData.stats || [],
+        score: matchData.score || null,
+        tlive: matchData.tlive || []
+      };
+    }
+
+    // Match not found in live results (may have ended or not started)
+    return { incidents: [], stats: [], score: null, tlive: [] };
   } catch (error) {
     console.error('[getMatchDetailLive] Error:', error);
     throw error;

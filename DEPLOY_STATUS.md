@@ -45,3 +45,4 @@ Deployment sonrası kontrol:
 2. Canlı maçlar endpoint'ini test et: `curl http://localhost:3000/api/matches/live`
 3. Bitmiş maçların artık listede olmadığını doğrula
 
+

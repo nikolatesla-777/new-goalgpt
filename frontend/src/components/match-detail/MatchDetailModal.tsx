@@ -13,6 +13,7 @@ import {
     getMatchLineup,
     getSeasonStandings,
     getMatchTrend,
+    getMatchHalfStats,
 } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 
@@ -44,12 +45,16 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                 let result;
                 switch (activeTab) {
                     case 'stats':
-                        // Fetch both stats and trend data for stats tab
-                        const [statsResult, trendResult] = await Promise.allSettled([
+                        // Fetch both full time, half time stats and trend data for stats tab
+                        const [statsResult, halfStatsResult, trendResult] = await Promise.allSettled([
                             getMatchTeamStats(matchId),
+                            getMatchHalfStats(matchId).catch(() => null), // Don't fail if half stats fails
                             getMatchTrend(matchId).catch(() => null) // Don't fail if trend fails
                         ]);
-                        result = statsResult.status === 'fulfilled' ? statsResult.value : null;
+                        result = {
+                            fullTime: statsResult.status === 'fulfilled' ? statsResult.value : null,
+                            halfTime: halfStatsResult.status === 'fulfilled' ? halfStatsResult.value : null,
+                        };
                         setTrendData(trendResult.status === 'fulfilled' ? trendResult.value : null);
                         break;
                     case 'h2h':
@@ -271,29 +276,44 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
 
 // Stats Tab Content
 function StatsContent({ data, match, trendData }: { data: any; match?: Match; trendData?: any }) {
-    const stats = data?.results || [];
+    const [activePeriod, setActivePeriod] = useState<'full' | 'first' | 'second'>('full');
 
-    if (!stats.length) {
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* Trend Chart */}
-                {trendData && match && (
-                    <MatchTrendChart
-                        data={trendData}
-                        homeTeamName={match.home_team?.name}
-                        awayTeamName={match.away_team?.name}
-                        homeTeamLogo={match.home_team?.logo_url}
-                        awayTeamLogo={match.away_team?.logo_url}
-                    />
-                )}
-                <div style={{ textAlign: 'center', color: '#6b7280' }}>İstatistik verisi bulunamadı</div>
-            </div>
-        );
+    // Parse half time stats data
+    const parseHalfStats = (halfData: any, sign: 'p1' | 'p2' | 'ft'): any[] => {
+        if (!halfData?.results || !Array.isArray(halfData.results)) {
+            return [];
+        }
+
+        const stats: any[] = [];
+        for (const statObj of halfData.results) {
+            if (statObj.Sign !== sign) continue;
+
+            for (const [key, value] of Object.entries(statObj)) {
+                if (key === 'Sign') continue;
+                const statId = Number(key);
+                if (isNaN(statId)) continue;
+                const values = Array.isArray(value) ? value : [];
+                if (values.length >= 2) {
+                    stats.push({ type: statId, home: values[0], away: values[1] });
+                }
+            }
+        }
+        return stats;
+    };
+
+    let rawStats: any[] = [];
+    if (activePeriod === 'full') {
+        rawStats = data?.fullTime?.results || data?.results || [];
+    } else if (activePeriod === 'first') {
+        rawStats = parseHalfStats(data?.halfTime, 'p1');
+    } else if (activePeriod === 'second') {
+        rawStats = parseHalfStats(data?.halfTime, 'p2');
     }
+
+    const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Trend Chart - Show at the top */}
             {trendData && match && (
                 <MatchTrendChart
                     data={trendData}
@@ -303,33 +323,44 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
                     awayTeamLogo={match.away_team?.logo_url}
                 />
             )}
-            
-            {/* Stats List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {stats.map((stat: any, idx: number) => (
-                <div
-                    key={idx}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '8px',
-                        backgroundColor: '#f9fafb',
-                        borderRadius: '8px',
-                    }}
-                >
-                    <span style={{ flex: 1, textAlign: 'right', fontWeight: '600' }}>
-                        {stat.home ?? '-'}
-                    </span>
-                    <span style={{ flex: 2, textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
-                        {getStatName(stat.type)}
-                    </span>
-                    <span style={{ flex: 1, textAlign: 'left', fontWeight: '600' }}>
-                        {stat.away ?? '-'}
-                    </span>
-                </div>
-            ))}
+
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px' }}>
+                {(['full', 'first', 'second'] as const).map((p) => (
+                    <button
+                        key={p}
+                        onClick={() => setActivePeriod(p)}
+                        style={{
+                            padding: '8px 16px',
+                            border: 'none',
+                            background: activePeriod === p ? '#3b82f6' : 'transparent',
+                            color: activePeriod === p ? 'white' : '#6b7280',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: activePeriod === p ? '600' : '400',
+                        }}
+                    >
+                        {p === 'full' ? 'TÜMÜ' : p === 'first' ? '1. YARI' : '2. YARI'}
+                    </button>
+                ))}
             </div>
+
+            {stats.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {stats.map((stat: any, idx: number) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                            <span style={{ flex: 1, textAlign: 'right', fontWeight: '600' }}>{stat.home ?? '-'}</span>
+                            <span style={{ flex: 2, textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>{getStatName(stat.type)}</span>
+                            <span style={{ flex: 1, textAlign: 'left', fontWeight: '600' }}>{stat.away ?? '-'}</span>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                    {activePeriod === 'first' ? '1. yarı istatistikleri henüz mevcut değil.' :
+                        activePeriod === 'second' ? '2. yarı istatistikleri henüz mevcut değil.' :
+                            'İstatistik verisi bulunamadı.'}
+                </div>
+            )}
         </div>
     );
 }
@@ -482,21 +513,119 @@ function LineupContent({ data }: { data: any }) {
 }
 
 // Helper function to get stat name in Turkish
+// CRITICAL: These mappings are based on official TheSports API documentation (TechnicalStatistics & HalfTimeStatistics)
 function getStatName(type: number): string {
     const statNames: Record<number, string> = {
-        2: 'Şut',
-        3: 'İsabetli Şut',
-        4: 'Bloke',
-        8: 'Korner',
-        21: 'Sarı Kart',
-        22: 'Kırmızı Kart',
-        23: 'Toplam Pas',
-        24: 'İsabetli Pas',
-        25: 'Topa Sahip Olma %',
-        26: 'Faul',
-        27: 'Ofsayt',
-        37: 'Atak',
-        38: 'Tehlikeli Atak',
+        // Basic match stats (from detail_live)
+        1: 'Gol',
+        2: 'Korner',
+        3: 'Sarı Kart',
+        4: 'Kırmızı Kart',
+        5: 'Ofsayt',
+        6: 'Serbest Vuruş',
+        7: 'Aut',
+        8: 'Penaltı',
+        9: 'Oyuncu Değişikliği',
+        21: 'İsabetli Şut',
+        22: 'İsabetsiz Şut',
+        23: 'Atak',
+        24: 'Tehlikeli Atak',
+        25: 'Top Hakimiyeti (%)',
+        37: 'Engellenen Şut',
+
+        // Detailed stats (from team_stats / half_team_stats)
+        33: 'Top Sürme',
+        34: 'Başarılı Top Sürme',
+        36: 'Uzaklaştırma',
+        38: 'Top Çalma',
+        39: 'Müdahale',
+        40: 'Toplam Pas',
+        41: 'İsabetli Pas',
+        42: 'Kilit Pas',
+        43: 'Orta',
+        44: 'İsabetli Orta',
+        45: 'Uzun Pas',
+        46: 'İsabetli Uzun Pas',
+        51: 'Faul',
+        52: 'Kurtarış',
+        63: 'Serbest Vuruş',
+        69: 'Direkten Dönen',
+        83: 'Toplam Şut',
+
+        // Custom Detailed Stats (Mapped from team_stats/list)
+        101: 'Toplam Pas',
+        102: 'İsabetli Pas',
+        103: 'Kilit Pas',
+        104: 'İsabetli Orta',
+        105: 'İsabetli Uzun Top',
+        106: 'Top Kesme',
+        107: 'Faul',
+        108: 'Ofsayt',
+        109: 'Hızlı Hücum Şutu',
+        110: 'İkili Mücadele',
+        111: 'Uzaklaştırma',
+        112: 'Başarılı Çalım',
+        113: 'Kazanılan İkili Mücadele',
+        115: 'Direkten Dönen'
     };
-    return statNames[type] || `İstatistik ${type}`;
+    return statNames[type] || '';
+}
+
+/**
+ * Helper function to sort statistics in a logical order
+ */
+function sortStats(stats: any[]): any[] {
+    const order = [
+        // Goals & Basic
+        1,  // Goals
+        25, // Ball Possession
+
+        // Shots
+        83, // Total Shots
+        21, // Shots on Target
+        22, // Shots off Target
+        37, // Blocked Shots
+        115, 69, // Woodwork
+        109, // Fastbreak shots
+
+        // Attack
+        2,  // Corners
+        23, // Attacks
+        24, // Dangerous Attacks
+        5, 108, // Offsides
+
+        // Passing
+        40, 101, // Total Passes
+        41, 102, // Accurate Passes
+        42, 103, // Key Passes
+        43, // Crosses
+        44, 104, // Accurate Crosses
+        45, // Long Balls
+        46, 105, // Accurate Long Balls
+
+        // Dribbles
+        33, // Dribbles
+        34, 112, // Dribble Success
+
+        // Defense
+        39, 110, // Tackles / Duels
+        113, // Duels Won
+        38, 106, // Interceptions
+        36, 111, // Clearances
+        52, // Saves
+
+        // Discipline
+        51, 107, // Fouls
+        3,  // Yellow Cards
+        4   // Red Cards
+    ];
+
+    return [...stats].sort((a, b) => {
+        const indexA = order.indexOf(a.type);
+        const indexB = order.indexOf(b.type);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB; // Both in list, sort by index
+        if (indexA !== -1) return -1; // Only A in list, A comes first
+        if (indexB !== -1) return 1;  // Only B in list, B comes first
+        return a.type - b.type; // Neither in list, sort by ID
+    });
 }

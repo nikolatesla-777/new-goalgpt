@@ -93,3 +93,4 @@ node trigger-workflow.js
 - Test süresi: ~2-3 dakika
 - 31 endpoint test edilir
 
+

@@ -109,3 +109,4 @@ cd /var/www/goalgpt && node -e "const {Pool}=require('pg');require('dotenv').con
 
 
 
+

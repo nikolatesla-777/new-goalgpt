@@ -16,11 +16,14 @@ import {
     getMatchTrend,
     getLiveMatches,
     getMatchDetailLive,
+    getMatchHalfStats,
+    getMatchById,
 } from '../../api/matches';
 import type { Match } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
+import { MatchEventsTimeline } from './MatchEventsTimeline';
 
-type TabType = 'stats' | 'h2h' | 'standings' | 'lineup' | 'trend';
+type TabType = 'stats' | 'h2h' | 'standings' | 'lineup' | 'trend' | 'events';
 
 export function MatchDetailPage() {
     const { matchId } = useParams<{ matchId: string }>();
@@ -46,19 +49,20 @@ export function MatchDetailPage() {
             try {
                 let foundMatch: Match | undefined;
 
-                // Step 1: Try getLiveMatches first (has real-time minute_text)
+                // Step 1: Try getMatchById first (works for any date, fetches directly from database)
                 try {
-                    const liveResponse = await getLiveMatches();
-                    foundMatch = liveResponse.results?.find((m: Match) => m.id === matchId);
-                } catch {
-                    // Live endpoint failed, will try diary below
-                }
-
-                // Step 2: Fallback to diary if not found in live
-                if (!foundMatch) {
-                    const today = new Date().toISOString().split('T')[0];
-                    const diaryResponse = await getMatchDiary(today);
-                    foundMatch = diaryResponse.results?.find((m: Match) => m.id === matchId);
+                    foundMatch = await getMatchById(matchId);
+                } catch (error: any) {
+                    // If match not found by ID, try other methods
+                    console.log('[MatchDetailPage] Match not found by ID, trying live matches...');
+                    
+                    // Step 2: Try getLiveMatches (has real-time minute_text for currently live matches)
+                    try {
+                        const liveResponse = await getLiveMatches();
+                        foundMatch = liveResponse.results?.find((m: Match) => m.id === matchId);
+                    } catch {
+                        // Live endpoint failed, continue to next step
+                    }
                 }
 
                 if (foundMatch) {
@@ -98,7 +102,15 @@ export function MatchDetailPage() {
                 let result;
                 switch (activeTab) {
                     case 'stats':
-                        result = await getMatchTeamStats(matchId);
+                        // Fetch both full time and half time stats
+                        const [teamStats, halfStats] = await Promise.allSettled([
+                            getMatchTeamStats(matchId),
+                            getMatchHalfStats(matchId).catch(() => null) // Fail gracefully
+                        ]);
+                        result = {
+                            fullTime: teamStats.status === 'fulfilled' ? teamStats.value : null,
+                            halfTime: halfStats.status === 'fulfilled' ? halfStats.value : null,
+                        };
                         break;
                     case 'h2h':
                         result = await getMatchH2H(matchId);
@@ -125,6 +137,20 @@ export function MatchDetailPage() {
                             incidents: detailLive?.incidents || []
                         };
                         break;
+                    case 'events':
+                        // Fetch incidents for events timeline
+                        // Try detail-live first (for live matches), then fallback to stats (for finished matches)
+                        let eventsData = await getMatchDetailLive(matchId).catch(() => ({}));
+                        let incidents = eventsData?.incidents || [];
+
+                        // If no incidents from detail-live, try stats endpoint (has historical data)
+                        if (incidents.length === 0) {
+                            const statsData = await getMatchTeamStats(matchId).catch(() => ({}));
+                            incidents = statsData?.incidents || [];
+                        }
+
+                        result = { incidents };
+                        break;
                 }
                 setTabData(result);
             } catch (err: any) {
@@ -141,6 +167,7 @@ export function MatchDetailPage() {
 
     const tabs: { id: TabType; label: string; icon: string }[] = [
         { id: 'stats', label: 'İstatistikler', icon: '📊' },
+        { id: 'events', label: 'Etkinlikler', icon: '📋' },
         { id: 'h2h', label: 'H2H', icon: '⚔️' },
         { id: 'standings', label: 'Puan Durumu', icon: '🏆' },
         { id: 'lineup', label: 'Kadro', icon: '👥' },
@@ -364,6 +391,7 @@ export function MatchDetailPage() {
                 ) : (
                     <>
                         {activeTab === 'stats' && <StatsContent data={tabData} match={match} />}
+                        {activeTab === 'events' && <EventsContent data={tabData} match={match} />}
                         {activeTab === 'h2h' && <H2HContent data={tabData} />}
                         {activeTab === 'standings' && <StandingsContent data={tabData} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
                         {activeTab === 'lineup' && <LineupContent data={tabData} match={match} />}
@@ -376,22 +404,67 @@ export function MatchDetailPage() {
 }
 
 // Stats Tab Content
+type StatsPeriod = 'full' | 'first' | 'second';
+
 function StatsContent({ data, match }: { data: any; match: Match }) {
-    // Handle multiple response formats:
-    // - live-stats: { stats: [...], incidents: [...] }
-    // - team-stats: { results: [...] }
-    // CRITICAL: Ensure rawStats is always an array
-    let rawStats: any[] = [];
-    if (data?.stats && Array.isArray(data.stats)) {
-        rawStats = data.stats;
-    } else if (data?.results) {
-        // results can be array (team-stats) or object (trend data, etc.)
-        if (Array.isArray(data.results)) {
-            rawStats = data.results;
-        } else {
-            // results is an object (not stats data), use empty array
-            rawStats = [];
+    const [activePeriod, setActivePeriod] = useState<StatsPeriod>('full');
+
+    // Parse half time stats data
+    const parseHalfStats = (halfData: any, sign: 'p1' | 'p2' | 'ft'): any[] => {
+        if (!halfData?.results || !Array.isArray(halfData.results)) {
+            return [];
         }
+
+        const stats: any[] = [];
+        for (const statObj of halfData.results) {
+            if (statObj.Sign !== sign) continue;
+            
+            // Extract stats from the object (keys are stat IDs)
+            for (const [key, value] of Object.entries(statObj)) {
+                if (key === 'Sign') continue;
+                
+                const statId = Number(key);
+                if (isNaN(statId)) continue;
+                
+                const values = Array.isArray(value) ? value : [];
+                if (values.length >= 2) {
+                    stats.push({
+                        type: statId,
+                        home: values[0],
+                        away: values[1],
+                    });
+                }
+            }
+        }
+        return stats;
+    };
+
+    // Get stats based on active period
+    let rawStats: any[] = [];
+    
+    if (activePeriod === 'full') {
+        // Full time stats - use existing logic
+        if (data?.fullTime?.stats && Array.isArray(data.fullTime.stats)) {
+            rawStats = data.fullTime.stats;
+        } else if (data?.fullTime?.results) {
+            if (Array.isArray(data.fullTime.results)) {
+                rawStats = data.fullTime.results;
+            } else {
+                rawStats = [];
+            }
+        } else if (data?.stats && Array.isArray(data.stats)) {
+            // Fallback for old format
+            rawStats = data.stats;
+        } else if (data?.results && Array.isArray(data.results)) {
+            // Fallback for old format
+            rawStats = data.results;
+        }
+    } else if (activePeriod === 'first') {
+        // First half stats (p1)
+        rawStats = parseHalfStats(data?.halfTime, 'p1');
+    } else if (activePeriod === 'second') {
+        // Second half stats (p2)
+        rawStats = parseHalfStats(data?.halfTime, 'p2');
     }
 
     // Sort and filter unknown stats
@@ -422,12 +495,80 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Stats List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {stats.map((stat: any, idx: number) => (
-                    <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
-                ))}
+            {/* Period Tabs */}
+            <div style={{ 
+                display: 'flex', 
+                gap: '8px', 
+                borderBottom: '2px solid #e5e7eb',
+                paddingBottom: '8px'
+            }}>
+                <button
+                    onClick={() => setActivePeriod('full')}
+                    style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        background: activePeriod === 'full' ? '#3b82f6' : 'transparent',
+                        color: activePeriod === 'full' ? 'white' : '#6b7280',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: activePeriod === 'full' ? '600' : '400',
+                        transition: 'all 0.2s',
+                    }}
+                >
+                    TÜMÜ
+                </button>
+                <button
+                    onClick={() => setActivePeriod('first')}
+                    style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        background: activePeriod === 'first' ? '#3b82f6' : 'transparent',
+                        color: activePeriod === 'first' ? 'white' : '#6b7280',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: activePeriod === 'first' ? '600' : '400',
+                        transition: 'all 0.2s',
+                    }}
+                >
+                    1. YARI
+                </button>
+                <button
+                    onClick={() => setActivePeriod('second')}
+                    style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        background: activePeriod === 'second' ? '#3b82f6' : 'transparent',
+                        color: activePeriod === 'second' ? 'white' : '#6b7280',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: activePeriod === 'second' ? '600' : '400',
+                        transition: 'all 0.2s',
+                    }}
+                >
+                    2. YARI
+                </button>
             </div>
+
+            {/* Stats List */}
+            {stats.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {stats.map((stat: any, idx: number) => (
+                        <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
+                    ))}
+                </div>
+            ) : (
+                <div style={{ 
+                    textAlign: 'center', 
+                    padding: '40px', 
+                    color: '#6b7280',
+                    backgroundColor: '#f9fafb',
+                    borderRadius: '8px'
+                }}>
+                    {activePeriod === 'first' && '1. yarı istatistikleri henüz mevcut değil.'}
+                    {activePeriod === 'second' && '2. yarı istatistikleri henüz mevcut değil.'}
+                    {activePeriod === 'full' && 'İstatistik verisi bulunamadı.'}
+                </div>
+            )}
         </div>
     );
 }
@@ -560,6 +701,38 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                     })}
                 </tbody>
             </table>
+        </div>
+    );
+}
+
+// Events Content (Timeline)
+function EventsContent({ data, match }: { data: any; match: Match }) {
+    const incidents = data?.incidents || [];
+
+    if (!incidents || incidents.length === 0) {
+        return (
+            <div style={{
+                textAlign: 'center',
+                padding: '40px',
+                color: '#6b7280',
+                backgroundColor: '#f9fafb',
+                borderRadius: '12px'
+            }}>
+                <p style={{ margin: 0, fontWeight: '500' }}>📋 Henüz etkinlik yok</p>
+                <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#9ca3af' }}>
+                    Bu maç için etkinlik verisi henüz oluşmamış olabilir.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <MatchEventsTimeline
+                incidents={incidents}
+                homeTeamName={match.home_team?.name}
+                awayTeamName={match.away_team?.name}
+            />
         </div>
     );
 }

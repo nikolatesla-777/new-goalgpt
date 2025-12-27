@@ -56,3 +56,4 @@
 ✅ Health check çalışmalı  
 ✅ Frontend 502 handling aktif  
 
+

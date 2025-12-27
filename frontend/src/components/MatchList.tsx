@@ -41,7 +41,9 @@ export function MatchList({ view, date }: MatchListProps) {
         response = await getLiveMatches();
       } else {
         // For diary view, use the /match/diary endpoint with date parameter
-        const dateStr = date || new Date().toISOString().split('T')[0];
+        // Use Turkish timezone for default date
+        const { getTodayInTurkey } = await import('../utils/dateUtils');
+        const dateStr = date || getTodayInTurkey();
         console.log('📅 [MatchList] Fetching diary for date:', dateStr);
         response = await getMatchDiary(dateStr);
         console.log('📦 [MatchList] Diary response received:', {

@@ -152,3 +152,4 @@ Same flow as GitHub Actions, with additional PM2 status checks.
 2. **Circuit Breaker:** Backend down olduğunda cached data gösterme
 3. **Rolling Deployment:** Multiple instance'lar ile true zero-downtime
 
+

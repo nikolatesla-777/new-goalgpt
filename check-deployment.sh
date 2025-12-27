@@ -69,3 +69,4 @@ echo "⏱️ Timeout: $MAX_CHECKS kontrol sonrası hala tamamlanmadı"
 echo "Manuel kontrol için: https://github.com/nikolatesla-777/new-goalgpt/actions"
 exit 2
 
+

@@ -21,6 +21,7 @@ import {
   getMatchLiveStats,
   triggerPreSync,
   getMatchH2H,
+  getMatchById,
 } from '../controllers/match.controller';
 
 export default async function matchRoutes(
@@ -74,6 +75,7 @@ export default async function matchRoutes(
   /**
    * GET /api/matches/:match_id/detail-live
    * Get match detail live
+   * NOTE: Must be registered before /:match_id route to avoid route conflicts
    */
   fastify.get('/:match_id/detail-live', getMatchDetailLive);
 
@@ -122,6 +124,15 @@ export default async function matchRoutes(
   /**
    * GET /api/matches/:match_id/live-stats
    * Get match live stats (from detail_live feed - real-time stats)
+   * NOTE: Must be registered before /:match_id route to avoid route conflicts
    */
   fastify.get('/:match_id/live-stats', getMatchLiveStats);
+
+  /**
+   * GET /api/matches/:match_id
+   * Get single match by ID (from database)
+   * CRITICAL: This endpoint allows fetching matches from any date, not just today
+   * NOTE: Must be registered LAST as a catch-all route for match IDs
+   */
+  fastify.get('/:match_id', getMatchById);
 }

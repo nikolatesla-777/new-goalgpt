@@ -18,8 +18,11 @@ export function LeagueSection({ competition, matches }: LeagueSectionProps) {
     );
   }
 
-  // CRITICAL: Show competition_id as fallback for debugging
-  const competitionName = competition?.name || (competition?.id ? `Competition ID: ${competition.id}` : 'Bilinmeyen Lig');
+  // Show "Country - League" format if country_name is available
+  const leagueName = competition?.name || (competition?.id ? `Competition ID: ${competition.id}` : 'Bilinmeyen Lig');
+  const competitionName = competition?.country_name
+    ? `${competition.country_name} - ${leagueName}`
+    : leagueName;
   const competitionLogo = competition?.logo_url;
   const safeMatches = matches.filter(match => match && typeof match === 'object' && match.id);
 

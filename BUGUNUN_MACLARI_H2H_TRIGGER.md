@@ -34,3 +34,4 @@ Frontend'te zaten API fallback var:
 - Database'de yoksa API'den çekilip database'e yazılıyor
 - Ama bu tek tek çalışıyor, toplu sync değil
 
+

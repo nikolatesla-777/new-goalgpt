@@ -181,7 +181,54 @@ export class MatchFreezeDetectionService {
       thresholdSec: threshold,
     };
   }
+
+  /**
+   * Force-end a severely stale match by updating status_id to 8 (ENDED)
+   * 
+   * CRITICAL: Only call this for matches that are:
+   * - Stuck for 2+ hours (7200 seconds)
+   * - API reconcile returned no data
+   * - Still have LIVE status (2, 3, 4, 5, 7)
+   * 
+   * @param matchId - External ID of the match to force-end
+   * @returns true if match was updated, false otherwise
+   */
+  async forceEndStaleMatch(matchId: string): Promise<boolean> {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `UPDATE ts_matches 
+         SET status_id = 8, 
+             updated_at = NOW(),
+             minute_text = 'FT'
+         WHERE external_id = $1 
+         AND status_id IN (2, 3, 4, 5, 7)
+         RETURNING external_id`,
+        [matchId]
+      );
+
+      const updated = result.rowCount !== null && result.rowCount > 0;
+
+      logEvent(updated ? 'warn' : 'debug', 'match.stale.force_ended', {
+        match_id: matchId,
+        updated,
+        new_status: 8,
+      });
+
+      if (updated) {
+        logger.info(`[FreezeDetection] Force-ended stale match: ${matchId}`);
+      }
+
+      return updated;
+    } catch (error: any) {
+      logger.error(`[FreezeDetection] Error force-ending match ${matchId}:`, error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
+
 
 
 

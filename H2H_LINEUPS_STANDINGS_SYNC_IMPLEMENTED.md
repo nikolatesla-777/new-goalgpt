@@ -131,3 +131,4 @@ Frontend'te `/api/matches/:match_id/h2h` endpoint'i database'den okuyor, eğer y
 2. `src/services/thesports/sync/dailyPreSync.service.ts` - Already existed (no changes)
 3. `src/services/thesports/match/matchAnalysis.service.ts` - Already existed (uses `/match/analysis`)
 
+

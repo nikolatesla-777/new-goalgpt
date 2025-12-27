@@ -50,3 +50,4 @@ pm2 restart goalgpt-backend --update-env || pm2 restart goalgpt-backend
 
 Frontend 502 error handling zaten mevcut - kullanıcılar 2-3 saniyelik downtime'ı görmeyecek (otomatik retry ile).
 
+

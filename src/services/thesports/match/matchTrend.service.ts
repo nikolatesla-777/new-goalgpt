@@ -16,6 +16,14 @@ import { MatchTrendParams, MatchTrendResponse, MatchTrendLiveResponse } from '..
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 
+// Local type for parsed trend data
+interface MatchTrendData {
+    match_id: string;
+    first_half: { minute: number; home_value: number; away_value: number }[];
+    second_half: { minute: number; home_value: number; away_value: number }[];
+    overtime?: { minute: number; home_value: number; away_value: number }[];
+}
+
 export class MatchTrendService {
     constructor(private client: TheSportsClient) { }
 
@@ -132,7 +140,7 @@ export class MatchTrendService {
             const results = Array.isArray(response.results) ? response.results[0] : response.results;
             // Check if results is an empty object (API returns {} when no trend data available)
             if (results && typeof results === 'object' && !Array.isArray(results)) {
-                if (results.first_half?.length > 0 || results.second_half?.length > 0 || results.overtime?.length > 0) {
+                if ((results.first_half?.length ?? 0) > 0 || (results.second_half?.length ?? 0) > 0 || (results.overtime?.length ?? 0) > 0) {
                     await cacheService.set(cacheKey, response, CacheTTL.Hour);
                 } else {
                     logger.debug(`Trend data not available for match ${match_id} (empty results)`);

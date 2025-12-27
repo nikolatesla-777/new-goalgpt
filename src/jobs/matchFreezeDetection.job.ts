@@ -25,10 +25,14 @@ export class MatchFreezeDetectionWorker {
   private matchDetailLiveService: MatchDetailLiveService;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
-  
+
   // Cooldown tracking: matchId -> last reconcile attempt timestamp (seconds)
   private reconcileCooldown: Map<string, number> = new Map();
   private cooldownSeconds: number = 300; // 5 minutes
+
+  // Auto-end threshold: If match is stale for this long, force-end it
+  // Set to 2 hours (7200 seconds) - matches stuck this long are clearly abandoned
+  private autoEndThresholdSeconds: number = 7200;
 
   // Deduplication: matches processed in current window
   private processedInWindow: Set<string> = new Set();
@@ -151,6 +155,30 @@ export class MatchFreezeDetectionWorker {
             continue;
           } else {
             reconcileFailedCount++;
+
+            // CRITICAL FIX: If match is stale for 2+ hours and reconcile returned no data,
+            // force-end the match to prevent it from being stuck forever
+            if (match.ageSec >= this.autoEndThresholdSeconds) {
+              try {
+                const forceEnded = await this.freezeDetectionService.forceEndStaleMatch(match.matchId);
+                if (forceEnded) {
+                  logEvent('warn', 'match.stale.auto_ended', {
+                    match_id: match.matchId,
+                    reason: match.reason,
+                    stale_since_sec: match.ageSec,
+                    threshold_sec: this.autoEndThresholdSeconds,
+                    new_status: 8,
+                  });
+                  continue; // Match fixed, skip marking
+                }
+              } catch (forceEndError: any) {
+                logEvent('error', 'match.stale.force_end_failed', {
+                  match_id: match.matchId,
+                  error: forceEndError.message,
+                });
+              }
+            }
+
             // Step C: Mark as unresolved (reconcile returned no data)
             // Note: No DB write - only structured log signal
             logEvent('error', 'match.stale.marked', {
@@ -180,7 +208,7 @@ export class MatchFreezeDetectionWorker {
             error: error.message,
           });
           reconcileFailedCount++;
-          
+
           // Step C: Mark as unresolved (reconcile exception, circuit_open excluded)
           // Note: No DB write - only structured log signal
           logEvent('error', 'match.stale.marked', {

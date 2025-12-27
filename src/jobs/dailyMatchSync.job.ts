@@ -96,7 +96,7 @@ export class DailyMatchSyncWorker {
   private getThreeDayWindow(): Array<{ dateStr: string; dateDisplay: string; label: string }> {
     const tsi = this.getNowTsiDate();
     const dates: Array<{ dateStr: string; dateDisplay: string; label: string }> = [];
-    
+
     // Yesterday
     const yesterday = new Date(tsi);
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
@@ -106,7 +106,7 @@ export class DailyMatchSyncWorker {
       dateDisplay: yesterdayDisplay,
       label: 'YESTERDAY'
     });
-    
+
     // Today
     const todayDisplay = formatTheSportsDate(tsi);
     dates.push({
@@ -114,7 +114,7 @@ export class DailyMatchSyncWorker {
       dateDisplay: todayDisplay,
       label: 'TODAY'
     });
-    
+
     // Tomorrow
     const tomorrow = new Date(tsi);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
@@ -124,7 +124,7 @@ export class DailyMatchSyncWorker {
       dateDisplay: tomorrowDisplay,
       label: 'TOMORROW'
     });
-    
+
     return dates;
   }
 
@@ -136,14 +136,14 @@ export class DailyMatchSyncWorker {
     const reason = opts?.reason ?? 'THREE_DAY_WINDOW';
     const window = this.getThreeDayWindow();
     const startTime = Date.now();
-    
+
     logger.info(`📅 [DailyDiary] Starting 3-day window sync (${reason}):`);
     window.forEach((d, i) => {
       logger.info(`   ${i + 1}. ${d.label}: ${d.dateDisplay} (${d.dateStr})`);
     });
-    
+
     const results: Array<{ date: string; matches: number; synced: number; errors: number }> = [];
-    
+
     for (const dateInfo of window) {
       const syncStartTime = Date.now();
       try {
@@ -151,27 +151,27 @@ export class DailyMatchSyncWorker {
         const { pool } = await import('../database/connection');
         const beforeResult = await pool.query('SELECT COUNT(*) as cnt FROM ts_matches');
         const beforeCount = parseInt(beforeResult.rows[0].cnt);
-        
-        await this.syncDateDiary(dateInfo.dateStr, { 
-          reason: `${reason}_${dateInfo.label}`, 
+
+        await this.syncDateDiary(dateInfo.dateStr, {
+          reason: `${reason}_${dateInfo.label}`,
           batchSize: 100,
-          interBatchDelayMs: 500 
+          interBatchDelayMs: 500
         });
-        
+
         // Check how many matches we have after sync
         const afterResult = await pool.query('SELECT COUNT(*) as cnt FROM ts_matches');
         const afterCount = parseInt(afterResult.rows[0].cnt);
-        
+
         const syncDuration = Date.now() - syncStartTime;
         const synced = afterCount - beforeCount;
-        
+
         results.push({
           date: dateInfo.dateDisplay,
           matches: afterCount - beforeCount,
           synced: synced > 0 ? synced : 0,
           errors: 0
         });
-        
+
         logger.info(`✅ [DailyDiary] ${dateInfo.label} (${dateInfo.dateDisplay}) sync completed in ${syncDuration}ms`);
       } catch (error: any) {
         logger.error(`❌ [DailyDiary] ${dateInfo.label} (${dateInfo.dateDisplay}) sync failed:`, error.message);
@@ -183,12 +183,12 @@ export class DailyMatchSyncWorker {
         });
       }
     }
-    
+
     const totalDuration = Date.now() - startTime;
     const totalMatches = results.reduce((sum, r) => sum + r.matches, 0);
     const totalSynced = results.reduce((sum, r) => sum + r.synced, 0);
     const totalErrors = results.reduce((sum, r) => sum + r.errors, 0);
-    
+
     logger.info(`✅ [DailyDiary] 3-day window sync COMPLETE:`);
     logger.info(`   D-1 (${results[0].date}): ${results[0].matches} matches, ${results[0].synced} synced`);
     logger.info(`   D (${results[1].date}): ${results[1].matches} matches, ${results[1].synced} synced`);
@@ -328,7 +328,7 @@ export class DailyMatchSyncWorker {
         const sample = allMatchesToSync[0];
         logger.info(
           `🔎 [DailyDiary] Sample match alignment: external_id=${sample.external_id}, ` +
-            `match_time=${sample.match_time}, status_id=${sample.status_id}`
+          `match_time=${sample.match_time}, status_id=${sample.status_id}`
         );
       }
 
@@ -363,14 +363,12 @@ export class DailyMatchSyncWorker {
               .map(([r, c]) => `${r}:${c}`)
               .join(', ');
             logger.info(
-              `✅ [DailyDiary] Batch ${batchNumber}/${totalBatches} completed: ${syncResult.synced} synced, ${
-                syncResult.errors || 0
+              `✅ [DailyDiary] Batch ${batchNumber}/${totalBatches} completed: ${syncResult.synced} synced, ${syncResult.errors || 0
               } errors (${reasons})`
             );
           } else {
             logger.info(
-              `✅ [DailyDiary] Batch ${batchNumber}/${totalBatches} completed: ${syncResult.synced} synced, ${
-                syncResult.errors || 0
+              `✅ [DailyDiary] Batch ${batchNumber}/${totalBatches} completed: ${syncResult.synced} synced, ${syncResult.errors || 0
               } errors`
             );
           }
@@ -425,7 +423,7 @@ export class DailyMatchSyncWorker {
             const preSyncResult = await preSyncService.runPreSync(matchIds, seasonIds);
 
             logger.info(`✅ [DailyDiary] Pre-sync complete: H2H=${preSyncResult.h2hSynced}, Lineups=${preSyncResult.lineupsSynced}, Standings=${preSyncResult.standingsSynced}`);
-            
+
             if (preSyncResult.errors.length > 0) {
               logger.warn(`⚠️ [DailyDiary] Pre-sync errors: ${preSyncResult.errors.length}`);
               preSyncResult.errors.slice(0, 10).forEach((err: string) => logger.warn(`  - ${err}`));
@@ -542,7 +540,7 @@ export class DailyMatchSyncWorker {
           if (teamIds.size > 0) {
             logger.info(`Fetching ${teamIds.size} teams for page ${page}...`);
             const teams = await this.teamDataService.getTeamsByIds(Array.from(teamIds));
-            
+
             // Fetch missing teams from API (getTeamById saves to DB)
             const missingTeamIds = Array.from(teamIds).filter(id => !teams.has(id));
             if (missingTeamIds.length > 0) {
@@ -556,7 +554,7 @@ export class DailyMatchSyncWorker {
                 }
               }
             }
-            
+
             totalTeams += teams.size;
             logger.debug(`Processed ${teams.size} teams from cache/DB, ${missingTeamIds.length} from API`);
           }
@@ -576,7 +574,7 @@ export class DailyMatchSyncWorker {
           logger.info(`Page ${page} synced: ${matches.length} matches, ${teamIds.size} teams, ${competitionIds.size} competitions`);
 
           // Check if there are more pages
-          const totalPages = response.pagination?.total 
+          const totalPages = response.pagination?.total
             ? Math.ceil(response.pagination.total / limit)
             : null;
 
@@ -621,6 +619,17 @@ export class DailyMatchSyncWorker {
       async () => {
         logger.info('🔄 [DailyDiary] CRON TRIGGERED: Starting new day sync at 00:05 (TSİ bulletin)');
         await this.syncTodayDiary();
+
+        // Sync countries daily (rarely changes, but ensures we have all country data)
+        try {
+          const { CountrySyncService } = await import('../services/thesports/country/countrySync.service');
+          const countrySyncService = new CountrySyncService();
+          logger.info('🌍 [DailyDiary] Starting daily country sync...');
+          const countryResult = await countrySyncService.syncAllCountries();
+          logger.info(`✅ [DailyDiary] Country sync complete: ${countryResult.synced} synced, ${countryResult.errors} errors`);
+        } catch (countryError: any) {
+          logger.error('❌ [DailyDiary] Country sync failed (non-blocking):', countryError.message);
+        }
       },
       { timezone: DailyMatchSyncWorker.CRON_TIMEZONE }
     );
@@ -670,7 +679,7 @@ export class DailyMatchSyncWorker {
     logger.info(`   🌍 Server TZ offset (minutes): ${new Date().getTimezoneOffset()}`);
     logger.info('   📅 Full sync: Every day at 00:05 (3-day window: yesterday/today/tomorrow)');
     logger.info('   🛠️ Repair: Every 30 minutes (00:10–06:00 TSİ, only if needed)');
-    
+
     // Run immediately on start to sync 3-day window
     setTimeout(() => {
       this.syncThreeDayWindow({ reason: 'STARTUP' });

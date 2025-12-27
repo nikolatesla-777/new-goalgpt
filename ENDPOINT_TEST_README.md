@@ -92,3 +92,4 @@ cat /var/www/goalgpt/.env | grep THESPORTS
 
 IP whitelist'te olmayan endpoint'ler için TheSports API support'a başvurun.
 
+

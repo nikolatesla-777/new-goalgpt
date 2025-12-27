@@ -16,6 +16,7 @@ export interface CompetitionEntity {
   type?: number | null;
   category_id?: string | null;
   country_id?: string | null;
+  country_name?: string | null; // From ts_countries JOIN
   cur_season_id?: string | null;
   cur_stage_id?: string | null;
   primary_color?: string | null;
@@ -37,8 +38,28 @@ export class CompetitionRepository extends BaseRepository<CompetitionEntity> {
   async findByExternalIds(externalIds: string[]): Promise<CompetitionEntity[]> {
     if (externalIds.length === 0) return [];
 
-    const query = `SELECT * FROM ${this.tableName} WHERE external_id = ANY($1)`;
+    // JOIN ts_countries to get country_name for "Country - League" display format
+    const query = `
+      SELECT c.*, co.name as country_name 
+      FROM ${this.tableName} c
+      LEFT JOIN ts_countries co ON c.country_id = co.external_id
+      WHERE c.external_id = ANY($1)
+    `;
     return this.executeQuery<CompetitionEntity>(query, [externalIds]);
+  }
+
+  /**
+   * Find single competition by external ID (with country JOIN)
+   */
+  async findByExternalId(externalId: string): Promise<CompetitionEntity | null> {
+    const query = `
+      SELECT c.*, co.name as country_name 
+      FROM ${this.tableName} c
+      LEFT JOIN ts_countries co ON c.country_id = co.external_id
+      WHERE c.external_id = $1
+    `;
+    const results = await this.executeQuery<CompetitionEntity>(query, [externalId]);
+    return results.length > 0 ? results[0] : null;
   }
 
   /**
@@ -67,7 +88,7 @@ export class CompetitionRepository extends BaseRepository<CompetitionEntity> {
       uid: competitionData.uid || null,
       is_duplicate: competitionData.is_duplicate || false,
     };
-    
+
     // TRIPLE-CHECK: Ensure id is NEVER in the object
     if ('id' in cleanData) {
       delete cleanData.id;
@@ -111,7 +132,7 @@ export class CompetitionRepository extends BaseRepository<CompetitionEntity> {
       for (const comp of competitions) {
         // Determine if this is a duplicate based on uid field
         const isDuplicate = !!(comp.uid && comp.uid.trim() !== '');
-        
+
         // CRITICAL FIX: Create clean object WITHOUT id field from scratch
         // Do NOT use spread operator on comp - it might contain id
         const cleanComp: any = {
@@ -129,7 +150,7 @@ export class CompetitionRepository extends BaseRepository<CompetitionEntity> {
           uid: comp.uid || null,
           is_duplicate: isDuplicate,
         };
-        
+
         // TRIPLE-CHECK: Ensure id is NEVER in the object
         if ('id' in cleanComp) {
           delete cleanComp.id;
@@ -140,7 +161,7 @@ export class CompetitionRepository extends BaseRepository<CompetitionEntity> {
         // Final safety check: explicitly set id to undefined
         cleanComp.id = undefined;
         delete cleanComp.id;
-        
+
         const result = await this.upsert(cleanComp as CompetitionEntity, 'external_id');
         results.push(result);
       }

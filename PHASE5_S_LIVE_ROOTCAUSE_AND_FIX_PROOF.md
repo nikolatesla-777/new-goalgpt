@@ -182,3 +182,4 @@ psql -c "SELECT external_id, status_id, minute, home_score_regular, away_score_r
 
 
 
+

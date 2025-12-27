@@ -184,3 +184,4 @@ const is502Error = error.includes('HTTP 502') || error.includes('502') ||
 4. `frontend/src/api/matches.ts` - Added retryFetch function
 5. `frontend/src/components/MatchList.tsx` - Better 502 error handling
 
+

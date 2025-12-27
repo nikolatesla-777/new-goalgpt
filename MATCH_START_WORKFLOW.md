@@ -272,3 +272,4 @@ Database State (Güncel):
 - **En Yavaş:** 1 dakika (MatchSyncWorker incremental sync)
 
 
+

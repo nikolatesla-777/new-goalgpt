@@ -235,6 +235,157 @@ export const getMatchDiary = async (
 };
 
 /**
+ * Get single match by ID
+ * GET /api/matches/:match_id
+ * Fetches match from database by external_id
+ */
+export const getMatchById = async (
+  request: FastifyRequest<{ Params: { match_id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { match_id } = request.params;
+    
+    const { pool } = await import('../database/connection');
+    const client = await pool.connect();
+    
+    try {
+      // Query match with JOINs for teams and competitions (same format as getMatchesByDate)
+      const query = `
+        SELECT 
+          m.external_id as id,
+          m.competition_id,
+          m.season_id,
+          m.match_time,
+          m.status_id as status_id,
+          m.minute,
+          m.updated_at,
+          m.provider_update_time,
+          m.last_event_ts,
+          m.home_team_id,
+          m.away_team_id,
+          m.home_score_regular as home_score,
+          m.away_score_regular as away_score,
+          m.home_score_overtime,
+          m.away_score_overtime,
+          m.home_score_penalties,
+          m.away_score_penalties,
+          m.home_score_display,
+          m.away_score_display,
+          COALESCE(m.home_red_cards, (m.home_scores->>2)::INTEGER, 0) as home_red_cards,
+          COALESCE(m.away_red_cards, (m.away_scores->>2)::INTEGER, 0) as away_red_cards,
+          COALESCE(m.home_yellow_cards, (m.home_scores->>3)::INTEGER, 0) as home_yellow_cards,
+          COALESCE(m.away_yellow_cards, (m.away_scores->>3)::INTEGER, 0) as away_yellow_cards,
+          COALESCE(m.home_corners, (m.home_scores->>4)::INTEGER, 0) as home_corners,
+          COALESCE(m.away_corners, (m.away_scores->>4)::INTEGER, 0) as away_corners,
+          COALESCE(
+            CASE 
+              WHEN m.live_kickoff_time IS NOT NULL AND m.live_kickoff_time != m.match_time 
+              THEN m.live_kickoff_time 
+              ELSE m.match_time 
+            END,
+            m.match_time
+          ) as live_kickoff_time,
+          ht.name as home_team_name,
+          ht.logo_url as home_team_logo,
+          at.name as away_team_name,
+          at.logo_url as away_team_logo,
+          c.name as competition_name,
+          c.logo_url as competition_logo,
+          c.country_id as competition_country_id
+        FROM ts_matches m
+        LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
+        LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
+        LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+        WHERE m.external_id = $1
+      `;
+
+      const result = await client.query(query, [match_id]);
+      
+      if (result.rows.length === 0) {
+        reply.status(404).send({
+          success: false,
+          message: 'Match not found',
+        });
+        return;
+      }
+
+      const row = result.rows[0];
+      const { generateMinuteText } = await import('../utils/matchMinuteText');
+      
+      // Validate status (future match cannot be END)
+      let validatedStatus = row.status_id ?? 0;
+      const now = Math.floor(Date.now() / 1000);
+      const matchTime = row.match_time;
+
+      if (matchTime && matchTime > now) {
+        if (validatedStatus === 8 || validatedStatus === 12) {
+          validatedStatus = 1; // NOT_STARTED
+        }
+      }
+
+      const minute = row.minute !== null && row.minute !== undefined ? Number(row.minute) : null;
+      const minuteText = generateMinuteText(minute, validatedStatus);
+
+      const match = {
+        id: row.id,
+        competition_id: row.competition_id,
+        season_id: row.season_id,
+        match_time: row.match_time,
+        status_id: validatedStatus,
+        status: validatedStatus,
+        home_team_id: row.home_team_id,
+        away_team_id: row.away_team_id,
+        home_score: (row.home_score ?? null),
+        away_score: (row.away_score ?? null),
+        home_score_overtime: (row.home_score_overtime ?? null),
+        away_score_overtime: (row.away_score_overtime ?? null),
+        home_score_penalties: (row.home_score_penalties ?? null),
+        away_score_penalties: (row.away_score_penalties ?? null),
+        home_red_cards: (row.home_red_cards ?? 0),
+        away_red_cards: (row.away_red_cards ?? 0),
+        home_yellow_cards: (row.home_yellow_cards ?? 0),
+        away_yellow_cards: (row.away_yellow_cards ?? 0),
+        home_corners: (row.home_corners ?? 0),
+        away_corners: (row.away_corners ?? 0),
+        minute: minute,
+        minute_text: minuteText,
+        updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+        home_team: row.home_team_name ? {
+          id: row.home_team_id,
+          name: row.home_team_name,
+          logo_url: row.home_team_logo,
+        } : null,
+        away_team: row.away_team_name ? {
+          id: row.away_team_id,
+          name: row.away_team_name,
+          logo_url: row.away_team_logo,
+        } : null,
+        competition: row.competition_name ? {
+          id: row.competition_id,
+          name: row.competition_name,
+          logo_url: row.competition_logo,
+          country_id: row.competition_country_id,
+        } : null,
+      };
+
+      reply.send({
+        success: true,
+        data: match,
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    logger.error('[MatchController] Error in getMatchById:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
+/**
  * Get match detail live
  * GET /api/matches/:match_id/detail-live
  */
