@@ -528,6 +528,8 @@ export const getMatchAnalysis = async (
 /**
  * Get match trend (live or detail)
  * GET /api/matches/:match_id/trend
+ * CRITICAL: For live matches (status IN (2,3,4,5,7)), uses /match/trend/live endpoint
+ * For finished matches, uses /match/trend/detail endpoint
  */
 export const getMatchTrend = async (
   request: FastifyRequest<{ Params: { match_id: string } }>,
@@ -537,7 +539,24 @@ export const getMatchTrend = async (
     const { match_id } = request.params;
     const params: MatchTrendParams = { match_id };
 
-    const result = await matchTrendService.getMatchTrendDetail(params);
+    // Get match status from database to determine which endpoint to use
+    const { pool } = await import('../../database/connection');
+    const client = await pool.connect();
+    let matchStatus: number | undefined;
+    try {
+      const result = await client.query(
+        'SELECT status_id FROM ts_matches WHERE external_id = $1',
+        [match_id]
+      );
+      if (result.rows.length > 0) {
+        matchStatus = result.rows[0].status_id;
+      }
+    } finally {
+      client.release();
+    }
+
+    // Use getMatchTrend which automatically chooses live or detail based on status
+    const result = await matchTrendService.getMatchTrend(params, matchStatus);
 
     reply.send({
       success: true,

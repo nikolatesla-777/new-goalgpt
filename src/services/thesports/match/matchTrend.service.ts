@@ -1,13 +1,18 @@
 /**
  * Match Trend Service
  * 
- * Handles business logic for /match/trend/detail endpoint
- * CRITICAL: Uses /detail endpoint (not /live) for specific match data
+ * Handles business logic for /match/trend/live and /match/trend/detail endpoints
+ * CRITICAL: 
+ * - Use /live endpoint for real-time matches (status IN (2,3,4,5,7))
+ * - Use /detail endpoint for finished matches or when /live returns no data
+ * According to TheSports API docs:
+ * - /match/trend/live: "Returns home and away team trend details for real-time matches"
+ * - Recommended request frequency: 1 minute/time
  */
 
 import { TheSportsClient } from '../client/thesports-client';
 import { logger } from '../../../utils/logger';
-import { MatchTrendParams, MatchTrendResponse } from '../../../types/thesports/match';
+import { MatchTrendParams, MatchTrendResponse, MatchTrendLiveResponse } from '../../../types/thesports/match';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 
@@ -15,10 +20,28 @@ export class MatchTrendService {
     constructor(private client: TheSportsClient) { }
 
     /**
-     * Get match trend detail (for specific match)
-     * CRITICAL: Uses /detail endpoint for specific match data
-     * IMPORTANT: Trend data is only available when match is in progress (status IN (2,3,4,5,7))
-     * According to TheSports API docs: "Trend data is available only when the match is in progress"
+     * Get match trend live (for real-time matches)
+     * CRITICAL: Use this endpoint for matches in progress (status IN (2,3,4,5,7))
+     * According to TheSports API docs: "Real-time match trends. Returns home and away team trend details for real-time matches"
+     */
+    async getMatchTrendLive(params: MatchTrendParams): Promise<MatchTrendLiveResponse> {
+        const { match_id } = params;
+        const cacheKey = `${CacheKeyPrefix.TheSports}:match:trend:live:${match_id}`;
+
+        // Don't cache live data - always fetch fresh (cache TTL is very short for live data)
+        logger.info(`Fetching match trend live: ${match_id}`);
+        const response = await this.client.get<MatchTrendLiveResponse>(
+            '/match/trend/live',
+            { match_id }
+        );
+
+        return response;
+    }
+
+    /**
+     * Get match trend detail (for finished matches or fallback)
+     * CRITICAL: Use this endpoint for finished matches or when /live returns no data
+     * Request limit: Matches within 30 days before today
      */
     async getMatchTrendDetail(params: MatchTrendParams): Promise<MatchTrendResponse> {
         const { match_id } = params;
@@ -48,11 +71,50 @@ export class MatchTrendService {
                 if (results.first_half?.length > 0 || results.second_half?.length > 0 || results.overtime?.length > 0) {
                     await cacheService.set(cacheKey, response, CacheTTL.Hour);
                 } else {
-                    logger.debug(`Trend data not available for match ${match_id} (empty results - match may not be in progress)`);
+                    logger.debug(`Trend data not available for match ${match_id} (empty results)`);
                 }
             }
         }
 
         return response;
+    }
+
+    /**
+     * Get match trend (automatically chooses live or detail based on match status)
+     * CRITICAL: For live matches (status IN (2,3,4,5,7)), uses /live endpoint
+     * For finished matches, uses /detail endpoint
+     * 
+     * Returns MatchTrendResponse format (normalized) for both endpoints
+     */
+    async getMatchTrend(params: MatchTrendParams, matchStatus?: number): Promise<MatchTrendResponse> {
+        const { match_id } = params;
+
+        // If match is live, use /live endpoint
+        if (matchStatus && [2, 3, 4, 5, 7].includes(matchStatus)) {
+            logger.debug(`Match ${match_id} is live (status=${matchStatus}), using /live endpoint`);
+            try {
+                const liveResponse = await this.getMatchTrendLive(params);
+                // Check if live response has data
+                // MatchTrendLiveResponse.results is MatchTrendData[] (array)
+                if (liveResponse && liveResponse.results && Array.isArray(liveResponse.results) && liveResponse.results.length > 0) {
+                    // Normalize to MatchTrendResponse format (results can be array or single object)
+                    // For consistency with frontend, return first element if array
+                    const normalizedResponse: MatchTrendResponse = {
+                        code: liveResponse.code,
+                        results: liveResponse.results[0], // Return first match trend data
+                        err: liveResponse.err,
+                    };
+                    return normalizedResponse;
+                }
+                // If /live returns no data, fallback to /detail
+                logger.debug(`Match ${match_id} /live returned no data, falling back to /detail`);
+            } catch (error: any) {
+                logger.warn(`Match ${match_id} /live failed, falling back to /detail:`, error.message);
+                // Fallback to /detail on error
+            }
+        }
+
+        // Use /detail endpoint for finished matches or as fallback
+        return await this.getMatchTrendDetail(params);
     }
 }
