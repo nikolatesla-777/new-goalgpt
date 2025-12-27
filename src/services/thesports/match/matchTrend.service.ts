@@ -20,6 +20,49 @@ export class MatchTrendService {
     constructor(private client: TheSportsClient) { }
 
     /**
+     * Parse trend data from TheSports API format to frontend format
+     * API returns: { match_id, trend: { count, per, data: [[first_half_values], [second_half_values]] } }
+     * Frontend expects: { match_id, first_half: TrendPoint[], second_half: TrendPoint[] }
+     */
+    private parseTrendData(apiResponse: any, matchId: string): MatchTrendData | null {
+        try {
+            // Handle different response formats
+            const trendObj = apiResponse?.trend || apiResponse?.results?.trend;
+            if (!trendObj || !trendObj.data || !Array.isArray(trendObj.data)) {
+                return null;
+            }
+
+            const data = trendObj.data;
+            const firstHalfArray = data[0] || [];
+            const secondHalfArray = data[1] || [];
+
+            // Convert arrays to TrendPoint[] format
+            // Each value represents the trend value for that minute
+            // Positive = home team, Negative = away team
+            const firstHalf: any[] = firstHalfArray.map((value: number, index: number) => ({
+                minute: index + 1,
+                home_value: value > 0 ? value : 0,
+                away_value: value < 0 ? Math.abs(value) : 0,
+            }));
+
+            const secondHalf: any[] = secondHalfArray.map((value: number, index: number) => ({
+                minute: index + 46, // Second half starts at minute 46
+                home_value: value > 0 ? value : 0,
+                away_value: value < 0 ? Math.abs(value) : 0,
+            }));
+
+            return {
+                match_id: matchId,
+                first_half: firstHalf,
+                second_half: secondHalf,
+            };
+        } catch (error: any) {
+            logger.error(`Error parsing trend data for ${matchId}:`, error);
+            return null;
+        }
+    }
+
+    /**
      * Get match trend live (for real-time matches)
      * CRITICAL: Use this endpoint for matches in progress (status IN (2,3,4,5,7))
      * According to TheSports API docs: "Real-time match trends. Returns home and away team trend details for real-time matches"
@@ -30,12 +73,33 @@ export class MatchTrendService {
 
         // Don't cache live data - always fetch fresh (cache TTL is very short for live data)
         logger.info(`Fetching match trend live: ${match_id}`);
-        const response = await this.client.get<MatchTrendLiveResponse>(
+        const rawResponse = await this.client.get<any>(
             '/match/trend/live',
             { match_id }
         );
 
-        return response;
+        // Parse the response to frontend format
+        // API can return single object or array
+        if (rawResponse?.results) {
+            const results = Array.isArray(rawResponse.results) ? rawResponse.results : [rawResponse.results];
+            const parsedResults = results
+                .map((item: any) => {
+                    const parsed = this.parseTrendData(item, match_id);
+                    return parsed;
+                })
+                .filter((item: any) => item !== null);
+
+            if (parsedResults.length > 0) {
+                return {
+                    code: rawResponse.code,
+                    results: parsedResults as any,
+                    err: rawResponse.err,
+                };
+            }
+        }
+
+        // If parsing fails, return original response
+        return rawResponse as MatchTrendLiveResponse;
     }
 
     /**
