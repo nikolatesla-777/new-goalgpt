@@ -240,6 +240,7 @@ export function MatchList({ view, date }: MatchListProps) {
   }
 
   if (error) {
+    const is502Error = error.includes('HTTP 502') || error.includes('502');
     const isIPError = error.includes('IP is not authorized') || error.includes('IP is not authorized');
     const isRateLimitError = error.includes('Too Many Requests') || error.includes('too many requests') || error.includes('Çok fazla istek');
 

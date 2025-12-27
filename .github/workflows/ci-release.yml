@@ -46,10 +46,42 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd /var/www/goalgpt
-            git pull origin main
-            npm install --production
-            pm2 restart goalgpt-backend
             
+            # CRITICAL: Zero-downtime deployment
+            # Pull latest code first
+            git pull origin main
+            
+            # Install dependencies
+            npm install --production
+            
+            # Use PM2 reload for zero-downtime (graceful restart)
+            # Reload starts new instances before stopping old ones
+            echo "🔄 Reloading backend with zero-downtime..."
+            pm2 reload goalgpt-backend --update-env || pm2 restart goalgpt-backend
+            
+            # Wait for backend to be ready (health check)
+            echo "🏥 Waiting for backend to be ready..."
+            MAX_RETRIES=30
+            RETRY_COUNT=0
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              if curl -f -s http://localhost:3000/ready > /dev/null 2>&1; then
+                echo "✅ Backend is ready!"
+                break
+              fi
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "⏳ Backend not ready yet, waiting... ($RETRY_COUNT/$MAX_RETRIES)"
+              sleep 2
+            done
+            
+            if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+              echo "⚠️ Backend health check failed after $MAX_RETRIES attempts"
+              echo "Checking PM2 status..."
+              pm2 status
+              exit 1
+            fi
+            
+            # Build and deploy frontend (static files, no downtime needed)
+            echo "🔄 Building frontend..."
             cd frontend
             npm install
             npm run build

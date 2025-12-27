@@ -8,9 +8,14 @@ echo "🚀 Starting deployment..."
 
 cd /var/www/goalgpt
 
-# Stop backend first to avoid module conflicts
-echo "⏹️ Stopping backend..."
-pm2 stop goalgpt-backend || true
+# CRITICAL: Do NOT stop backend - use reload instead for zero-downtime
+# pm2 stop causes downtime - reload starts new instance before stopping old one
+# Only stop if process doesn't exist (first deployment)
+if ! pm2 list | grep -q "goalgpt-backend"; then
+  echo "ℹ️ Backend process not found, will start after installation"
+else
+  echo "ℹ️ Backend process exists, will use reload for zero-downtime deployment"
+fi
 
 # Pull latest code
 echo "📥 Pulling latest code..."
@@ -24,9 +29,37 @@ npm install
 # Wait for filesystem sync
 sleep 2
 
-# Start backend
-echo "🔄 Starting backend..."
-pm2 start goalgpt-backend
+# CRITICAL: Zero-downtime deployment
+# Use PM2 reload for graceful restart (zero-downtime)
+echo "🔄 Reloading backend with zero-downtime..."
+if pm2 list | grep -q "goalgpt-backend"; then
+  # Process exists, use reload for zero-downtime
+  pm2 reload goalgpt-backend --update-env
+else
+  # Process doesn't exist, start it
+  pm2 start goalgpt-backend
+fi
+
+# Wait for backend to be ready (health check)
+echo "🏥 Waiting for backend to be ready..."
+MAX_RETRIES=30
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if curl -f -s http://localhost:3000/ready > /dev/null 2>&1; then
+    echo "✅ Backend is ready!"
+    break
+  fi
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  echo "⏳ Backend not ready yet, waiting... ($RETRY_COUNT/$MAX_RETRIES)"
+  sleep 2
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+  echo "⚠️ WARNING: Backend health check failed after $MAX_RETRIES attempts"
+  echo "Checking PM2 status..."
+  pm2 status
+  pm2 logs goalgpt-backend --lines 20
+fi
 
 # Build and restart frontend
 echo "🔄 Building frontend..."
