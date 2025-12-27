@@ -42,29 +42,94 @@ export class CompensationService {
 
     /**
      * Sync compensation data to database for a match
+     * Updates both ts_compensation table and ts_matches table
      */
     async syncCompensationToDb(matchData: any): Promise<void> {
         if (!matchData.id) return;
 
         const client = await pool.connect();
         try {
+            // Extract data from API response
+            const history = matchData.history || matchData.h2h || {};
+            const recent = matchData.recent || matchData.recent_record || {};
+            const similar = matchData.similar || matchData.historical_compensation || {};
+
+            // Extract win rates from history (historical confrontation)
+            const homeWinRate = history.home?.rate || null;
+            const awayWinRate = history.away?.rate || null;
+            
+            // Calculate draw rate from history counts (more accurate than estimation)
+            // Use home team's stats to calculate total matches and draw rate
+            let drawRate: number | null = null;
+            if (history.home?.won_count != null && history.home?.drawn_count != null && history.home?.lost_count != null) {
+                const totalMatches = history.home.won_count + history.home.drawn_count + history.home.lost_count;
+                if (totalMatches > 0) {
+                    drawRate = history.home.drawn_count / totalMatches;
+                }
+            } else if (homeWinRate != null && awayWinRate != null) {
+                // Fallback: Estimate draw rate if counts are not available
+                // Draw rate = 1 - home_win_rate - away_win_rate (normalized)
+                const sum = homeWinRate + awayWinRate;
+                if (sum < 1) {
+                    drawRate = 1 - sum;
+                }
+            }
+
+            // Extract recent form win rates
+            const homeRecentWinRate = recent.home?.rate || null;
+            const awayRecentWinRate = recent.away?.rate || null;
+
+            // 1. Update ts_compensation table (existing logic)
             await client.query(`
-        INSERT INTO ts_compensation (match_id, h2h_data, recent_record, historical_compensation, raw_response, updated_at)
-        VALUES ($1, $2, $3, $4, $5, NOW())
-        ON CONFLICT (match_id) 
-        DO UPDATE SET 
-          h2h_data = EXCLUDED.h2h_data,
-          recent_record = EXCLUDED.recent_record,
-          historical_compensation = EXCLUDED.historical_compensation,
-          raw_response = EXCLUDED.raw_response,
-          updated_at = NOW()
-      `, [
+                INSERT INTO ts_compensation (match_id, h2h_data, recent_record, historical_compensation, raw_response, updated_at)
+                VALUES ($1, $2, $3, $4, $5, NOW())
+                ON CONFLICT (match_id) 
+                DO UPDATE SET 
+                  h2h_data = EXCLUDED.h2h_data,
+                  recent_record = EXCLUDED.recent_record,
+                  historical_compensation = EXCLUDED.historical_compensation,
+                  raw_response = EXCLUDED.raw_response,
+                  updated_at = NOW()
+            `, [
                 matchData.id,
-                JSON.stringify(matchData.h2h || null),
-                JSON.stringify(matchData.recent_record || null),
-                JSON.stringify(matchData.historical_compensation || null),
+                JSON.stringify(history),
+                JSON.stringify(recent),
+                JSON.stringify(similar),
                 JSON.stringify(matchData)
             ]);
+
+            // 2. Update ts_matches table with compensation data
+            // Check if compensation columns exist
+            const columnCheck = await client.query(`
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'ts_matches' 
+                AND column_name IN ('home_win_rate', 'away_win_rate', 'draw_rate', 'home_recent_win_rate', 'away_recent_win_rate', 'compensation_data')
+            `);
+            const hasCompensationColumns = columnCheck.rows.length > 0;
+
+            if (hasCompensationColumns) {
+                await client.query(`
+                    UPDATE ts_matches
+                    SET 
+                      home_win_rate = $1,
+                      away_win_rate = $2,
+                      draw_rate = $3,
+                      home_recent_win_rate = $4,
+                      away_recent_win_rate = $5,
+                      compensation_data = $6::jsonb,
+                      updated_at = NOW()
+                    WHERE external_id = $7
+                `, [
+                    homeWinRate,
+                    awayWinRate,
+                    drawRate,
+                    homeRecentWinRate,
+                    awayRecentWinRate,
+                    JSON.stringify(matchData),
+                    matchData.id
+                ]);
+            }
 
             logger.debug(`✅ Synced compensation for match ${matchData.id}`);
         } catch (error: any) {

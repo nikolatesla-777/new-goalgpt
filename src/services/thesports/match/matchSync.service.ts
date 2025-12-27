@@ -59,6 +59,13 @@ export interface MatchSyncData {
   // JSONB columns
   incidents?: any | null;
   statistics?: any | null;
+  // Compensation columns
+  home_win_rate?: number | null;
+  away_win_rate?: number | null;
+  draw_rate?: number | null;
+  home_recent_win_rate?: number | null;
+  away_recent_win_rate?: number | null;
+  compensation_data?: any | null;
 }
 
 export class MatchSyncService {
@@ -72,6 +79,7 @@ export class MatchSyncService {
   private hasNewScoreColumns = false;
   private hasIncidentsColumn = false;
   private hasStatisticsColumn = false;
+  private hasCompensationColumns = false;
   private ensuredCompetitionIds = new Set<string>();
   private ensuredTeamIds = new Set<string>();
 
@@ -273,7 +281,8 @@ export class MatchSyncService {
       WHERE table_name = 'ts_matches' AND column_name IN (
         'home_score_regular', 'home_score_overtime', 'home_score_penalties', 'home_score_display',
         'away_score_regular', 'away_score_overtime', 'away_score_penalties', 'away_score_display',
-        'incidents', 'statistics'
+        'incidents', 'statistics',
+        'home_win_rate', 'away_win_rate', 'draw_rate', 'home_recent_win_rate', 'away_recent_win_rate', 'compensation_data'
       );
     `;
     const columnCheckResult = await client.query(columnCheckQuery);
@@ -283,15 +292,20 @@ export class MatchSyncService {
       'home_score_regular', 'home_score_overtime', 'home_score_penalties', 'home_score_display',
       'away_score_regular', 'away_score_overtime', 'away_score_penalties', 'away_score_display',
     ];
+    const compensationCols = [
+      'home_win_rate', 'away_win_rate', 'draw_rate', 'home_recent_win_rate', 'away_recent_win_rate', 'compensation_data',
+    ];
 
     this.hasNewScoreColumns = scoreCols.every(c => cols.has(c));
     this.hasIncidentsColumn = cols.has('incidents');
     this.hasStatisticsColumn = cols.has('statistics');
+    this.hasCompensationColumns = compensationCols.every(c => cols.has(c));
     this.matchColumnSupportChecked = true;
 
     logger.info(
       `Match schema detected: hasNewScoreColumns=${this.hasNewScoreColumns}, ` +
-      `hasIncidents=${this.hasIncidentsColumn}, hasStatistics=${this.hasStatisticsColumn}`
+      `hasIncidents=${this.hasIncidentsColumn}, hasStatistics=${this.hasStatisticsColumn}, ` +
+      `hasCompensation=${this.hasCompensationColumns}`
     );
   }
 
@@ -353,6 +367,7 @@ export class MatchSyncService {
     const hasNewColumns = this.hasNewScoreColumns;
     const hasIncidents = this.hasIncidentsColumn;
     const hasStatistics = this.hasStatisticsColumn;
+    const hasCompensation = this.hasCompensationColumns;
     
     // Debug: Log problematic data types for JSONB columns
     if (hasIncidents && matchData.incidents != null && typeof matchData.incidents === 'string') {
@@ -502,6 +517,35 @@ export class MatchSyncService {
       // Use ::jsonb cast in placeholder to ensure proper type conversion
       placeholders += `, $${paramIndex}::jsonb`;
       paramIndex++;
+    }
+
+    // Add compensation columns if they exist
+    if (hasCompensation) {
+      columns.push(
+        'home_win_rate',
+        'away_win_rate',
+        'draw_rate',
+        'home_recent_win_rate',
+        'away_recent_win_rate',
+        'compensation_data'
+      );
+      const compensationValues = [
+        matchData.home_win_rate ?? null,
+        matchData.away_win_rate ?? null,
+        matchData.draw_rate ?? null,
+        matchData.home_recent_win_rate ?? null,
+        matchData.away_recent_win_rate ?? null,
+        matchData.compensation_data != null ? JSON.stringify(matchData.compensation_data) : null,
+      ];
+      values.push(...compensationValues);
+      placeholders += ', ' + compensationValues.map((val, i) => {
+        // Last column (compensation_data) is JSONB
+        if (i === compensationValues.length - 1) {
+          return `$${paramIndex + i}::jsonb`;
+        }
+        return `$${paramIndex + i}`;
+      }).join(', ');
+      paramIndex += compensationValues.length;
     }
 
     // Handle home_scores and away_scores (legacy arrays - stored as JSONB)
