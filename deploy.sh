@@ -3,7 +3,7 @@
 
 cd /var/www/goalgpt
 git pull origin main
-npm install --production
+npm install
 
 # Ensure logs directory exists
 mkdir -p logs
