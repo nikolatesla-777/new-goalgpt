@@ -72,7 +72,6 @@ export function MatchDetailPage() {
                 switch (activeTab) {
                     case 'stats':
                         result = await getMatchTeamStats(matchId);
-                        setTrendData(null);
                         break;
                     case 'h2h':
                         result = await getMatchH2H(matchId);
@@ -435,6 +434,19 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                     })}
                 </tbody>
             </table>
+        </div>
+    );
+}
+
+// Trend Content
+function TrendContent({ data, match }: { data: any; match: Match }) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <MatchTrendChart
+                data={data}
+                homeTeamName={match.home_team?.name}
+                awayTeamName={match.away_team?.name}
+            />
         </div>
     );
 }
