@@ -57,8 +57,10 @@ export class DailyPreSyncService {
         // 1. Sync H2H for each match
         for (const matchId of matchIds) {
             try {
-                await this.syncH2HToDb(matchId);
-                result.h2hSynced++;
+                const synced = await this.syncH2HToDb(matchId);
+                if (synced) {
+                    result.h2hSynced++;
+                }
             } catch (error: any) {
                 result.errors.push(`H2H ${matchId}: ${error.message}`);
             }
@@ -67,8 +69,10 @@ export class DailyPreSyncService {
         // 2. Sync Lineups for each match
         for (const matchId of matchIds) {
             try {
-                await this.syncLineupToDb(matchId);
-                result.lineupsSynced++;
+                const synced = await this.syncLineupToDb(matchId);
+                if (synced) {
+                    result.lineupsSynced++;
+                }
             } catch (error: any) {
                 result.errors.push(`Lineup ${matchId}: ${error.message}`);
             }
@@ -78,8 +82,10 @@ export class DailyPreSyncService {
         const uniqueSeasons = [...new Set(seasonIds)];
         for (const seasonId of uniqueSeasons) {
             try {
-                await this.syncStandingsToDb(seasonId);
-                result.standingsSynced++;
+                const synced = await this.syncStandingsToDb(seasonId);
+                if (synced) {
+                    result.standingsSynced++;
+                }
             } catch (error: any) {
                 result.errors.push(`Standings ${seasonId}: ${error.message}`);
             }
@@ -99,8 +105,9 @@ export class DailyPreSyncService {
 
     /**
      * Sync H2H data to database
+     * @returns true if data was synced, false if no data available
      */
-    async syncH2HToDb(matchId: string): Promise<void> {
+    async syncH2HToDb(matchId: string): Promise<boolean> {
         try {
             const response = await this.matchAnalysisService.getMatchAnalysis({ match_id: matchId });
             const results = (response as any).results || {};
@@ -108,7 +115,7 @@ export class DailyPreSyncService {
             // Skip if no data
             if (!results || Object.keys(results).length === 0) {
                 logger.debug(`No H2H data for match ${matchId}`);
-                return;
+                return false;
             }
 
             // Parse H2H data
@@ -158,25 +165,28 @@ export class DailyPreSyncService {
                 ]);
 
                 logger.debug(`✅ Synced H2H for match ${matchId}: ${totalMatches} matches`);
+                return true;
             } finally {
                 client.release();
             }
         } catch (error: any) {
             logger.warn(`Failed to sync H2H for match ${matchId}: ${error.message}`);
+            throw error; // Re-throw to be caught by caller
         }
     }
 
     /**
      * Sync Lineup data to database
+     * @returns true if data was synced, false if no data available
      */
-    async syncLineupToDb(matchId: string): Promise<void> {
+    async syncLineupToDb(matchId: string): Promise<boolean> {
         try {
             const response = await this.matchLineupService.getMatchLineup({ match_id: matchId });
             const results = (response as any).results || {};
 
             if (!results || Object.keys(results).length === 0) {
                 logger.debug(`No lineup data for match ${matchId}`);
-                return;
+                return false;
             }
 
             const homeFormation = results.home_formation || results.home?.formation || null;
@@ -212,25 +222,28 @@ export class DailyPreSyncService {
                 ]);
 
                 logger.debug(`✅ Synced lineup for match ${matchId}`);
+                return true;
             } finally {
                 client.release();
             }
         } catch (error: any) {
             logger.warn(`Failed to sync lineup for match ${matchId}: ${error.message}`);
+            throw error; // Re-throw to be caught by caller
         }
     }
 
     /**
      * Sync Standings data to database
+     * @returns true if data was synced, false if no data available
      */
-    async syncStandingsToDb(seasonId: string): Promise<void> {
+    async syncStandingsToDb(seasonId: string): Promise<boolean> {
         try {
             const response = await this.seasonStandingsService.getSeasonStandings({ season_id: seasonId });
             const results = (response as any).results || [];
 
             if (!results || results.length === 0) {
                 logger.debug(`No standings data for season ${seasonId}`);
-                return;
+                return false;
             }
 
             const client = await pool.connect();
@@ -245,11 +258,13 @@ export class DailyPreSyncService {
         `, [seasonId, JSON.stringify(results), JSON.stringify(response)]);
 
                 logger.debug(`✅ Synced standings for season ${seasonId}`);
+                return true;
             } finally {
                 client.release();
             }
         } catch (error: any) {
             logger.warn(`Failed to sync standings for season ${seasonId}: ${error.message}`);
+            throw error; // Re-throw to be caught by caller
         }
     }
 
