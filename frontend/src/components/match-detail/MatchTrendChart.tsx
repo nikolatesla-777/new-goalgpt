@@ -34,7 +34,11 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
             // results can be single object or array
             const extracted = Array.isArray(results) ? results[0] : results;
             // Only use if it has actual data (not empty object)
-            if (extracted && (extracted.first_half?.length > 0 || extracted.second_half?.length > 0 || extracted.overtime?.length > 0)) {
+            if (extracted && (
+                (extracted.first_half && extracted.first_half.length > 0) || 
+                (extracted.second_half && extracted.second_half.length > 0) || 
+                (extracted.overtime && extracted.overtime.length > 0)
+            )) {
                 trendData = extracted;
             }
         } else {
@@ -109,8 +113,6 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
     const scaleX = plotWidth / Math.max(allPoints.length - 1, 1);
     const scaleY = plotHeight / 2 / maxValue;
 
-    // Time markers
-    const timeMarkers = [];
     const maxMinute = allPoints[allPoints.length - 1]?.minute || 90;
     
     // Add markers for key minutes
