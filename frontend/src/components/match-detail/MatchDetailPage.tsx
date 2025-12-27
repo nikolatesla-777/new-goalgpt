@@ -443,11 +443,8 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
     // According to TheSports API docs:
     // "Trend data is available only when the match is in progress"
     // Status IDs: 2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5=OVERTIME, 7=PENALTY_SHOOTOUT
-    const isLiveMatch = match.status_id && [2, 3, 4, 5, 7].includes(match.status_id);
-    
-    // Check if data has actual trend data (not empty object)
-    const hasTrendData = data && data.results && typeof data.results === 'object' && !Array.isArray(data.results) && 
-        (data.results.first_half?.length > 0 || data.results.second_half?.length > 0 || data.results.overtime?.length > 0);
+    const matchStatus = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
+    const isLiveMatch = matchStatus && [2, 3, 4, 5, 7].includes(matchStatus);
     
     if (!isLiveMatch) {
         return (
