@@ -12,7 +12,6 @@ import {
     getMatchTeamStats,
     getMatchLineup,
     getSeasonStandings,
-    getMatchDiary,
     getMatchTrend,
     getLiveMatches,
     getMatchDetailLive,
