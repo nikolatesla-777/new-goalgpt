@@ -440,6 +440,35 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
 
 // Trend Content
 function TrendContent({ data, match }: { data: any; match: Match }) {
+    // According to TheSports API docs:
+    // "Trend data is available only when the match is in progress"
+    // Status IDs: 2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5=OVERTIME, 7=PENALTY_SHOOTOUT
+    const isLiveMatch = match.status_id && [2, 3, 4, 5, 7].includes(match.status_id);
+    
+    // Check if data has actual trend data (not empty object)
+    const hasTrendData = data && data.results && typeof data.results === 'object' && !Array.isArray(data.results) && 
+        (data.results.first_half?.length > 0 || data.results.second_half?.length > 0 || data.results.overtime?.length > 0);
+    
+    if (!isLiveMatch) {
+        return (
+            <div style={{
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#6b7280',
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb'
+            }}>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: '500' }}>
+                    Trend verisi sadece maç devam ederken mevcuttur.
+                </p>
+                <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#9ca3af' }}>
+                    Bu maç henüz başlamadı veya tamamlandı.
+                </p>
+            </div>
+        );
+    }
+    
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <MatchTrendChart

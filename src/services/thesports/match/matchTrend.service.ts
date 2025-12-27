@@ -17,6 +17,8 @@ export class MatchTrendService {
     /**
      * Get match trend detail (for specific match)
      * CRITICAL: Uses /detail endpoint for specific match data
+     * IMPORTANT: Trend data is only available when match is in progress (status IN (2,3,4,5,7))
+     * According to TheSports API docs: "Trend data is available only when the match is in progress"
      */
     async getMatchTrendDetail(params: MatchTrendParams): Promise<MatchTrendResponse> {
         const { match_id } = params;
@@ -41,8 +43,13 @@ export class MatchTrendService {
         // Only cache if response has actual data
         if (response && response.results) {
             const results = Array.isArray(response.results) ? response.results[0] : response.results;
-            if (results && (results.first_half?.length > 0 || results.second_half?.length > 0 || results.overtime?.length > 0)) {
-                await cacheService.set(cacheKey, response, CacheTTL.Hour);
+            // Check if results is an empty object (API returns {} when no trend data available)
+            if (results && typeof results === 'object' && !Array.isArray(results)) {
+                if (results.first_half?.length > 0 || results.second_half?.length > 0 || results.overtime?.length > 0) {
+                    await cacheService.set(cacheKey, response, CacheTTL.Hour);
+                } else {
+                    logger.debug(`Trend data not available for match ${match_id} (empty results - match may not be in progress)`);
+                }
             }
         }
 
