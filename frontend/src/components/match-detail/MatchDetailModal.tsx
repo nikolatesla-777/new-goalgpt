@@ -14,6 +14,7 @@ import {
     getSeasonStandings,
     getMatchTrend,
     getMatchHalfStats,
+    getMatchPlayerStats,
 } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 
@@ -70,7 +71,15 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                         setTrendData(null);
                         break;
                     case 'lineup':
-                        result = await getMatchLineup(matchId);
+                        // Fetch Lineup and Player Stats together
+                        const [lineupResult, playerStatsResult] = await Promise.all([
+                            getMatchLineup(matchId),
+                            getMatchPlayerStats(matchId).catch(() => null) // Don't fail if stats missing
+                        ]);
+                        result = {
+                            lineup: lineupResult,
+                            stats: playerStatsResult
+                        };
                         setTrendData(null);
                         break;
                 }
@@ -451,14 +460,45 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
 
 // Lineup Tab Content
 function LineupContent({ data }: { data: any }) {
-    const lineup = data?.results || data;
+    // data.lineup contains the lineup info
+    // data.stats contains the player stats (including ratings)
 
-    if (!lineup) {
+    // Fallback if data is just the lineup itself (backward compat)
+    const lineupData = data?.lineup?.results || data?.lineup || data?.results || data;
+    const statsData = data?.stats?.results || data?.stats;
+
+    // Helper to get rating for a player
+    const getRating = (playerId: string) => {
+        if (!statsData || !Array.isArray(statsData)) return null;
+
+        // Find the stats object (it might be nested in results array which contains matches)
+        // Adjust based on exact API response. Assuming statsData is the array of matches or stats directly.
+        // The endpoint returns { results: [ { id: matchId, player_stats: [...] } ] }
+        // So statsData might be that result array.
+
+        // Flatten stats if needed or search directly
+        const matchStats = Array.isArray(statsData) ? statsData[0] : statsData;
+        if (!matchStats?.player_stats) return null;
+
+        const playerStats = matchStats.player_stats.find((p: any) => p.player_id === playerId);
+        return playerStats?.rating ? parseFloat(playerStats.rating).toFixed(1) : null;
+    };
+
+    if (!lineupData) {
         return <div style={{ textAlign: 'center', color: '#6b7280' }}>Kadro bilgisi bulunamadı</div>;
     }
 
-    const homeLineup = lineup.home || lineup.home_lineup || [];
-    const awayLineup = lineup.away || lineup.away_lineup || [];
+    const homeLineup = lineupData.home || lineupData.home_lineup || [];
+    const awayLineup = lineupData.away || lineupData.away_lineup || [];
+
+    // Rating color helper
+    const getRatingColor = (rating: string | null) => {
+        if (!rating) return '#9ca3af'; // gray
+        const r = parseFloat(rating);
+        if (r >= 7.5) return '#10b981'; // green
+        if (r >= 6.5) return '#f59e0b'; // orange
+        return '#ef4444'; // red
+    };
 
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
@@ -466,20 +506,45 @@ function LineupContent({ data }: { data: any }) {
                 <h4 style={{ margin: '0 0 12px 0', fontWeight: '600', color: '#1f2937' }}>Ev Sahibi</h4>
                 {homeLineup.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {homeLineup.slice(0, 11).map((player: any, idx: number) => (
-                            <div
-                                key={idx}
-                                style={{
-                                    padding: '8px',
-                                    backgroundColor: '#f9fafb',
-                                    borderRadius: '4px',
-                                    fontSize: '14px',
-                                }}
-                            >
-                                {player.shirt_number && <span style={{ fontWeight: '600', marginRight: '8px' }}>{player.shirt_number}</span>}
-                                {player.name || player.player_name || `Oyuncu ${idx + 1}`}
-                            </div>
-                        ))}
+                        {homeLineup.slice(0, 11).map((player: any, idx: number) => {
+                            const rating = getRating(player.id || player.player_id);
+                            return (
+                                <div
+                                    key={idx}
+                                    style={{
+                                        padding: '8px',
+                                        backgroundColor: '#f9fafb',
+                                        borderRadius: '4px',
+                                        fontSize: '14px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        {player.shirt_number && (
+                                            <span style={{ fontWeight: '600', marginRight: '8px', minWidth: '20px' }}>
+                                                {player.shirt_number}
+                                            </span>
+                                        )}
+                                        {player.name || player.player_name || `Oyuncu ${idx + 1}`}
+                                    </div>
+
+                                    {rating && (
+                                        <div style={{
+                                            backgroundColor: getRatingColor(rating),
+                                            color: 'white',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '12px',
+                                            fontWeight: 'bold'
+                                        }}>
+                                            {rating}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 ) : (
                     <div style={{ color: '#6b7280' }}>Kadro bilgisi yok</div>
@@ -489,20 +554,44 @@ function LineupContent({ data }: { data: any }) {
                 <h4 style={{ margin: '0 0 12px 0', fontWeight: '600', color: '#1f2937' }}>Deplasman</h4>
                 {awayLineup.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {awayLineup.slice(0, 11).map((player: any, idx: number) => (
-                            <div
-                                key={idx}
-                                style={{
-                                    padding: '8px',
-                                    backgroundColor: '#f9fafb',
-                                    borderRadius: '4px',
-                                    fontSize: '14px',
-                                }}
-                            >
-                                {player.shirt_number && <span style={{ fontWeight: '600', marginRight: '8px' }}>{player.shirt_number}</span>}
-                                {player.name || player.player_name || `Oyuncu ${idx + 1}`}
-                            </div>
-                        ))}
+                        {awayLineup.slice(0, 11).map((player: any, idx: number) => {
+                            const rating = getRating(player.id || player.player_id);
+                            return (
+                                <div
+                                    key={idx}
+                                    style={{
+                                        padding: '8px',
+                                        backgroundColor: '#f9fafb',
+                                        borderRadius: '4px',
+                                        fontSize: '14px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        {player.shirt_number && (
+                                            <span style={{ fontWeight: '600', marginRight: '8px', minWidth: '20px' }}>
+                                                {player.shirt_number}
+                                            </span>
+                                        )}
+                                        {player.name || player.player_name || `Oyuncu ${idx + 1}`}
+                                    </div>
+                                    {rating && (
+                                        <div style={{
+                                            backgroundColor: getRatingColor(rating),
+                                            color: 'white',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '12px',
+                                            fontWeight: 'bold'
+                                        }}>
+                                            {rating}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 ) : (
                     <div style={{ color: '#6b7280' }}>Kadro bilgisi yok</div>

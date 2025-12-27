@@ -465,6 +465,26 @@ export async function getMatchTeamStats(matchId: string): Promise<any> {
   }
 }
 
+/**
+ * Get match player stats (for ratings and detailed stats)
+ * GET /api/matches/:match_id/player-stats
+ */
+export async function getMatchPlayerStats(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/player-stats`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchPlayerStats] Error:', error);
+    throw error;
+  }
+}
+
 
 /**
  * Get match detail live (score, events, stats)

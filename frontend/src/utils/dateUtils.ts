@@ -7,20 +7,19 @@
 /**
  * Get today's date in Turkish timezone (YYYY-MM-DD format)
  * CRITICAL: Turkish time is UTC+3, so we need to adjust for correct date
+ * Same logic as backend DailyMatchSyncWorker.getTodayTsiStrings()
  */
 export function getTodayInTurkey(): string {
-  const now = new Date();
+  // Date.now() returns UTC milliseconds
+  // Add TSI offset (UTC+3 = 3 hours = 10800000 ms)
+  const TSI_OFFSET_MS = 3 * 3600 * 1000;
+  const tsiMs = Date.now() + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
   
-  // Get UTC time
-  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-  
-  // Add Turkish timezone offset (UTC+3 = 3 hours = 10800000 ms)
-  const turkeyTime = new Date(utcTime + (3 * 3600000));
-  
-  // Format as YYYY-MM-DD
-  const year = turkeyTime.getUTCFullYear();
-  const month = String(turkeyTime.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(turkeyTime.getUTCDate()).padStart(2, '0');
+  // Format as YYYY-MM-DD using UTC methods
+  const year = tsiDate.getUTCFullYear();
+  const month = String(tsiDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(tsiDate.getUTCDate()).padStart(2, '0');
   
   return `${year}-${month}-${day}`;
 }
@@ -39,13 +38,16 @@ export function formatDateForInput(date: Date): string {
  * Get date string from timestamp (Turkish timezone)
  */
 export function getDateStringFromTimestamp(timestamp: number): string {
-  const date = new Date(timestamp * 1000);
-  const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
-  const turkeyTime = new Date(utcTime + (3 * 3600000));
+  // Convert Unix timestamp to milliseconds
+  const dateMs = timestamp * 1000;
+  // Add TSI offset (UTC+3 = 3 hours = 10800000 ms)
+  const TSI_OFFSET_MS = 3 * 3600 * 1000;
+  const tsiMs = dateMs + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
   
-  const year = turkeyTime.getUTCFullYear();
-  const month = String(turkeyTime.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(turkeyTime.getUTCDate()).padStart(2, '0');
+  const year = tsiDate.getUTCFullYear();
+  const month = String(tsiDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(tsiDate.getUTCDate()).padStart(2, '0');
   
   return `${year}-${month}-${day}`;
 }
