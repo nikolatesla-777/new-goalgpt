@@ -18,7 +18,7 @@ import {
 import type { Match } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 
-type TabType = 'stats' | 'h2h' | 'standings' | 'lineup';
+type TabType = 'stats' | 'h2h' | 'standings' | 'lineup' | 'trend';
 
 export function MatchDetailPage() {
     const { matchId } = useParams<{ matchId: string }>();
@@ -72,13 +72,8 @@ export function MatchDetailPage() {
                 let result;
                 switch (activeTab) {
                     case 'stats':
-                        // Fetch both stats and trend data for stats tab
-                        const [statsResult, trendResult] = await Promise.allSettled([
-                            getMatchTeamStats(matchId),
-                            getMatchTrend(matchId).catch(() => null) // Don't fail if trend fails
-                        ]);
-                        result = statsResult.status === 'fulfilled' ? statsResult.value : null;
-                        setTrendData(trendResult.status === 'fulfilled' ? trendResult.value : null);
+                        result = await getMatchTeamStats(matchId);
+                        setTrendData(null);
                         break;
                     case 'h2h':
                         result = await getMatchH2H(matchId);
@@ -94,6 +89,10 @@ export function MatchDetailPage() {
                         break;
                     case 'lineup':
                         result = await getMatchLineup(matchId);
+                        setTrendData(null);
+                        break;
+                    case 'trend':
+                        result = await getMatchTrend(matchId);
                         setTrendData(null);
                         break;
                 }
@@ -115,6 +114,7 @@ export function MatchDetailPage() {
         { id: 'h2h', label: 'H2H', icon: '⚔️' },
         { id: 'standings', label: 'Puan Durumu', icon: '🏆' },
         { id: 'lineup', label: 'Kadro', icon: '👥' },
+        { id: 'trend', label: 'Trend', icon: '📈' },
     ];
 
     if (loading) {
@@ -255,10 +255,11 @@ export function MatchDetailPage() {
                     </div>
                 ) : (
                     <>
-                        {activeTab === 'stats' && <StatsContent data={tabData} match={match} trendData={trendData} />}
+                        {activeTab === 'stats' && <StatsContent data={tabData} match={match} />}
                         {activeTab === 'h2h' && <H2HContent data={tabData} />}
                         {activeTab === 'standings' && <StandingsContent data={tabData} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
                         {activeTab === 'lineup' && <LineupContent data={tabData} match={match} />}
+                        {activeTab === 'trend' && <TrendContent data={tabData} match={match} />}
                     </>
                 )}
             </div>
@@ -267,7 +268,7 @@ export function MatchDetailPage() {
 }
 
 // Stats Tab Content
-function StatsContent({ data, match, trendData }: { data: any; match: Match; trendData?: any }) {
+function StatsContent({ data, match }: { data: any; match: Match }) {
     // Handle multiple response formats:
     // - live-stats: { stats: [...], incidents: [...] }
     // - team-stats: { results: [...] }
@@ -275,9 +276,6 @@ function StatsContent({ data, match, trendData }: { data: any; match: Match; tre
 
     // Sort and filter unknown stats
     const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
-
-    // Extract trend data from API response (already extracted by getMatchTrend API function)
-    const trend = trendData;
 
     // If no data from API, show basic match stats
     if (!stats.length && match) {
@@ -290,15 +288,6 @@ function StatsContent({ data, match, trendData }: { data: any; match: Match; tre
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* Trend Chart */}
-                {trend && (
-                    <MatchTrendChart
-                        data={trend}
-                        homeTeamName={match.home_team?.name}
-                        awayTeamName={match.away_team?.name}
-                    />
-                )}
-                
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <p style={{ textAlign: 'center', color: '#6b7280', marginBottom: '16px' }}>
                         {data?.message || 'Detaylı istatistik verisi bulunamadı. Temel bilgiler gösteriliyor.'}
@@ -313,15 +302,6 @@ function StatsContent({ data, match, trendData }: { data: any; match: Match; tre
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Trend Chart - Show at the top */}
-            {trend && (
-                <MatchTrendChart
-                    data={trend}
-                    homeTeamName={match.home_team?.name}
-                    awayTeamName={match.away_team?.name}
-                />
-            )}
-            
             {/* Stats List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {stats.map((stat: any, idx: number) => (
