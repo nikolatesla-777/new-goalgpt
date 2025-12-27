@@ -5,8 +5,6 @@
  * Based on /match/trend/detail endpoint data
  */
 
-import { parseMinuteFromText } from '../../utils/parseMinute';
-
 interface TrendPoint {
     minute: number;
     home_value: number;  // Positive for home
@@ -24,19 +22,9 @@ interface MatchTrendChartProps {
     data: MatchTrendData | null;
     homeTeamName?: string;
     awayTeamName?: string;
-    currentMinute?: number | null; // Current match minute (numeric) to limit trend data display
-    currentMinuteText?: string | null; // Current match minute text (e.g., "26'", "HT", "45+") - will be parsed if currentMinute is not available
-    matchStatus?: number; // Match status (needed to parse minute_text correctly)
 }
 
-export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName = 'Deplasman', currentMinute, currentMinuteText, matchStatus }: MatchTrendChartProps) {
-    // Determine the actual current minute to use for filtering
-    let actualCurrentMinute: number | null = currentMinute ?? null;
-    
-    // If currentMinute is not available but currentMinuteText is, parse it
-    if (actualCurrentMinute === null && currentMinuteText && matchStatus !== undefined) {
-        actualCurrentMinute = parseMinuteFromText(currentMinuteText, matchStatus);
-    }
+export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName = 'Deplasman' }: MatchTrendChartProps) {
     // Handle API response format: data can be MatchTrendData directly or wrapped in results
     let trendData: MatchTrendData | null = null;
     if (data) {
@@ -87,17 +75,11 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
     const overtime = trendData.overtime || [];
     
     // Combine all points with half indicators
-    let allPoints: (TrendPoint & { half: 'first' | 'second' | 'overtime' })[] = [
+    const allPoints: (TrendPoint & { half: 'first' | 'second' | 'overtime' })[] = [
         ...firstHalf.map(p => ({ ...p, half: 'first' as const })),
         ...secondHalf.map(p => ({ ...p, half: 'second' as const })),
         ...overtime.map(p => ({ ...p, half: 'overtime' as const }))
     ];
-
-    // Filter trend data to current match minute if available
-    // This ensures the graph only shows data up to the actual match minute
-    if (actualCurrentMinute !== null && actualCurrentMinute !== undefined && actualCurrentMinute > 0) {
-        allPoints = allPoints.filter(point => point.minute <= actualCurrentMinute);
-    }
 
     if (allPoints.length === 0) {
         return (
