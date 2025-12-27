@@ -253,7 +253,7 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                     <path
                         d={`M ${padding.left} ${centerY} ${allPoints.map((point, index) => {
                             const x = padding.left + index * scaleX;
-                            const y = centerY - (point.away_value || 0) * scaleY; // away_value is negative, so this goes down
+                            const y = centerY + (point.away_value || 0) * scaleY; // away_value is positive, add to go down from center
                             return `L ${x} ${y}`;
                         }).join(' ')} L ${padding.left + (allPoints.length - 1) * scaleX} ${centerY} Z`}
                         fill="#f97316"
@@ -263,7 +263,7 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                     <polyline
                         points={allPoints.map((point, index) => {
                             const x = padding.left + index * scaleX;
-                            const y = centerY - (point.away_value || 0) * scaleY;
+                            const y = centerY + (point.away_value || 0) * scaleY; // away_value is positive, add to go down from center
                             return `${x},${y}`;
                         }).join(' ')}
                         fill="none"
