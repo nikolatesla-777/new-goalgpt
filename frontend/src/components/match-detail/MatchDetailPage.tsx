@@ -30,7 +30,6 @@ export function MatchDetailPage() {
     const [tabLoading, setTabLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [tabData, setTabData] = useState<any>(null);
-    const [trendData, setTrendData] = useState<any>(null);
 
     // Fetch match info
     useEffect(() => {
@@ -77,7 +76,6 @@ export function MatchDetailPage() {
                         break;
                     case 'h2h':
                         result = await getMatchH2H(matchId);
-                        setTrendData(null);
                         break;
                     case 'standings':
                         if (match.season_id) {
@@ -85,15 +83,12 @@ export function MatchDetailPage() {
                         } else {
                             result = null; // No season_id, result stays null
                         }
-                        setTrendData(null);
                         break;
                     case 'lineup':
                         result = await getMatchLineup(matchId);
-                        setTrendData(null);
                         break;
                     case 'trend':
                         result = await getMatchTrend(matchId);
-                        setTrendData(null);
                         break;
                 }
                 setTabData(result);
