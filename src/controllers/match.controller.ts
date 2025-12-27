@@ -790,19 +790,51 @@ export const getMatchLiveStats = async (
   try {
     const { match_id } = request.params;
 
-    // Use the comprehensive CombinedStatsService
-    const result = await combinedStatsService.getCombinedMatchStats(match_id);
+    // DB-first approach: Try to get stats from database first
+    let result = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
+    
+    if (result && result.allStats.length > 0) {
+      // Found in DB, return it
+      logger.debug(`[MatchController] Returning stats from DB for ${match_id}`);
+      reply.send({
+        success: true,
+        data: {
+          match_id: result.matchId,
+          stats: result.allStats,
+          incidents: result.incidents,
+          score: result.score,
+          sources: {
+            basic: result.basicStats.length,
+            detailed: result.detailedStats.length,
+            from: 'database'
+          },
+        },
+      });
+      return;
+    }
+
+    // Not in DB or empty, fetch from API
+    logger.info(`[MatchController] Stats not in DB, fetching from API for ${match_id}`);
+    result = await combinedStatsService.getCombinedMatchStats(match_id);
+
+    // Save to database asynchronously (don't await - background operation)
+    if (result && result.allStats.length > 0) {
+      combinedStatsService.saveCombinedStatsToDatabase(match_id, result).catch((err) => {
+        logger.error(`[MatchController] Failed to save stats to DB for ${match_id}:`, err);
+      });
+    }
 
     reply.send({
       success: true,
       data: {
         match_id: result.matchId,
-        stats: result.allStats, // Returns basic + detailed sorted
+        stats: result.allStats,
         incidents: result.incidents,
         score: result.score,
         sources: {
           basic: result.basicStats.length,
-          detailed: result.detailedStats.length
+          detailed: result.detailedStats.length,
+          from: 'api'
         },
       },
     });

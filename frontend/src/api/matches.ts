@@ -434,6 +434,27 @@ export async function getMatchLineup(matchId: string): Promise<any> {
 }
 
 /**
+ * Get match live stats (combined stats from detail_live + team_stats)
+ * GET /api/matches/:match_id/live-stats
+ * Returns comprehensive match statistics (basic + detailed)
+ */
+export async function getMatchLiveStats(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/live-stats`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getMatchLiveStats] Error:', error);
+    throw error;
+  }
+}
+
+/**
  * Get match team stats (from live stats feed for real-time data)
  */
 export async function getMatchTeamStats(matchId: string): Promise<any> {

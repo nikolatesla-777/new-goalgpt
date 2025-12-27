@@ -14,6 +14,8 @@ import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { MatchDetailLiveService } from './matchDetailLive.service';
 import { MatchTeamStatsService } from './matchTeamStats.service';
+import { pool } from '../../../database/connection';
+import { pool } from '../../../database/connection';
 
 // Stat type mapping for human-readable names
 // Based on official TheSports API documentation for detail_live and team_stats
@@ -413,5 +415,97 @@ export class CombinedStatsService {
         }
 
         return result;
+    }
+
+    /**
+     * Save combined match statistics to database (statistics JSONB column)
+     * Stores the full combined stats (basic + detailed) for later retrieval
+     */
+    async saveCombinedStatsToDatabase(matchId: string, stats: CombinedMatchStats): Promise<void> {
+        const client = await pool.connect();
+        try {
+            // Check if statistics column exists
+            const columnCheck = await client.query(`
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'ts_matches' 
+                AND column_name = 'statistics'
+            `);
+            
+            if (columnCheck.rows.length === 0) {
+                logger.warn(`[CombinedStats] statistics column does not exist, skipping save for ${matchId}`);
+                return;
+            }
+
+            // Prepare statistics data to save
+            const statisticsData = {
+                match_id: stats.matchId,
+                basic_stats: stats.basicStats,
+                detailed_stats: stats.detailedStats,
+                all_stats: stats.allStats,
+                incidents: stats.incidents,
+                score: stats.score,
+                last_updated: stats.lastUpdated,
+                saved_at: Date.now(),
+            };
+
+            // Update statistics column
+            await client.query(`
+                UPDATE ts_matches
+                SET statistics = $1::jsonb,
+                    updated_at = NOW()
+                WHERE external_id = $2
+            `, [JSON.stringify(statisticsData), matchId]);
+
+            logger.info(`[CombinedStats] Saved combined stats to database for match: ${matchId}`);
+        } catch (error: any) {
+            logger.error(`[CombinedStats] Error saving stats to database for ${matchId}:`, error);
+            // Don't throw - this is a background operation
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Get combined match statistics from database (statistics JSONB column)
+     * Returns null if not found or invalid
+     */
+    async getCombinedStatsFromDatabase(matchId: string): Promise<CombinedMatchStats | null> {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(`
+                SELECT statistics
+                FROM ts_matches
+                WHERE external_id = $1
+                  AND statistics IS NOT NULL
+            `, [matchId]);
+
+            if (result.rows.length === 0 || !result.rows[0].statistics) {
+                return null;
+            }
+
+            const statsData = result.rows[0].statistics;
+
+            // Validate structure
+            if (!statsData.all_stats || !Array.isArray(statsData.all_stats)) {
+                logger.warn(`[CombinedStats] Invalid statistics structure in DB for ${matchId}`);
+                return null;
+            }
+
+            return {
+                matchId: statsData.match_id || matchId,
+                basicStats: statsData.basic_stats || [],
+                detailedStats: statsData.detailed_stats || [],
+                allStats: statsData.all_stats,
+                incidents: statsData.incidents || [],
+                score: statsData.score || null,
+                lastUpdated: statsData.last_updated || Date.now(),
+            };
+        } catch (error: any) {
+            logger.error(`[CombinedStats] Error reading stats from database for ${matchId}:`, error);
+            return null;
+        } finally {
+            client.release();
+        }
     }
 }

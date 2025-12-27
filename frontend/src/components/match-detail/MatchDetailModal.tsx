@@ -8,13 +8,14 @@
 import { useState, useEffect } from 'react';
 import type { Match } from '../../api/matches';
 import {
-    getMatchAnalysis,
     getMatchTeamStats,
+    getMatchLiveStats,
     getMatchLineup,
     getSeasonStandings,
     getMatchTrend,
     getMatchHalfStats,
     getMatchPlayerStats,
+    getMatchH2H,
 } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 
@@ -46,20 +47,39 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                 let result;
                 switch (activeTab) {
                     case 'stats':
-                        // Fetch both full time, half time stats and trend data for stats tab
-                        const [statsResult, halfStatsResult, trendResult] = await Promise.allSettled([
-                            getMatchTeamStats(matchId),
+                        // Fetch combined stats (live-stats endpoint includes both basic and detailed stats)
+                        // Also fetch half time stats for period selection
+                        const [liveStatsResult, halfStatsResult, trendResult] = await Promise.allSettled([
+                            getMatchLiveStats(matchId).catch(() => null), // Fail gracefully, fallback to teamStats
                             getMatchHalfStats(matchId).catch(() => null), // Don't fail if half stats fails
                             getMatchTrend(matchId).catch(() => null) // Don't fail if trend fails
                         ]);
+                        
+                        // If liveStats failed, fallback to teamStats
+                        let fullTimeData = null;
+                        if (liveStatsResult.status === 'fulfilled' && liveStatsResult.value) {
+                            fullTimeData = {
+                                stats: liveStatsResult.value.stats || [],
+                                incidents: liveStatsResult.value.incidents || [],
+                            };
+                        } else {
+                            // Fallback to getMatchTeamStats
+                            try {
+                                const teamStats = await getMatchTeamStats(matchId);
+                                fullTimeData = teamStats;
+                            } catch {
+                                fullTimeData = null;
+                            }
+                        }
+                        
                         result = {
-                            fullTime: statsResult.status === 'fulfilled' ? statsResult.value : null,
+                            fullTime: fullTimeData,
                             halfTime: halfStatsResult.status === 'fulfilled' ? halfStatsResult.value : null,
                         };
                         setTrendData(trendResult.status === 'fulfilled' ? trendResult.value : null);
                         break;
                     case 'h2h':
-                        result = await getMatchAnalysis(matchId);
+                        result = await getMatchH2H(matchId);
                         setTrendData(null);
                         break;
                     case 'standings':
@@ -376,7 +396,8 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
 
 // H2H Tab Content
 function H2HContent({ data }: { data: any }) {
-    const h2hMatches = data?.results?.h2h || data?.h2h || [];
+    // Support new structure (h2hMatches) and legacy structure
+    const h2hMatches = data?.h2hMatches || data?.results?.h2h || data?.h2h || [];
 
     if (!h2hMatches.length) {
         return <div style={{ textAlign: 'center', color: '#6b7280' }}>H2H verisi bulunamadı</div>;

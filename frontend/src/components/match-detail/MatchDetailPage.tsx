@@ -10,6 +10,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     getMatchH2H,
     getMatchTeamStats,
+    getMatchLiveStats,
     getMatchLineup,
     getSeasonStandings,
     getMatchTrend,
@@ -101,13 +102,32 @@ export function MatchDetailPage() {
                 let result;
                 switch (activeTab) {
                     case 'stats':
-                        // Fetch both full time and half time stats
-                        const [teamStats, halfStats] = await Promise.allSettled([
-                            getMatchTeamStats(matchId),
+                        // Fetch combined stats (live-stats endpoint includes both basic and detailed stats)
+                        // Also fetch half time stats for period selection
+                        const [liveStats, halfStats] = await Promise.allSettled([
+                            getMatchLiveStats(matchId).catch(() => null), // Fail gracefully, fallback to teamStats
                             getMatchHalfStats(matchId).catch(() => null) // Fail gracefully
                         ]);
+                        
+                        // If liveStats failed, fallback to teamStats
+                        let fullTimeData = null;
+                        if (liveStats.status === 'fulfilled' && liveStats.value) {
+                            fullTimeData = {
+                                stats: liveStats.value.stats || [],
+                                incidents: liveStats.value.incidents || [],
+                            };
+                        } else {
+                            // Fallback to getMatchTeamStats
+                            try {
+                                const teamStats = await getMatchTeamStats(matchId);
+                                fullTimeData = teamStats;
+                            } catch {
+                                fullTimeData = null;
+                            }
+                        }
+                        
                         result = {
-                            fullTime: teamStats.status === 'fulfilled' ? teamStats.value : null,
+                            fullTime: fullTimeData,
                             halfTime: halfStats.status === 'fulfilled' ? halfStats.value : null,
                         };
                         break;
