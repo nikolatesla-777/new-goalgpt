@@ -66,6 +66,7 @@ export function MatchDetailPage() {
 
             setTabLoading(true);
             setTabData(null);
+            setError(null); // Clear previous errors
 
             try {
                 let result;
@@ -86,6 +87,8 @@ export function MatchDetailPage() {
                     case 'standings':
                         if (match.season_id) {
                             result = await getSeasonStandings(match.season_id);
+                        } else {
+                            result = null; // No season_id, result stays null
                         }
                         setTrendData(null);
                         break;
@@ -97,6 +100,8 @@ export function MatchDetailPage() {
                 setTabData(result);
             } catch (err: any) {
                 console.error('Tab data fetch error:', err);
+                setError(err.message || 'Veri yüklenirken hata oluştu');
+                setTabData(null); // Ensure data is null on error
             } finally {
                 setTabLoading(false);
             }
@@ -236,6 +241,17 @@ export function MatchDetailPage() {
                 {tabLoading ? (
                     <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
                         Yükleniyor...
+                    </div>
+                ) : error ? (
+                    <div style={{
+                        textAlign: 'center',
+                        padding: '40px',
+                        color: '#ef4444',
+                        backgroundColor: '#fef2f2',
+                        borderRadius: '12px',
+                        border: '1px solid #fecaca'
+                    }}>
+                        <p style={{ margin: 0, fontWeight: '500' }}>❌ {error}</p>
                     </div>
                 ) : (
                     <>

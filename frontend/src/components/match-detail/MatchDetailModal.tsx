@@ -38,6 +38,7 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
             setLoading(true);
             setError(null);
             setData(null);
+            setTrendData(null);
 
             try {
                 let result;
@@ -59,8 +60,7 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                         if (seasonId) {
                             result = await getSeasonStandings(seasonId);
                         } else {
-                            setError('Sezon bilgisi bulunamadı');
-                            return;
+                            result = null; // No season_id
                         }
                         setTrendData(null);
                         break;
@@ -71,7 +71,9 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                 }
                 setData(result);
             } catch (err: any) {
+                console.error('Tab data fetch error:', err);
                 setError(err.message || 'Veri yüklenirken hata oluştu');
+                setData(null); // Ensure data is null on error
             } finally {
                 setLoading(false);
             }
