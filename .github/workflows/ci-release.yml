@@ -45,44 +45,13 @@ jobs:
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            set +e  # Don't exit on error - continue deployment
-            
             cd /var/www/goalgpt
-            
-            # Pull latest code
             git pull origin main
-            
-            # Install dependencies
             npm install --production
-            
-            # CRITICAL FIX: Simple PM2 restart (guaranteed to work)
-            # Check if process exists
-            if pm2 list | grep -q "goalgpt-backend"; then
-              echo "🔄 Restarting existing backend process..."
-              pm2 restart goalgpt-backend --update-env || pm2 restart goalgpt-backend
-            else
-              echo "🆕 Starting new backend process..."
-              pm2 start npm --name "goalgpt-backend" -- start || echo "⚠️ PM2 start failed, but continuing..."
-            fi
-            
-            # Wait a moment for backend to start
-            sleep 5
-            
-            # Optional health check (non-blocking)
-            echo "🏥 Checking backend health..."
-            if curl -f -s http://localhost:3000/ready > /dev/null 2>&1; then
-              echo "✅ Backend is ready!"
-            else
-              echo "⚠️ Backend health check failed, but continuing deployment..."
-              pm2 status || true
-            fi
-            
-            # Build and deploy frontend
-            echo "🔄 Building frontend..."
+            pm2 restart goalgpt-backend
+            sleep 3
             cd frontend
-            npm install || echo "⚠️ Frontend npm install failed, but continuing..."
-            npm run build || echo "⚠️ Frontend build failed, but continuing..."
-            cp -r dist/* /var/www/goalgpt-frontend/ || echo "⚠️ Frontend copy failed, but continuing..."
-            
-            echo "✅ Deploy completed at $(date)"
-            pm2 status || true
+            npm install
+            npm run build
+            cp -r dist/* /var/www/goalgpt-frontend/
+            echo "✅ Deploy completed"
