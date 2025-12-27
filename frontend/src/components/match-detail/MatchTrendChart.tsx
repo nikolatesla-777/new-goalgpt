@@ -24,9 +24,10 @@ interface MatchTrendChartProps {
     awayTeamName?: string;
     homeTeamLogo?: string | null;
     awayTeamLogo?: string | null;
+    currentMinute?: number | null; // Current match minute (0-90)
 }
 
-export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName = 'Deplasman', homeTeamLogo, awayTeamLogo }: MatchTrendChartProps) {
+export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName = 'Deplasman', homeTeamLogo, awayTeamLogo, currentMinute = null }: MatchTrendChartProps) {
     // Handle API response format: data can be MatchTrendData directly or wrapped in results
     let trendData: MatchTrendData | null = null;
     if (data) {
@@ -98,12 +99,16 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
         );
     }
 
-    // Find max absolute values for scaling
-    const maxHomeValue = Math.max(...allPoints.map(p => Math.abs(p.home_value || 0)), 1);
-    const maxAwayValue = Math.max(...allPoints.map(p => Math.abs(p.away_value || 0)), 1);
+    // Determine current minute - filter data up to current minute
+    const actualCurrentMinute = currentMinute !== null && currentMinute !== undefined ? currentMinute : (allPoints[allPoints.length - 1]?.minute || 90);
+    const filteredPoints = allPoints.filter(p => p.minute <= actualCurrentMinute);
+
+    // Find max absolute values for scaling (only from filtered points)
+    const maxHomeValue = Math.max(...filteredPoints.map(p => Math.abs(p.home_value || 0)), 1);
+    const maxAwayValue = Math.max(...filteredPoints.map(p => Math.abs(p.away_value || 0)), 1);
     const maxValue = Math.max(maxHomeValue, maxAwayValue, 50); // Minimum scale of 50
 
-    // Chart dimensions
+    // Chart dimensions - ALWAYS based on 90 minutes for full time scale
     const chartWidth = 1000;
     const chartHeight = 220;
     const logoAreaWidth = 100;
@@ -113,15 +118,13 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
     const centerY = padding.top + plotHeight / 2;
     const plotStartX = padding.left + logoAreaWidth;
 
-    // Scale factors - Bar chart: each minute gets a bar
-    const barWidth = plotWidth / Math.max(allPoints.length, 1);
+    // Scale factors - Bar chart: fixed width based on 90 minutes
+    const TOTAL_MINUTES = 90;
+    const barWidth = plotWidth / TOTAL_MINUTES; // Each minute gets equal space
     const scaleY = plotHeight / 2 / maxValue;
 
-    const maxMinute = allPoints[allPoints.length - 1]?.minute || 90;
-
-    // Find HT position (after first half ends)
-    const htIndex = firstHalf.length > 0 ? firstHalf.length : 0;
-    const htPosition = htIndex * barWidth;
+    // Find HT position (at 45 minutes)
+    const htPosition = 45 * barWidth;
 
     return (
         <div style={{
@@ -242,29 +245,28 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                         strokeWidth="0.5"
                     />
 
-                    {/* HT marker (vertical dashed line) */}
-                    {htPosition > 0 && (
-                        <line
-                            x1={plotStartX + htPosition}
-                            y1={padding.top}
-                            x2={plotStartX + htPosition}
-                            y2={padding.top + plotHeight}
-                            stroke="rgba(255, 255, 255, 0.3)"
-                            strokeWidth="0.5"
-                            strokeDasharray="2 2"
-                        />
-                    )}
+                    {/* HT marker (vertical dashed line at 45 minutes) */}
+                    <line
+                        x1={plotStartX + htPosition}
+                        y1={padding.top}
+                        x2={plotStartX + htPosition}
+                        y2={padding.top + plotHeight}
+                        stroke="rgba(255, 255, 255, 0.3)"
+                        strokeWidth="0.5"
+                        strokeDasharray="2 2"
+                    />
 
-                    {/* Bars for each minute */}
-                    {allPoints.map((point, index) => {
-                        const barSpacing = 2; // Space between bars
-                        const actualBarWidth = barWidth - barSpacing;
-                        const x = plotStartX + index * barWidth + barSpacing / 2;
+                    {/* Bars for each minute - only show up to currentMinute */}
+                    {filteredPoints.map((point) => {
+                        const barSpacing = 1.5; // Smaller spacing for thinner bars
+                        const actualBarWidth = Math.max(barWidth - barSpacing, 1.2); // Thinner bars, minimum 1.2px
+                        // Position bar at minute position (minute is 1-based, so use minute-1 for 0-based index)
+                        const x = plotStartX + (point.minute - 1) * barWidth + barSpacing / 2;
                         const homeBarHeight = (point.home_value || 0) * scaleY;
                         const awayBarHeight = (point.away_value || 0) * scaleY;
                         
                         return (
-                            <g key={index}>
+                            <g key={point.minute}>
                                 {/* Home team bar (upward, green) */}
                                 {homeBarHeight > 0 && (
                                     <rect
@@ -273,11 +275,11 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                                         width={actualBarWidth}
                                         height={homeBarHeight}
                                         fill="#22c55e"
-                                        rx="1"
+                                        rx="0.5"
                                     />
                                 )}
                                 
-                                {/* Away team bar (downward, purple/blue) */}
+                                {/* Away team bar (downward, blue) */}
                                 {awayBarHeight > 0 && (
                                     <rect
                                         x={x}
@@ -285,19 +287,16 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                                         width={actualBarWidth}
                                         height={awayBarHeight}
                                         fill="#3b82f6"
-                                        rx="1"
+                                        rx="0.5"
                                     />
                                 )}
                             </g>
                         );
                     })}
 
-                    {/* Time markers on bottom */}
-                    {[0, 15, 30, 45, 60, 75, 90].filter(m => m <= maxMinute).map((minute) => {
-                        const point = allPoints.find(p => p.minute === minute);
-                        if (!point) return null;
-                        const index = allPoints.indexOf(point);
-                        const x = plotStartX + index * barWidth + barWidth / 2;
+                    {/* Time markers on bottom - always show full 90 minute scale */}
+                    {[0, 15, 30, 45, 60, 75, 90].map((minute) => {
+                        const x = plotStartX + minute * barWidth; // Position based on minute
                         const label = minute === 45 ? 'HT' : minute === 90 ? 'FT' : `${minute}'`;
                         
                         return (
@@ -324,18 +323,16 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                     })}
 
                     {/* HT label */}
-                    {htPosition > 0 && (
-                        <text
-                            x={plotStartX + htPosition}
-                            y={padding.top - 3}
-                            textAnchor="middle"
-                            fontSize="9"
-                            fontWeight="500"
-                            fill="rgba(255, 255, 255, 0.6)"
-                        >
-                            HT
-                        </text>
-                    )}
+                    <text
+                        x={plotStartX + htPosition}
+                        y={padding.top - 3}
+                        textAnchor="middle"
+                        fontSize="9"
+                        fontWeight="500"
+                        fill="rgba(255, 255, 255, 0.6)"
+                    >
+                        HT
+                    </text>
 
                     {/* FT label */}
                     <text

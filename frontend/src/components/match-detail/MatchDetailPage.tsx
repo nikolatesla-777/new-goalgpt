@@ -15,6 +15,7 @@ import {
     getMatchDiary,
     getMatchTrend,
     getLiveMatches,
+    getMatchDetailLive,
 } from '../../api/matches';
 import type { Match } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
@@ -113,7 +114,16 @@ export function MatchDetailPage() {
                         result = await getMatchLineup(matchId);
                         break;
                     case 'trend':
-                        result = await getMatchTrend(matchId);
+                        // Fetch both trend and live detail (for incidents/events)
+                        // If match is finished, getMatchDetailLive might still return events if available
+                        const [trendData, detailLive] = await Promise.all([
+                            getMatchTrend(matchId),
+                            getMatchDetailLive(matchId).catch(() => ({})) // Fail gracefully
+                        ]);
+                        result = {
+                            trend: trendData,
+                            incidents: detailLive?.incidents || []
+                        };
                         break;
                 }
                 setTabData(result);
@@ -582,14 +592,42 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
         );
     }
 
+    // Relaxed check: Only show "Not available" if we truly have NO data
+    // The service handles live/finished logic. If we have data, show it.
+    const hasData = (data?.trend?.first_half?.length > 0 || data?.trend?.second_half?.length > 0);
+
+    if (!hasData && !isLiveMatch) {
+        return (
+            <div style={{
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#6b7280',
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb'
+            }}>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: '500' }}>
+                    Trend verisi bulunamadı.
+                </p>
+                <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#9ca3af' }}>
+                    Bu maç için trend verisi henüz oluşmamış olabilir.
+                </p>
+            </div>
+        );
+    }
+
+    // Get current minute from match
+    const currentMinute = (match as any).minute ?? null;
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <MatchTrendChart
-                data={data}
+                data={data?.trend}
                 homeTeamName={match.home_team?.name}
                 awayTeamName={match.away_team?.name}
                 homeTeamLogo={match.home_team?.logo_url}
                 awayTeamLogo={match.away_team?.logo_url}
+                currentMinute={currentMinute}
             />
         </div>
     );
