@@ -5,6 +5,8 @@
  * Based on /match/trend/detail endpoint data
  */
 
+import { parseMinuteFromText } from '../../utils/parseMinute';
+
 interface TrendPoint {
     minute: number;
     home_value: number;  // Positive for home
