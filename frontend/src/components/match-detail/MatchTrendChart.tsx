@@ -22,9 +22,10 @@ interface MatchTrendChartProps {
     data: MatchTrendData | null;
     homeTeamName?: string;
     awayTeamName?: string;
+    currentMinute?: number | null; // Current match minute to limit trend data display
 }
 
-export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName = 'Deplasman' }: MatchTrendChartProps) {
+export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName = 'Deplasman', currentMinute }: MatchTrendChartProps) {
     // Handle API response format: data can be MatchTrendData directly or wrapped in results
     let trendData: MatchTrendData | null = null;
     if (data) {
@@ -75,11 +76,17 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
     const overtime = trendData.overtime || [];
     
     // Combine all points with half indicators
-    const allPoints: (TrendPoint & { half: 'first' | 'second' | 'overtime' })[] = [
+    let allPoints: (TrendPoint & { half: 'first' | 'second' | 'overtime' })[] = [
         ...firstHalf.map(p => ({ ...p, half: 'first' as const })),
         ...secondHalf.map(p => ({ ...p, half: 'second' as const })),
         ...overtime.map(p => ({ ...p, half: 'overtime' as const }))
     ];
+
+    // Filter trend data to current match minute if available
+    // This ensures the graph only shows data up to the actual match minute
+    if (currentMinute !== null && currentMinute !== undefined && currentMinute > 0) {
+        allPoints = allPoints.filter(point => point.minute <= currentMinute);
+    }
 
     if (allPoints.length === 0) {
         return (

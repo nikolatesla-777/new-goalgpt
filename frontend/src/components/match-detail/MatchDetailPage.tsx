@@ -484,6 +484,7 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
                 data={data}
                 homeTeamName={match.home_team?.name}
                 awayTeamName={match.away_team?.name}
+                currentMinute={match.minute}
             />
         </div>
     );

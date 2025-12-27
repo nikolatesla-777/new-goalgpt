@@ -282,6 +282,7 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
                         data={trendData}
                         homeTeamName={match.home_team?.name}
                         awayTeamName={match.away_team?.name}
+                        currentMinute={match.minute}
                     />
                 )}
                 <div style={{ textAlign: 'center', color: '#6b7280' }}>İstatistik verisi bulunamadı</div>
@@ -297,6 +298,7 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
                     data={trendData}
                     homeTeamName={match.home_team?.name}
                     awayTeamName={match.away_team?.name}
+                    currentMinute={match.minute}
                 />
             )}
             
