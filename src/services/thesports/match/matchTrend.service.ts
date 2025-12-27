@@ -23,9 +23,13 @@ export class MatchTrendService {
         const cacheKey = `${CacheKeyPrefix.TheSports}:match:trend:detail:${match_id}`;
 
         const cached = await cacheService.get<MatchTrendResponse>(cacheKey);
-        if (cached) {
-            logger.debug(`Cache hit for match trend detail: ${cacheKey}`);
-            return cached;
+        // Only use cache if it has actual data (not empty results)
+        if (cached && cached.results && typeof cached.results === 'object' && !Array.isArray(cached.results)) {
+            const results = cached.results as any;
+            if (results.first_half?.length > 0 || results.second_half?.length > 0 || results.overtime?.length > 0) {
+                logger.debug(`Cache hit for match trend detail: ${cacheKey}`);
+                return cached;
+            }
         }
 
         logger.info(`Fetching match trend detail: ${match_id}`);
@@ -34,8 +38,13 @@ export class MatchTrendService {
             { match_id }
         );
 
-        // Longer cache for historical data
-        await cacheService.set(cacheKey, response, CacheTTL.Hour);
+        // Only cache if response has actual data
+        if (response && response.results) {
+            const results = Array.isArray(response.results) ? response.results[0] : response.results;
+            if (results && (results.first_half?.length > 0 || results.second_half?.length > 0 || results.overtime?.length > 0)) {
+                await cacheService.set(cacheKey, response, CacheTTL.Hour);
+            }
+        }
 
         return response;
     }
