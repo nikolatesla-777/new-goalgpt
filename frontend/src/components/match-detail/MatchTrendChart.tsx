@@ -40,7 +40,11 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
         } else {
             // Direct MatchTrendData - check if it has data
             const direct = data as MatchTrendData;
-            if (direct && (direct.first_half?.length > 0 || direct.second_half?.length > 0 || direct.overtime?.length > 0)) {
+            if (direct && (
+                (direct.first_half && direct.first_half.length > 0) || 
+                (direct.second_half && direct.second_half.length > 0) || 
+                (direct.overtime && direct.overtime.length > 0)
+            )) {
                 trendData = direct;
             }
         }
