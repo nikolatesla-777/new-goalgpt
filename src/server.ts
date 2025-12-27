@@ -68,6 +68,8 @@ if (missing.length > 0) {
 
 const fastify = Fastify({
   logger: false, // We use winston for logging
+  requestTimeout: 600000, // 10 minutes for long-running operations like pre-sync
+  keepAliveTimeout: 610000, // Slightly longer than requestTimeout
 });
 
 // Phase 4-5 WS3: CORS with allowlist (fix wildcard + credentials bug)

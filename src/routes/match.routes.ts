@@ -63,14 +63,13 @@ export default async function matchRoutes(
   /**
    * POST /api/matches/admin/pre-sync
    * Trigger pre-sync for today's matches (H2H, lineups, standings, compensation)
-   * Long-running operation - timeout set to 10 minutes
+   * Long-running operation - timeout handled by Fastify default (30s) or nginx
    */
   fastify.post('/admin/pre-sync', {
-    config: {
-      timeout: 600000, // 10 minutes
+    schema: {
+      // No timeout in schema, handled at server level
     },
-    handler: triggerPreSync,
-  });
+  }, triggerPreSync);
 
   /**
    * GET /api/matches/:match_id/detail-live
