@@ -502,7 +502,23 @@ function getStatName(type: number): string {
         52: 'Kurtarış',
         63: 'Serbest Vuruş',
         69: 'Direkten Dönen',
-        83: 'Toplam Şut'
+        83: 'Toplam Şut',
+
+        // Custom Detailed Stats (Mapped from team_stats/list)
+        101: 'Toplam Pas',
+        102: 'İsabetli Pas',
+        103: 'Kilit Pas',
+        104: 'İsabetli Orta',
+        105: 'İsabetli Uzun Top',
+        106: 'Top Kesme',
+        107: 'Faul',
+        108: 'Ofsayt',
+        109: 'Hızlı Hücum Şutu',
+        110: 'İkili Mücadele',
+        111: 'Uzaklaştırma',
+        112: 'Başarılı Çalım',
+        113: 'Kazanılan İkili Mücadele',
+        115: 'Direkten Dönen'
     };
     return statNames[type] || '';
 }
@@ -511,13 +527,57 @@ function getStatName(type: number): string {
  * Helper function to sort statistics in a logical order
  */
 function sortStats(stats: any[]): any[] {
-    const order = [25, 21, 22, 2, 3, 4, 5, 23, 24, 40, 41, 51, 52]; // Possession, Shots, Corner, Cards, Offside, Attacks, Passes, Fouls, Saves
+    const order = [
+        // Goals & Basic
+        1,  // Goals
+        25, // Ball Possession
+
+        // Shots
+        83, // Total Shots
+        21, // Shots on Target
+        22, // Shots off Target
+        37, // Blocked Shots
+        115, 69, // Woodwork
+        109, // Fastbreak shots
+
+        // Attack
+        2,  // Corners
+        23, // Attacks
+        24, // Dangerous Attacks
+        5, 108, // Offsides
+
+        // Passing
+        40, 101, // Total Passes
+        41, 102, // Accurate Passes
+        42, 103, // Key Passes
+        43, // Crosses
+        44, 104, // Accurate Crosses
+        45, // Long Balls
+        46, 105, // Accurate Long Balls
+
+        // Dribbles
+        33, // Dribbles
+        34, 112, // Dribble Success
+
+        // Defense
+        39, 110, // Tackles / Duels
+        113, // Duels Won
+        38, 106, // Interceptions
+        36, 111, // Clearances
+        52, // Saves
+
+        // Discipline
+        51, 107, // Fouls
+        3,  // Yellow Cards
+        4   // Red Cards
+    ];
+
     return [...stats].sort((a, b) => {
         const indexA = order.indexOf(a.type);
         const indexB = order.indexOf(b.type);
-        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
-        return a.type - b.type;
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB; // Both in list, sort by index
+        if (indexA !== -1) return -1; // Only A in list, A comes first
+        if (indexB !== -1) return 1;  // Only B in list, B comes first
+        return a.type - b.type; // Neither in list, sort by ID
     });
 }

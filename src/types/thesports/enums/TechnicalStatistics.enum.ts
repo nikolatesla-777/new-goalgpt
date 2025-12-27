@@ -34,8 +34,23 @@ export enum TechnicalStatistics {
   PENALTY_MISSED_SHOOTOUT = 30, // Penalty missed (Penalty Shoot-out)
   SHOT_ON_POST = 34,           // Shot on post
   BLOCKED_SHOTS = 37,          // Blocked shots
-  FOULS = 42,                  // Fouls (Common in some endpoints)
-  SAVES = 43                   // Saves (Common in some endpoints)
+  SAVES = 43,                  // Saves (Common in some endpoints)
+
+  // Detailed Stats (Mapped from team_stats/list named fields)
+  TOTAL_PASSES = 101, // passes
+  ACCURATE_PASSES = 102, // passes_accuracy
+  KEY_PASSES = 103, // key_passes
+  ACCURATE_CROSSES = 104, // crosses_accuracy
+  ACCURATE_LONG_BALLS = 105, // long_balls_accuracy
+  INTERCEPTIONS = 106, // interceptions
+  FOULS = 107, // fouls
+  OFFSIDES = 108, // offsides
+  FASTBREAK_SHOTS = 109, // fastbreak_shots
+  DUELS_TACKLES = 110, // tackles (Matches AIscore 'İkili Mücadele')
+  CLEARANCES = 111, // clearances
+  SUCCESSFUL_DRIBBLES = 112, // dribble_succ
+  DUELS_WON = 113, // duels_won,
+  HIT_WOODWORK = 115, // hit_woodwork
 }
 
 /**

@@ -124,6 +124,28 @@ export interface MatchDiaryResponse {
 }
 
 /**
+ * Retry fetch with exponential backoff for 502/503/504 errors
+ */
+async function retryFetch(url: string, options?: RequestInit, retries = 3, delay = 1000): Promise<Response> {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok && (response.status === 502 || response.status === 503 || response.status === 504)) {
+      if (retries > 0) {
+        await new Promise(res => setTimeout(res, delay));
+        return retryFetch(url, options, retries - 1, delay * 2);
+      }
+    }
+    return response;
+  } catch (error: any) {
+    if ((error.name === 'TypeError' || error.name === 'AbortError') && retries > 0) {
+      await new Promise(res => setTimeout(res, delay));
+      return retryFetch(url, options, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+}
+
+/**
  * Get recent matches
  */
 export async function getRecentMatches(params?: {
@@ -137,13 +159,12 @@ export async function getRecentMatches(params?: {
   if (params?.date) queryParams.append('date', params.date);
 
   const url = `${API_BASE_URL}/matches/recent?${queryParams}`;
-  const response = await fetch(url);
+  const response = await retryFetch(url);
 
   if (!response.ok) {
     const errorText = await response.text();
-    // CRITICAL: 502 Bad Gateway is a temporary error (usually during deployment)
-    if (response.status === 502) {
-      throw new Error(`HTTP 502: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      throw new Error(`HTTP ${response.status}: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
     }
     throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
   }
@@ -175,15 +196,13 @@ export async function getLiveMatches(): Promise<MatchDiaryResponse> {
   const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await retryFetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
-      // CRITICAL: 502 Bad Gateway is a temporary error (usually during deployment)
-      // Retry with exponential backoff
-      if (response.status === 502) {
-        throw new Error(`HTTP 502: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
+      if (response.status === 502 || response.status === 503 || response.status === 504) {
+        throw new Error(`HTTP ${response.status}: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
       }
       throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
     }
@@ -230,14 +249,13 @@ export async function getMatchDiary(date?: string): Promise<MatchDiaryResponse> 
   console.log('🔍 [getMatchDiary] Full URL:', fullUrl);
   console.log('🔍 [getMatchDiary] Date param:', date);
 
-  const response = await fetch(fullUrl);
+  const response = await retryFetch(fullUrl);
 
   if (!response.ok) {
     const errorText = await response.text();
     console.error('❌ [getMatchDiary] HTTP Error:', response.status, errorText);
-    // CRITICAL: 502 Bad Gateway is a temporary error (usually during deployment)
-    if (response.status === 502) {
-      throw new Error(`HTTP 502: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      throw new Error(`HTTP ${response.status}: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
     }
     throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
   }

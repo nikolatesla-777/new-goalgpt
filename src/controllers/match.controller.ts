@@ -22,6 +22,7 @@ import { TheSportsClient } from '../services/thesports/client/thesports-client';
 import { MatchSyncService } from '../services/thesports/match/matchSync.service';
 import { TeamDataService } from '../services/thesports/team/teamData.service';
 import { CompetitionService } from '../services/thesports/competition/competition.service';
+import { CombinedStatsService } from '../services/thesports/match/combinedStats.service';
 import { MatchRecentParams, MatchDiaryParams, MatchDetailLiveParams, MatchSeasonRecentParams, MatchLineupParams, MatchTeamStatsParams, MatchPlayerStatsParams, MatchAnalysisParams, MatchTrendParams, MatchHalfStatsParams } from '../types/thesports/match';
 import { SeasonStandingsParams } from '../types/thesports/season/seasonStandings.types';
 import { logger } from '../utils/logger';
@@ -44,6 +45,7 @@ const seasonStandingsService = new SeasonStandingsService(theSportsClient);
 const teamDataService = new TeamDataService(theSportsClient);
 const competitionService = new CompetitionService(theSportsClient);
 const matchSyncService = new MatchSyncService(teamDataService, competitionService);
+const combinedStatsService = new CombinedStatsService(theSportsClient);
 
 // --- Date helpers (TSİ bulletin) ---
 const TSI_OFFSET_SECONDS = 3 * 3600;
@@ -618,78 +620,19 @@ export const getMatchLiveStats = async (
   try {
     const { match_id } = request.params;
 
-    // Fetch BOTH data sources in parallel
-    const [liveStats, teamStatsResponse] = await Promise.all([
-      matchDetailLiveService.getMatchStatsFromLive(match_id).catch(err => {
-        logger.warn(`[CombinedStats] detail_live failed for ${match_id}:`, err.message);
-        return null;
-      }),
-      matchTeamStatsService.getMatchTeamStats({ match_id }).catch(err => {
-        logger.warn(`[CombinedStats] team_stats failed for ${match_id}:`, err.message);
-        return null;
-      }),
-    ]);
-
-    // Merge stats from both sources
-    const statsMap = new Map<number, { type: number; home: number; away: number }>();
-
-    // 1. Add real-time stats (detail_live) - lower priority
-    if (liveStats?.stats && Array.isArray(liveStats.stats)) {
-      for (const stat of liveStats.stats) {
-        if (stat.type !== undefined) {
-          statsMap.set(stat.type, {
-            type: stat.type,
-            home: stat.home ?? 0,
-            away: stat.away ?? 0,
-          });
-        }
-      }
-    }
-
-    // 2. Add/override with team stats (team_stats/detail) - higher priority (more detailed)
-    // Handle multiple response formats: results[], result.stats, or results[0].stats
-    let teamStatsArray: any[] = [];
-    if (teamStatsResponse) {
-      const resp = teamStatsResponse as any;
-      if (resp.result?.stats && Array.isArray(resp.result.stats)) {
-        teamStatsArray = resp.result.stats;
-      } else if (resp.results && Array.isArray(resp.results)) {
-        // Find match in results array
-        const matchData = resp.results.find((r: any) => r.id === match_id || r.match_id === match_id);
-        if (matchData?.stats && Array.isArray(matchData.stats)) {
-          teamStatsArray = matchData.stats;
-        } else if (resp.results[0]?.stats && Array.isArray(resp.results[0].stats)) {
-          teamStatsArray = resp.results[0].stats;
-        }
-      }
-    }
-    if (Array.isArray(teamStatsArray)) {
-      for (const stat of teamStatsArray) {
-        if (stat.type !== undefined) {
-          statsMap.set(stat.type, {
-            type: stat.type,
-            home: stat.home ?? 0,
-            away: stat.away ?? 0,
-          });
-        }
-      }
-    }
-
-    // Convert map to sorted array (by type)
-    const combinedStats = Array.from(statsMap.values()).sort((a, b) => a.type - b.type);
-
-    logger.info(`[CombinedStats] ${match_id}: detail_live=${liveStats?.stats?.length || 0}, team_stats=${teamStatsArray.length}, combined=${combinedStats.length}`);
+    // Use the comprehensive CombinedStatsService
+    const result = await combinedStatsService.getCombinedMatchStats(match_id);
 
     reply.send({
       success: true,
       data: {
-        match_id: liveStats?.id || match_id,
-        stats: combinedStats,
-        incidents: liveStats?.incidents || [],
-        score: liveStats?.score || null,
+        match_id: result.matchId,
+        stats: result.allStats, // Returns basic + detailed sorted
+        incidents: result.incidents,
+        score: result.score,
         sources: {
-          detail_live: liveStats?.stats?.length || 0,
-          team_stats: teamStatsArray.length,
+          basic: result.basicStats.length,
+          detailed: result.detailedStats.length
         },
       },
     });

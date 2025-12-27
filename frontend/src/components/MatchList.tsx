@@ -242,7 +242,7 @@ export function MatchList({ view, date }: MatchListProps) {
   }
 
   if (error) {
-    const is502Error = error.includes('HTTP 502') || error.includes('502');
+    const is502Error = error.includes('HTTP 502') || error.includes('502') || error.includes('HTTP 503') || error.includes('503') || error.includes('HTTP 504') || error.includes('504');
     const isIPError = error.includes('IP is not authorized') || error.includes('IP is not authorized');
     const isRateLimitError = error.includes('Too Many Requests') || error.includes('too many requests') || error.includes('Çok fazla istek');
 
@@ -270,7 +270,7 @@ export function MatchList({ view, date }: MatchListProps) {
               color: is502Error ? '#1e3a8a' : isIPError ? '#78350f' : isRateLimitError ? '#78350f' : '#7f1d1d',
               marginBottom: '12px',
             }}>
-              {is502Error ? 'Sistem güncelleniyor. Lütfen birkaç saniye bekleyin, otomatik olarak tekrar denenecek.' : error}
+              {is502Error ? 'Backend başlatılıyor veya güncelleniyor. Otomatik olarak tekrar denenecek...' : error}
             </p>
             {isRateLimitError && (
               <div style={{
