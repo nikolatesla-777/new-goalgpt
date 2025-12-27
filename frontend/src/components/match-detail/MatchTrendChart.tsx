@@ -105,9 +105,9 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
 
     // Chart dimensions
     const chartWidth = 1000;
-    const chartHeight = 400;
-    const logoAreaWidth = 140;
-    const padding = { top: 20, right: 20, bottom: 60, left: 20 };
+    const chartHeight = 220;
+    const logoAreaWidth = 100;
+    const padding = { top: 12, right: 20, bottom: 35, left: 12 };
     const plotWidth = chartWidth - padding.left - padding.right - logoAreaWidth;
     const plotHeight = chartHeight - padding.top - padding.bottom;
     const centerY = padding.top + plotHeight / 2;
@@ -126,7 +126,7 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
     return (
         <div style={{
             backgroundColor: '#1f2937',
-            borderRadius: '12px',
+            borderRadius: '8px',
             padding: '0',
             overflowX: 'auto'
         }}>
@@ -141,7 +141,7 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    padding: '20px 12px'
+                    padding: '16px 8px'
                 }}>
                     {/* Home Team Logo & Name */}
                     <div style={{
@@ -155,8 +155,8 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                                 src={homeTeamLogo}
                                 alt={homeTeamName}
                                 style={{
-                                    width: '48px',
-                                    height: '48px',
+                                    width: '40px',
+                                    height: '40px',
                                     objectFit: 'contain'
                                 }}
                                 onError={(e) => {
@@ -166,8 +166,8 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                         )}
                         <div style={{
                             color: '#10b981',
-                            fontSize: '12px',
-                            fontWeight: '600',
+                            fontSize: '11px',
+                            fontWeight: '500',
                             textAlign: 'center',
                             lineHeight: '1.2'
                         }}>
@@ -187,8 +187,8 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                                 src={awayTeamLogo}
                                 alt={awayTeamName}
                                 style={{
-                                    width: '48px',
-                                    height: '48px',
+                                    width: '40px',
+                                    height: '40px',
                                     objectFit: 'contain'
                                 }}
                                 onError={(e) => {
@@ -198,8 +198,8 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                         )}
                         <div style={{
                             color: '#8b5cf6',
-                            fontSize: '12px',
-                            fontWeight: '600',
+                            fontSize: '11px',
+                            fontWeight: '500',
                             textAlign: 'center',
                             lineHeight: '1.2'
                         }}>
@@ -214,22 +214,22 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                     height={chartHeight}
                     style={{ display: 'block' }}
                 >
-                    {/* Home team background (top half) */}
+                    {/* Home team background (top half) - darker green */}
                     <rect
                         x={plotStartX}
                         y={padding.top}
                         width={plotWidth}
                         height={plotHeight / 2}
-                        fill="rgba(16, 185, 129, 0.1)"
+                        fill="rgba(16, 185, 129, 0.15)"
                     />
 
-                    {/* Away team background (bottom half) */}
+                    {/* Away team background (bottom half) - darker purple */}
                     <rect
                         x={plotStartX}
                         y={centerY}
                         width={plotWidth}
                         height={plotHeight / 2}
-                        fill="rgba(139, 92, 246, 0.1)"
+                        fill="rgba(139, 92, 246, 0.15)"
                     />
 
                     {/* Center line (neutral line) */}
@@ -239,10 +239,10 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                         x2={plotStartX + plotWidth}
                         y2={centerY}
                         stroke="rgba(255, 255, 255, 0.2)"
-                        strokeWidth="1"
+                        strokeWidth="0.5"
                     />
 
-                    {/* HT marker (vertical line) */}
+                    {/* HT marker (vertical dashed line) */}
                     {htPosition > 0 && (
                         <line
                             x1={plotStartX + htPosition}
@@ -250,7 +250,8 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                             x2={plotStartX + htPosition}
                             y2={padding.top + plotHeight}
                             stroke="rgba(255, 255, 255, 0.3)"
-                            strokeWidth="2"
+                            strokeWidth="0.5"
+                            strokeDasharray="2 2"
                         />
                     )}
 
@@ -271,19 +272,19 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                                         y={centerY - homeBarHeight}
                                         width={actualBarWidth}
                                         height={homeBarHeight}
-                                        fill="#10b981"
+                                        fill="#22c55e"
                                         rx="1"
                                     />
                                 )}
                                 
-                                {/* Away team bar (downward, purple) */}
+                                {/* Away team bar (downward, purple/blue) */}
                                 {awayBarHeight > 0 && (
                                     <rect
                                         x={x}
                                         y={centerY}
                                         width={actualBarWidth}
                                         height={awayBarHeight}
-                                        fill="#8b5cf6"
+                                        fill="#3b82f6"
                                         rx="1"
                                     />
                                 )}
@@ -305,16 +306,16 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                                     x1={x}
                                     y1={padding.top + plotHeight}
                                     x2={x}
-                                    y2={padding.top + plotHeight + 5}
-                                    stroke="rgba(255, 255, 255, 0.4)"
-                                    strokeWidth="1"
+                                    y2={padding.top + plotHeight + 4}
+                                    stroke="rgba(255, 255, 255, 0.3)"
+                                    strokeWidth="0.5"
                                 />
                                 <text
                                     x={x}
-                                    y={padding.top + plotHeight + 20}
+                                    y={padding.top + plotHeight + 18}
                                     textAnchor="middle"
-                                    fontSize="11"
-                                    fill="rgba(255, 255, 255, 0.7)"
+                                    fontSize="9"
+                                    fill="rgba(255, 255, 255, 0.6)"
                                 >
                                     {label}
                                 </text>
@@ -326,11 +327,11 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                     {htPosition > 0 && (
                         <text
                             x={plotStartX + htPosition}
-                            y={padding.top - 5}
+                            y={padding.top - 3}
                             textAnchor="middle"
-                            fontSize="11"
-                            fontWeight="600"
-                            fill="rgba(255, 255, 255, 0.7)"
+                            fontSize="9"
+                            fontWeight="500"
+                            fill="rgba(255, 255, 255, 0.6)"
                         >
                             HT
                         </text>
@@ -339,11 +340,11 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                     {/* FT label */}
                     <text
                         x={plotStartX + plotWidth}
-                        y={padding.top - 5}
+                        y={padding.top - 3}
                         textAnchor="end"
-                        fontSize="11"
-                        fontWeight="600"
-                        fill="rgba(255, 255, 255, 0.7)"
+                        fontSize="9"
+                        fontWeight="500"
+                        fill="rgba(255, 255, 255, 0.6)"
                     >
                         FT
                     </text>
