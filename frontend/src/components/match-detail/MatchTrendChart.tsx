@@ -108,11 +108,12 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
     const maxAwayValue = Math.max(...filteredPoints.map(p => Math.abs(p.away_value || 0)), 1);
     const maxValue = Math.max(maxHomeValue, maxAwayValue, 50); // Minimum scale of 50
 
-    // Chart dimensions - ALWAYS based on 90 minutes for full time scale
-    const chartWidth = 1000;
+    // Chart dimensions - Responsive, always show full 90 minutes without scrolling
     const chartHeight = 220;
     const logoAreaWidth = 100;
     const padding = { top: 12, right: 20, bottom: 35, left: 12 };
+    // Calculate plot width based on container (will be set via viewBox, making it responsive)
+    const chartWidth = 1000; // Base width for calculations
     const plotWidth = chartWidth - padding.left - padding.right - logoAreaWidth;
     const plotHeight = chartHeight - padding.top - padding.bottom;
     const centerY = padding.top + plotHeight / 2;
@@ -131,9 +132,10 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
             backgroundColor: '#1f2937',
             borderRadius: '8px',
             padding: '0',
-            overflowX: 'auto'
+            width: '100%',
+            overflow: 'hidden'
         }}>
-            <div style={{ position: 'relative', width: chartWidth, height: chartHeight }}>
+            <div style={{ position: 'relative', width: '100%', height: chartHeight }}>
                 {/* Logo Area - Left Side */}
                 <div style={{
                     position: 'absolute',
@@ -211,11 +213,11 @@ export function MatchTrendChart({ data, homeTeamName = 'Ev Sahibi', awayTeamName
                     </div>
                 </div>
 
-                {/* Chart SVG */}
+                {/* Chart SVG - Responsive with viewBox */}
                 <svg
-                    width={chartWidth}
-                    height={chartHeight}
-                    style={{ display: 'block' }}
+                    viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+                    preserveAspectRatio="none"
+                    style={{ display: 'block', width: '100%', height: '100%' }}
                 >
                     {/* Home team background (top half) - darker green */}
                     <rect
