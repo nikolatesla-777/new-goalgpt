@@ -18,6 +18,7 @@ import { logEvent } from '../utils/obsLogger';
 import { cacheService } from '../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../utils/cache/types';
 import { formatTheSportsDate } from '../utils/thesports/timestamp.util';
+import { pool } from '../database/connection';
 
 export class DailyMatchSyncWorker {
   private matchRecentService: MatchRecentService;
@@ -392,6 +393,53 @@ export class DailyMatchSyncWorker {
       logger.info(`   ✅ Synced: ${totalSynced}`);
       logger.info(`   ❌ Errors: ${totalErrors}`);
       logger.info(`   📈 Success rate: ${successRate}%`);
+
+      // --- PRE-SYNC: H2H, Lineups, Standings for NOT_STARTED matches ---
+      // This runs after match sync completes, only for matches that haven't started yet
+      try {
+        const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
+        const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
+        const preSyncService = new DailyPreSyncService(new TheSportsClient());
+
+        // Get NOT_STARTED matches from database for this date
+        const client = await pool.connect();
+        try {
+          const matchTimeStart = new Date(`${dateDisplay}T00:00:00Z`).getTime() / 1000;
+          const matchTimeEnd = matchTimeStart + 86400; // +24 hours
+
+          const notStartedMatches = await client.query(
+            `SELECT external_id, season_id 
+             FROM ts_matches 
+             WHERE match_time >= $1 AND match_time < $2 
+             AND status_id = 1
+             ORDER BY match_time ASC`,
+            [matchTimeStart, matchTimeEnd]
+          );
+
+          if (notStartedMatches.rows.length > 0) {
+            logger.info(`🔄 [DailyDiary] Starting pre-sync for ${notStartedMatches.rows.length} NOT_STARTED matches (H2H, Lineups, Standings)`);
+
+            const matchIds = notStartedMatches.rows.map((r: any) => r.external_id).filter(Boolean);
+            const seasonIds = [...new Set(notStartedMatches.rows.map((r: any) => r.season_id).filter(Boolean))];
+
+            const preSyncResult = await preSyncService.runPreSync(matchIds, seasonIds);
+
+            logger.info(`✅ [DailyDiary] Pre-sync complete: H2H=${preSyncResult.h2hSynced}, Lineups=${preSyncResult.lineupsSynced}, Standings=${preSyncResult.standingsSynced}`);
+            
+            if (preSyncResult.errors.length > 0) {
+              logger.warn(`⚠️ [DailyDiary] Pre-sync errors: ${preSyncResult.errors.length}`);
+              preSyncResult.errors.slice(0, 10).forEach((err: string) => logger.warn(`  - ${err}`));
+            }
+          } else {
+            logger.debug(`ℹ️ [DailyDiary] No NOT_STARTED matches found for pre-sync`);
+          }
+        } finally {
+          client.release();
+        }
+      } catch (preSyncError: any) {
+        // Don't fail the entire sync if pre-sync fails
+        logger.error(`❌ [DailyDiary] Pre-sync failed (non-blocking):`, preSyncError.message);
+      }
 
       // Cache sync state for observability (48h)
       const cacheKey = `${CacheKeyPrefix.TheSports}:match:diary:syncState:${dateStr}`;
