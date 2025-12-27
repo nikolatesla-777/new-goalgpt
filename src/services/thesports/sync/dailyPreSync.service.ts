@@ -54,40 +54,72 @@ export class DailyPreSyncService {
 
         logger.info(`🔄 Starting pre-sync for ${matchIds.length} matches, ${seasonIds.length} seasons`);
 
-        // 1. Sync H2H for each match
-        for (const matchId of matchIds) {
-            try {
-                const synced = await this.syncH2HToDb(matchId);
-                if (synced) {
-                    result.h2hSynced++;
+        const BATCH_SIZE = 50;
+
+        // 1. Sync H2H for each match (in batches of 50)
+        for (let i = 0; i < matchIds.length; i += BATCH_SIZE) {
+            const batch = matchIds.slice(i, i + BATCH_SIZE);
+            logger.info(`🔄 Syncing H2H batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(matchIds.length / BATCH_SIZE)} (${batch.length} matches)`);
+            
+            for (const matchId of batch) {
+                try {
+                    const synced = await this.syncH2HToDb(matchId);
+                    if (synced) {
+                        result.h2hSynced++;
+                    }
+                } catch (error: any) {
+                    result.errors.push(`H2H ${matchId}: ${error.message}`);
                 }
-            } catch (error: any) {
-                result.errors.push(`H2H ${matchId}: ${error.message}`);
+            }
+            
+            // Small delay between batches to avoid rate limiting
+            if (i + BATCH_SIZE < matchIds.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
-        // 2. Sync Lineups for each match
-        for (const matchId of matchIds) {
-            try {
-                const synced = await this.syncLineupToDb(matchId);
-                if (synced) {
-                    result.lineupsSynced++;
+        // 2. Sync Lineups for each match (in batches of 50)
+        for (let i = 0; i < matchIds.length; i += BATCH_SIZE) {
+            const batch = matchIds.slice(i, i + BATCH_SIZE);
+            logger.info(`🔄 Syncing Lineups batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(matchIds.length / BATCH_SIZE)} (${batch.length} matches)`);
+            
+            for (const matchId of batch) {
+                try {
+                    const synced = await this.syncLineupToDb(matchId);
+                    if (synced) {
+                        result.lineupsSynced++;
+                    }
+                } catch (error: any) {
+                    result.errors.push(`Lineup ${matchId}: ${error.message}`);
                 }
-            } catch (error: any) {
-                result.errors.push(`Lineup ${matchId}: ${error.message}`);
+            }
+            
+            // Small delay between batches to avoid rate limiting
+            if (i + BATCH_SIZE < matchIds.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
-        // 3. Sync Standings for each season
+        // 3. Sync Standings for each season (in batches of 50)
         const uniqueSeasons = [...new Set(seasonIds)];
-        for (const seasonId of uniqueSeasons) {
-            try {
-                const synced = await this.syncStandingsToDb(seasonId);
-                if (synced) {
-                    result.standingsSynced++;
+        for (let i = 0; i < uniqueSeasons.length; i += BATCH_SIZE) {
+            const batch = uniqueSeasons.slice(i, i + BATCH_SIZE);
+            logger.info(`🔄 Syncing Standings batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(uniqueSeasons.length / BATCH_SIZE)} (${batch.length} seasons)`);
+            
+            for (const seasonId of batch) {
+                try {
+                    const synced = await this.syncStandingsToDb(seasonId);
+                    if (synced) {
+                        result.standingsSynced++;
+                    }
+                } catch (error: any) {
+                    result.errors.push(`Standings ${seasonId}: ${error.message}`);
                 }
-            } catch (error: any) {
-                result.errors.push(`Standings ${seasonId}: ${error.message}`);
+            }
+            
+            // Small delay between batches to avoid rate limiting
+            if (i + BATCH_SIZE < uniqueSeasons.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
