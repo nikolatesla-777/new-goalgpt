@@ -282,6 +282,8 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
                         data={trendData}
                         homeTeamName={match.home_team?.name}
                         awayTeamName={match.away_team?.name}
+                        homeTeamLogo={match.home_team?.logo_url}
+                        awayTeamLogo={match.away_team?.logo_url}
                     />
                 )}
                 <div style={{ textAlign: 'center', color: '#6b7280' }}>İstatistik verisi bulunamadı</div>
@@ -297,34 +299,36 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
                     data={trendData}
                     homeTeamName={match.home_team?.name}
                     awayTeamName={match.away_team?.name}
+                    homeTeamLogo={match.home_team?.logo_url}
+                    awayTeamLogo={match.away_team?.logo_url}
                 />
             )}
             
             {/* Stats List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {stats.map((stat: any, idx: number) => (
-                    <div
-                        key={idx}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            padding: '8px',
-                            backgroundColor: '#f9fafb',
-                            borderRadius: '8px',
-                        }}
-                    >
-                        <span style={{ flex: 1, textAlign: 'right', fontWeight: '600' }}>
-                            {stat.home ?? '-'}
-                        </span>
-                        <span style={{ flex: 2, textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
-                            {getStatName(stat.type)}
-                        </span>
-                        <span style={{ flex: 1, textAlign: 'left', fontWeight: '600' }}>
-                            {stat.away ?? '-'}
-                        </span>
-                    </div>
-                ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {stats.map((stat: any, idx: number) => (
+                <div
+                    key={idx}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '8px',
+                        backgroundColor: '#f9fafb',
+                        borderRadius: '8px',
+                    }}
+                >
+                    <span style={{ flex: 1, textAlign: 'right', fontWeight: '600' }}>
+                        {stat.home ?? '-'}
+                    </span>
+                    <span style={{ flex: 2, textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
+                        {getStatName(stat.type)}
+                    </span>
+                    <span style={{ flex: 1, textAlign: 'left', fontWeight: '600' }}>
+                        {stat.away ?? '-'}
+                    </span>
+                </div>
+            ))}
             </div>
         </div>
     );

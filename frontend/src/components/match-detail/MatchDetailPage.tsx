@@ -14,6 +14,7 @@ import {
     getSeasonStandings,
     getMatchDiary,
     getMatchTrend,
+    getLiveMatches,
 } from '../../api/matches';
 import type { Match } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
@@ -31,31 +32,56 @@ export function MatchDetailPage() {
     const [error, setError] = useState<string | null>(null);
     const [tabData, setTabData] = useState<any>(null);
 
-    // Fetch match info
+
+    // Fetch match info with periodic polling for live matches
+    // CRITICAL: Use getLiveMatches() first (has minute_text), then fallback to diary
     useEffect(() => {
         const fetchMatch = async () => {
             if (!matchId) return;
 
-            setLoading(true);
+            // Only show loading on initial fetch, not on poll updates
+            if (!match) setLoading(true);
+
             try {
-                // Try to get match from diary (today's matches)
-                const today = new Date().toISOString().split('T')[0];
-                const response = await getMatchDiary(today);
-                const foundMatch = response.results?.find((m: Match) => m.id === matchId);
+                let foundMatch: Match | undefined;
+
+                // Step 1: Try getLiveMatches first (has real-time minute_text)
+                try {
+                    const liveResponse = await getLiveMatches();
+                    foundMatch = liveResponse.results?.find((m: Match) => m.id === matchId);
+                } catch {
+                    // Live endpoint failed, will try diary below
+                }
+
+                // Step 2: Fallback to diary if not found in live
+                if (!foundMatch) {
+                    const today = new Date().toISOString().split('T')[0];
+                    const diaryResponse = await getMatchDiary(today);
+                    foundMatch = diaryResponse.results?.find((m: Match) => m.id === matchId);
+                }
 
                 if (foundMatch) {
                     setMatch(foundMatch);
-                } else {
+                    setError(null);
+                } else if (!match) {
+                    // Only set error if we don't have existing data
                     setError('Maç bulunamadı');
                 }
             } catch (err: any) {
-                setError(err.message || 'Maç yüklenirken hata oluştu');
+                if (!match) {
+                    setError(err.message || 'Maç yüklenirken hata oluştu');
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         fetchMatch();
+
+        // Poll every 10 seconds for live match updates (same as homepage pattern)
+        const pollInterval = setInterval(fetchMatch, 10000);
+
+        return () => clearInterval(pollInterval);
     }, [matchId]);
 
     // Fetch tab data
@@ -174,13 +200,91 @@ export function MatchDetailPage() {
                         </p>
                     </div>
 
-                    {/* Score */}
+                    {/* Score & Live Status */}
                     <div style={{ textAlign: 'center' }}>
+                        {/* Live Status Badges - Same as MatchCard.tsx */}
+                        {(() => {
+                            const status = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
+                            const isLive = status >= 2 && status <= 7; // FIRST_HALF to PENALTY_SHOOTOUT
+                            const isFinished = status === 8; // END
+                            const minuteText = match.minute_text || '—';
+
+                            return (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
+                                    {isLive && (
+                                        <>
+                                            {/* CRITICAL FIX: Halftime shows "DEVRE ARASI" instead of "CANLI" */}
+                                            {status === 3 ? (
+                                                <span style={{
+                                                    padding: '6px 12px',
+                                                    backgroundColor: '#f59e0b',
+                                                    color: 'white',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    borderRadius: '6px',
+                                                }}>
+                                                    DEVRE ARASI
+                                                </span>
+                                            ) : (
+                                                <span style={{
+                                                    padding: '6px 12px',
+                                                    backgroundColor: '#ef4444',
+                                                    color: 'white',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    borderRadius: '6px',
+                                                    animation: 'pulse 2s infinite',
+                                                }}>
+                                                    CANLI
+                                                </span>
+                                            )}
+                                            {/* Phase 4-4: Display minute_text from backend */}
+                                            {minuteText && minuteText !== '—' && (
+                                                <span style={{
+                                                    padding: '6px 12px',
+                                                    backgroundColor: '#f59e0b',
+                                                    color: 'white',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    borderRadius: '6px',
+                                                }}>
+                                                    {minuteText}
+                                                </span>
+                                            )}
+                                        </>
+                                    )}
+                                    {isFinished && (
+                                        <span style={{
+                                            padding: '6px 12px',
+                                            backgroundColor: '#6b7280',
+                                            color: 'white',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 'bold',
+                                            borderRadius: '6px',
+                                        }}>
+                                            MS
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })()}
                         <div style={{ fontSize: '48px', fontWeight: 'bold', letterSpacing: '4px' }}>
                             {match.home_score ?? 0} - {match.away_score ?? 0}
                         </div>
                         <p style={{ fontSize: '14px', opacity: 0.8, margin: '8px 0 0' }}>
-                            {match.minute_text || 'FT'}
+                            {(() => {
+                                const status = (match as any).status ?? (match as any).status_id ?? 0;
+                                switch (status) {
+                                    case 1: return 'Başlamadı';
+                                    case 2: return '1. Yarı';
+                                    case 3: return 'Devre Arası';
+                                    case 4: return '2. Yarı';
+                                    case 5: return 'Uzatmalar';
+                                    case 7: return 'Penaltılar';
+                                    case 8: return 'Maç Sonu';
+                                    default: return match.minute_text || '';
+                                }
+                            })()}
                         </p>
                     </div>
 
@@ -457,7 +561,7 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
     // Status IDs: 2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5=OVERTIME, 7=PENALTY_SHOOTOUT
     const matchStatus = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
     const isLiveMatch = matchStatus && [2, 3, 4, 5, 7].includes(matchStatus);
-    
+
     if (!isLiveMatch) {
         return (
             <div style={{
@@ -477,13 +581,15 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
             </div>
         );
     }
-    
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <MatchTrendChart
                 data={data}
                 homeTeamName={match.home_team?.name}
                 awayTeamName={match.away_team?.name}
+                homeTeamLogo={match.home_team?.logo_url}
+                awayTeamLogo={match.away_team?.logo_url}
             />
         </div>
     );
