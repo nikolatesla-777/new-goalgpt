@@ -1,0 +1,120 @@
+/**
+ * Migration: Create AI Predictions tables
+ * 
+ * Tables for storing incoming AI predictions and their matches to TheSports data
+ */
+
+import { pool } from '../connection';
+
+export async function up(): Promise<void> {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. ai_predictions - Raw incoming predictions from external AI
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_predictions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        external_id VARCHAR(100),
+        bot_name VARCHAR(100),
+        league_name VARCHAR(255),
+        home_team_name VARCHAR(255),
+        away_team_name VARCHAR(255),
+        score_at_prediction VARCHAR(20),
+        minute_at_prediction INTEGER,
+        prediction_type VARCHAR(100),
+        prediction_value VARCHAR(255),
+        raw_payload TEXT,
+        processed BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+        // Indexes for ai_predictions
+        await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_predictions_external_id ON ai_predictions(external_id);
+    `);
+        await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_predictions_processed ON ai_predictions(processed);
+    `);
+        await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_predictions_created_at ON ai_predictions(created_at DESC);
+    `);
+
+        // 2. ai_prediction_matches - Links predictions to ts_matches
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_prediction_matches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        prediction_id UUID NOT NULL REFERENCES ai_predictions(id) ON DELETE CASCADE,
+        match_external_id VARCHAR(255),
+        match_uuid UUID,
+        home_team_id VARCHAR(255),
+        away_team_id VARCHAR(255),
+        home_team_confidence FLOAT DEFAULT 0,
+        away_team_confidence FLOAT DEFAULT 0,
+        overall_confidence FLOAT DEFAULT 0,
+        match_status VARCHAR(50) DEFAULT 'pending',
+        prediction_result VARCHAR(50) DEFAULT 'pending',
+        final_home_score INTEGER,
+        final_away_score INTEGER,
+        result_reason TEXT,
+        matched_at TIMESTAMP,
+        resulted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+        // Indexes for ai_prediction_matches
+        await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_prediction_matches_prediction_id ON ai_prediction_matches(prediction_id);
+    `);
+        await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_prediction_matches_match_external_id ON ai_prediction_matches(match_external_id);
+    `);
+        await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_prediction_matches_status ON ai_prediction_matches(match_status);
+    `);
+        await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_prediction_matches_result ON ai_prediction_matches(prediction_result);
+    `);
+
+        await client.query('COMMIT');
+        console.log('✅ AI Predictions tables created successfully');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+export async function down(): Promise<void> {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('DROP TABLE IF EXISTS ai_prediction_matches CASCADE');
+        await client.query('DROP TABLE IF EXISTS ai_predictions CASCADE');
+        await client.query('COMMIT');
+        console.log('✅ AI Predictions tables dropped successfully');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+// CLI runner
+if (require.main === module) {
+    const action = process.argv[2];
+    if (action === 'up') {
+        up().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
+    } else if (action === 'down') {
+        down().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
+    } else {
+        console.log('Usage: npx tsx create-ai-predictions-tables.ts [up|down]');
+        process.exit(1);
+    }
+}

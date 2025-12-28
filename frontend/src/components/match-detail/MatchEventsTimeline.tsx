@@ -17,13 +17,20 @@ const EVENT_TYPES = {
     GOAL_KICK: 7,
     PENALTY: 8,
     SUBSTITUTION: 9,
-    START: 10,
-    END: 12,
-    HALFTIME_SCORE: 13,
-    CARD_UPGRADE: 15,
+    START: 10,               // 1. yarı başladı
+    MIDFIELD: 11,            // 2. yarı başladı (from TheSports API)
+    END: 12,                 // Maç bitti
+    HALFTIME_SCORE: 13,      // Devre skoru
+    CARD_UPGRADE: 15,        // İkinci sarı -> Kırmızı
     PENALTY_MISSED: 16,
     OWN_GOAL: 17,
+    INJURY_TIME: 19,         // Uzatma süresi
+    OVERTIME_OVER: 26,       // Uzatma bitti
+    PENALTY_KICK_ENDED: 27,  // Penaltı atışları bitti
     VAR: 28,
+    PENALTY_SHOOTOUT: 29,    // Penaltı atışı (seri)
+    PENALTY_MISSED_SHOOTOUT: 30, // Penaltı kaçtı (seri)
+    SHOT_ON_POST: 34,        // Direkten dönen
 } as const;
 
 interface Incident {
@@ -66,10 +73,24 @@ function getEventStyle(incident: Incident) {
             return { icon: '📺', color: '#6366f1', label: 'VAR' };
         case EVENT_TYPES.START:
             return { icon: '🏁', color: '#22c55e', label: 'MAÇ BAŞLADI' };
+        case EVENT_TYPES.MIDFIELD:
+            return { icon: '▶️', color: '#22c55e', label: '2. YARI BAŞLADI' };
         case EVENT_TYPES.END:
             return { icon: '🏁', color: '#6b7280', label: 'MAÇ BİTTİ' };
         case EVENT_TYPES.HALFTIME_SCORE:
             return { icon: '⏸️', color: '#f59e0b', label: 'DEVRE ARASI' };
+        case EVENT_TYPES.INJURY_TIME:
+            return { icon: '⏱️', color: '#f59e0b', label: 'UZATMA SÜRESİ' };
+        case EVENT_TYPES.OVERTIME_OVER:
+            return { icon: '🏁', color: '#6b7280', label: 'UZATMA BİTTİ' };
+        case EVENT_TYPES.PENALTY_KICK_ENDED:
+            return { icon: '🏁', color: '#6b7280', label: 'PENALTİLAR BİTTİ' };
+        case EVENT_TYPES.PENALTY_SHOOTOUT:
+            return { icon: '⚽', color: '#10b981', label: 'PENALTİ GOL' };
+        case EVENT_TYPES.PENALTY_MISSED_SHOOTOUT:
+            return { icon: '❌', color: '#ef4444', label: 'PENALTİ KAÇTI' };
+        case EVENT_TYPES.SHOT_ON_POST:
+            return { icon: '🥅', color: '#f59e0b', label: 'DİREKTEN DÖNEN' };
         case EVENT_TYPES.CORNER:
             return { icon: '🚩', color: '#8b5cf6', label: 'KORNER' };
         case EVENT_TYPES.OFFSIDE:
@@ -80,6 +101,34 @@ function getEventStyle(incident: Incident) {
             return { icon: '❌', color: '#ef4444', label: 'PENALTI KAÇTI' };
         default:
             return { icon: '•', color: '#9ca3af', label: 'DİĞER' };
+    }
+}
+
+function getEventText(incident: Incident, label: string): string {
+    switch (incident.type) {
+        case EVENT_TYPES.SUBSTITUTION:
+            return incident.in_player_name || 'Giren Oyuncu';
+        case EVENT_TYPES.START:
+            return 'Maç Başladı';
+        case EVENT_TYPES.MIDFIELD:
+            return '2. Yarı Başladı';
+        case EVENT_TYPES.END:
+            return 'Maç Bitti';
+        case EVENT_TYPES.HALFTIME_SCORE:
+            return `Devre Skoru: ${incident.home_score ?? 0} - ${incident.away_score ?? 0}`;
+        case EVENT_TYPES.INJURY_TIME:
+            return 'Uzatma Süresi Verildi';
+        case EVENT_TYPES.OVERTIME_OVER:
+            return 'Uzatma Devresi Bitti';
+        case EVENT_TYPES.PENALTY_KICK_ENDED:
+            return 'Penaltı Atışları Bitti';
+        case EVENT_TYPES.PENALTY_SHOOTOUT:
+        case EVENT_TYPES.PENALTY_MISSED_SHOOTOUT:
+            return incident.player_name || 'Penaltı Atışı';
+        case EVENT_TYPES.SHOT_ON_POST:
+            return incident.player_name || 'Direkten Dönen';
+        default:
+            return incident.player_name || label;
     }
 }
 
@@ -214,16 +263,7 @@ function EventTimelineRow({ incident }: { incident: Incident }) {
                     fontWeight: 700,
                     color: '#1e293b'
                 }}>
-                    {incident.type === EVENT_TYPES.SUBSTITUTION
-                        ? (incident.in_player_name || 'Giren Oyuncu')
-                        : incident.type === EVENT_TYPES.START
-                            ? 'Maç Başladı'
-                            : incident.type === EVENT_TYPES.END
-                                ? 'Maç Bitti'
-                                : incident.type === EVENT_TYPES.HALFTIME_SCORE
-                                    ? `Devre Skoru: ${incident.home_score ?? 0} - ${incident.away_score ?? 0}`
-                                    : (incident.player_name || label)
-                    }
+                    {getEventText(incident, label)}
                 </div>
 
                 {incident.type === EVENT_TYPES.SUBSTITUTION ? (
