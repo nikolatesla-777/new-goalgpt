@@ -1,10 +1,11 @@
 /**
  * Admin Layout Component
  * Premium flat minimal design with Satoshi font
+ * Mobile responsive with hamburger menu
  */
 
-import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import './admin.css';
 
 // Icons as simple SVG components
@@ -45,6 +46,20 @@ const LivescoreIcon = () => (
     </svg>
 );
 
+// Hamburger Menu Icon
+const HamburgerIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width="24" height="24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+    </svg>
+);
+
+// Close Icon
+const CloseIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" width="24" height="24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+);
+
 interface NavItem {
     path: string;
     label: string;
@@ -76,16 +91,62 @@ const navSections: { label: string; items: NavItem[] }[] = [
 ];
 
 export function AdminLayout() {
-    // const location = useLocation(); // Available for future use
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const location = useLocation();
+
+    // Close mobile menu on route change
+    useEffect(() => {
+        setMobileMenuOpen(false);
+    }, [location.pathname]);
+
+    // Prevent body scroll when menu is open
+    useEffect(() => {
+        if (mobileMenuOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [mobileMenuOpen]);
 
     return (
         <div className="admin-container">
-            {/* Sidebar */}
-            <aside className="admin-sidebar">
+            {/* Mobile Header */}
+            <header className="admin-mobile-header">
+                <button
+                    className="admin-hamburger-btn"
+                    onClick={() => setMobileMenuOpen(true)}
+                    aria-label="Menüyü aç"
+                >
+                    <HamburgerIcon />
+                </button>
+                <div className="admin-mobile-logo">
+                    <span>Goal</span>GPT
+                </div>
+                <div className="admin-mobile-header-spacer"></div>
+            </header>
+
+            {/* Mobile Menu Overlay */}
+            <div
+                className={`admin-mobile-overlay ${mobileMenuOpen ? 'open' : ''}`}
+                onClick={() => setMobileMenuOpen(false)}
+            />
+
+            {/* Sidebar - Desktop & Mobile */}
+            <aside className={`admin-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
                 <div className="admin-sidebar-logo">
                     <h1>
                         <span>Goal</span>GPT
                     </h1>
+                    <button
+                        className="admin-sidebar-close"
+                        onClick={() => setMobileMenuOpen(false)}
+                        aria-label="Menüyü kapat"
+                    >
+                        <CloseIcon />
+                    </button>
                 </div>
 
                 <nav className="admin-sidebar-nav">
@@ -100,6 +161,7 @@ export function AdminLayout() {
                                     className={({ isActive }) =>
                                         `admin-nav-item ${isActive ? 'active' : ''}`
                                     }
+                                    onClick={() => setMobileMenuOpen(false)}
                                 >
                                     <item.icon />
                                     <span>{item.label}</span>

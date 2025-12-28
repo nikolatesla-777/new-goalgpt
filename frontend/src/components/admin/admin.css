@@ -1187,7 +1187,7 @@
   color: var(--admin-text-primary);
 }
 
-/* Responsive */
+/* Responsive - Dashboard Table */
 @media (max-width: 768px) {
   .dashboard-table-header {
     flex-direction: column;
@@ -1198,5 +1198,387 @@
   .dashboard-table-actions {
     width: 100%;
     justify-content: space-between;
+  }
+}
+
+/* ================================
+   MOBILE RESPONSIVE DESIGN
+   Premium UI/UX for Mobile
+   ================================ */
+
+/* Mobile Header - Only visible on mobile */
+.admin-mobile-header {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background-color: var(--admin-sidebar-bg);
+  z-index: 100;
+  padding: 0 16px;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.admin-mobile-logo {
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+
+.admin-mobile-logo span {
+  color: var(--admin-sidebar-accent);
+}
+
+.admin-hamburger-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  border-radius: var(--admin-radius-md);
+  transition: background-color 0.15s ease;
+}
+
+.admin-hamburger-btn:hover {
+  background-color: var(--admin-sidebar-hover);
+}
+
+.admin-mobile-header-spacer {
+  width: 44px;
+}
+
+/* Mobile Menu Overlay */
+.admin-mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 199;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.admin-mobile-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Sidebar Close Button - Only on mobile */
+.admin-sidebar-close {
+  display: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--admin-sidebar-text);
+  cursor: pointer;
+  border-radius: var(--admin-radius-md);
+  transition: all 0.15s ease;
+}
+
+.admin-sidebar-close:hover {
+  background-color: var(--admin-sidebar-hover);
+  color: white;
+}
+
+/* ================================
+   Mobile Breakpoint (768px and below)
+   ================================ */
+@media (max-width: 768px) {
+
+  /* Show mobile header */
+  .admin-mobile-header {
+    display: flex;
+  }
+
+  /* Show mobile overlay */
+  .admin-mobile-overlay {
+    display: block;
+  }
+
+  /* Hide sidebar by default, show when open */
+  .admin-sidebar {
+    position: fixed;
+    left: -300px;
+    width: 280px;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 200;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+  }
+
+  .admin-sidebar.mobile-open {
+    left: 0;
+  }
+
+  /* Show close button on mobile */
+  .admin-sidebar-close {
+    display: flex;
+  }
+
+  .admin-sidebar-logo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Show nav labels on mobile menu */
+  .admin-nav-label {
+    display: block !important;
+  }
+
+  .admin-nav-item span {
+    display: inline !important;
+  }
+
+  /* Main content - full width */
+  .admin-main {
+    margin-left: 0;
+    padding-top: 60px;
+  }
+
+  /* Improve header on mobile */
+  .admin-header {
+    padding: 16px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .admin-header-title {
+    font-size: 20px;
+  }
+
+  .admin-header-subtitle {
+    font-size: 13px;
+  }
+
+  /* Period selector full width */
+  .admin-period-selector {
+    width: 100%;
+  }
+
+  .admin-select {
+    flex: 1;
+  }
+
+  /* Content padding */
+  .admin-content {
+    padding: 16px;
+  }
+
+  /* Stat cards - single column */
+  .admin-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .admin-stat-card {
+    padding: 16px;
+  }
+
+  .admin-stat-value {
+    font-size: 24px;
+  }
+
+  .admin-stat-label {
+    font-size: 13px;
+  }
+
+  /* Section title */
+  .admin-section-title {
+    font-size: 12px;
+  }
+
+  .admin-section {
+    margin-bottom: 24px;
+  }
+
+  /* Back button */
+  .back-button {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .admin-header-left {
+    width: 100%;
+  }
+
+  /* Horizontal scroll cards in drill-down */
+  .admin-cards-scroll-container {
+    padding: 12px;
+  }
+
+  .admin-cards-scroll {
+    gap: 10px;
+  }
+
+  .admin-cards-scroll .admin-stat-card {
+    min-width: 140px;
+    padding: 12px;
+  }
+
+  .admin-cards-scroll .admin-stat-value {
+    font-size: 18px;
+  }
+
+  /* Charts */
+  .dashboard-chart-container {
+    padding: 16px;
+    margin-bottom: 16px;
+    border-radius: var(--admin-radius-md);
+  }
+
+  .dashboard-chart-title {
+    font-size: 14px;
+  }
+
+  .dashboard-chart-legend {
+    gap: 16px;
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+
+  /* Tables */
+  .dashboard-table-container {
+    border-radius: var(--admin-radius-md);
+  }
+
+  .dashboard-table th {
+    padding: 10px 12px;
+    font-size: 10px;
+  }
+
+  .dashboard-table td {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .user-cell {
+    gap: 8px;
+  }
+
+  .user-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .user-name {
+    font-size: 13px;
+  }
+
+  .user-email {
+    font-size: 11px;
+  }
+
+  .platform-badge {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  .plan-badge {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  .excel-export-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .record-count {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .whatsapp-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .action-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* Livescore controls */
+  .admin-livescore-controls {
+    gap: 12px;
+  }
+
+  .admin-filter-btn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  /* Loading state */
+  .admin-loading {
+    padding: 48px 24px;
+  }
+
+  /* Error message */
+  .admin-error-message {
+    padding: 48px 24px;
+  }
+}
+
+/* ================================
+   Extra Small Devices (375px and below)
+   ================================ */
+@media (max-width: 375px) {
+  .admin-mobile-header {
+    height: 56px;
+    padding: 0 12px;
+  }
+
+  .admin-mobile-logo {
+    font-size: 18px;
+  }
+
+  .admin-hamburger-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .admin-main {
+    padding-top: 56px;
+  }
+
+  .admin-header-title {
+    font-size: 18px;
+  }
+
+  .admin-content {
+    padding: 12px;
+  }
+
+  .admin-stat-card {
+    padding: 14px;
+  }
+
+  .admin-stat-value {
+    font-size: 22px;
+  }
+
+  .admin-stat-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .dashboard-chart-container {
+    padding: 12px;
   }
 }
