@@ -7,19 +7,19 @@
   --admin-bg-primary: #FAFBFC;
   --admin-bg-card: #FFFFFF;
   --admin-bg-hover: #F3F4F6;
-  
+
   /* Sidebar */
   --admin-sidebar-bg: #1A1D21;
   --admin-sidebar-text: #A0A3A8;
   --admin-sidebar-active: #FFFFFF;
   --admin-sidebar-hover: rgba(255, 255, 255, 0.08);
   --admin-sidebar-accent: #14B8A6;
-  
+
   /* Text colors */
   --admin-text-primary: #111827;
   --admin-text-secondary: #6B7280;
   --admin-text-muted: #9CA3AF;
-  
+
   /* Accent colors */
   --admin-accent: #14B8A6;
   --admin-accent-light: rgba(20, 184, 166, 0.1);
@@ -29,16 +29,16 @@
   --admin-warning-light: rgba(245, 158, 11, 0.1);
   --admin-error: #EF4444;
   --admin-error-light: rgba(239, 68, 68, 0.1);
-  
+
   /* Borders */
   --admin-border: #E5E7EB;
   --admin-border-light: #F3F4F6;
-  
+
   /* Shadows */
   --admin-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --admin-shadow-md: 0 1px 3px rgba(0, 0, 0, 0.08);
   --admin-shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
-  
+
   /* Spacing */
   --admin-radius-sm: 6px;
   --admin-radius-md: 8px;
@@ -498,17 +498,161 @@
   .admin-sidebar {
     width: 80px;
   }
-  
+
   .admin-main {
     margin-left: 80px;
   }
-  
+
   .admin-nav-label,
   .admin-sidebar-logo h1 span:last-child {
     display: none;
   }
-  
+
   .admin-nav-item span {
     display: none;
+  }
+}
+
+/* ================================
+   Livescore Styles
+   ================================ */
+
+.admin-livescore-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.admin-livescore-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-filter-btn {
+  padding: 10px 20px;
+  border-radius: var(--admin-radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  border: 1px solid var(--admin-border);
+  background-color: var(--admin-bg-card);
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-filter-btn:hover {
+  border-color: var(--admin-accent);
+  color: var(--admin-accent);
+}
+
+.admin-filter-btn.active {
+  background-color: var(--admin-accent);
+  border-color: var(--admin-accent);
+  color: white;
+}
+
+.live-indicator {
+  width: 8px;
+  height: 8px;
+  background-color: #EF4444;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.admin-filter-btn.active .live-indicator {
+  background-color: white;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.admin-date-picker {
+  display: flex;
+  align-items: center;
+}
+
+.admin-date-input {
+  padding: 10px 16px;
+  border-radius: var(--admin-radius-md);
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid var(--admin-border);
+  background-color: var(--admin-bg-card);
+  color: var(--admin-text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-date-input:hover,
+.admin-date-input:focus {
+  border-color: var(--admin-accent);
+  outline: none;
+}
+
+.admin-livescore-content {
+  background-color: var(--admin-bg-card);
+  border-radius: var(--admin-radius-lg);
+  box-shadow: var(--admin-shadow-md);
+  border: 1px solid var(--admin-border-light);
+  overflow: hidden;
+}
+
+/* Override MatchList inline styles for admin theme */
+.admin-livescore-content>div {
+  padding: 0 !important;
+}
+
+.admin-livescore-content>div>div:first-child {
+  /* Total matches counter - style override */
+  margin: 0 !important;
+  padding: 16px 24px !important;
+  border-radius: 0 !important;
+  border-bottom: 1px solid var(--admin-border-light) !important;
+  background-color: rgba(20, 184, 166, 0.05) !important;
+  border-left: 4px solid var(--admin-accent) !important;
+}
+
+.admin-livescore-content h2 {
+  padding: 16px 24px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--admin-text-primary);
+  border-bottom: 1px solid var(--admin-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Responsive for livescore */
+@media (max-width: 768px) {
+  .admin-livescore-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-livescore-filters {
+    flex-wrap: wrap;
+  }
+
+  .admin-filter-btn {
+    flex: 1;
+    justify-content: center;
   }
 }
