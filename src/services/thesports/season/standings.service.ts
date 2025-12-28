@@ -17,6 +17,7 @@ export class SeasonStandingsService {
 
     /**
      * Get season standings - tries API first, falls back to DB
+     * Always enriches with team names from ts_teams table
      */
     async getSeasonStandings(params: SeasonStandingsParams): Promise<SeasonStandingsResponse> {
         const { season_id } = params;
@@ -24,10 +25,12 @@ export class SeasonStandingsService {
 
         // 1. Check cache first
         const cached = await cacheService.get<SeasonStandingsResponse>(cacheKey);
-        if (cached && cached.results && Object.keys(cached.results).length > 0) {
+        if (cached && cached.results && Array.isArray(cached.results) && cached.results.length > 0) {
             logger.debug(`Cache hit for season standings: ${cacheKey}`);
             return cached;
         }
+
+        let standings: any[] = [];
 
         // 2. Try /table/live endpoint (only works if league has live matches)
         try {
@@ -44,31 +47,74 @@ export class SeasonStandingsService {
                 );
                 
                 if (seasonStandings && seasonStandings.tables && seasonStandings.tables.length > 0) {
-                    // Parse and save to database for future use
-                    const parsed = this.parseTableLiveResponse(seasonStandings);
-                    await this.saveStandingsToDb(season_id, parsed, liveResponse);
+                    // Parse standings
+                    standings = this.parseTableLiveResponse(seasonStandings);
                     
-                    const response: SeasonStandingsResponse = { code: 0, results: parsed };
-                    await cacheService.set(cacheKey, response, CacheTTL.FiveMinutes);
-                    return response;
+                    // Save raw to database (without team names - we'll enrich on read)
+                    await this.saveStandingsToDb(season_id, standings, liveResponse);
                 }
             }
         } catch (error: any) {
             logger.warn(`/table/live failed for ${season_id}: ${error.message}`);
         }
 
-        // 3. Fallback: Get from database
-        logger.info(`Fetching standings from DB for season: ${season_id}`);
-        const dbStandings = await this.getStandingsFromDb(season_id);
-        
-        if (dbStandings && dbStandings.standings && dbStandings.standings.length > 0) {
-            const response: SeasonStandingsResponse = { code: 0, results: dbStandings.standings };
+        // 3. If no live data, get from database
+        if (standings.length === 0) {
+            logger.info(`Fetching standings from DB for season: ${season_id}`);
+            const dbStandings = await this.getStandingsFromDb(season_id);
+            
+            if (dbStandings && dbStandings.standings && Array.isArray(dbStandings.standings)) {
+                standings = dbStandings.standings;
+            }
+        }
+
+        // 4. Enrich with team names from ts_teams table
+        if (standings.length > 0) {
+            standings = await this.enrichWithTeamNames(standings);
+            
+            const response: SeasonStandingsResponse = { code: 0, results: standings };
+            await cacheService.set(cacheKey, response, CacheTTL.FiveMinutes);
             return response;
         }
 
         // No data available
         logger.warn(`No standings data found for season: ${season_id}`);
-        return { code: 0, results: {} };
+        return { code: 0, results: [] };
+    }
+
+    /**
+     * Enrich standings with team names from ts_teams table
+     */
+    private async enrichWithTeamNames(standings: any[]): Promise<any[]> {
+        if (!standings || standings.length === 0) return standings;
+
+        const teamIds = standings.map(s => s.team_id).filter(Boolean);
+        if (teamIds.length === 0) return standings;
+
+        const client = await pool.connect();
+        try {
+            // Get team names and logos from ts_teams
+            const placeholders = teamIds.map((_, i) => `$${i + 1}`).join(',');
+            const result = await client.query(
+                `SELECT external_id, name, logo_url FROM ts_teams WHERE external_id IN (${placeholders})`,
+                teamIds
+            );
+
+            // Create lookup map
+            const teamMap = new Map<string, { name: string; logo_url: string }>();
+            for (const row of result.rows) {
+                teamMap.set(row.external_id, { name: row.name, logo_url: row.logo_url });
+            }
+
+            // Enrich standings
+            return standings.map(team => ({
+                ...team,
+                team_name: teamMap.get(team.team_id)?.name || null,
+                team_logo: teamMap.get(team.team_id)?.logo_url || null,
+            }));
+        } finally {
+            client.release();
+        }
     }
 
     /**
