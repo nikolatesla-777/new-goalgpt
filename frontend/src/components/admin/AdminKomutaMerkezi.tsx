@@ -6,8 +6,8 @@
 import { useState, useEffect } from 'react';
 import './admin.css';
 
-// API base URL
-const API_BASE = import.meta.env.VITE_API_URL || '';
+// API base URL - should end with /api
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 interface DashboardStats {
     financial: {
@@ -169,7 +169,7 @@ export function AdminKomutaMerkezi() {
             setLoading(true);
             setError(null);
             try {
-                const response = await fetch(`${API_BASE}/api/admin/dashboard/stats?period=${period}`);
+                const response = await fetch(`${API_BASE}/admin/dashboard/stats?period=${period}`);
                 const data = await response.json();
                 if (data.success) {
                     setStats(data.data);

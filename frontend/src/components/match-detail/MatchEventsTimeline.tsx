@@ -52,6 +52,7 @@ interface MatchEventsTimelineProps {
     incidents: Incident[];
     homeTeamName?: string;
     awayTeamName?: string;
+    matchStatusId?: number; // 1=NOT_STARTED, 2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5+=OVERTIME/END
 }
 
 function getEventStyle(incident: Incident) {
