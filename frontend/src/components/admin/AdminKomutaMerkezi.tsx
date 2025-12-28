@@ -68,7 +68,7 @@ interface DetailItem {
 }
 
 type PeriodFilter = 'today' | 'week' | 'month' | 'year';
-type CardType = 'revenue' | 'subscribers' | 'sales' | 'billing-errors' | 'signups' | 'trials' | 'cancellations' | 'churn' | null;
+type CardType = 'revenue' | 'subscribers' | 'sales' | 'billing-errors' | 'signups' | 'trials' | 'cancellations' | 'churn' | 'first-purchase' | 'conversion' | 'total-members' | null;
 
 const periodLabels: Record<PeriodFilter, string> = {
     today: 'Bugün',
@@ -86,6 +86,9 @@ const cardConfig: Record<string, { label: string; trendTitle: string; tableTitle
     trials: { label: 'DENEME', trendTitle: 'Deneme Trendi', tableTitle: 'Deneme Başlatanlar', tableDesc: 'Ücretsiz deneme dönemindeki kullanıcılar' },
     cancellations: { label: 'İPTALLER', trendTitle: 'İptaller Trendi', tableTitle: 'Gönüllü İptaller', tableDesc: 'Aboneliğini iptal eden kullanıcılar' },
     churn: { label: 'CHURN', trendTitle: 'Churn Trendi', tableTitle: 'Süresi Bitenler', tableDesc: 'Aboneliği sona eren kullanıcılar' },
+    'first-purchase': { label: 'İLK SATIŞ', trendTitle: 'İlk Satış Trendi', tableTitle: 'İlk Satışlar', tableDesc: 'İlk kez satın alan kullanıcılar' },
+    'conversion': { label: 'DÖNÜŞÜM', trendTitle: 'Dönüşüm Oranı Trendi', tableTitle: 'Dönüşüm Detayları', tableDesc: 'Kayıt olup satın alan kullanıcılar' },
+    'total-members': { label: 'TOPLAM ÜYE', trendTitle: 'Toplam Üye Trendi', tableTitle: 'Tüm Üyeler', tableDesc: 'Sistemdeki tüm kayıtlı kullanıcılar' },
 };
 
 // Icons
@@ -461,23 +464,27 @@ export function AdminKomutaMerkezi() {
         setSelectedCard(null);
     };
 
-    // Card definitions
+    // Card definitions - all 11 cards in order
     const allCards = [
+        // Finansal Sağlık (4 cards)
         { type: 'revenue' as CardType, icon: <RevenueIcon />, iconColor: 'teal', getValue: () => formatCurrency(stats?.financial.totalRevenue || 0), getChange: () => stats?.financial.revenueChange },
         { type: 'subscribers' as CardType, icon: <SubscribersIcon />, iconColor: 'green', getValue: () => formatNumber(stats?.financial.activeSubscribers || 0), getChange: () => stats?.financial.subscribersChange },
         { type: 'sales' as CardType, icon: <SalesIcon />, iconColor: 'blue', getValue: () => formatNumber(stats?.financial.salesCount || 0), getChange: () => stats?.financial.salesChange },
         { type: 'billing-errors' as CardType, icon: <ErrorIcon />, iconColor: 'red', getValue: () => formatNumber(stats?.financial.billingErrors || 0), getChange: () => stats?.financial.errorsChange },
+        // Edinim & Büyüme (4 cards)
         { type: 'signups' as CardType, icon: <NewUserIcon />, iconColor: 'teal', getValue: () => formatNumber(stats?.acquisition.newSignups || 0), getChange: () => stats?.acquisition.signupsChange },
         { type: 'trials' as CardType, icon: <TrialIcon />, iconColor: 'purple', getValue: () => formatNumber(stats?.acquisition.trials || 0), getChange: () => stats?.acquisition.trialsChange },
+        { type: 'first-purchase' as CardType, icon: <SalesIcon />, iconColor: 'green', getValue: () => formatNumber(stats?.acquisition.firstPurchase || 0), getChange: () => stats?.acquisition.firstPurchaseChange },
+        { type: 'conversion' as CardType, icon: <ChurnIcon />, iconColor: 'blue', getValue: () => `${stats?.acquisition.conversionRate || 0}%`, getChange: () => stats?.acquisition.conversionChange },
+        // Tutundurma & Kayıp (3 cards)
         { type: 'cancellations' as CardType, icon: <CancelIcon />, iconColor: 'amber', getValue: () => formatNumber(stats?.retention.cancellations || 0), getChange: () => stats?.retention.cancellationsChange },
         { type: 'churn' as CardType, icon: <ChurnIcon />, iconColor: 'red', getValue: () => formatNumber(stats?.retention.churnRate || 0), getChange: () => stats?.retention.churnChange },
+        { type: 'total-members' as CardType, icon: <SubscribersIcon />, iconColor: 'teal', getValue: () => formatNumber(stats?.retention.totalMembers || 0), getChange: () => stats?.retention.membersChange },
     ];
 
     const financialCards = allCards.slice(0, 4);
-    const acquisitionCards = allCards.slice(4, 6);
-    // Add conversion card
-    const conversionCard = { type: null as CardType, icon: <ChurnIcon />, iconColor: 'blue', getValue: () => `${stats?.acquisition.conversionRate || 0}%`, getChange: () => stats?.acquisition.conversionChange };
-    // retentionCards defined below inline
+    const acquisitionCards = allCards.slice(4, 8);  // Include first-purchase and conversion
+    const retentionCards = allCards.slice(8, 11);   // cancellations, churn, total-members
 
     // Expanded View (Drill-down)
     if (selectedCard) {
@@ -625,22 +632,6 @@ export function AdminKomutaMerkezi() {
                                         onClick={() => handleCardClick(card.type)}
                                     />
                                 ))}
-                                <StatCard
-                                    type={null}
-                                    icon={<SalesIcon />}
-                                    iconColor="green"
-                                    label="İLK SATIŞ"
-                                    value={formatNumber(stats.acquisition.firstPurchase)}
-                                    change={stats.acquisition.firstPurchaseChange}
-                                />
-                                <StatCard
-                                    type={null}
-                                    icon={conversionCard.icon}
-                                    iconColor={conversionCard.iconColor}
-                                    label="DÖNÜŞÜM"
-                                    value={conversionCard.getValue()}
-                                    change={conversionCard.getChange()}
-                                />
                             </div>
                         </div>
 
@@ -651,34 +642,21 @@ export function AdminKomutaMerkezi() {
                                 Tutundurma & Kayıp
                             </h2>
                             <div className="admin-stats-grid">
-                                <StatCard
-                                    type="cancellations"
-                                    icon={<CancelIcon />}
-                                    iconColor="amber"
-                                    label="İPTALLER"
-                                    value={formatNumber(stats.retention.cancellations)}
-                                    change={stats.retention.cancellationsChange}
-                                    onClick={() => handleCardClick('cancellations')}
-                                />
-                                <StatCard
-                                    type="churn"
-                                    icon={<ChurnIcon />}
-                                    iconColor="red"
-                                    label="CHURN"
-                                    value={formatNumber(stats.retention.churnRate)}
-                                    change={stats.retention.churnChange}
-                                    onClick={() => handleCardClick('churn')}
-                                />
-                                <StatCard
-                                    type={null}
-                                    icon={<SubscribersIcon />}
-                                    iconColor="teal"
-                                    label="TOPLAM ÜYE"
-                                    value={formatNumber(stats.retention.totalMembers)}
-                                    change={stats.retention.membersChange}
-                                />
+                                {retentionCards.map((card) => (
+                                    <StatCard
+                                        key={card.type}
+                                        type={card.type}
+                                        icon={card.icon}
+                                        iconColor={card.iconColor}
+                                        label={cardConfig[card.type!]?.label || ''}
+                                        value={card.getValue()}
+                                        change={card.getChange()}
+                                        onClick={() => handleCardClick(card.type)}
+                                    />
+                                ))}
                             </div>
                         </div>
+
                     </>
                 )}
             </div>

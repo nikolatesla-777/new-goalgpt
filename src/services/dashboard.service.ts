@@ -721,3 +721,326 @@ export async function getBillingErrorsDetails(period: PeriodFilter, limit: numbe
   }
 }
 
+// ============ FIRST PURCHASE ============
+export async function getFirstPurchaseTrend(period: PeriodFilter): Promise<TrendDataPoint[]> {
+  const { periodStart } = getPeriodDates(period);
+
+  try {
+    const query = `
+      SELECT 
+        DATE(cs.created_at) as date,
+        COUNT(*) as total,
+        COUNT(CASE WHEN cs.platform IN ('ios', 'apple') THEN 1 END) as ios,
+        COUNT(CASE WHEN cs.platform IN ('android', 'google') THEN 1 END) as android
+      FROM customer_subscriptions cs
+      LEFT JOIN customer_users cu ON cs.customer_user_id = cu.id
+      WHERE cs.created_at >= $1
+        AND cs.created_at = (
+          SELECT MIN(cs2.created_at) 
+          FROM customer_subscriptions cs2 
+          WHERE cs2.customer_user_id = cs.customer_user_id
+        )
+      GROUP BY DATE(cs.created_at)
+      ORDER BY date ASC
+    `;
+    const result = await pool.query(query, [periodStart]);
+    return result.rows.map(row => ({
+      date: row.date?.toISOString()?.split('T')[0] || '',
+      total: parseInt(row.total) || 0,
+      ios: parseInt(row.ios) || 0,
+      android: parseInt(row.android) || 0,
+    }));
+  } catch (error) {
+    logger.error('Error fetching first purchase trend:', error);
+    return [];
+  }
+}
+
+export async function getFirstPurchaseDetails(period: PeriodFilter, limit: number = 100): Promise<SubscriptionDetail[]> {
+  const { periodStart } = getPeriodDates(period);
+
+  try {
+    const query = `
+      SELECT 
+        cs.id,
+        cu.id as user_id,
+        cu.email,
+        cu.full_name,
+        cu.phone,
+        cs.platform,
+        sp.plan_name,
+        cs.amount,
+        cs.status,
+        cs.created_at as started_at
+      FROM customer_subscriptions cs
+      LEFT JOIN customer_users cu ON cs.customer_user_id = cu.id
+      LEFT JOIN subscription_plans sp ON cs.plan_id = sp.id
+      WHERE cs.created_at >= $1
+        AND cs.created_at = (
+          SELECT MIN(cs2.created_at) 
+          FROM customer_subscriptions cs2 
+          WHERE cs2.customer_user_id = cs.customer_user_id
+        )
+      ORDER BY cs.created_at DESC
+      LIMIT $2
+    `;
+
+    const result = await pool.query(query, [periodStart, limit]);
+    return result.rows.map(row => ({
+      id: row.id,
+      user_id: row.user_id,
+      email: row.email || '',
+      full_name: row.full_name || '',
+      phone: row.phone || '',
+      platform: row.platform || 'unknown',
+      plan_name: row.plan_name || 'Unknown',
+      amount: parseFloat(row.amount) || 0,
+      status: row.status || '',
+      started_at: row.started_at?.toISOString() || '',
+      expired_at: '',
+      canceled_at: '',
+      days_remaining: 0,
+      total_spent: parseFloat(row.amount) || 0,
+      transaction_count: 1,
+    }));
+  } catch (error) {
+    logger.error('Error fetching first purchase details:', error);
+    return [];
+  }
+}
+
+// ============ CONVERSION RATE ============
+export async function getConversionTrend(period: PeriodFilter): Promise<TrendDataPoint[]> {
+  const { periodStart } = getPeriodDates(period);
+
+  try {
+    // Get daily signups and first purchases to calculate conversion
+    const query = `
+      WITH daily_stats AS (
+        SELECT 
+          d.date,
+          COALESCE(signups.count, 0) as signups,
+          COALESCE(conversions.count, 0) as conversions,
+          COALESCE(signups_ios.count, 0) as signups_ios,
+          COALESCE(conversions_ios.count, 0) as conversions_ios,
+          COALESCE(signups_android.count, 0) as signups_android,
+          COALESCE(conversions_android.count, 0) as conversions_android
+        FROM (
+          SELECT generate_series($1::date, CURRENT_DATE, '1 day'::interval)::date as date
+        ) d
+        LEFT JOIN (
+          SELECT DATE(created_at) as date, COUNT(*) as count 
+          FROM customer_users 
+          WHERE created_at >= $1
+          GROUP BY DATE(created_at)
+        ) signups ON signups.date = d.date
+        LEFT JOIN (
+          SELECT DATE(cs.created_at) as date, COUNT(*) as count 
+          FROM customer_subscriptions cs
+          WHERE cs.created_at >= $1 AND cs.status NOT IN ('trial')
+          GROUP BY DATE(cs.created_at)
+        ) conversions ON conversions.date = d.date
+        LEFT JOIN (
+          SELECT DATE(created_at) as date, COUNT(*) as count 
+          FROM customer_users 
+          WHERE created_at >= $1 AND platform IN ('ios', 'apple')
+          GROUP BY DATE(created_at)
+        ) signups_ios ON signups_ios.date = d.date
+        LEFT JOIN (
+          SELECT DATE(cs.created_at) as date, COUNT(*) as count 
+          FROM customer_subscriptions cs
+          WHERE cs.created_at >= $1 AND cs.status NOT IN ('trial') AND cs.platform IN ('ios', 'apple')
+          GROUP BY DATE(cs.created_at)
+        ) conversions_ios ON conversions_ios.date = d.date
+        LEFT JOIN (
+          SELECT DATE(created_at) as date, COUNT(*) as count 
+          FROM customer_users 
+          WHERE created_at >= $1 AND platform IN ('android', 'google')
+          GROUP BY DATE(created_at)
+        ) signups_android ON signups_android.date = d.date
+        LEFT JOIN (
+          SELECT DATE(cs.created_at) as date, COUNT(*) as count 
+          FROM customer_subscriptions cs
+          WHERE cs.created_at >= $1 AND cs.status NOT IN ('trial') AND cs.platform IN ('android', 'google')
+          GROUP BY DATE(cs.created_at)
+        ) conversions_android ON conversions_android.date = d.date
+      )
+      SELECT 
+        date,
+        CASE WHEN signups > 0 THEN ROUND((conversions::numeric / signups::numeric) * 100, 1) ELSE 0 END as total,
+        CASE WHEN signups_ios > 0 THEN ROUND((conversions_ios::numeric / signups_ios::numeric) * 100, 1) ELSE 0 END as ios,
+        CASE WHEN signups_android > 0 THEN ROUND((conversions_android::numeric / signups_android::numeric) * 100, 1) ELSE 0 END as android
+      FROM daily_stats
+      ORDER BY date ASC
+    `;
+    const result = await pool.query(query, [periodStart]);
+    return result.rows.map(row => ({
+      date: row.date?.toISOString()?.split('T')[0] || '',
+      total: parseFloat(row.total) || 0,
+      ios: parseFloat(row.ios) || 0,
+      android: parseFloat(row.android) || 0,
+    }));
+  } catch (error) {
+    logger.error('Error fetching conversion trend:', error);
+    return [];
+  }
+}
+
+export async function getConversionDetails(period: PeriodFilter, limit: number = 100): Promise<SubscriptionDetail[]> {
+  const { periodStart } = getPeriodDates(period);
+
+  try {
+    // Get users who signed up and then made a purchase
+    const query = `
+      SELECT 
+        cu.id as user_id,
+        cu.email,
+        cu.full_name,
+        cu.phone,
+        cu.platform,
+        cu.created_at as signup_at,
+        cs.created_at as conversion_at,
+        sp.plan_name,
+        cs.amount,
+        EXTRACT(DAY FROM (cs.created_at - cu.created_at)) as days_to_convert
+      FROM customer_users cu
+      INNER JOIN customer_subscriptions cs ON cs.customer_user_id = cu.id
+      LEFT JOIN subscription_plans sp ON cs.plan_id = sp.id
+      WHERE cu.created_at >= $1
+        AND cs.status NOT IN ('trial')
+        AND cs.created_at = (
+          SELECT MIN(cs2.created_at) 
+          FROM customer_subscriptions cs2 
+          WHERE cs2.customer_user_id = cu.id AND cs2.status NOT IN ('trial')
+        )
+      ORDER BY cs.created_at DESC
+      LIMIT $2
+    `;
+
+    const result = await pool.query(query, [periodStart, limit]);
+    return result.rows.map(row => ({
+      id: row.user_id,
+      user_id: row.user_id,
+      email: row.email || '',
+      full_name: row.full_name || '',
+      phone: row.phone || '',
+      platform: row.platform || 'unknown',
+      plan_name: row.plan_name || 'Unknown',
+      amount: parseFloat(row.amount) || 0,
+      status: 'converted',
+      started_at: row.conversion_at?.toISOString() || '',
+      expired_at: '',
+      canceled_at: '',
+      days_remaining: parseInt(row.days_to_convert) || 0, // Days to convert
+      total_spent: parseFloat(row.amount) || 0,
+      transaction_count: 1,
+      created_at: row.signup_at?.toISOString() || '',
+    }));
+  } catch (error) {
+    logger.error('Error fetching conversion details:', error);
+    return [];
+  }
+}
+
+// ============ TOTAL MEMBERS ============
+export async function getTotalMembersTrend(period: PeriodFilter): Promise<TrendDataPoint[]> {
+  const { periodStart } = getPeriodDates(period);
+
+  try {
+    // Get cumulative member count over time
+    const query = `
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as daily_new,
+        COUNT(CASE WHEN platform IN ('ios', 'apple') THEN 1 END) as ios,
+        COUNT(CASE WHEN platform IN ('android', 'google') THEN 1 END) as android
+      FROM customer_users
+      WHERE created_at >= $1
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `;
+    const result = await pool.query(query, [periodStart]);
+
+    // Calculate cumulative total
+    let runningTotal = 0;
+    let runningIos = 0;
+    let runningAndroid = 0;
+
+    // Get the initial count before periodStart
+    const baseQuery = `SELECT COUNT(*) as count FROM customer_users WHERE created_at < $1`;
+    const baseResult = await pool.query(baseQuery, [periodStart]);
+    runningTotal = parseInt(baseResult.rows[0]?.count) || 0;
+
+    return result.rows.map(row => {
+      runningTotal += parseInt(row.daily_new) || 0;
+      runningIos += parseInt(row.ios) || 0;
+      runningAndroid += parseInt(row.android) || 0;
+      return {
+        date: row.date?.toISOString()?.split('T')[0] || '',
+        total: runningTotal,
+        ios: runningIos,
+        android: runningAndroid,
+      };
+    });
+  } catch (error) {
+    logger.error('Error fetching total members trend:', error);
+    return [];
+  }
+}
+
+export async function getTotalMembersDetails(period: PeriodFilter, limit: number = 100): Promise<SubscriptionDetail[]> {
+  try {
+    // Get all members with their subscription info
+    const query = `
+      SELECT 
+        cu.id as user_id,
+        cu.email,
+        cu.full_name,
+        cu.phone,
+        cu.platform,
+        cu.created_at,
+        cu.last_seen_at,
+        COALESCE(subs.total_spent, 0) as total_spent,
+        COALESCE(subs.transaction_count, 0) as transaction_count,
+        subs.latest_plan
+      FROM customer_users cu
+      LEFT JOIN (
+        SELECT 
+          customer_user_id,
+          SUM(amount) as total_spent,
+          COUNT(*) as transaction_count,
+          MAX(plan_id) as latest_plan
+        FROM customer_subscriptions
+        WHERE status != 'trial'
+        GROUP BY customer_user_id
+      ) subs ON subs.customer_user_id = cu.id
+      ORDER BY cu.created_at DESC
+      LIMIT $1
+    `;
+
+    const result = await pool.query(query, [limit]);
+    return result.rows.map(row => ({
+      id: row.user_id,
+      user_id: row.user_id,
+      email: row.email || '',
+      full_name: row.full_name || '',
+      phone: row.phone || '',
+      platform: row.platform || 'unknown',
+      plan_name: '',
+      amount: 0,
+      status: row.total_spent > 0 ? 'paying' : 'free',
+      started_at: '',
+      expired_at: '',
+      canceled_at: '',
+      days_remaining: 0,
+      total_spent: parseFloat(row.total_spent) || 0,
+      transaction_count: parseInt(row.transaction_count) || 0,
+      created_at: row.created_at?.toISOString() || '',
+      last_seen_at: row.last_seen_at?.toISOString() || '',
+    }));
+  } catch (error) {
+    logger.error('Error fetching total members details:', error);
+    return [];
+  }
+}
+

@@ -15,6 +15,9 @@ import {
     getTrialsTrend,
     getCancellationsTrend,
     getChurnTrend,
+    getFirstPurchaseTrend,
+    getConversionTrend,
+    getTotalMembersTrend,
     getRevenueDetails,
     getActiveSubscribersDetails,
     getSignupsDetails,
@@ -22,6 +25,9 @@ import {
     getCancellationsDetails,
     getChurnDetails,
     getBillingErrorsDetails,
+    getFirstPurchaseDetails,
+    getConversionDetails,
+    getTotalMembersDetails,
     PeriodFilter
 } from '../services/dashboard.service';
 import { logger } from '../utils/logger';
@@ -119,6 +125,15 @@ export async function getTrendHandler(
             case 'churn':
                 trendData = await getChurnTrend(period);
                 break;
+            case 'first-purchase':
+                trendData = await getFirstPurchaseTrend(period);
+                break;
+            case 'conversion':
+                trendData = await getConversionTrend(period);
+                break;
+            case 'total-members':
+                trendData = await getTotalMembersTrend(period);
+                break;
             default:
                 return reply.status(400).send({
                     success: false,
@@ -180,6 +195,15 @@ export async function getDetailsHandler(
                 break;
             case 'churn':
                 detailsData = await getChurnDetails(period, limit);
+                break;
+            case 'first-purchase':
+                detailsData = await getFirstPurchaseDetails(period, limit);
+                break;
+            case 'conversion':
+                detailsData = await getConversionDetails(period, limit);
+                break;
+            case 'total-members':
+                detailsData = await getTotalMembersDetails(period, limit);
                 break;
             default:
                 return reply.status(400).send({
