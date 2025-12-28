@@ -6,7 +6,7 @@ import { TeamCardPage } from './components/team/TeamCardPage';
 // Admin Panel Components
 import {
   AdminLayout,
-  AdminDashboard,
+  AdminKomutaMerkezi,
   AdminPredictions,
   AdminLogs,
   AdminBots,
@@ -19,11 +19,13 @@ function App() {
       <Routes>
         {/* All routes now use AdminLayout with sidebar */}
         <Route element={<AdminLayout />}>
-          {/* Livescore is now the homepage */}
-          <Route path="/" element={<AdminLivescore />} />
+          {/* Komuta Merkezi (Dashboard) is now the homepage */}
+          <Route path="/" element={<AdminKomutaMerkezi />} />
+
+          {/* Livescore moved to /livescore */}
+          <Route path="/livescore" element={<AdminLivescore />} />
 
           {/* Admin Panel Routes */}
-          <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/predictions" element={<AdminPredictions />} />
           <Route path="/admin/logs" element={<AdminLogs />} />
           <Route path="/admin/bots" element={<AdminBots />} />

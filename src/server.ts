@@ -16,6 +16,7 @@ import seasonRoutes from './routes/season.routes';
 import teamRoutes from './routes/team.routes';
 import healthRoutes from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
+import { dashboardRoutes } from './routes/dashboard.routes';
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
 import { config } from './config';
@@ -177,6 +178,7 @@ fastify.register(seasonRoutes, { prefix: '/api/seasons' });
 fastify.register(teamRoutes, { prefix: '/api/teams' });
 fastify.register(healthRoutes); // Health and readiness endpoints
 fastify.register(predictionRoutes); // AI Prediction ingestion (VPS backend)
+fastify.register(dashboardRoutes); // Admin dashboard endpoints
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {
@@ -222,7 +224,7 @@ const start = async () => {
     logEvent('info', 'server.listening', { port: PORT, host: HOST });
 
     const theSportsClient = new TheSportsClient();
-    
+
     // CRITICAL: Bootstrap system before starting MQTT
     // Bootstrap MUST complete successfully before MQTT connection
     // CRITICAL FIX: Allow server to start even if bootstrap fails (for placeholder DB setup)
@@ -434,7 +436,7 @@ const shutdown = async (signal?: string) => {
 
     // Close HTTP server
     try {
-  await fastify.close();
+      await fastify.close();
       logger.info('✅ HTTP server closed');
     } catch (e: any) {
       logger.error('Failed to close Fastify server:', e);
@@ -452,7 +454,7 @@ const shutdown = async (signal?: string) => {
       });
     });
 
-  process.exit(0);
+    process.exit(0);
   } catch (err: any) {
     logger.error('❌ Shutdown error:', err);
     process.exit(1);

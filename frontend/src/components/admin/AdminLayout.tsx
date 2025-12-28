@@ -53,9 +53,10 @@ interface NavItem {
 
 const navSections: { label: string; items: NavItem[] }[] = [
     {
-        label: 'Canlı Skor',
+        label: 'Genel Bakış',
         items: [
-            { path: '/', label: 'Canlı Skorlar', icon: LivescoreIcon },
+            { path: '/', label: 'Komuta Merkezi', icon: DashboardIcon },
+            { path: '/livescore', label: 'Canlı Skorlar', icon: LivescoreIcon },
         ],
     },
     {
@@ -68,7 +69,6 @@ const navSections: { label: string; items: NavItem[] }[] = [
     {
         label: 'Yönetim',
         items: [
-            { path: '/admin', label: 'Dashboard', icon: DashboardIcon },
             { path: '/admin/bots', label: 'Bot Kuralları', icon: BotsIcon },
             { path: '/admin/settings', label: 'Ayarlar', icon: SettingsIcon },
         ],
