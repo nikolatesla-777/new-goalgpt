@@ -50,7 +50,7 @@ export async function up(): Promise<void> {
     await client.query(`
       CREATE TABLE IF NOT EXISTS ai_bot_rules (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        bot_group_id UUID NOT NULL,
+        bot_group_id UUID,
         bot_display_name VARCHAR(100) NOT NULL,
         minute_from INTEGER,
         minute_to INTEGER,
