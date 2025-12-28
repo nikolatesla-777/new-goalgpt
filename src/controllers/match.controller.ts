@@ -386,8 +386,10 @@ export const getMatchById = async (
 };
 
 /**
- * Get match detail live
+ * Get match detail live (incidents, stats, score)
  * GET /api/matches/:match_id/detail-live
+ * 
+ * CRITICAL: For finished matches, returns from database (API doesn't return data after match ends)
  */
 export const getMatchDetailLive = async (
   request: FastifyRequest<{ Params: { match_id: string } }>,
@@ -395,15 +397,72 @@ export const getMatchDetailLive = async (
 ): Promise<void> => {
   try {
     const { match_id } = request.params;
-    const params: MatchDetailLiveParams = { match_id };
 
+    // Check if match is finished
+    const isFinished = await combinedStatsService.isMatchFinished(match_id);
+    
+    // For FINISHED matches, return from database
+    if (isFinished) {
+      const dbResult = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
+      
+      if (dbResult && (dbResult.incidents.length > 0 || dbResult.allStats.length > 0)) {
+        logger.debug(`[MatchController] Match finished, returning detail-live from DB for ${match_id}`);
+        reply.send({
+          success: true,
+          data: {
+            results: [{
+              id: match_id,
+              incidents: dbResult.incidents,
+              stats: dbResult.allStats,
+              score: dbResult.score,
+            }],
+            source: 'database (match finished)'
+          },
+        });
+        return;
+      }
+    }
+
+    // Fetch from API
+    const params: MatchDetailLiveParams = { match_id };
     const result = await matchDetailLiveService.getMatchDetailLive(params);
+
+    // Save incidents to database (merge with existing stats)
+    if (result?.results && Array.isArray(result.results)) {
+      const matchData = result.results.find((r: any) => r.id === match_id) || result.results[0];
+      if (matchData?.incidents?.length > 0) {
+        // Get existing stats and merge with incidents
+        const existingStats = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
+        if (existingStats) {
+          existingStats.incidents = matchData.incidents;
+          existingStats.score = matchData.score || existingStats.score;
+          combinedStatsService.saveCombinedStatsToDatabase(match_id, existingStats).catch(err => {
+            logger.error(`[MatchController] Failed to save incidents to DB for ${match_id}:`, err);
+          });
+        } else {
+          // Create new entry with incidents
+          const newStats = {
+            matchId: match_id,
+            basicStats: [],
+            detailedStats: [],
+            allStats: [],
+            incidents: matchData.incidents,
+            score: matchData.score || null,
+            lastUpdated: Date.now(),
+          };
+          combinedStatsService.saveCombinedStatsToDatabase(match_id, newStats).catch(err => {
+            logger.error(`[MatchController] Failed to save incidents to DB for ${match_id}:`, err);
+          });
+        }
+      }
+    }
 
     reply.send({
       success: true,
       data: result,
     });
   } catch (error: any) {
+    logger.error('[MatchController] Error in getMatchDetailLive:', error);
     reply.status(500).send({
       success: false,
       message: error.message || 'Internal server error',
@@ -677,10 +736,10 @@ export const getMatchAnalysis = async (
 };
 
 /**
- * Get match trend (live or detail)
+ * Get match trend (minute-by-minute data)
  * GET /api/matches/:match_id/trend
- * CRITICAL: For live matches (status IN (2,3,4,5,7)), uses /match/trend/live endpoint
- * For finished matches, uses /match/trend/detail endpoint
+ * 
+ * CRITICAL: For finished matches, returns from database (API doesn't return data after match ends)
  */
 export const getMatchTrend = async (
   request: FastifyRequest<{ Params: { match_id: string } }>,
@@ -690,7 +749,7 @@ export const getMatchTrend = async (
     const { match_id } = request.params;
     const params: MatchTrendParams = { match_id };
 
-    // Get match status from database to determine which endpoint to use
+    // Get match status from database
     const { pool } = await import('../database/connection');
     const client = await pool.connect();
     let matchStatus: number | undefined;
@@ -706,8 +765,34 @@ export const getMatchTrend = async (
       client.release();
     }
 
-    // Use getMatchTrend which automatically chooses live or detail based on status
+    const isFinished = matchStatus === 8;
+
+    // For FINISHED matches, return from database first
+    if (isFinished) {
+      const dbTrend = await getTrendFromDatabase(match_id);
+      
+      if (dbTrend && dbTrend.results && dbTrend.results.length > 0) {
+        logger.debug(`[MatchController] Match finished, returning trend from DB for ${match_id}`);
+        reply.send({
+          success: true,
+          data: {
+            ...dbTrend,
+            source: 'database (match finished)'
+          },
+        });
+        return;
+      }
+    }
+
+    // Fetch from API
     const result = await matchTrendService.getMatchTrend(params, matchStatus);
+
+    // Save trend data to database for persistence
+    if (result?.results && Array.isArray(result.results) && result.results.length > 0) {
+      saveTrendToDatabase(match_id, result).catch(err => {
+        logger.error(`[MatchController] Failed to save trend to DB for ${match_id}:`, err);
+      });
+    }
 
     reply.send({
       success: true,
@@ -721,6 +806,66 @@ export const getMatchTrend = async (
     });
   }
 };
+
+// Helper function to get trend from database
+async function getTrendFromDatabase(matchId: string): Promise<any | null> {
+  const { pool } = await import('../database/connection');
+  const client = await pool.connect();
+  try {
+    const result = await client.query(`
+      SELECT statistics->'trend' as trend
+      FROM ts_matches
+      WHERE external_id = $1
+        AND statistics->'trend' IS NOT NULL
+    `, [matchId]);
+
+    if (result.rows.length === 0 || !result.rows[0].trend) {
+      return null;
+    }
+
+    return result.rows[0].trend;
+  } catch (error: any) {
+    logger.error(`[MatchController] Error reading trend from database for ${matchId}:`, error);
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
+// Helper function to save trend to database
+async function saveTrendToDatabase(matchId: string, trendData: any): Promise<void> {
+  const { pool } = await import('../database/connection');
+  const client = await pool.connect();
+  try {
+    // Get existing statistics
+    const existingResult = await client.query(`
+      SELECT statistics FROM ts_matches WHERE external_id = $1
+    `, [matchId]);
+    
+    const existingStats = existingResult.rows[0]?.statistics || {};
+
+    // Update only trend field
+    const statisticsData = {
+      ...existingStats,
+      trend: trendData,
+      last_updated: Date.now(),
+    };
+
+    // Update statistics column
+    await client.query(`
+      UPDATE ts_matches
+      SET statistics = $1::jsonb,
+          updated_at = NOW()
+      WHERE external_id = $2
+    `, [JSON.stringify(statisticsData), matchId]);
+
+    logger.info(`[MatchController] Saved trend data to database for match: ${matchId}`);
+  } catch (error: any) {
+    logger.error(`[MatchController] Error saving trend to database for ${matchId}:`, error);
+  } finally {
+    client.release();
+  }
+}
 
 /**
  * Get match half stats (first half / second half breakdown)

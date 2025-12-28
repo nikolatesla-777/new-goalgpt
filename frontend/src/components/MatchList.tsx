@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getRecentMatches, getMatchDiary, getLiveMatches } from '../api/matches';
+import { getMatchDiary, getLiveMatches } from '../api/matches';
 import type { Match, Competition } from '../api/matches';
 import { LeagueSection } from './LeagueSection';
-import { isLiveMatch } from '../utils/matchStatus';
+import { isLiveMatch, isFinishedMatch, MatchState } from '../utils/matchStatus';
 
 interface MatchListProps {
-  view: 'recent' | 'diary' | 'live';
+  view: 'diary' | 'live' | 'finished' | 'not_started';
   date?: string;
+  sortBy?: 'league' | 'time';
 }
 
-export function MatchList({ view, date }: MatchListProps) {
+export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   // ============================================
   // STEP 1: ALL HOOKS MUST BE CALLED FIRST
   // ============================================
@@ -33,15 +34,11 @@ export function MatchList({ view, date }: MatchListProps) {
       setLoading(true);
 
       let response;
-      if (view === 'recent') {
-        // Progressive loading: start with 50, then load more
-        response = await getRecentMatches({ limit: 50 });
-      } else if (view === 'live') {
+      if (view === 'live') {
         // Use dedicated live matches endpoint
         response = await getLiveMatches();
       } else {
-        // For diary view, use the /match/diary endpoint with date parameter
-        // Use Turkish timezone for default date
+        // For diary, finished, not_started views - use diary endpoint with date
         const { getTodayInTurkey } = await import('../utils/dateUtils');
         const dateStr = date || getTodayInTurkey();
         console.log('📅 [MatchList] Fetching diary for date:', dateStr);
@@ -69,14 +66,28 @@ export function MatchList({ view, date }: MatchListProps) {
       if (response && typeof response === 'object' && 'results' in response) {
         const results = response.results;
         if (Array.isArray(results)) {
-          // Filter for live matches if view is 'live'
-          const filteredResults = view === 'live'
-            ? results.filter((match: Match) => {
+          // Filter matches based on view type
+          let filteredResults = results;
+
+          if (view === 'live') {
+            filteredResults = results.filter((match: Match) => {
               const status = match.status ?? 0;
               return isLiveMatch(status);
-            })
-            : results;
-          console.log('✅ [MatchList] Setting', filteredResults.length, 'matches' + (view === 'live' ? ' (live)' : ''));
+            });
+          } else if (view === 'finished') {
+            filteredResults = results.filter((match: Match) => {
+              const status = match.status ?? 0;
+              return isFinishedMatch(status);
+            });
+          } else if (view === 'not_started') {
+            filteredResults = results.filter((match: Match) => {
+              const status = match.status ?? 0;
+              return status === MatchState.NOT_STARTED;
+            });
+          }
+          // 'diary' view shows all matches
+
+          console.log('✅ [MatchList] Setting', filteredResults.length, 'matches (view:', view, ')');
           setMatches(filteredResults);
         } else {
           console.warn('⚠️ [MatchList] results is not an array, type:', typeof results, 'value:', results);
@@ -104,7 +115,7 @@ export function MatchList({ view, date }: MatchListProps) {
     fetchRef.current = fetchMatches;
   }, [fetchMatches]);
 
-  // Group matches by competition - MUST BE CALLED BEFORE ANY EARLY RETURNS
+  // Group matches by competition or sort by time - MUST BE CALLED BEFORE ANY EARLY RETURNS
   const matchesByCompetition = useMemo(() => {
     // CRITICAL FIX: Ensure matches is always an array before processing
     if (!Array.isArray(safeMatches)) {
@@ -112,7 +123,22 @@ export function MatchList({ view, date }: MatchListProps) {
       return [];
     }
 
-    console.log('🔄 [MatchList] Grouping matches - total:', safeMatches.length);
+    console.log('🔄 [MatchList] Grouping matches - total:', safeMatches.length, 'sortBy:', sortBy);
+
+    // If sorting by time, don't group by competition
+    if (sortBy === 'time') {
+      // Sort all matches by match_time
+      const sortedByTime = [...safeMatches].sort((a, b) => {
+        const timeA = a.match_time || 0;
+        const timeB = b.match_time || 0;
+        return timeA - timeB;
+      });
+
+      // Return as single "group" with null competition
+      return [['__time_sorted__', { competition: null, matches: sortedByTime }]] as [string | null, { competition: Competition | null; matches: Match[] }][];
+    }
+
+    // Group by league (default)
     const grouped = new Map<string | null, { competition: Competition | null; matches: Match[] }>();
 
     safeMatches.forEach((match) => {
@@ -140,7 +166,7 @@ export function MatchList({ view, date }: MatchListProps) {
 
     console.log('✅ [MatchList] Grouped into', sorted.length, 'competitions');
     return sorted;
-  }, [safeMatches]);
+  }, [safeMatches, sortBy]);
 
   // CRITICAL: WebSocket connection for real-time updates (with reconnect)
   useEffect(() => {
@@ -467,7 +493,7 @@ export function MatchList({ view, date }: MatchListProps) {
         justifyContent: 'space-between',
       }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
-          {view === 'recent' ? 'Son Maçlar' : view === 'live' ? 'Canlı Maçlar' : 'Günün Maçları'}
+          {view === 'live' ? 'Canlı Maçlar' : view === 'finished' ? 'Biten Maçlar' : view === 'not_started' ? 'Başlamamış Maçlar' : 'Günün Maçları'}
         </h2>
         <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
           Son güncelleme: {lastUpdate.toLocaleTimeString('tr-TR')}

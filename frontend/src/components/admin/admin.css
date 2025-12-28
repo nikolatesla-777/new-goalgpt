@@ -605,6 +605,54 @@
   outline: none;
 }
 
+/* Sort Toggle */
+.admin-livescore-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-sort-toggle {
+  display: flex;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  overflow: hidden;
+}
+
+.admin-sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  background-color: var(--admin-bg-card);
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-sort-btn:first-child {
+  border-right: 1px solid var(--admin-border);
+}
+
+.admin-sort-btn:hover {
+  background-color: var(--admin-bg-hover);
+  color: var(--admin-text-primary);
+}
+
+.admin-sort-btn.active {
+  background-color: var(--admin-accent);
+  color: white;
+}
+
+.admin-sort-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .admin-livescore-content {
   background-color: var(--admin-bg-card);
   border-radius: var(--admin-radius-lg);
