@@ -265,38 +265,17 @@ export class DailyPreSyncService {
     }
 
     /**
-     * Sync Standings data to database
+     * Sync Standings data to database using /table/live endpoint
      * @returns true if data was synced, false if no data available
      */
     async syncStandingsToDb(seasonId: string): Promise<boolean> {
         try {
-            const response = await this.seasonStandingsService.getSeasonStandings({ season_id: seasonId });
-            const results = (response as any).results || [];
-
-            if (!results || results.length === 0) {
-                logger.debug(`No standings data for season ${seasonId}`);
-                return false;
-            }
-
-            const client = await pool.connect();
-            try {
-                await client.query(`
-          INSERT INTO ts_standings (season_id, standings, raw_response, updated_at)
-          VALUES ($1, $2, $3, NOW())
-          ON CONFLICT (season_id) DO UPDATE SET
-            standings = EXCLUDED.standings,
-            raw_response = EXCLUDED.raw_response,
-            updated_at = NOW()
-        `, [seasonId, JSON.stringify(results), JSON.stringify(response)]);
-
-                logger.debug(`✅ Synced standings for season ${seasonId}`);
-                return true;
-            } finally {
-                client.release();
-            }
+            // Use tableLiveService which uses /table/live endpoint
+            await this.tableLiveService.syncStandingsToDb(seasonId);
+            return true;
         } catch (error: any) {
             logger.warn(`Failed to sync standings for season ${seasonId}: ${error.message}`);
-            throw error; // Re-throw to be caught by caller
+            return false;
         }
     }
 
