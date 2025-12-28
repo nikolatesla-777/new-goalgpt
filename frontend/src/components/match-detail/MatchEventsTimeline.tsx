@@ -64,6 +64,20 @@ function getEventStyle(incident: Incident) {
             return { icon: '🔄', color: '#3b82f6', label: 'DEĞİŞİKLİK' };
         case EVENT_TYPES.VAR:
             return { icon: '📺', color: '#6366f1', label: 'VAR' };
+        case EVENT_TYPES.START:
+            return { icon: '🏁', color: '#22c55e', label: 'MAÇ BAŞLADI' };
+        case EVENT_TYPES.END:
+            return { icon: '🏁', color: '#6b7280', label: 'MAÇ BİTTİ' };
+        case EVENT_TYPES.HALFTIME_SCORE:
+            return { icon: '⏸️', color: '#f59e0b', label: 'DEVRE ARASI' };
+        case EVENT_TYPES.CORNER:
+            return { icon: '🚩', color: '#8b5cf6', label: 'KORNER' };
+        case EVENT_TYPES.OFFSIDE:
+            return { icon: '🚫', color: '#6b7280', label: 'OFSAYT' };
+        case EVENT_TYPES.FREE_KICK:
+            return { icon: '⚡', color: '#0ea5e9', label: 'SERBEST VURUŞ' };
+        case EVENT_TYPES.PENALTY_MISSED:
+            return { icon: '❌', color: '#ef4444', label: 'PENALTI KAÇTI' };
         default:
             return { icon: '•', color: '#9ca3af', label: 'DİĞER' };
     }
@@ -81,15 +95,31 @@ export function MatchEventsTimeline({ incidents }: MatchEventsTimelineProps) {
         return (
             <div style={{
                 textAlign: 'center',
-                padding: '80px 20px',
+                padding: '60px 20px',
                 backgroundColor: '#ffffff',
                 borderRadius: '24px',
                 border: '1px solid #f1f5f9',
                 boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)'
             }}>
                 <div style={{ fontSize: '48px', marginBottom: '20px' }}>📋</div>
-                <div style={{ color: '#1f2937', fontSize: '16px', fontWeight: 600 }}>Maç Akışı Henüz Boş</div>
-                <div style={{ color: '#9ca3af', fontSize: '13px', marginTop: '8px' }}>Bu maç için henüz bir olay kaydedilmedi.</div>
+                <div style={{ color: '#1f2937', fontSize: '16px', fontWeight: 600 }}>Henüz etkinlik yok</div>
+                <div style={{ color: '#9ca3af', fontSize: '13px', marginTop: '8px' }}>Bu maç için etkinlik verisi henüz oluşmamış olabilir.</div>
+                
+                {/* KICK OFF MARKER - Always show when match has started */}
+                <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'center' }}>
+                    <div style={{
+                        backgroundColor: '#1e293b',
+                        color: '#fff',
+                        padding: '8px 24px',
+                        borderRadius: '50px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        letterSpacing: '0.05em',
+                        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
+                    }}>
+                        🏁 BAŞLADI
+                    </div>
+                </div>
             </div>
         );
     }
@@ -186,7 +216,13 @@ function EventTimelineRow({ incident }: { incident: Incident }) {
                 }}>
                     {incident.type === EVENT_TYPES.SUBSTITUTION
                         ? (incident.in_player_name || 'Giren Oyuncu')
-                        : (incident.player_name || 'Maç Olayı')
+                        : incident.type === EVENT_TYPES.START
+                            ? 'Maç Başladı'
+                            : incident.type === EVENT_TYPES.END
+                                ? 'Maç Bitti'
+                                : incident.type === EVENT_TYPES.HALFTIME_SCORE
+                                    ? `Devre Skoru: ${incident.home_score ?? 0} - ${incident.away_score ?? 0}`
+                                    : (incident.player_name || label)
                     }
                 </div>
 
