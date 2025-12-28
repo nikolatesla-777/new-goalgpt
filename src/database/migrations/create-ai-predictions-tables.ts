@@ -16,6 +16,7 @@ export async function up(): Promise<void> {
       CREATE TABLE IF NOT EXISTS ai_predictions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         external_id VARCHAR(100),
+        bot_group_id UUID,
         bot_name VARCHAR(100),
         league_name VARCHAR(255),
         home_team_name VARCHAR(255),
@@ -40,6 +41,39 @@ export async function up(): Promise<void> {
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ai_predictions_created_at ON ai_predictions(created_at DESC);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_predictions_bot_group_id ON ai_predictions(bot_group_id);
+    `);
+
+    // 1b. ai_bot_rules - Rules for assigning predictions to bot groups based on minute
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_bot_rules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bot_group_id UUID NOT NULL,
+        bot_display_name VARCHAR(100) NOT NULL,
+        minute_from INTEGER,
+        minute_to INTEGER,
+        prediction_type_pattern VARCHAR(255),
+        priority INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_bot_rules_active ON ai_bot_rules(is_active);
+    `);
+
+    // Insert default bot rules (can be modified via admin)
+    await client.query(`
+      INSERT INTO ai_bot_rules (bot_display_name, minute_from, minute_to, priority) 
+      VALUES 
+        ('ALERT: D', 1, 15, 10),
+        ('70. Dakika Botu', 65, 75, 20),
+        ('BOT 007', 0, 90, 1)
+      ON CONFLICT DO NOTHING;
     `);
 
     // 2. ai_prediction_matches - Links predictions to ts_matches
@@ -128,6 +162,7 @@ export async function down(): Promise<void> {
     await client.query('DROP TABLE IF EXISTS ai_prediction_requests CASCADE');
     await client.query('DROP TABLE IF EXISTS ai_prediction_matches CASCADE');
     await client.query('DROP TABLE IF EXISTS ai_predictions CASCADE');
+    await client.query('DROP TABLE IF EXISTS ai_bot_rules CASCADE');
     await client.query('COMMIT');
     console.log('✅ AI Predictions tables dropped successfully');
   } catch (error) {

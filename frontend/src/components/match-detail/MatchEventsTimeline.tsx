@@ -75,9 +75,8 @@ function getEventStyle(incident: Incident) {
         case EVENT_TYPES.START:
             return { icon: '🏁', color: '#22c55e', label: 'MAÇ BAŞLADI' };
         case EVENT_TYPES.MIDFIELD:
-            // Type 11 is center kickoff - could be 2nd half start OR restart after goal
-            // We'll skip showing this as a separate event since it's confusing
-            return { icon: '▶️', color: '#22c55e', label: 'DEVAM', hidden: true };
+            // Type 11 at 45-47' = 2nd half start (shown), other times = restart after goal (filtered out)
+            return { icon: '▶️', color: '#22c55e', label: '2. YARI BAŞLADI' };
         case EVENT_TYPES.END:
             return { icon: '🏁', color: '#6b7280', label: 'MAÇ BİTTİ' };
         case EVENT_TYPES.HALFTIME_SCORE:
@@ -113,7 +112,8 @@ function getEventText(incident: Incident, label: string): string {
             return incident.in_player_name || 'Giren Oyuncu';
         case EVENT_TYPES.START:
             return 'Maç Başladı';
-        // MIDFIELD (type 11) is filtered out, no need to handle
+        case EVENT_TYPES.MIDFIELD:
+            return '2. Yarı Başladı';
         case EVENT_TYPES.END:
             return 'Maç Bitti';
         case EVENT_TYPES.HALFTIME_SCORE:
@@ -140,8 +140,9 @@ export function MatchEventsTimeline({ incidents }: MatchEventsTimelineProps) {
         return [...incidents]
             .filter(inc => {
                 if (!inc || typeof inc.time !== 'number') return false;
-                // Filter out MIDFIELD (type 11) events - they're confusing (could be 2nd half start OR restart after goal)
-                if (inc.type === EVENT_TYPES.MIDFIELD) return false;
+                // Filter out MIDFIELD (type 11) ONLY if it's not at halftime (45-47')
+                // At 45-47' it means "2nd half started", at other times it's restart after goal
+                if (inc.type === EVENT_TYPES.MIDFIELD && (inc.time < 45 || inc.time > 47)) return false;
                 // Filter out START (type 10) events - we show "BAŞLADI" marker at the bottom
                 if (inc.type === EVENT_TYPES.START) return false;
                 return true;

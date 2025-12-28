@@ -43,7 +43,17 @@ export interface PredictionIngestionResult {
     matchFound: boolean;
     matchExternalId?: string;
     confidence?: number;
+    botGroupName?: string;
     error?: string;
+}
+
+interface BotRule {
+    id: string;
+    bot_group_id: string;
+    bot_display_name: string;
+    minute_from: number | null;
+    minute_to: number | null;
+    priority: number;
 }
 
 export class AIPredictionService {
@@ -56,6 +66,39 @@ export class AIPredictionService {
         } catch (error) {
             logger.error('[AIPrediction] Failed to decode Base64 payload:', error);
             return base64String; // Return as-is if not valid base64
+        }
+    }
+
+    /**
+     * Get bot group for a prediction based on minute
+     * Uses rules from ai_bot_rules table, sorted by priority (higher = more specific)
+     */
+    async getBotGroupForMinute(minute: number): Promise<{ botGroupId: string | null; botDisplayName: string }> {
+        try {
+            const result = await pool.query(`
+                SELECT id, bot_group_id, bot_display_name, minute_from, minute_to, priority
+                FROM ai_bot_rules
+                WHERE is_active = true
+                ORDER BY priority DESC
+            `);
+
+            for (const rule of result.rows as BotRule[]) {
+                const minFrom = rule.minute_from ?? 0;
+                const minTo = rule.minute_to ?? 999;
+
+                if (minute >= minFrom && minute <= minTo) {
+                    return {
+                        botGroupId: rule.bot_group_id || null,
+                        botDisplayName: rule.bot_display_name
+                    };
+                }
+            }
+
+            // Default fallback
+            return { botGroupId: null, botDisplayName: 'BOT 007' };
+        } catch (error) {
+            logger.warn('[AIPrediction] Failed to get bot group, using default:', error);
+            return { botGroupId: null, botDisplayName: 'BOT 007' };
         }
     }
 
@@ -181,19 +224,24 @@ export class AIPredictionService {
                 };
             }
 
+            // Determine bot group based on minute
+            const botGroup = await this.getBotGroupForMinute(parsed.minuteAtPrediction);
+            logger.info(`[AIPrediction] Assigned to bot: ${botGroup.botDisplayName} (minute: ${parsed.minuteAtPrediction})`);
+
             // Insert into ai_predictions
             const insertQuery = `
         INSERT INTO ai_predictions (
-          external_id, bot_name, league_name, home_team_name, away_team_name,
+          external_id, bot_group_id, bot_name, league_name, home_team_name, away_team_name,
           score_at_prediction, minute_at_prediction, prediction_type, prediction_value,
           raw_payload, processed
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false)
         RETURNING id
       `;
 
             const insertResult = await client.query(insertQuery, [
                 parsed.externalId,
-                parsed.botName,
+                botGroup.botGroupId,
+                botGroup.botDisplayName,
                 parsed.leagueName,
                 parsed.homeTeamName,
                 parsed.awayTeamName,
