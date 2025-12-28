@@ -45,7 +45,7 @@ export const getTeamById = async (
       
       // Get team's current season (from most recent match)
       const seasonResult = await client.query(
-        `SELECT DISTINCT season_id, competition_id 
+        `SELECT season_id, competition_id 
          FROM ts_matches 
          WHERE home_team_id = $1 OR away_team_id = $1
          ORDER BY match_time DESC
