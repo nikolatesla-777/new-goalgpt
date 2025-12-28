@@ -13,6 +13,7 @@ import { logger } from './utils/logger';
 import { logEvent } from './utils/obsLogger';
 import matchRoutes from './routes/match.routes';
 import seasonRoutes from './routes/season.routes';
+import teamRoutes from './routes/team.routes';
 import healthRoutes from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
 import { setWebSocketState } from './controllers/health.controller';

@@ -5,6 +5,15 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { MatchDetailPage } from './components/match-detail/MatchDetailPage';
 import { getTodayInTurkey } from './utils/dateUtils';
 
+// Admin Panel Components
+import {
+  AdminLayout,
+  AdminDashboard,
+  AdminPredictions,
+  AdminLogs,
+  AdminBots
+} from './components/admin';
+
 function HomePage() {
   const [view, setView] = useState<'recent' | 'diary' | 'live'>('diary');
   // Use Turkish timezone for date (UTC+3)
@@ -110,8 +119,17 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Livescore Routes - UNCHANGED */}
         <Route path="/" element={<HomePage />} />
         <Route path="/match/:matchId" element={<MatchDetailPage />} />
+
+        {/* Admin Panel Routes - NEW */}
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="predictions" element={<AdminPredictions />} />
+          <Route path="logs" element={<AdminLogs />} />
+          <Route path="bots" element={<AdminBots />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );
