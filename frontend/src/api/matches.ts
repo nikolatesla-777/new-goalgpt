@@ -560,3 +560,72 @@ export async function getSeasonStandings(seasonId: string): Promise<any> {
     throw error;
   }
 }
+
+// ===== TEAM API FUNCTIONS =====
+
+/**
+ * Get team by ID
+ * Returns team info, competition, and recent form
+ */
+export async function getTeamById(teamId: string): Promise<any> {
+  const url = `${API_BASE_URL}/teams/${teamId}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Team not found');
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getTeamById] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get team fixtures (past and upcoming matches)
+ */
+export async function getTeamFixtures(teamId: string, seasonId?: string): Promise<any> {
+  let url = `${API_BASE_URL}/teams/${teamId}/fixtures`;
+  if (seasonId) {
+    url += `?season_id=${seasonId}`;
+  }
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getTeamFixtures] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get team standings position
+ */
+export async function getTeamStandings(teamId: string, seasonId?: string): Promise<any> {
+  let url = `${API_BASE_URL}/teams/${teamId}/standings`;
+  if (seasonId) {
+    url += `?season_id=${seasonId}`;
+  }
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error('[getTeamStandings] Error:', error);
+    throw error;
+  }
+}

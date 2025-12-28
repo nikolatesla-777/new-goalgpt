@@ -702,6 +702,7 @@ function H2HContent({ data }: { data: any }) {
 
 // Standings Content
 function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTeamId: string; awayTeamId: string }) {
+    const navigate = useNavigate();
     const standings = data?.results || [];
 
     if (!standings.length) {
@@ -732,7 +733,30 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                         return (
                             <tr key={idx} style={{ backgroundColor: isHighlighted ? '#dbeafe' : 'transparent', borderBottom: '1px solid #e5e7eb' }}>
                                 <td style={{ padding: '12px 8px', fontWeight: '600' }}>{team.position || idx + 1}</td>
-                                <td style={{ padding: '12px 8px' }}>{team.team_name || `Takım ${idx + 1}`}</td>
+                                <td style={{ padding: '12px 8px' }}>
+                                    <div 
+                                        onClick={() => navigate(`/team/${team.team_id}`)}
+                                        style={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: '8px',
+                                            cursor: 'pointer',
+                                            color: '#1e40af',
+                                            fontWeight: isHighlighted ? '600' : '400'
+                                        }}
+                                    >
+                                        {team.team_logo && (
+                                            <img 
+                                                src={team.team_logo} 
+                                                alt=""
+                                                style={{ width: '20px', height: '20px', objectFit: 'contain' }}
+                                            />
+                                        )}
+                                        <span style={{ textDecoration: 'none' }}>
+                                            {team.team_name || `Takım ${idx + 1}`}
+                                        </span>
+                                    </div>
+                                </td>
                                 <td style={{ padding: '12px 8px', textAlign: 'center' }}>{team.played}</td>
                                 <td style={{ padding: '12px 8px', textAlign: 'center' }}>{team.won}</td>
                                 <td style={{ padding: '12px 8px', textAlign: 'center' }}>{team.drawn}</td>

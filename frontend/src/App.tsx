@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { MatchList } from './components/MatchList';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MatchDetailPage } from './components/match-detail/MatchDetailPage';
+import { TeamCardPage } from './components/team/TeamCardPage';
 import { getTodayInTurkey } from './utils/dateUtils';
 
 // Admin Panel Components
@@ -119,9 +120,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Livescore Routes - UNCHANGED */}
+        {/* Livescore Routes */}
         <Route path="/" element={<HomePage />} />
         <Route path="/match/:matchId" element={<MatchDetailPage />} />
+        <Route path="/team/:teamId" element={<TeamCardPage />} />
 
         {/* Admin Panel Routes - NEW */}
         <Route path="/admin" element={<AdminLayout />}>
