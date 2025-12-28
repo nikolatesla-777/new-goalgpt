@@ -71,8 +71,8 @@ export const getTeamById = async (
           m.external_id,
           m.home_team_id,
           m.away_team_id,
-          m.home_score,
-          m.away_score,
+          m.home_score_display,
+          m.away_score_display,
           m.match_time,
           m.status_id,
           ht.name as home_team_name,
@@ -90,8 +90,8 @@ export const getTeamById = async (
       // Calculate form (W/D/L)
       const recentForm = formResult.rows.map(match => {
         const isHome = match.home_team_id === team_id;
-        const teamScore = isHome ? match.home_score : match.away_score;
-        const opponentScore = isHome ? match.away_score : match.home_score;
+        const teamScore = isHome ? match.home_score_display : match.away_score_display;
+        const opponentScore = isHome ? match.away_score_display : match.home_score_display;
         
         let result = 'D';
         if (teamScore > opponentScore) result = 'W';
@@ -100,7 +100,7 @@ export const getTeamById = async (
         return {
           match_id: match.external_id,
           result,
-          score: `${match.home_score}-${match.away_score}`,
+          score: `${match.home_score_display ?? 0}-${match.away_score_display ?? 0}`,
           opponent: isHome ? match.away_team_name : match.home_team_name,
           isHome,
           date: new Date(match.match_time * 1000).toISOString().split('T')[0],
@@ -257,8 +257,8 @@ export const getTeamFixtures = async (
           m.status_id,
           m.home_team_id,
           m.away_team_id,
-          m.home_score,
-          m.away_score,
+          m.home_score_display,
+          m.away_score_display,
           m.season_id,
           ht.name as home_team_name,
           ht.logo_url as home_team_logo,
@@ -287,8 +287,8 @@ export const getTeamFixtures = async (
           name: m.away_team_name,
           logo_url: m.away_team_logo,
         },
-        home_score: m.home_score,
-        away_score: m.away_score,
+        home_score: m.home_score_display,
+        away_score: m.away_score_display,
         is_home: m.home_team_id === team_id,
       }));
       
