@@ -74,7 +74,7 @@ export function MatchDetailPage() {
                 }
             } catch (err: any) {
                 if (!match) {
-                    setError(err.message || 'Maç yüklenirken hata oluştu');
+                setError(err.message || 'Maç yüklenirken hata oluştu');
                 }
             } finally {
                 setLoading(false);
@@ -509,8 +509,7 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     // Sort and filter unknown stats
     const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
 
-    // If no data from API, show basic match stats
-    if (!stats.length && match) {
+    // Get basic stats fallback (for match info from database)
         const basicStats = [
             { label: 'Gol', home: match.home_score ?? 0, away: match.away_score ?? 0 },
             { label: 'Sarı Kart', home: (match as any).home_yellow_cards ?? 0, away: (match as any).away_yellow_cards ?? 0 },
@@ -518,97 +517,102 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
             { label: 'Korner', home: (match as any).home_corners ?? 0, away: (match as any).away_corners ?? 0 },
         ];
 
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <p style={{ textAlign: 'center', color: '#6b7280', marginBottom: '16px' }}>
-                        {data?.message || 'Detaylı istatistik verisi bulunamadı. Temel bilgiler gösteriliyor.'}
-                    </p>
-                    {basicStats.map((stat, idx) => (
-                        <StatRow key={idx} label={stat.label} home={stat.home} away={stat.away} />
-                    ))}
-                </div>
+    // Check if we have any full time stats (to determine if tabs should be shown)
+    const hasFullTimeStats = getFullTimeStats().length > 0;
+
+    // Render period tabs component
+    const PeriodTabs = () => (
+        <div style={{ 
+            display: 'flex', 
+            gap: '8px', 
+            borderBottom: '2px solid #e5e7eb',
+            paddingBottom: '8px'
+        }}>
+            <button
+                onClick={() => setActivePeriod('full')}
+                style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: activePeriod === 'full' ? '#3b82f6' : 'transparent',
+                    color: activePeriod === 'full' ? 'white' : '#6b7280',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: activePeriod === 'full' ? '600' : '400',
+                    transition: 'all 0.2s',
+                }}
+            >
+                TÜMÜ
+            </button>
+            <button
+                onClick={() => setActivePeriod('first')}
+                style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: activePeriod === 'first' ? '#3b82f6' : 'transparent',
+                    color: activePeriod === 'first' ? 'white' : '#6b7280',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: activePeriod === 'first' ? '600' : '400',
+                    transition: 'all 0.2s',
+                }}
+            >
+                1. YARI
+            </button>
+            {/* Only show 2. YARI tab if match has reached 2nd half or later */}
+            {isSecondHalfOrLater && (
+                <button
+                    onClick={() => setActivePeriod('second')}
+                    style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        background: activePeriod === 'second' ? '#3b82f6' : 'transparent',
+                        color: activePeriod === 'second' ? 'white' : '#6b7280',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: activePeriod === 'second' ? '600' : '400',
+                        transition: 'all 0.2s',
+                    }}
+                >
+                    2. YARI
+                </button>
+            )}
             </div>
         );
-    }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Period Tabs - Only show if match has started */}
-            <div style={{ 
-                display: 'flex', 
-                gap: '8px', 
-                borderBottom: '2px solid #e5e7eb',
-                paddingBottom: '8px'
-            }}>
-                <button
-                    onClick={() => setActivePeriod('full')}
-                    style={{
-                        padding: '8px 16px',
-                        border: 'none',
-                        background: activePeriod === 'full' ? '#3b82f6' : 'transparent',
-                        color: activePeriod === 'full' ? 'white' : '#6b7280',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: activePeriod === 'full' ? '600' : '400',
-                        transition: 'all 0.2s',
-                    }}
-                >
-                    TÜMÜ
-                </button>
-                <button
-                    onClick={() => setActivePeriod('first')}
-                    style={{
-                        padding: '8px 16px',
-                        border: 'none',
-                        background: activePeriod === 'first' ? '#3b82f6' : 'transparent',
-                        color: activePeriod === 'first' ? 'white' : '#6b7280',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: activePeriod === 'first' ? '600' : '400',
-                        transition: 'all 0.2s',
-                    }}
-                >
-                    1. YARI
-                </button>
-                {/* Only show 2. YARI tab if match has reached 2nd half or later */}
-                {isSecondHalfOrLater && (
-                    <button
-                        onClick={() => setActivePeriod('second')}
-                        style={{
-                            padding: '8px 16px',
-                            border: 'none',
-                            background: activePeriod === 'second' ? '#3b82f6' : 'transparent',
-                            color: activePeriod === 'second' ? 'white' : '#6b7280',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: activePeriod === 'second' ? '600' : '400',
-                            transition: 'all 0.2s',
-                        }}
-                    >
-                        2. YARI
-                    </button>
-                )}
-            </div>
+            {/* Period Tabs - Always show if we have any stats or match has started */}
+            {(hasFullTimeStats || matchStatus >= 2) && <PeriodTabs />}
 
             {/* Stats List */}
             {stats.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {stats.map((stat: any, idx: number) => (
-                        <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
-                    ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {stats.map((stat: any, idx: number) => (
+                <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
+            ))}
                 </div>
             ) : (
-                <div style={{ 
-                    textAlign: 'center', 
-                    padding: '40px', 
-                    color: '#6b7280',
-                    backgroundColor: '#f9fafb',
-                    borderRadius: '8px'
-                }}>
-                    {activePeriod === 'first' && (isFirstHalf ? 'Maç devam ediyor, istatistikler güncelleniyor...' : '1. yarı istatistikleri henüz mevcut değil.')}
-                    {activePeriod === 'second' && '2. yarı istatistikleri henüz mevcut değil.'}
-                    {activePeriod === 'full' && 'İstatistik verisi bulunamadı.'}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* Show message based on period */}
+                    <div style={{ 
+                        textAlign: 'center', 
+                        padding: '20px', 
+                        color: '#6b7280',
+                        backgroundColor: '#f9fafb',
+                        borderRadius: '8px',
+                        marginBottom: '16px'
+                    }}>
+                        {activePeriod === 'first' && (isFirstHalf 
+                            ? 'Maç devam ediyor, detaylı istatistikler güncelleniyor...' 
+                            : '1. yarı detaylı istatistikleri mevcut değil.'
+                        )}
+                        {activePeriod === 'second' && '2. yarı detaylı istatistikleri mevcut değil. Temel bilgiler gösteriliyor.'}
+                        {activePeriod === 'full' && 'Detaylı istatistik verisi bulunamadı. Temel bilgiler gösteriliyor.'}
+                    </div>
+                    {/* Show basic stats as fallback */}
+                    {basicStats.map((stat, idx) => (
+                        <StatRow key={idx} label={stat.label} home={stat.home} away={stat.away} />
+                    ))}
                 </div>
             )}
         </div>
@@ -774,30 +778,16 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
 // Events Content (Timeline)
 function EventsContent({ data, match }: { data: any; match: Match }) {
     const incidents = data?.incidents || [];
+    const matchStatusId = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
 
-    if (!incidents || incidents.length === 0) {
-        return (
-            <div style={{
-                textAlign: 'center',
-                padding: '40px',
-                color: '#6b7280',
-                backgroundColor: '#f9fafb',
-                borderRadius: '12px'
-            }}>
-                <p style={{ margin: 0, fontWeight: '500' }}>📋 Henüz etkinlik yok</p>
-                <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#9ca3af' }}>
-                    Bu maç için etkinlik verisi henüz oluşmamış olabilir.
-                </p>
-            </div>
-        );
-    }
-
+    // Always render MatchEventsTimeline - it handles empty state with "MAÇ BAŞLADI" marker
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <MatchEventsTimeline
                 incidents={incidents}
                 homeTeamName={match.home_team?.name}
                 awayTeamName={match.away_team?.name}
+                matchStatusId={matchStatusId}
             />
         </div>
     );

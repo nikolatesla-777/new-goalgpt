@@ -135,7 +135,10 @@ function getEventText(incident: Incident, label: string): string {
     }
 }
 
-export function MatchEventsTimeline({ incidents }: MatchEventsTimelineProps) {
+export function MatchEventsTimeline({ incidents, matchStatusId }: MatchEventsTimelineProps) {
+    // Match has started if status_id >= 2 (FIRST_HALF, HALF_TIME, SECOND_HALF, OVERTIME, END, etc.)
+    const matchHasStarted = (matchStatusId ?? 0) >= 2;
+    
     const sortedIncidents = useMemo(() => {
         if (!incidents || !Array.isArray(incidents)) return [];
         return [...incidents]
@@ -161,25 +164,35 @@ export function MatchEventsTimeline({ incidents }: MatchEventsTimelineProps) {
                 border: '1px solid #f1f5f9',
                 boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)'
             }}>
-                <div style={{ fontSize: '48px', marginBottom: '20px' }}>📋</div>
-                <div style={{ color: '#1f2937', fontSize: '16px', fontWeight: 600 }}>Henüz etkinlik yok</div>
-                <div style={{ color: '#9ca3af', fontSize: '13px', marginTop: '8px' }}>Bu maç için etkinlik verisi henüz oluşmamış olabilir.</div>
-                
-                {/* KICK OFF MARKER - Always show when match has started */}
-                <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'center' }}>
-                    <div style={{
-                        backgroundColor: '#1e293b',
-                        color: '#fff',
-                        padding: '8px 24px',
-                        borderRadius: '50px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        letterSpacing: '0.05em',
-                        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
-                    }}>
-                        🏁 BAŞLADI
-                    </div>
-                </div>
+                {matchHasStarted ? (
+                    <>
+                        <div style={{ fontSize: '48px', marginBottom: '20px' }}>⚽</div>
+                        <div style={{ color: '#1f2937', fontSize: '16px', fontWeight: 600 }}>Maç devam ediyor</div>
+                        <div style={{ color: '#9ca3af', fontSize: '13px', marginTop: '8px' }}>Henüz önemli bir olay gerçekleşmedi.</div>
+                        
+                        {/* KICK OFF MARKER */}
+                        <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'center' }}>
+                            <div style={{
+                                backgroundColor: '#22c55e',
+                                color: '#fff',
+                                padding: '10px 28px',
+                                borderRadius: '50px',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                letterSpacing: '0.05em',
+                                boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.3)'
+                            }}>
+                                🏁 MAÇ BAŞLADI
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div style={{ fontSize: '48px', marginBottom: '20px' }}>📋</div>
+                        <div style={{ color: '#1f2937', fontSize: '16px', fontWeight: 600 }}>Henüz etkinlik yok</div>
+                        <div style={{ color: '#9ca3af', fontSize: '13px', marginTop: '8px' }}>Bu maç için etkinlik verisi henüz oluşmamış olabilir.</div>
+                    </>
+                )}
             </div>
         );
     }
