@@ -426,6 +426,17 @@ export function MatchDetailPage() {
 type StatsPeriod = 'full' | 'first' | 'second';
 
 function StatsContent({ data, match }: { data: any; match: Match }) {
+    // Determine match status
+    const matchStatus = (match as any).status ?? (match as any).status_id ?? 1;
+    
+    // Determine which tabs to show based on match status:
+    // - 1 = NOT_STARTED: No tabs (no stats yet)
+    // - 2 = FIRST_HALF: Only TÜMÜ/1.YARI (same data)
+    // - 3 = HALF_TIME: Only TÜMÜ/1.YARI (same data)
+    // - 4+ = SECOND_HALF, OVERTIME, PENALTIES, END: Show all tabs
+    const isFirstHalf = matchStatus === 2 || matchStatus === 3; // 1st half or halftime
+    const isSecondHalfOrLater = matchStatus >= 4; // 2nd half, overtime, penalties, or finished
+    
     const [activePeriod, setActivePeriod] = useState<StatsPeriod>('full');
 
     // Parse half time stats data
@@ -458,31 +469,40 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
         return stats;
     };
 
+    // Get full time stats (used for TÜMÜ and 1.YARI when in first half)
+    const getFullTimeStats = (): any[] => {
+        if (data?.fullTime?.stats && Array.isArray(data.fullTime.stats)) {
+            return data.fullTime.stats;
+        } else if (data?.fullTime?.results) {
+            if (Array.isArray(data.fullTime.results)) {
+                return data.fullTime.results;
+            }
+        } else if (data?.stats && Array.isArray(data.stats)) {
+            return data.stats;
+        } else if (data?.results && Array.isArray(data.results)) {
+            return data.results;
+        }
+        return [];
+    };
+
     // Get stats based on active period
     let rawStats: any[] = [];
     
     if (activePeriod === 'full') {
-        // Full time stats - use existing logic
-        if (data?.fullTime?.stats && Array.isArray(data.fullTime.stats)) {
-            rawStats = data.fullTime.stats;
-        } else if (data?.fullTime?.results) {
-            if (Array.isArray(data.fullTime.results)) {
-                rawStats = data.fullTime.results;
-            } else {
-                rawStats = [];
-            }
-        } else if (data?.stats && Array.isArray(data.stats)) {
-            // Fallback for old format
-            rawStats = data.stats;
-        } else if (data?.results && Array.isArray(data.results)) {
-            // Fallback for old format
-            rawStats = data.results;
-        }
+        // Full time stats
+        rawStats = getFullTimeStats();
     } else if (activePeriod === 'first') {
-        // First half stats (p1)
-        rawStats = parseHalfStats(data?.halfTime, 'p1');
+        // First half stats
+        if (isFirstHalf) {
+            // If match is in 1st half, 1.YARI = TÜMÜ (same data)
+            rawStats = getFullTimeStats();
+        } else {
+            // If match passed 1st half, try to get p1 data from halfTime API
+            const halfStats = parseHalfStats(data?.halfTime, 'p1');
+            rawStats = halfStats.length > 0 ? halfStats : getFullTimeStats();
+        }
     } else if (activePeriod === 'second') {
-        // Second half stats (p2)
+        // Second half stats (p2) - only available after 1st half
         rawStats = parseHalfStats(data?.halfTime, 'p2');
     }
 
@@ -514,7 +534,7 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Period Tabs */}
+            {/* Period Tabs - Only show if match has started */}
             <div style={{ 
                 display: 'flex', 
                 gap: '8px', 
@@ -551,21 +571,24 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
                 >
                     1. YARI
                 </button>
-                <button
-                    onClick={() => setActivePeriod('second')}
-                    style={{
-                        padding: '8px 16px',
-                        border: 'none',
-                        background: activePeriod === 'second' ? '#3b82f6' : 'transparent',
-                        color: activePeriod === 'second' ? 'white' : '#6b7280',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: activePeriod === 'second' ? '600' : '400',
-                        transition: 'all 0.2s',
-                    }}
-                >
-                    2. YARI
-                </button>
+                {/* Only show 2. YARI tab if match has reached 2nd half or later */}
+                {isSecondHalfOrLater && (
+                    <button
+                        onClick={() => setActivePeriod('second')}
+                        style={{
+                            padding: '8px 16px',
+                            border: 'none',
+                            background: activePeriod === 'second' ? '#3b82f6' : 'transparent',
+                            color: activePeriod === 'second' ? 'white' : '#6b7280',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: activePeriod === 'second' ? '600' : '400',
+                            transition: 'all 0.2s',
+                        }}
+                    >
+                        2. YARI
+                    </button>
+                )}
             </div>
 
             {/* Stats List */}
@@ -583,7 +606,7 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
                     backgroundColor: '#f9fafb',
                     borderRadius: '8px'
                 }}>
-                    {activePeriod === 'first' && '1. yarı istatistikleri henüz mevcut değil.'}
+                    {activePeriod === 'first' && (isFirstHalf ? 'Maç devam ediyor, istatistikler güncelleniyor...' : '1. yarı istatistikleri henüz mevcut değil.')}
                     {activePeriod === 'second' && '2. yarı istatistikleri henüz mevcut değil.'}
                     {activePeriod === 'full' && 'İstatistik verisi bulunamadı.'}
                 </div>

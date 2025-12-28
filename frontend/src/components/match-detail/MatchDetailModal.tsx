@@ -305,6 +305,15 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
 
 // Stats Tab Content
 function StatsContent({ data, match, trendData }: { data: any; match?: Match; trendData?: any }) {
+    // Determine match status
+    const matchStatus = match ? ((match as any).status ?? (match as any).status_id ?? 1) : 1;
+    
+    // Determine which tabs to show based on match status:
+    // - 2 = FIRST_HALF, 3 = HALF_TIME: Only TÜMÜ/1.YARI (same data)
+    // - 4+ = SECOND_HALF, OVERTIME, PENALTIES, END: Show all tabs
+    const isFirstHalf = matchStatus === 2 || matchStatus === 3;
+    const isSecondHalfOrLater = matchStatus >= 4;
+    
     const [activePeriod, setActivePeriod] = useState<'full' | 'first' | 'second'>('full');
 
     // Parse half time stats data
@@ -330,16 +339,41 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
         return stats;
     };
 
+    // Get full time stats
+    const getFullTimeStats = (): any[] => {
+        if (data?.fullTime?.stats && Array.isArray(data.fullTime.stats)) {
+            return data.fullTime.stats;
+        } else if (data?.fullTime?.results && Array.isArray(data.fullTime.results)) {
+            return data.fullTime.results;
+        } else if (data?.stats && Array.isArray(data.stats)) {
+            return data.stats;
+        } else if (data?.results && Array.isArray(data.results)) {
+            return data.results;
+        }
+        return [];
+    };
+
     let rawStats: any[] = [];
     if (activePeriod === 'full') {
-        rawStats = data?.fullTime?.results || data?.results || [];
+        rawStats = getFullTimeStats();
     } else if (activePeriod === 'first') {
-        rawStats = parseHalfStats(data?.halfTime, 'p1');
+        // If match is in 1st half, 1.YARI = TÜMÜ (same data)
+        if (isFirstHalf) {
+            rawStats = getFullTimeStats();
+        } else {
+            const halfStats = parseHalfStats(data?.halfTime, 'p1');
+            rawStats = halfStats.length > 0 ? halfStats : getFullTimeStats();
+        }
     } else if (activePeriod === 'second') {
         rawStats = parseHalfStats(data?.halfTime, 'p2');
     }
 
     const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
+
+    // Tabs to show
+    const tabs: Array<'full' | 'first' | 'second'> = isSecondHalfOrLater 
+        ? ['full', 'first', 'second'] 
+        : ['full', 'first'];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -354,7 +388,7 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
             )}
 
             <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px' }}>
-                {(['full', 'first', 'second'] as const).map((p) => (
+                {tabs.map((p) => (
                     <button
                         key={p}
                         onClick={() => setActivePeriod(p)}
@@ -385,7 +419,7 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
                 </div>
             ) : (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-                    {activePeriod === 'first' ? '1. yarı istatistikleri henüz mevcut değil.' :
+                    {activePeriod === 'first' ? (isFirstHalf ? 'Maç devam ediyor, istatistikler güncelleniyor...' : '1. yarı istatistikleri henüz mevcut değil.') :
                         activePeriod === 'second' ? '2. yarı istatistikleri henüz mevcut değil.' :
                             'İstatistik verisi bulunamadı.'}
                 </div>
