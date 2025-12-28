@@ -15,7 +15,6 @@ import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { MatchDetailLiveService } from './matchDetailLive.service';
 import { MatchTeamStatsService } from './matchTeamStats.service';
 import { pool } from '../../../database/connection';
-import { pool } from '../../../database/connection';
 
 // Stat type mapping for human-readable names
 // Based on official TheSports API documentation for detail_live and team_stats
@@ -81,11 +80,18 @@ export interface CombinedStatItem {
     source: 'basic' | 'detailed';
 }
 
+export interface HalfTimeStats {
+    firstHalf: CombinedStatItem[];
+    secondHalf: CombinedStatItem[];
+    fullTime: CombinedStatItem[];
+}
+
 export interface CombinedMatchStats {
     matchId: string;
     basicStats: CombinedStatItem[];
     detailedStats: CombinedStatItem[];
     allStats: CombinedStatItem[];
+    halfTimeStats?: HalfTimeStats;
     incidents: any[];
     score: any[] | null;
     lastUpdated: number;
@@ -419,9 +425,10 @@ export class CombinedStatsService {
 
     /**
      * Save combined match statistics to database (statistics JSONB column)
-     * Stores the full combined stats (basic + detailed) for later retrieval
+     * Stores the full combined stats (basic + detailed + half-time) for later retrieval
+     * CRITICAL: This saves stats permanently so they survive after match ends
      */
-    async saveCombinedStatsToDatabase(matchId: string, stats: CombinedMatchStats): Promise<void> {
+    async saveCombinedStatsToDatabase(matchId: string, stats: CombinedMatchStats, halfTimeStats?: HalfTimeStats): Promise<void> {
         const client = await pool.connect();
         try {
             // Check if statistics column exists
@@ -437,12 +444,21 @@ export class CombinedStatsService {
                 return;
             }
 
-            // Prepare statistics data to save
+            // Get existing statistics first (to preserve half-time data if not provided)
+            const existingResult = await client.query(`
+                SELECT statistics FROM ts_matches WHERE external_id = $1
+            `, [matchId]);
+            
+            const existingStats = existingResult.rows[0]?.statistics || {};
+
+            // Prepare statistics data to save (merge with existing)
             const statisticsData = {
                 match_id: stats.matchId,
                 basic_stats: stats.basicStats,
                 detailed_stats: stats.detailedStats,
                 all_stats: stats.allStats,
+                // Preserve or update half-time stats
+                half_time_stats: halfTimeStats || stats.halfTimeStats || existingStats.half_time_stats || null,
                 incidents: stats.incidents,
                 score: stats.score,
                 last_updated: stats.lastUpdated,
@@ -457,10 +473,47 @@ export class CombinedStatsService {
                 WHERE external_id = $2
             `, [JSON.stringify(statisticsData), matchId]);
 
-            logger.info(`[CombinedStats] Saved combined stats to database for match: ${matchId}`);
+            logger.info(`[CombinedStats] Saved combined stats to database for match: ${matchId} (half-time: ${!!statisticsData.half_time_stats})`);
         } catch (error: any) {
             logger.error(`[CombinedStats] Error saving stats to database for ${matchId}:`, error);
             // Don't throw - this is a background operation
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Save half-time stats separately (called from half-stats endpoint)
+     */
+    async saveHalfTimeStatsToDatabase(matchId: string, halfTimeStats: HalfTimeStats): Promise<void> {
+        const client = await pool.connect();
+        try {
+            // Get existing statistics first
+            const existingResult = await client.query(`
+                SELECT statistics FROM ts_matches WHERE external_id = $1
+            `, [matchId]);
+            
+            const existingStats = existingResult.rows[0]?.statistics || {};
+
+            // Update only half_time_stats field
+            const statisticsData = {
+                ...existingStats,
+                half_time_stats: halfTimeStats,
+                last_updated: Date.now(),
+                saved_at: Date.now(),
+            };
+
+            // Update statistics column
+            await client.query(`
+                UPDATE ts_matches
+                SET statistics = $1::jsonb,
+                    updated_at = NOW()
+                WHERE external_id = $2
+            `, [JSON.stringify(statisticsData), matchId]);
+
+            logger.info(`[CombinedStats] Saved half-time stats to database for match: ${matchId}`);
+        } catch (error: any) {
+            logger.error(`[CombinedStats] Error saving half-time stats to database for ${matchId}:`, error);
         } finally {
             client.release();
         }
@@ -497,6 +550,7 @@ export class CombinedStatsService {
                 basicStats: statsData.basic_stats || [],
                 detailedStats: statsData.detailed_stats || [],
                 allStats: statsData.all_stats,
+                halfTimeStats: statsData.half_time_stats || undefined,
                 incidents: statsData.incidents || [],
                 score: statsData.score || null,
                 lastUpdated: statsData.last_updated || Date.now(),
@@ -504,6 +558,50 @@ export class CombinedStatsService {
         } catch (error: any) {
             logger.error(`[CombinedStats] Error reading stats from database for ${matchId}:`, error);
             return null;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Get half-time stats from database
+     */
+    async getHalfTimeStatsFromDatabase(matchId: string): Promise<HalfTimeStats | null> {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(`
+                SELECT statistics->'half_time_stats' as half_time_stats
+                FROM ts_matches
+                WHERE external_id = $1
+                  AND statistics->'half_time_stats' IS NOT NULL
+            `, [matchId]);
+
+            if (result.rows.length === 0 || !result.rows[0].half_time_stats) {
+                return null;
+            }
+
+            return result.rows[0].half_time_stats;
+        } catch (error: any) {
+            logger.error(`[CombinedStats] Error reading half-time stats from database for ${matchId}:`, error);
+            return null;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Check if match is finished (status_id = 8)
+     */
+    async isMatchFinished(matchId: string): Promise<boolean> {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(`
+                SELECT status_id FROM ts_matches WHERE external_id = $1
+            `, [matchId]);
+            
+            return result.rows[0]?.status_id === 8;
+        } catch (error: any) {
+            return false;
         } finally {
             client.release();
         }
