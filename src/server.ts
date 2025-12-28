@@ -14,6 +14,7 @@ import { logEvent } from './utils/obsLogger';
 import matchRoutes from './routes/match.routes';
 import seasonRoutes from './routes/season.routes';
 import healthRoutes from './routes/health.routes';
+import { predictionRoutes } from './routes/prediction.routes';
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
 import { config } from './config';
@@ -173,6 +174,7 @@ fastify.get('/', async (request, reply) => {
 fastify.register(matchRoutes, { prefix: '/api/matches' });
 fastify.register(seasonRoutes, { prefix: '/api/seasons' });
 fastify.register(healthRoutes); // Health and readiness endpoints
+fastify.register(predictionRoutes); // AI Prediction ingestion (VPS backend)
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

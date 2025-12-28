@@ -7,12 +7,12 @@
 import { pool } from '../connection';
 
 export async function up(): Promise<void> {
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-        // 1. ai_predictions - Raw incoming predictions from external AI
-        await client.query(`
+    // 1. ai_predictions - Raw incoming predictions from external AI
+    await client.query(`
       CREATE TABLE IF NOT EXISTS ai_predictions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         external_id VARCHAR(100),
@@ -31,19 +31,19 @@ export async function up(): Promise<void> {
       );
     `);
 
-        // Indexes for ai_predictions
-        await client.query(`
+    // Indexes for ai_predictions
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ai_predictions_external_id ON ai_predictions(external_id);
     `);
-        await client.query(`
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ai_predictions_processed ON ai_predictions(processed);
     `);
-        await client.query(`
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ai_predictions_created_at ON ai_predictions(created_at DESC);
     `);
 
-        // 2. ai_prediction_matches - Links predictions to ts_matches
-        await client.query(`
+    // 2. ai_prediction_matches - Links predictions to ts_matches
+    await client.query(`
       CREATE TABLE IF NOT EXISTS ai_prediction_matches (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         prediction_id UUID NOT NULL REFERENCES ai_predictions(id) ON DELETE CASCADE,
@@ -66,55 +66,87 @@ export async function up(): Promise<void> {
       );
     `);
 
-        // Indexes for ai_prediction_matches
-        await client.query(`
+    // Indexes for ai_prediction_matches
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ai_prediction_matches_prediction_id ON ai_prediction_matches(prediction_id);
     `);
-        await client.query(`
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ai_prediction_matches_match_external_id ON ai_prediction_matches(match_external_id);
     `);
-        await client.query(`
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ai_prediction_matches_status ON ai_prediction_matches(match_status);
     `);
-        await client.query(`
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ai_prediction_matches_result ON ai_prediction_matches(prediction_result);
     `);
 
-        await client.query('COMMIT');
-        console.log('✅ AI Predictions tables created successfully');
-    } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-    } finally {
-        client.release();
-    }
+    // 3. ai_prediction_requests - Log ALL incoming requests for debugging
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_prediction_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        request_id VARCHAR(100),
+        source_ip VARCHAR(50),
+        user_agent TEXT,
+        http_method VARCHAR(10) DEFAULT 'POST',
+        endpoint VARCHAR(255),
+        request_headers JSONB,
+        request_body TEXT,
+        response_status INTEGER,
+        response_body TEXT,
+        success BOOLEAN DEFAULT false,
+        error_message TEXT,
+        processing_time_ms INTEGER,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    // Indexes for ai_prediction_requests
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_prediction_requests_created_at ON ai_prediction_requests(created_at DESC);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_prediction_requests_success ON ai_prediction_requests(success);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_prediction_requests_source_ip ON ai_prediction_requests(source_ip);
+    `);
+
+    await client.query('COMMIT');
+    console.log('✅ AI Predictions tables created successfully');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function down(): Promise<void> {
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-        await client.query('DROP TABLE IF EXISTS ai_prediction_matches CASCADE');
-        await client.query('DROP TABLE IF EXISTS ai_predictions CASCADE');
-        await client.query('COMMIT');
-        console.log('✅ AI Predictions tables dropped successfully');
-    } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-    } finally {
-        client.release();
-    }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DROP TABLE IF EXISTS ai_prediction_requests CASCADE');
+    await client.query('DROP TABLE IF EXISTS ai_prediction_matches CASCADE');
+    await client.query('DROP TABLE IF EXISTS ai_predictions CASCADE');
+    await client.query('COMMIT');
+    console.log('✅ AI Predictions tables dropped successfully');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // CLI runner
 if (require.main === module) {
-    const action = process.argv[2];
-    if (action === 'up') {
-        up().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
-    } else if (action === 'down') {
-        down().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
-    } else {
-        console.log('Usage: npx tsx create-ai-predictions-tables.ts [up|down]');
-        process.exit(1);
-    }
+  const action = process.argv[2];
+  if (action === 'up') {
+    up().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
+  } else if (action === 'down') {
+    down().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
+  } else {
+    console.log('Usage: npx tsx create-ai-predictions-tables.ts [up|down]');
+    process.exit(1);
+  }
 }

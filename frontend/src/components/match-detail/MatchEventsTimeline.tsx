@@ -45,6 +45,7 @@ interface Incident {
     away_score?: number;
     var_reason?: number;
     reason_type?: number;
+    add_time?: number; // Injury time duration (e.g., +2 minutes)
 }
 
 interface MatchEventsTimelineProps {
@@ -74,7 +75,9 @@ function getEventStyle(incident: Incident) {
         case EVENT_TYPES.START:
             return { icon: '🏁', color: '#22c55e', label: 'MAÇ BAŞLADI' };
         case EVENT_TYPES.MIDFIELD:
-            return { icon: '▶️', color: '#22c55e', label: '2. YARI BAŞLADI' };
+            // Type 11 is center kickoff - could be 2nd half start OR restart after goal
+            // We'll skip showing this as a separate event since it's confusing
+            return { icon: '▶️', color: '#22c55e', label: 'DEVAM', hidden: true };
         case EVENT_TYPES.END:
             return { icon: '🏁', color: '#6b7280', label: 'MAÇ BİTTİ' };
         case EVENT_TYPES.HALFTIME_SCORE:
@@ -110,14 +113,13 @@ function getEventText(incident: Incident, label: string): string {
             return incident.in_player_name || 'Giren Oyuncu';
         case EVENT_TYPES.START:
             return 'Maç Başladı';
-        case EVENT_TYPES.MIDFIELD:
-            return '2. Yarı Başladı';
+        // MIDFIELD (type 11) is filtered out, no need to handle
         case EVENT_TYPES.END:
             return 'Maç Bitti';
         case EVENT_TYPES.HALFTIME_SCORE:
             return `Devre Skoru: ${incident.home_score ?? 0} - ${incident.away_score ?? 0}`;
         case EVENT_TYPES.INJURY_TIME:
-            return 'Uzatma Süresi Verildi';
+            return incident.add_time ? `+${incident.add_time} Dakika Uzatma` : 'Uzatma Süresi Verildi';
         case EVENT_TYPES.OVERTIME_OVER:
             return 'Uzatma Devresi Bitti';
         case EVENT_TYPES.PENALTY_KICK_ENDED:
@@ -136,7 +138,14 @@ export function MatchEventsTimeline({ incidents }: MatchEventsTimelineProps) {
     const sortedIncidents = useMemo(() => {
         if (!incidents || !Array.isArray(incidents)) return [];
         return [...incidents]
-            .filter(inc => inc && typeof inc.time === 'number')
+            .filter(inc => {
+                if (!inc || typeof inc.time !== 'number') return false;
+                // Filter out MIDFIELD (type 11) events - they're confusing (could be 2nd half start OR restart after goal)
+                if (inc.type === EVENT_TYPES.MIDFIELD) return false;
+                // Filter out START (type 10) events - we show "BAŞLADI" marker at the bottom
+                if (inc.type === EVENT_TYPES.START) return false;
+                return true;
+            })
             .sort((a, b) => b.time - a.time);
     }, [incidents]);
 
