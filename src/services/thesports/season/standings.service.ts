@@ -72,14 +72,14 @@ export class SeasonStandingsService {
         if (standings.length > 0) {
             standings = await this.enrichWithTeamNames(standings);
             
-            const response: SeasonStandingsResponse = { code: 0, results: standings };
+            const response: any = { code: 0, results: standings };
             await cacheService.set(cacheKey, response, CacheTTL.FiveMinutes);
             return response;
         }
 
         // No data available
         logger.warn(`No standings data found for season: ${season_id}`);
-        return { code: 0, results: [] };
+        return { code: 0, results: [] } as any;
     }
 
     /**

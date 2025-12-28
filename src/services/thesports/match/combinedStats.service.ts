@@ -606,4 +606,90 @@ export class CombinedStatsService {
             client.release();
         }
     }
+
+    /**
+     * Save first half stats to database (called when match reaches HALF_TIME status)
+     * This is the snapshot of stats at halftime - used to calculate 2nd half stats
+     */
+    async saveFirstHalfStats(matchId: string, stats: CombinedStatItem[]): Promise<void> {
+        const client = await pool.connect();
+        try {
+            await client.query(`
+                UPDATE ts_matches
+                SET first_half_stats = $1::jsonb,
+                    updated_at = NOW()
+                WHERE external_id = $2
+            `, [JSON.stringify(stats), matchId]);
+
+            logger.info(`[CombinedStats] ✅ Saved first half stats for match: ${matchId} (${stats.length} stats)`);
+        } catch (error: any) {
+            logger.error(`[CombinedStats] Error saving first half stats for ${matchId}:`, error);
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Get first half stats from database
+     */
+    async getFirstHalfStats(matchId: string): Promise<CombinedStatItem[] | null> {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(`
+                SELECT first_half_stats
+                FROM ts_matches
+                WHERE external_id = $1
+                  AND first_half_stats IS NOT NULL
+            `, [matchId]);
+
+            if (result.rows.length === 0 || !result.rows[0].first_half_stats) {
+                return null;
+            }
+
+            return result.rows[0].first_half_stats;
+        } catch (error: any) {
+            logger.error(`[CombinedStats] Error reading first half stats for ${matchId}:`, error);
+            return null;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Check if first half stats already saved
+     */
+    async hasFirstHalfStats(matchId: string): Promise<boolean> {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(`
+                SELECT first_half_stats IS NOT NULL as has_stats
+                FROM ts_matches
+                WHERE external_id = $1
+            `, [matchId]);
+
+            return result.rows[0]?.has_stats === true;
+        } catch (error: any) {
+            return false;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Get match status from database
+     */
+    async getMatchStatus(matchId: string): Promise<number | null> {
+        const client = await pool.connect();
+        try {
+            const result = await client.query(`
+                SELECT status_id FROM ts_matches WHERE external_id = $1
+            `, [matchId]);
+            
+            return result.rows[0]?.status_id ?? null;
+        } catch (error: any) {
+            return null;
+        } finally {
+            client.release();
+        }
+    }
 }

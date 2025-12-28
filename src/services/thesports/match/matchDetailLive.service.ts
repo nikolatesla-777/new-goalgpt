@@ -664,6 +664,14 @@ export class MatchDetailLiveService {
           `[DetailLive] CRITICAL TRANSITION detected for ${match_id}: ${existingStatusId} → ${live.statusId}. ` +
           `Allowing update despite timestamp check.`
         );
+        
+        // CRITICAL: Save first half stats when transitioning to HALF_TIME
+        if (existingStatusId === 2 && live.statusId === 3) {
+          logger.info(`[DetailLive] ⚽ HALF_TIME TRANSITION! Saving first half stats for ${match_id}`);
+          this.saveFirstHalfStatsOnHalftime(match_id).catch(err => {
+            logger.error(`[DetailLive] Failed to save first half stats for ${match_id}:`, err);
+          });
+        }
       }
 
       // Calculate provider_update_time to write (max of existing and incoming)
@@ -942,6 +950,37 @@ export class MatchDetailLiveService {
       };
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Save first half stats when match transitions to HALF_TIME
+   * This is called automatically by the DataUpdateWorker when a match reaches halftime
+   */
+  private async saveFirstHalfStatsOnHalftime(matchId: string): Promise<void> {
+    try {
+      // Import CombinedStatsService dynamically to avoid circular dependency
+      const { CombinedStatsService } = await import('./combinedStats.service');
+      const combinedStatsService = new CombinedStatsService(this.client);
+      
+      // Check if first_half_stats already exists
+      const hasStats = await combinedStatsService.hasFirstHalfStats(matchId);
+      if (hasStats) {
+        logger.debug(`[DetailLive] First half stats already saved for ${matchId}, skipping`);
+        return;
+      }
+      
+      // Fetch current stats from API
+      const result = await combinedStatsService.getCombinedMatchStats(matchId);
+      
+      if (result && result.allStats && result.allStats.length > 0) {
+        await combinedStatsService.saveFirstHalfStats(matchId, result.allStats);
+        logger.info(`[DetailLive] ✅ Saved first half stats for ${matchId} (${result.allStats.length} stats)`);
+      } else {
+        logger.warn(`[DetailLive] No stats available to save for ${matchId} at halftime`);
+      }
+    } catch (error: any) {
+      logger.error(`[DetailLive] Error saving first half stats for ${matchId}:`, error);
     }
   }
 }

@@ -429,7 +429,7 @@ export const getMatchDetailLive = async (
 
     // Save incidents to database (merge with existing stats)
     if (result?.results && Array.isArray(result.results)) {
-      const matchData = result.results.find((r: any) => r.id === match_id) || result.results[0];
+      const matchData: any = result.results.find((r: any) => r.id === match_id) || result.results[0];
       if (matchData?.incidents?.length > 0) {
         // Get existing stats and merge with incidents
         const existingStats = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
@@ -1039,6 +1039,7 @@ export const getMatchLiveStats = async (
     // For FINISHED matches, ALWAYS use database (API doesn't return data after match ends)
     if (isFinished) {
       const dbResult = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
+      const firstHalfStats = await combinedStatsService.getFirstHalfStats(match_id);
       
       if (dbResult && dbResult.allStats.length > 0) {
         logger.debug(`[MatchController] Match finished, returning stats from DB for ${match_id}`);
@@ -1046,18 +1047,21 @@ export const getMatchLiveStats = async (
           success: true,
           data: {
             match_id: dbResult.matchId,
+            match_status: 8, // FINISHED
             stats: dbResult.allStats,
             fullTime: {
               stats: dbResult.allStats,
               results: dbResult.allStats,
             },
+            firstHalfStats: firstHalfStats || null,
             halfTime: dbResult.halfTimeStats || null,
             incidents: dbResult.incidents,
             score: dbResult.score,
             sources: {
               basic: dbResult.basicStats.length,
               detailed: dbResult.detailedStats.length,
-              from: 'database (match finished)'
+              from: 'database (match finished)',
+              hasFirstHalfSnapshot: !!firstHalfStats,
             },
           },
         });
@@ -1068,51 +1072,25 @@ export const getMatchLiveStats = async (
       logger.warn(`[MatchController] Match finished but no DB data, trying API for ${match_id}`);
     }
 
-    // For LIVE matches: Try DB first, then API
-    let result = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
+    // Get match status to detect HALF_TIME or 2nd half
+    const matchStatus = await combinedStatsService.getMatchStatus(match_id);
+    const isHalfTime = matchStatus === 3; // HALF_TIME
+    const isSecondHalf = matchStatus === 4 || matchStatus === 5 || matchStatus === 7; // 2nd half, overtime, penalties
     
-    if (result && result.allStats.length > 0 && !isFinished) {
-      // Found in DB for live match - but still refresh from API periodically
-      // Return DB data and refresh in background
-      logger.debug(`[MatchController] Returning stats from DB for live match ${match_id}`);
-      
-      // Background refresh from API
-      combinedStatsService.getCombinedMatchStats(match_id).then(apiResult => {
-        if (apiResult && apiResult.allStats.length > 0) {
-          combinedStatsService.saveCombinedStatsToDatabase(match_id, apiResult).catch(err => {
-            logger.error(`[MatchController] Background save failed for ${match_id}:`, err);
-          });
-        }
-      }).catch(err => {
-        logger.warn(`[MatchController] Background refresh failed for ${match_id}:`, err);
-      });
-      
-      reply.send({
-        success: true,
-        data: {
-          match_id: result.matchId,
-          stats: result.allStats,
-          fullTime: {
-            stats: result.allStats,
-            results: result.allStats,
-          },
-          halfTime: result.halfTimeStats || null,
-          incidents: result.incidents,
-          score: result.score,
-          sources: {
-            basic: result.basicStats.length,
-            detailed: result.detailedStats.length,
-            from: 'database'
-          },
-        },
-      });
-      return;
+    // Get first_half_stats from database (if exists)
+    let firstHalfStats = await combinedStatsService.getFirstHalfStats(match_id);
+    
+    // For LIVE matches: Always fetch fresh data from API
+    logger.info(`[MatchController] Fetching stats from API for ${match_id} (status: ${matchStatus})`);
+    let result = await combinedStatsService.getCombinedMatchStats(match_id);
+
+    // CRITICAL: Save first half stats when match reaches HALF_TIME
+    if (isHalfTime && result && result.allStats.length > 0 && !firstHalfStats) {
+      logger.info(`[MatchController] ⚽ HALF_TIME detected! Saving first half stats for ${match_id}`);
+      await combinedStatsService.saveFirstHalfStats(match_id, result.allStats);
+      firstHalfStats = result.allStats;
     }
-
-    // Fetch from API
-    logger.info(`[MatchController] Fetching stats from API for ${match_id}`);
-    result = await combinedStatsService.getCombinedMatchStats(match_id);
-
+    
     // Save to database (CRITICAL for persistence after match ends)
     if (result && result.allStats.length > 0) {
       combinedStatsService.saveCombinedStatsToDatabase(match_id, result).catch((err) => {
@@ -1120,22 +1098,27 @@ export const getMatchLiveStats = async (
       });
     }
 
+    // Build response with first_half_stats for 2nd half calculation on frontend
     reply.send({
       success: true,
       data: {
         match_id: result.matchId,
+        match_status: matchStatus,
         stats: result.allStats,
         fullTime: {
           stats: result.allStats,
           results: result.allStats,
         },
+        // CRITICAL: first_half_stats for frontend to calculate 2nd half
+        firstHalfStats: firstHalfStats || null,
         halfTime: result.halfTimeStats || null,
         incidents: result.incidents,
         score: result.score,
         sources: {
           basic: result.basicStats.length,
           detailed: result.detailedStats.length,
-          from: 'api'
+          from: 'api',
+          hasFirstHalfSnapshot: !!firstHalfStats,
         },
       },
     });

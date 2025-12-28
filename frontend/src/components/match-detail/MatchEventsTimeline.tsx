@@ -55,7 +55,7 @@ interface MatchEventsTimelineProps {
     matchStatusId?: number; // 1=NOT_STARTED, 2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5+=OVERTIME/END
 }
 
-function getEventStyle(incident: Incident) {
+function getEventStyle(incident: Incident, matchStatusId?: number) {
     const type = incident.type;
     switch (type) {
         case EVENT_TYPES.GOAL:
@@ -76,7 +76,12 @@ function getEventStyle(incident: Incident) {
         case EVENT_TYPES.START:
             return { icon: '🏁', color: '#22c55e', label: 'MAÇ BAŞLADI' };
         case EVENT_TYPES.MIDFIELD:
-            // Type 11 at 45-47' = 2nd half start (shown), other times = restart after goal (filtered out)
+            // Type 11 at 45-47' = halftime/2nd half marker
+            // If match is at HALF_TIME (status=3), show "İLK YARI BİTTİ"
+            // If match is at SECOND_HALF or later (status>=4), show "2. YARI BAŞLADI"
+            if (matchStatusId === 3) {
+                return { icon: '⏸️', color: '#f59e0b', label: 'İLK YARI BİTTİ' };
+            }
             return { icon: '▶️', color: '#22c55e', label: '2. YARI BAŞLADI' };
         case EVENT_TYPES.END:
             return { icon: '🏁', color: '#6b7280', label: 'MAÇ BİTTİ' };
@@ -107,13 +112,18 @@ function getEventStyle(incident: Incident) {
     }
 }
 
-function getEventText(incident: Incident, label: string): string {
+function getEventText(incident: Incident, label: string, matchStatusId?: number): string {
     switch (incident.type) {
         case EVENT_TYPES.SUBSTITUTION:
             return incident.in_player_name || 'Giren Oyuncu';
         case EVENT_TYPES.START:
             return 'Maç Başladı';
         case EVENT_TYPES.MIDFIELD:
+            // If match is at HALF_TIME (status=3), show "İlk Yarı Bitti"
+            // If match is at SECOND_HALF or later (status>=4), show "2. Yarı Başladı"
+            if (matchStatusId === 3) {
+                return 'İlk Yarı Bitti';
+            }
             return '2. Yarı Başladı';
         case EVENT_TYPES.END:
             return 'Maç Bitti';
@@ -227,7 +237,7 @@ export function MatchEventsTimeline({ incidents, matchStatusId }: MatchEventsTim
             {/* EVENT ROWS */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '48px', position: 'relative', zIndex: 2 }}>
                 {sortedIncidents.map((incident, idx) => (
-                    <EventTimelineRow key={idx} incident={incident} />
+                    <EventTimelineRow key={idx} incident={incident} matchStatusId={matchStatusId} />
                 ))}
             </div>
 
@@ -250,10 +260,10 @@ export function MatchEventsTimeline({ incidents, matchStatusId }: MatchEventsTim
     );
 }
 
-function EventTimelineRow({ incident }: { incident: Incident }) {
+function EventTimelineRow({ incident, matchStatusId }: { incident: Incident; matchStatusId?: number }) {
     const isHome = incident.position === 1;
     const isNeutral = incident.position === 0;
-    const { icon, color, label } = getEventStyle(incident);
+    const { icon, color, label } = getEventStyle(incident, matchStatusId);
     const showScore = incident.type === EVENT_TYPES.GOAL || incident.type === EVENT_TYPES.OWN_GOAL || incident.type === EVENT_TYPES.PENALTY;
 
     return (
@@ -287,7 +297,7 @@ function EventTimelineRow({ incident }: { incident: Incident }) {
                     fontWeight: 700,
                     color: '#1e293b'
                 }}>
-                    {getEventText(incident, label)}
+                    {getEventText(incident, label, matchStatusId)}
                 </div>
 
                 {incident.type === EVENT_TYPES.SUBSTITUTION ? (

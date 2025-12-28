@@ -823,3 +823,380 @@
   transform: translateY(-2px);
   box-shadow: var(--admin-shadow-lg);
 }
+
+/* ================================
+   Drill-Down Feature Styles
+   ================================ */
+
+/* Clickable Card */
+.admin-stat-card.clickable {
+  cursor: pointer;
+}
+
+.admin-stat-card.selected {
+  border: 2px solid var(--admin-accent);
+  background-color: var(--admin-accent-light);
+}
+
+/* iOS/Android Breakdown */
+.admin-stat-breakdown {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--admin-text-secondary);
+}
+
+.admin-stat-breakdown .ios-value {
+  color: #3B82F6;
+}
+
+.admin-stat-breakdown .android-value {
+  color: #10B981;
+}
+
+/* Back Button */
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.back-button:hover {
+  background-color: var(--admin-bg-hover);
+  color: var(--admin-text-primary);
+}
+
+.admin-header-left {
+  display: flex;
+  align-items: center;
+}
+
+/* Horizontal Scroll Cards Container */
+.admin-cards-scroll-container {
+  padding: 16px 24px;
+  background-color: var(--admin-bg-card);
+  border-bottom: 1px solid var(--admin-border);
+  overflow: hidden;
+}
+
+.admin-cards-scroll {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+}
+
+.admin-cards-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.admin-cards-scroll::-webkit-scrollbar-track {
+  background: var(--admin-border-light);
+  border-radius: 3px;
+}
+
+.admin-cards-scroll::-webkit-scrollbar-thumb {
+  background: var(--admin-border);
+  border-radius: 3px;
+}
+
+.admin-cards-scroll .admin-stat-card {
+  flex: 0 0 auto;
+  min-width: 160px;
+}
+
+/* Trend Chart Container */
+.dashboard-chart-container {
+  background-color: var(--admin-bg-card);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-lg);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.dashboard-chart-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--admin-text-primary);
+  margin: 0 0 8px 0;
+}
+
+.dashboard-chart-legend {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--admin-text-secondary);
+}
+
+.legend-item.total {
+  color: #9CA3AF;
+}
+
+.legend-item.ios {
+  color: #3B82F6;
+}
+
+.legend-item.android {
+  color: #10B981;
+}
+
+/* Detail Table Container */
+.dashboard-table-container {
+  background-color: var(--admin-bg-card);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-lg);
+  overflow: hidden;
+}
+
+.dashboard-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.dashboard-table-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--admin-text-primary);
+  margin: 0;
+}
+
+.dashboard-table-desc {
+  font-size: 13px;
+  color: var(--admin-text-secondary);
+  margin: 4px 0 0 0;
+}
+
+.dashboard-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.excel-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background-color: var(--admin-accent);
+  color: white;
+  border: none;
+  border-radius: var(--admin-radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.excel-export-btn:hover {
+  background-color: #0d9488;
+}
+
+.record-count {
+  padding: 6px 12px;
+  background-color: var(--admin-bg-hover);
+  border-radius: var(--admin-radius-pill);
+  font-size: 13px;
+  color: var(--admin-text-secondary);
+}
+
+.dashboard-table-scroll {
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.dashboard-table th {
+  text-align: left;
+  padding: 12px 16px;
+  background-color: var(--admin-bg-hover);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--admin-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.dashboard-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--admin-border-light);
+  color: var(--admin-text-primary);
+  white-space: nowrap;
+}
+
+.dashboard-table tr:hover td {
+  background-color: var(--admin-bg-hover);
+}
+
+.dashboard-table .empty-cell {
+  text-align: center;
+  color: var(--admin-text-muted);
+  padding: 48px 16px;
+}
+
+/* User Cell */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--admin-accent) 0%, #0d9488 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  font-weight: 500;
+  color: var(--admin-text-primary);
+}
+
+.user-email {
+  font-size: 12px;
+  color: var(--admin-text-muted);
+}
+
+/* Platform Badge */
+.platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--admin-radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.platform-badge.ios {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+}
+
+.platform-badge.android {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+}
+
+.platform-badge.web {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #8B5CF6;
+}
+
+/* Plan Badge */
+.plan-badge {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: var(--admin-radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--admin-bg-hover);
+  color: var(--admin-text-secondary);
+}
+
+.plan-badge.weekly {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #F59E0B;
+}
+
+.plan-badge.monthly {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+}
+
+.plan-badge.yearly {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #8B5CF6;
+}
+
+/* Amount Cell */
+.amount-cell {
+  font-weight: 600;
+  color: var(--admin-success);
+}
+
+/* WhatsApp Button */
+.whatsapp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: #25D366;
+  color: white;
+  border: none;
+  border-radius: var(--admin-radius-md);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.whatsapp-btn:hover {
+  background-color: #1da851;
+}
+
+/* Action Button */
+.action-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-md);
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  background-color: var(--admin-bg-hover);
+  color: var(--admin-text-primary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dashboard-table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .dashboard-table-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

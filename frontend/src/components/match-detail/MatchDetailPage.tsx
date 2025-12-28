@@ -485,25 +485,76 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
         return [];
     };
 
+    // Get first half stats snapshot from database (saved at halftime)
+    const firstHalfStatsSnapshot = data?.firstHalfStats || null;
+    const hasFirstHalfSnapshot = !!firstHalfStatsSnapshot && Array.isArray(firstHalfStatsSnapshot) && firstHalfStatsSnapshot.length > 0;
+    
+    // Calculate second half stats by subtracting first half from total
+    const calculateSecondHalfStats = (): any[] => {
+        if (!hasFirstHalfSnapshot) return [];
+        
+        const fullStats = getFullTimeStats();
+        if (fullStats.length === 0) return [];
+        
+        const secondHalfStats: any[] = [];
+        
+        for (const fullStat of fullStats) {
+            // Find matching first half stat
+            const firstHalfStat = firstHalfStatsSnapshot.find((s: any) => s.type === fullStat.type);
+            
+            if (firstHalfStat) {
+                // Calculate 2nd half = Total - 1st half
+                const homeSecondHalf = (fullStat.home ?? 0) - (firstHalfStat.home ?? 0);
+                const awaySecondHalf = (fullStat.away ?? 0) - (firstHalfStat.away ?? 0);
+                
+                secondHalfStats.push({
+                    ...fullStat,
+                    home: Math.max(0, homeSecondHalf), // Ensure non-negative
+                    away: Math.max(0, awaySecondHalf),
+                });
+            } else {
+                // No first half data for this stat - assume all in second half
+                secondHalfStats.push(fullStat);
+            }
+        }
+        
+        return secondHalfStats;
+    };
+
     // Get stats based on active period
     let rawStats: any[] = [];
     
     if (activePeriod === 'full') {
-        // Full time stats
+        // TÜMÜ: Current total stats from API
         rawStats = getFullTimeStats();
     } else if (activePeriod === 'first') {
-        // First half stats
+        // 1. YARI: 
+        // - If in 1st half: Same as TÜMÜ (live data)
+        // - If in 2nd half or later: Use firstHalfStatsSnapshot (saved at halftime)
         if (isFirstHalf) {
-            // If match is in 1st half, 1.YARI = TÜMÜ (same data)
             rawStats = getFullTimeStats();
+        } else if (hasFirstHalfSnapshot) {
+            rawStats = firstHalfStatsSnapshot;
         } else {
-            // If match passed 1st half, try to get p1 data from halfTime API
+            // Fallback: Try halfTime API data, then use total stats
             const halfStats = parseHalfStats(data?.halfTime, 'p1');
             rawStats = halfStats.length > 0 ? halfStats : getFullTimeStats();
         }
     } else if (activePeriod === 'second') {
-        // Second half stats (p2) - only available after 1st half
-        rawStats = parseHalfStats(data?.halfTime, 'p2');
+        // 2. YARI: Calculate as TÜMÜ - 1. YARI
+        if (hasFirstHalfSnapshot) {
+            rawStats = calculateSecondHalfStats();
+        } else {
+            // Fallback 1: Try halfTime API data
+            const halfStats = parseHalfStats(data?.halfTime, 'p2');
+            if (halfStats.length > 0) {
+                rawStats = halfStats;
+            } else {
+                // Fallback 2: If in 2nd half but no 1st half snapshot, show current total (live data)
+                // This is better than showing nothing - user can still see live stats
+                rawStats = getFullTimeStats();
+            }
+        }
     }
 
     // Sort and filter unknown stats
