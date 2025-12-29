@@ -11,32 +11,52 @@ export interface DashboardStats {
   financial: {
     totalRevenue: number;
     revenueChange: number;
+    revenueIos: number;
+    revenueAndroid: number;
     activeSubscribers: number;
     subscribersChange: number;
+    subscribersIos: number;
+    subscribersAndroid: number;
     salesCount: number;
     salesChange: number;
+    salesIos: number;
+    salesAndroid: number;
     billingErrors: number;
     errorsChange: number;
+    errorsIos: number;
+    errorsAndroid: number;
   };
   // Edinim & Büyüme
   acquisition: {
     newSignups: number;
     signupsChange: number;
+    signupsIos: number;
+    signupsAndroid: number;
     trials: number;
     trialsChange: number;
+    trialsIos: number;
+    trialsAndroid: number;
     firstPurchase: number;
     firstPurchaseChange: number;
+    firstPurchaseIos: number;
+    firstPurchaseAndroid: number;
     conversionRate: number;
     conversionChange: number;
+    conversionIos: number;
+    conversionAndroid: number;
   };
   // Tutundurma & Kayıp
   retention: {
     cancellations: number;
     cancellationsChange: number;
+    cancellationsIos: number;
+    cancellationsAndroid: number;
     churnRate: number;
     churnChange: number;
     totalMembers: number;
     membersChange: number;
+    membersIos: number;
+    membersAndroid: number;
   };
 }
 
@@ -83,67 +103,101 @@ export async function getDashboardStats(period: PeriodFilter = 'month'): Promise
   const { periodStart, previous } = getPeriodDates(period);
 
   try {
-    // Financial Stats
+    // Financial Stats - Revenue with platform breakdown
     const revenueQuery = `
       SELECT 
         COALESCE(SUM(CASE WHEN created_at >= $1 THEN amount ELSE 0 END), 0) as current_revenue,
-        COALESCE(SUM(CASE WHEN created_at >= $2 AND created_at < $1 THEN amount ELSE 0 END), 0) as previous_revenue
+        COALESCE(SUM(CASE WHEN created_at >= $2 AND created_at < $1 THEN amount ELSE 0 END), 0) as previous_revenue,
+        COALESCE(SUM(CASE WHEN created_at >= $1 AND platform = 'ios' THEN amount ELSE 0 END), 0) as revenue_ios,
+        COALESCE(SUM(CASE WHEN created_at >= $1 AND platform = 'android' THEN amount ELSE 0 END), 0) as revenue_android
       FROM customer_subscriptions
       WHERE status NOT IN ('canceled', 'expired')
     `;
     const revenueResult = await pool.query(revenueQuery, [periodStart, previous]);
     const currentRevenue = parseFloat(revenueResult.rows[0]?.current_revenue || 0);
     const previousRevenue = parseFloat(revenueResult.rows[0]?.previous_revenue || 0);
+    const revenueIos = parseFloat(revenueResult.rows[0]?.revenue_ios || 0);
+    const revenueAndroid = parseFloat(revenueResult.rows[0]?.revenue_android || 0);
 
+    // Active Subscribers with platform breakdown
     const subscribersQuery = `
       SELECT 
         COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
+        COUNT(CASE WHEN status = 'active' AND platform = 'ios' THEN 1 END) as active_ios,
+        COUNT(CASE WHEN status = 'active' AND platform = 'android' THEN 1 END) as active_android,
         COUNT(CASE WHEN status = 'active' AND created_at >= $1 THEN 1 END) as new_active
       FROM customer_subscriptions
     `;
     const subscribersResult = await pool.query(subscribersQuery, [periodStart]);
     const activeSubscribers = parseInt(subscribersResult.rows[0]?.active_count || 0);
+    const subscribersIos = parseInt(subscribersResult.rows[0]?.active_ios || 0);
+    const subscribersAndroid = parseInt(subscribersResult.rows[0]?.active_android || 0);
 
+    // Sales with platform breakdown
     const salesQuery = `
       SELECT 
         COUNT(CASE WHEN created_at >= $1 THEN 1 END) as current_sales,
-        COUNT(CASE WHEN created_at >= $2 AND created_at < $1 THEN 1 END) as previous_sales
+        COUNT(CASE WHEN created_at >= $2 AND created_at < $1 THEN 1 END) as previous_sales,
+        COUNT(CASE WHEN created_at >= $1 AND platform = 'ios' THEN 1 END) as sales_ios,
+        COUNT(CASE WHEN created_at >= $1 AND platform = 'android' THEN 1 END) as sales_android
       FROM customer_subscriptions
     `;
     const salesResult = await pool.query(salesQuery, [periodStart, previous]);
     const currentSales = parseInt(salesResult.rows[0]?.current_sales || 0);
     const previousSales = parseInt(salesResult.rows[0]?.previous_sales || 0);
+    const salesIos = parseInt(salesResult.rows[0]?.sales_ios || 0);
+    const salesAndroid = parseInt(salesResult.rows[0]?.sales_android || 0);
 
+    // Billing errors with platform breakdown
     const errorsQuery = `
-      SELECT COUNT(*) as error_count
+      SELECT 
+        COUNT(*) as error_count,
+        COUNT(CASE WHEN platform = 'ios' THEN 1 END) as errors_ios,
+        COUNT(CASE WHEN platform = 'android' THEN 1 END) as errors_android
       FROM customer_subscriptions
       WHERE status = 'billing_error' OR status = 'past_due'
     `;
     const errorsResult = await pool.query(errorsQuery);
     const billingErrors = parseInt(errorsResult.rows[0]?.error_count || 0);
+    const errorsIos = parseInt(errorsResult.rows[0]?.errors_ios || 0);
+    const errorsAndroid = parseInt(errorsResult.rows[0]?.errors_android || 0);
 
-    // Acquisition Stats
+    // Acquisition Stats - Signups with platform breakdown
     const signupsQuery = `
       SELECT 
         COUNT(CASE WHEN created_at >= $1 THEN 1 END) as current_signups,
-        COUNT(CASE WHEN created_at >= $2 AND created_at < $1 THEN 1 END) as previous_signups
+        COUNT(CASE WHEN created_at >= $2 AND created_at < $1 THEN 1 END) as previous_signups,
+        COUNT(CASE WHEN created_at >= $1 AND registration_platform = 'ios' THEN 1 END) as signups_ios,
+        COUNT(CASE WHEN created_at >= $1 AND registration_platform = 'android' THEN 1 END) as signups_android
       FROM customer_users
       WHERE deleted_at IS NULL
     `;
     const signupsResult = await pool.query(signupsQuery, [periodStart, previous]);
     const currentSignups = parseInt(signupsResult.rows[0]?.current_signups || 0);
     const previousSignups = parseInt(signupsResult.rows[0]?.previous_signups || 0);
+    const signupsIos = parseInt(signupsResult.rows[0]?.signups_ios || 0);
+    const signupsAndroid = parseInt(signupsResult.rows[0]?.signups_android || 0);
 
+    // Trials with platform breakdown
     const trialsQuery = `
-      SELECT COUNT(*) as trial_count
+      SELECT 
+        COUNT(*) as trial_count,
+        COUNT(CASE WHEN platform = 'ios' THEN 1 END) as trials_ios,
+        COUNT(CASE WHEN platform = 'android' THEN 1 END) as trials_android
       FROM customer_subscriptions
       WHERE status = 'trialing' OR status = 'trial'
     `;
     const trialsResult = await pool.query(trialsQuery);
     const trials = parseInt(trialsResult.rows[0]?.trial_count || 0);
+    const trialsIos = parseInt(trialsResult.rows[0]?.trials_ios || 0);
+    const trialsAndroid = parseInt(trialsResult.rows[0]?.trials_android || 0);
 
+    // First purchase with platform breakdown
     const firstPurchaseQuery = `
-      SELECT COUNT(DISTINCT customer_user_id) as first_purchase_count
+      SELECT 
+        COUNT(DISTINCT customer_user_id) as first_purchase_count,
+        COUNT(DISTINCT CASE WHEN platform = 'ios' THEN customer_user_id END) as first_purchase_ios,
+        COUNT(DISTINCT CASE WHEN platform = 'android' THEN customer_user_id END) as first_purchase_android
       FROM customer_subscriptions
       WHERE created_at >= $1
       AND customer_user_id NOT IN (
@@ -154,59 +208,93 @@ export async function getDashboardStats(period: PeriodFilter = 'month'): Promise
     `;
     const firstPurchaseResult = await pool.query(firstPurchaseQuery, [periodStart]);
     const firstPurchase = parseInt(firstPurchaseResult.rows[0]?.first_purchase_count || 0);
+    const firstPurchaseIos = parseInt(firstPurchaseResult.rows[0]?.first_purchase_ios || 0);
+    const firstPurchaseAndroid = parseInt(firstPurchaseResult.rows[0]?.first_purchase_android || 0);
 
     const conversionRate = currentSignups > 0 ? Math.round((firstPurchase / currentSignups) * 100) : 0;
+    const conversionIos = signupsIos > 0 ? Math.round((firstPurchaseIos / signupsIos) * 100) : 0;
+    const conversionAndroid = signupsAndroid > 0 ? Math.round((firstPurchaseAndroid / signupsAndroid) * 100) : 0;
 
-    // Retention Stats
+    // Retention Stats - Cancellations with platform breakdown
     const cancellationsQuery = `
       SELECT 
         COUNT(CASE WHEN canceled_at >= $1 THEN 1 END) as current_cancellations,
-        COUNT(CASE WHEN canceled_at >= $2 AND canceled_at < $1 THEN 1 END) as previous_cancellations
+        COUNT(CASE WHEN canceled_at >= $2 AND canceled_at < $1 THEN 1 END) as previous_cancellations,
+        COUNT(CASE WHEN canceled_at >= $1 AND platform = 'ios' THEN 1 END) as cancellations_ios,
+        COUNT(CASE WHEN canceled_at >= $1 AND platform = 'android' THEN 1 END) as cancellations_android
       FROM customer_subscriptions
       WHERE canceled_at IS NOT NULL
     `;
     const cancellationsResult = await pool.query(cancellationsQuery, [periodStart, previous]);
     const currentCancellations = parseInt(cancellationsResult.rows[0]?.current_cancellations || 0);
     const previousCancellations = parseInt(cancellationsResult.rows[0]?.previous_cancellations || 0);
+    const cancellationsIos = parseInt(cancellationsResult.rows[0]?.cancellations_ios || 0);
+    const cancellationsAndroid = parseInt(cancellationsResult.rows[0]?.cancellations_android || 0);
 
     const churnRate = activeSubscribers > 0 ? Math.round((currentCancellations / activeSubscribers) * 100) : 0;
 
+    // Total members with platform breakdown
     const totalMembersQuery = `
-      SELECT COUNT(*) as total_members
+      SELECT 
+        COUNT(*) as total_members,
+        COUNT(CASE WHEN registration_platform = 'ios' THEN 1 END) as members_ios,
+        COUNT(CASE WHEN registration_platform = 'android' THEN 1 END) as members_android
       FROM customer_users
       WHERE deleted_at IS NULL
     `;
     const totalMembersResult = await pool.query(totalMembersQuery);
     const totalMembers = parseInt(totalMembersResult.rows[0]?.total_members || 0);
+    const membersIos = parseInt(totalMembersResult.rows[0]?.members_ios || 0);
+    const membersAndroid = parseInt(totalMembersResult.rows[0]?.members_android || 0);
 
     return {
       financial: {
         totalRevenue: currentRevenue,
         revenueChange: calculateChange(currentRevenue, previousRevenue),
+        revenueIos,
+        revenueAndroid,
         activeSubscribers,
-        subscribersChange: 0, // Would need historical data
+        subscribersChange: 0,
+        subscribersIos,
+        subscribersAndroid,
         salesCount: currentSales,
         salesChange: calculateChange(currentSales, previousSales),
+        salesIos,
+        salesAndroid,
         billingErrors,
         errorsChange: 0,
+        errorsIos,
+        errorsAndroid,
       },
       acquisition: {
         newSignups: currentSignups,
         signupsChange: calculateChange(currentSignups, previousSignups),
+        signupsIos,
+        signupsAndroid,
         trials,
         trialsChange: 0,
+        trialsIos,
+        trialsAndroid,
         firstPurchase,
         firstPurchaseChange: 0,
+        firstPurchaseIos,
+        firstPurchaseAndroid,
         conversionRate,
         conversionChange: 0,
+        conversionIos,
+        conversionAndroid,
       },
       retention: {
         cancellations: currentCancellations,
         cancellationsChange: calculateChange(currentCancellations, previousCancellations),
+        cancellationsIos,
+        cancellationsAndroid,
         churnRate,
         churnChange: 0,
         totalMembers,
         membersChange: 0,
+        membersIos,
+        membersAndroid,
       },
     };
   } catch (error) {

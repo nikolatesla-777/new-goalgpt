@@ -15,30 +15,50 @@ interface DashboardStats {
     financial: {
         totalRevenue: number;
         revenueChange: number;
+        revenueIos: number;
+        revenueAndroid: number;
         activeSubscribers: number;
         subscribersChange: number;
+        subscribersIos: number;
+        subscribersAndroid: number;
         salesCount: number;
         salesChange: number;
+        salesIos: number;
+        salesAndroid: number;
         billingErrors: number;
         errorsChange: number;
+        errorsIos: number;
+        errorsAndroid: number;
     };
     acquisition: {
         newSignups: number;
         signupsChange: number;
+        signupsIos: number;
+        signupsAndroid: number;
         trials: number;
         trialsChange: number;
+        trialsIos: number;
+        trialsAndroid: number;
         firstPurchase: number;
         firstPurchaseChange: number;
+        firstPurchaseIos: number;
+        firstPurchaseAndroid: number;
         conversionRate: number;
         conversionChange: number;
+        conversionIos: number;
+        conversionAndroid: number;
     };
     retention: {
         cancellations: number;
         cancellationsChange: number;
+        cancellationsIos: number;
+        cancellationsAndroid: number;
         churnRate: number;
         churnChange: number;
         totalMembers: number;
         membersChange: number;
+        membersIos: number;
+        membersAndroid: number;
     };
 }
 
@@ -467,19 +487,19 @@ export function AdminKomutaMerkezi() {
     // Card definitions - all 11 cards in order
     const allCards = [
         // Finansal Sağlık (4 cards)
-        { type: 'revenue' as CardType, icon: <RevenueIcon />, iconColor: 'teal', getValue: () => formatCurrency(stats?.financial.totalRevenue || 0), getChange: () => stats?.financial.revenueChange },
-        { type: 'subscribers' as CardType, icon: <SubscribersIcon />, iconColor: 'green', getValue: () => formatNumber(stats?.financial.activeSubscribers || 0), getChange: () => stats?.financial.subscribersChange },
-        { type: 'sales' as CardType, icon: <SalesIcon />, iconColor: 'blue', getValue: () => formatNumber(stats?.financial.salesCount || 0), getChange: () => stats?.financial.salesChange },
-        { type: 'billing-errors' as CardType, icon: <ErrorIcon />, iconColor: 'red', getValue: () => formatNumber(stats?.financial.billingErrors || 0), getChange: () => stats?.financial.errorsChange },
+        { type: 'revenue' as CardType, icon: <RevenueIcon />, iconColor: 'teal', getValue: () => formatCurrency(stats?.financial.totalRevenue || 0), getChange: () => stats?.financial.revenueChange, getIosValue: () => stats?.financial.revenueIos || 0, getAndroidValue: () => stats?.financial.revenueAndroid || 0 },
+        { type: 'subscribers' as CardType, icon: <SubscribersIcon />, iconColor: 'green', getValue: () => formatNumber(stats?.financial.activeSubscribers || 0), getChange: () => stats?.financial.subscribersChange, getIosValue: () => stats?.financial.subscribersIos || 0, getAndroidValue: () => stats?.financial.subscribersAndroid || 0 },
+        { type: 'sales' as CardType, icon: <SalesIcon />, iconColor: 'blue', getValue: () => formatNumber(stats?.financial.salesCount || 0), getChange: () => stats?.financial.salesChange, getIosValue: () => stats?.financial.salesIos || 0, getAndroidValue: () => stats?.financial.salesAndroid || 0 },
+        { type: 'billing-errors' as CardType, icon: <ErrorIcon />, iconColor: 'red', getValue: () => formatNumber(stats?.financial.billingErrors || 0), getChange: () => stats?.financial.errorsChange, getIosValue: () => stats?.financial.errorsIos || 0, getAndroidValue: () => stats?.financial.errorsAndroid || 0 },
         // Edinim & Büyüme (4 cards)
-        { type: 'signups' as CardType, icon: <NewUserIcon />, iconColor: 'teal', getValue: () => formatNumber(stats?.acquisition.newSignups || 0), getChange: () => stats?.acquisition.signupsChange },
-        { type: 'trials' as CardType, icon: <TrialIcon />, iconColor: 'purple', getValue: () => formatNumber(stats?.acquisition.trials || 0), getChange: () => stats?.acquisition.trialsChange },
-        { type: 'first-purchase' as CardType, icon: <SalesIcon />, iconColor: 'green', getValue: () => formatNumber(stats?.acquisition.firstPurchase || 0), getChange: () => stats?.acquisition.firstPurchaseChange },
-        { type: 'conversion' as CardType, icon: <ChurnIcon />, iconColor: 'blue', getValue: () => `${stats?.acquisition.conversionRate || 0}%`, getChange: () => stats?.acquisition.conversionChange },
+        { type: 'signups' as CardType, icon: <NewUserIcon />, iconColor: 'teal', getValue: () => formatNumber(stats?.acquisition.newSignups || 0), getChange: () => stats?.acquisition.signupsChange, getIosValue: () => stats?.acquisition.signupsIos || 0, getAndroidValue: () => stats?.acquisition.signupsAndroid || 0 },
+        { type: 'trials' as CardType, icon: <TrialIcon />, iconColor: 'purple', getValue: () => formatNumber(stats?.acquisition.trials || 0), getChange: () => stats?.acquisition.trialsChange, getIosValue: () => stats?.acquisition.trialsIos || 0, getAndroidValue: () => stats?.acquisition.trialsAndroid || 0 },
+        { type: 'first-purchase' as CardType, icon: <SalesIcon />, iconColor: 'green', getValue: () => formatNumber(stats?.acquisition.firstPurchase || 0), getChange: () => stats?.acquisition.firstPurchaseChange, getIosValue: () => stats?.acquisition.firstPurchaseIos || 0, getAndroidValue: () => stats?.acquisition.firstPurchaseAndroid || 0 },
+        { type: 'conversion' as CardType, icon: <ChurnIcon />, iconColor: 'blue', getValue: () => `${stats?.acquisition.conversionRate || 0}%`, getChange: () => stats?.acquisition.conversionChange, getIosValue: () => stats?.acquisition.conversionIos || 0, getAndroidValue: () => stats?.acquisition.conversionAndroid || 0 },
         // Tutundurma & Kayıp (3 cards)
-        { type: 'cancellations' as CardType, icon: <CancelIcon />, iconColor: 'amber', getValue: () => formatNumber(stats?.retention.cancellations || 0), getChange: () => stats?.retention.cancellationsChange },
+        { type: 'cancellations' as CardType, icon: <CancelIcon />, iconColor: 'amber', getValue: () => formatNumber(stats?.retention.cancellations || 0), getChange: () => stats?.retention.cancellationsChange, getIosValue: () => stats?.retention.cancellationsIos || 0, getAndroidValue: () => stats?.retention.cancellationsAndroid || 0 },
         { type: 'churn' as CardType, icon: <ChurnIcon />, iconColor: 'red', getValue: () => formatNumber(stats?.retention.churnRate || 0), getChange: () => stats?.retention.churnChange },
-        { type: 'total-members' as CardType, icon: <SubscribersIcon />, iconColor: 'teal', getValue: () => formatNumber(stats?.retention.totalMembers || 0), getChange: () => stats?.retention.membersChange },
+        { type: 'total-members' as CardType, icon: <SubscribersIcon />, iconColor: 'teal', getValue: () => formatNumber(stats?.retention.totalMembers || 0), getChange: () => stats?.retention.membersChange, getIosValue: () => stats?.retention.membersIos || 0, getAndroidValue: () => stats?.retention.membersAndroid || 0 },
     ];
 
     const financialCards = allCards.slice(0, 4);
@@ -522,6 +542,8 @@ export function AdminKomutaMerkezi() {
                                 label={cardConfig[card.type!]?.label || ''}
                                 value={card.getValue()}
                                 change={card.getChange()}
+                                iosValue={card.getIosValue?.()}
+                                androidValue={card.getAndroidValue?.()}
                                 isSelected={card.type === selectedCard}
                                 onClick={() => handleCardClick(card.type)}
                             />
@@ -607,6 +629,8 @@ export function AdminKomutaMerkezi() {
                                         label={cardConfig[card.type!]?.label || ''}
                                         value={card.getValue()}
                                         change={card.getChange()}
+                                        iosValue={card.getIosValue?.()}
+                                        androidValue={card.getAndroidValue?.()}
                                         onClick={() => handleCardClick(card.type)}
                                     />
                                 ))}
@@ -629,6 +653,8 @@ export function AdminKomutaMerkezi() {
                                         label={cardConfig[card.type!]?.label || ''}
                                         value={card.getValue()}
                                         change={card.getChange()}
+                                        iosValue={card.getIosValue?.()}
+                                        androidValue={card.getAndroidValue?.()}
                                         onClick={() => handleCardClick(card.type)}
                                     />
                                 ))}
@@ -651,6 +677,8 @@ export function AdminKomutaMerkezi() {
                                         label={cardConfig[card.type!]?.label || ''}
                                         value={card.getValue()}
                                         change={card.getChange()}
+                                        iosValue={card.getIosValue?.()}
+                                        androidValue={card.getAndroidValue?.()}
                                         onClick={() => handleCardClick(card.type)}
                                     />
                                 ))}
