@@ -55,7 +55,7 @@ export function MatchDetailPage() {
                 } catch (error: any) {
                     // If match not found by ID, try other methods
                     console.log('[MatchDetailPage] Match not found by ID, trying live matches...');
-                    
+
                     // Step 2: Try getLiveMatches (has real-time minute_text for currently live matches)
                     try {
                         const liveResponse = await getLiveMatches();
@@ -74,7 +74,7 @@ export function MatchDetailPage() {
                 }
             } catch (err: any) {
                 if (!match) {
-                setError(err.message || 'Maç yüklenirken hata oluştu');
+                    setError(err.message || 'Maç yüklenirken hata oluştu');
                 }
             } finally {
                 setLoading(false);
@@ -108,7 +108,7 @@ export function MatchDetailPage() {
                             getMatchLiveStats(matchId).catch(() => null), // Fail gracefully, fallback to teamStats
                             getMatchHalfStats(matchId).catch(() => null) // Fail gracefully
                         ]);
-                        
+
                         // If liveStats failed, fallback to teamStats
                         let fullTimeData = null;
                         if (liveStats.status === 'fulfilled' && liveStats.value) {
@@ -125,7 +125,7 @@ export function MatchDetailPage() {
                                 fullTimeData = null;
                             }
                         }
-                        
+
                         result = {
                             fullTime: fullTimeData,
                             halfTime: halfStats.status === 'fulfilled' ? halfStats.value : null,
@@ -428,7 +428,7 @@ type StatsPeriod = 'full' | 'first' | 'second';
 function StatsContent({ data, match }: { data: any; match: Match }) {
     // Determine match status
     const matchStatus = (match as any).status ?? (match as any).status_id ?? 1;
-    
+
     // Determine which tabs to show based on match status:
     // - 1 = NOT_STARTED: No tabs (no stats yet)
     // - 2 = FIRST_HALF: Only TÜMÜ/1.YARI (same data)
@@ -436,7 +436,7 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     // - 4+ = SECOND_HALF, OVERTIME, PENALTIES, END: Show all tabs
     const isFirstHalf = matchStatus === 2 || matchStatus === 3; // 1st half or halftime
     const isSecondHalfOrLater = matchStatus >= 4; // 2nd half, overtime, penalties, or finished
-    
+
     const [activePeriod, setActivePeriod] = useState<StatsPeriod>('full');
 
     // Parse half time stats data
@@ -448,14 +448,14 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
         const stats: any[] = [];
         for (const statObj of halfData.results) {
             if (statObj.Sign !== sign) continue;
-            
+
             // Extract stats from the object (keys are stat IDs)
             for (const [key, value] of Object.entries(statObj)) {
                 if (key === 'Sign') continue;
-                
+
                 const statId = Number(key);
                 if (isNaN(statId)) continue;
-                
+
                 const values = Array.isArray(value) ? value : [];
                 if (values.length >= 2) {
                     stats.push({
@@ -488,25 +488,25 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     // Get first half stats snapshot from database (saved at halftime)
     const firstHalfStatsSnapshot = data?.firstHalfStats || null;
     const hasFirstHalfSnapshot = !!firstHalfStatsSnapshot && Array.isArray(firstHalfStatsSnapshot) && firstHalfStatsSnapshot.length > 0;
-    
+
     // Calculate second half stats by subtracting first half from total
     const calculateSecondHalfStats = (): any[] => {
         if (!hasFirstHalfSnapshot) return [];
-        
+
         const fullStats = getFullTimeStats();
         if (fullStats.length === 0) return [];
-        
+
         const secondHalfStats: any[] = [];
-        
+
         for (const fullStat of fullStats) {
             // Find matching first half stat
             const firstHalfStat = firstHalfStatsSnapshot.find((s: any) => s.type === fullStat.type);
-            
+
             if (firstHalfStat) {
                 // Calculate 2nd half = Total - 1st half
                 const homeSecondHalf = (fullStat.home ?? 0) - (firstHalfStat.home ?? 0);
                 const awaySecondHalf = (fullStat.away ?? 0) - (firstHalfStat.away ?? 0);
-                
+
                 secondHalfStats.push({
                     ...fullStat,
                     home: Math.max(0, homeSecondHalf), // Ensure non-negative
@@ -517,13 +517,13 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
                 secondHalfStats.push(fullStat);
             }
         }
-        
+
         return secondHalfStats;
     };
 
     // Get stats based on active period
     let rawStats: any[] = [];
-    
+
     if (activePeriod === 'full') {
         // TÜMÜ: Current total stats from API
         rawStats = getFullTimeStats();
@@ -561,21 +561,21 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
 
     // Get basic stats fallback (for match info from database)
-        const basicStats = [
-            { label: 'Gol', home: match.home_score ?? 0, away: match.away_score ?? 0 },
-            { label: 'Sarı Kart', home: (match as any).home_yellow_cards ?? 0, away: (match as any).away_yellow_cards ?? 0 },
-            { label: 'Kırmızı Kart', home: (match as any).home_red_cards ?? 0, away: (match as any).away_red_cards ?? 0 },
-            { label: 'Korner', home: (match as any).home_corners ?? 0, away: (match as any).away_corners ?? 0 },
-        ];
+    const basicStats = [
+        { label: 'Gol', home: match.home_score ?? 0, away: match.away_score ?? 0 },
+        { label: 'Sarı Kart', home: (match as any).home_yellow_cards ?? 0, away: (match as any).away_yellow_cards ?? 0 },
+        { label: 'Kırmızı Kart', home: (match as any).home_red_cards ?? 0, away: (match as any).away_red_cards ?? 0 },
+        { label: 'Korner', home: (match as any).home_corners ?? 0, away: (match as any).away_corners ?? 0 },
+    ];
 
     // Check if we have any full time stats (to determine if tabs should be shown)
     const hasFullTimeStats = getFullTimeStats().length > 0;
 
     // Render period tabs component
     const PeriodTabs = () => (
-        <div style={{ 
-            display: 'flex', 
-            gap: '8px', 
+        <div style={{
+            display: 'flex',
+            gap: '8px',
             borderBottom: '2px solid #e5e7eb',
             paddingBottom: '8px'
         }}>
@@ -627,8 +627,8 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
                     2. YARI
                 </button>
             )}
-            </div>
-        );
+        </div>
+    );
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -637,24 +637,24 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
 
             {/* Stats List */}
             {stats.length > 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {stats.map((stat: any, idx: number) => (
-                <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
-            ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {stats.map((stat: any, idx: number) => (
+                        <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
+                    ))}
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {/* Show message based on period */}
-                    <div style={{ 
-                        textAlign: 'center', 
-                        padding: '20px', 
+                    <div style={{
+                        textAlign: 'center',
+                        padding: '20px',
                         color: '#6b7280',
                         backgroundColor: '#f9fafb',
                         borderRadius: '8px',
                         marginBottom: '16px'
                     }}>
-                        {activePeriod === 'first' && (isFirstHalf 
-                            ? 'Maç devam ediyor, detaylı istatistikler güncelleniyor...' 
+                        {activePeriod === 'first' && (isFirstHalf
+                            ? 'Maç devam ediyor, detaylı istatistikler güncelleniyor...'
                             : '1. yarı detaylı istatistikleri mevcut değil.'
                         )}
                         {activePeriod === 'second' && '2. yarı detaylı istatistikleri mevcut değil. Temel bilgiler gösteriliyor.'}
@@ -789,11 +789,11 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                             <tr key={idx} style={{ backgroundColor: isHighlighted ? '#dbeafe' : 'transparent', borderBottom: '1px solid #e5e7eb' }}>
                                 <td style={{ padding: '12px 8px', fontWeight: '600' }}>{team.position || idx + 1}</td>
                                 <td style={{ padding: '12px 8px' }}>
-                                    <div 
+                                    <div
                                         onClick={() => navigate(`/team/${team.team_id}`)}
-                                        style={{ 
-                                            display: 'flex', 
-                                            alignItems: 'center', 
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
                                             gap: '8px',
                                             cursor: 'pointer',
                                             color: '#1e40af',
@@ -801,8 +801,8 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                                         }}
                                     >
                                         {team.team_logo && (
-                                            <img 
-                                                src={team.team_logo} 
+                                            <img
+                                                src={team.team_logo}
                                                 alt=""
                                                 style={{ width: '20px', height: '20px', objectFit: 'contain' }}
                                             />
@@ -846,13 +846,13 @@ function EventsContent({ data, match }: { data: any; match: Match }) {
 
 // Trend Content
 function TrendContent({ data, match }: { data: any; match: Match }) {
-    // According to TheSports API docs:
-    // "Trend data is available only when the match is in progress"
-    // Status IDs: 2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5=OVERTIME, 7=PENALTY_SHOOTOUT
+    // Get match status
     const matchStatus = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
-    const isLiveMatch = matchStatus && [2, 3, 4, 5, 7].includes(matchStatus);
+    const isFinished = matchStatus === 8;
+    const isNotStarted = matchStatus === 0 || matchStatus === 1;
 
-    if (!isLiveMatch) {
+    // For NOT_STARTED matches, show message
+    if (isNotStarted) {
         return (
             <div style={{
                 padding: '40px 20px',
@@ -863,20 +863,20 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
                 border: '1px solid #e5e7eb'
             }}>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: '500' }}>
-                    Trend verisi sadece maç devam ederken mevcuttur.
+                    Trend verisi maç başladığında gösterilecektir.
                 </p>
                 <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#9ca3af' }}>
-                    Bu maç henüz başlamadı veya tamamlandı.
+                    Bu maç henüz başlamadı.
                 </p>
             </div>
         );
     }
 
-    // Relaxed check: Only show "Not available" if we truly have NO data
-    // The service handles live/finished logic. If we have data, show it.
+    // Check if we have trend data (from API for live or DB for finished)
     const hasData = (data?.trend?.first_half?.length > 0 || data?.trend?.second_half?.length > 0);
 
-    if (!hasData && !isLiveMatch) {
+    // No data available (for both live and finished matches)
+    if (!hasData) {
         return (
             <div style={{
                 padding: '40px 20px',
@@ -887,10 +887,12 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
                 border: '1px solid #e5e7eb'
             }}>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: '500' }}>
-                    Trend verisi bulunamadı.
+                    {isFinished ? 'Bu maç için trend verisi kaydedilmemiş.' : 'Trend verisi henüz oluşmamış.'}
                 </p>
                 <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#9ca3af' }}>
-                    Bu maç için trend verisi henüz oluşmamış olabilir.
+                    {isFinished
+                        ? 'Maç sırasında veri toplanamadı.'
+                        : 'Maç devam ederken veriler güncellenecektir.'}
                 </p>
             </div>
         );
@@ -912,6 +914,7 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
         </div>
     );
 }
+
 
 // Lineup Content
 function LineupContent({ data, match }: { data: any; match: Match }) {

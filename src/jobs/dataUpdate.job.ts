@@ -7,15 +7,20 @@
 
 import { DataUpdateService } from '../services/thesports/dataUpdate/dataUpdate.service';
 import { MatchDetailLiveService } from '../services/thesports/match/matchDetailLive.service';
+import { CombinedStatsService } from '../services/thesports/match/combinedStats.service';
+import { MatchTrendService } from '../services/thesports/match/matchTrend.service';
 import { TheSportsClient } from '../services/thesports/client/thesports-client';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 
+
 export class DataUpdateWorker {
   private dataUpdateService: DataUpdateService;
   private apiClient: TheSportsClient;
   private matchDetailLiveService: MatchDetailLiveService;
+  private combinedStatsService: CombinedStatsService;
+  private matchTrendService: MatchTrendService;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -23,6 +28,8 @@ export class DataUpdateWorker {
     this.dataUpdateService = new DataUpdateService();
     this.apiClient = new TheSportsClient();
     this.matchDetailLiveService = new MatchDetailLiveService(this.apiClient);
+    this.combinedStatsService = new CombinedStatsService(this.apiClient);
+    this.matchTrendService = new MatchTrendService(this.apiClient);
   }
 
   /**
@@ -47,7 +54,7 @@ export class DataUpdateWorker {
     // Helper to extract match_id and update_time from an item
     const extractMatchInfo = (item: any): { matchId: string | null; updateTime: number | null } => {
       if (item == null) return { matchId: null, updateTime: null };
-      
+
       let matchId: string | null = null;
       if (typeof item === 'string' || typeof item === 'number') {
         matchId = String(item);
@@ -168,11 +175,11 @@ export class DataUpdateWorker {
         dbClient = await pool.connect();
       } catch (dbError: any) {
         // Database connection failed (placeholder DB or not configured)
-        const isDbConnectionError = dbError.message?.includes('getaddrinfo') || 
-                                    dbError.message?.includes('EAI_AGAIN') ||
-                                    dbError.message?.includes('placeholder') ||
-                                    dbError.message?.includes('Connection');
-        
+        const isDbConnectionError = dbError.message?.includes('getaddrinfo') ||
+          dbError.message?.includes('EAI_AGAIN') ||
+          dbError.message?.includes('placeholder') ||
+          dbError.message?.includes('Connection');
+
         if (isDbConnectionError) {
           logger.warn(`[DataUpdate:${runId}] Database connection failed (placeholder DB). Skipping DB operations. Error: ${dbError.message}`);
           // Continue without database - don't crash the worker
@@ -207,12 +214,12 @@ export class DataUpdateWorker {
               provider_update_time: updateTime !== null ? updateTime : undefined,
               run_id: runId,
             });
-            
+
             const result = await this.matchDetailLiveService.reconcileMatchToDatabase(
               matchIdStr,
               updateTime !== null ? updateTime : null
             );
-            
+
             const duration = Date.now() - t0;
             logEvent('info', 'dataupdate.reconcile.done', {
               match_id: matchIdStr,
@@ -220,6 +227,36 @@ export class DataUpdateWorker {
               rowCount: result.rowCount,
               run_id: runId,
             });
+
+            // PHASE 4+: On match end (status=8), sync final stats/trend to database
+            // This ensures data is persisted before API stops returning it
+            if (result.statusId === 8) {
+              logger.info(`[DataUpdate:${runId}] Match ${matchIdStr} ended (status=8), syncing final stats/trend...`);
+              try {
+                // Fetch and save final combined stats (includes incidents)
+                const stats = await this.combinedStatsService.getCombinedMatchStats(matchIdStr);
+                if (stats && stats.allStats.length > 0) {
+                  await this.combinedStatsService.saveCombinedStatsToDatabase(matchIdStr, stats);
+                  logger.info(`[DataUpdate:${runId}] Saved ${stats.allStats.length} final stats for ${matchIdStr}`);
+                }
+
+                // Fetch and save final trend data
+                const trend = await this.matchTrendService.getMatchTrend({ match_id: matchIdStr }, 8);
+                const trendResults = trend?.results;
+                const hasTrendData = Array.isArray(trendResults) ? trendResults.length > 0 : !!trendResults;
+                if (hasTrendData) {
+                  // Save trend to statistics JSONB field
+                  await dbClient.query(`
+                    UPDATE ts_matches 
+                    SET statistics = COALESCE(statistics, '{}'::jsonb) || jsonb_build_object('trend', $2::jsonb)
+                    WHERE external_id = $1
+                  `, [matchIdStr, JSON.stringify(trend)]);
+                  logger.info(`[DataUpdate:${runId}] Saved trend data for ${matchIdStr}`);
+                }
+              } catch (syncErr: any) {
+                logger.warn(`[DataUpdate:${runId}] Failed to sync final stats/trend for ${matchIdStr}:`, syncErr.message);
+              }
+            }
           } catch (err: any) {
             logger.error(`[DataUpdate] Error reconciling changed match ${matchId}:`, err);
           }
