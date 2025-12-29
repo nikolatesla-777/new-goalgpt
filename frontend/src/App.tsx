@@ -12,6 +12,7 @@ import {
   AdminBots,
   AdminLivescore
 } from './components/admin';
+import MemberDetail from './components/admin/MemberDetail';
 
 function App() {
   return (
@@ -29,6 +30,9 @@ function App() {
           <Route path="/admin/predictions" element={<AdminPredictions />} />
           <Route path="/admin/logs" element={<AdminLogs />} />
           <Route path="/admin/bots" element={<AdminBots />} />
+
+          {/* Member Detail */}
+          <Route path="/admin/member/:id" element={<MemberDetail />} />
         </Route>
 
         {/* Match Detail Page - Outside of admin layout */}

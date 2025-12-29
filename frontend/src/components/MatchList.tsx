@@ -3,6 +3,7 @@ import { getMatchDiary, getLiveMatches } from '../api/matches';
 import type { Match, Competition } from '../api/matches';
 import { LeagueSection } from './LeagueSection';
 import { isLiveMatch, isFinishedMatch, MatchState } from '../utils/matchStatus';
+import { useSocket } from '../hooks/useSocket';
 
 interface MatchListProps {
   view: 'diary' | 'live' | 'finished' | 'not_started';
@@ -168,59 +169,30 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
     return sorted;
   }, [safeMatches, sortBy]);
 
-  // CRITICAL: WebSocket connection for real-time updates (with reconnect)
+  // CRITICAL: WebSocket connection for real-time updates using useSocket hook
+  const { isConnected, dangerAlerts } = useSocket({
+    onScoreChange: (event) => {
+      console.log(`⚽ SCORE_CHANGE for match ${event.matchId}: ${event.homeScore}-${event.awayScore}`);
+      fetchRef.current(); // Refresh matches on score change
+    },
+    onDangerAlert: (event) => {
+      console.log(`🎯 DANGER_ALERT for match ${event.matchId}: ${event.alertType}`);
+      // dangerAlerts state is automatically updated by useSocket
+    },
+    onGoalCancelled: (event) => {
+      console.log(`❌ GOAL_CANCELLED for match ${event.matchId}`);
+      fetchRef.current(); // Refresh matches on goal cancellation
+    },
+    onMatchStateChange: (event) => {
+      console.log(`🔄 MATCH_STATE_CHANGE for match ${event.matchId}: status=${event.statusId}`);
+      fetchRef.current(); // Refresh on status change (HT, FT, etc.)
+    },
+  });
+
+  // Log WebSocket connection status
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimer: number | null = null;
-
-    const connect = () => {
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsHost =
-        window.location.hostname === 'localhost' ? 'localhost:3000' : window.location.host;
-
-      ws = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
-
-      ws.onopen = () => {
-        console.log('✅ WebSocket connected for real-time updates');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          console.log('📨 WebSocket event received:', message);
-
-          // If it's a goal or score change, immediately refresh matches
-          if (message.type === 'GOAL' || message.type === 'SCORE_CHANGE') {
-            console.log(`⚽ Goal/Score update for match ${message.matchId} - refreshing matches...`);
-            fetchRef.current(); // Always call latest fetch
-          }
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected, will reconnect...');
-        if (reconnectTimer) window.clearTimeout(reconnectTimer);
-
-        // Reconnect after 5 seconds
-        reconnectTimer = window.setTimeout(() => {
-          connect();
-        }, 5000);
-      };
-    };
-
-    connect();
-
-    return () => {
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      if (ws) ws.close();
-    };
-  }, []);
+    console.log(`🔌 WebSocket ${isConnected ? 'connected' : 'disconnected'}`);
+  }, [isConnected]);
 
   useEffect(() => {
     fetchMatches();
@@ -513,6 +485,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
                 key={compId || 'unknown'}
                 competition={competition}
                 matches={compMatches}
+                dangerAlerts={dangerAlerts}
               />
             );
           })

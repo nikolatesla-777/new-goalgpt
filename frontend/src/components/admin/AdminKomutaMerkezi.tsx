@@ -312,6 +312,10 @@ function DetailTable({ data, type, tableTitle, tableDesc }: { data: DetailItem[]
         alert('Excel export özelliği yakında eklenecek');
     };
 
+    const handleRowClick = (userId: string) => {
+        window.location.href = `/admin/member/${userId}`;
+    };
+
     return (
         <div className="dashboard-table-container">
             <div className="dashboard-table-header">
@@ -349,7 +353,12 @@ function DetailTable({ data, type, tableTitle, tableDesc }: { data: DetailItem[]
                     </thead>
                     <tbody>
                         {data.map((item, index) => (
-                            <tr key={item.id}>
+                            <tr
+                                key={item.id}
+                                className="clickable"
+                                onClick={() => handleRowClick(item.id)}
+                                style={{ cursor: 'pointer' }}
+                            >
                                 <td>{index + 1}</td>
                                 <td>
                                     <div className="user-cell">
@@ -363,7 +372,7 @@ function DetailTable({ data, type, tableTitle, tableDesc }: { data: DetailItem[]
                                     </div>
                                 </td>
                                 {type === 'signups' && (
-                                    <td>
+                                    <td onClick={(e) => e.stopPropagation()}>
                                         {item.phone ? (
                                             <button className="whatsapp-btn" onClick={() => handleWhatsApp(item.phone)}>
                                                 <WhatsAppIcon /> {item.phone}
@@ -394,7 +403,7 @@ function DetailTable({ data, type, tableTitle, tableDesc }: { data: DetailItem[]
                                 {type === 'cancellations' && <td>{formatDateTime(item.canceled_at || '')}</td>}
                                 {type === 'cancellations' && <td>{item.days_remaining || 0} gün</td>}
                                 {['churn', 'billing-errors'].includes(type as string) && <td>{formatDateTime(item.expired_at || '')}</td>}
-                                <td>
+                                <td onClick={(e) => e.stopPropagation()}>
                                     <button className="action-btn">⋮</button>
                                 </td>
                             </tr>

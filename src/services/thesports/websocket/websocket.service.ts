@@ -263,6 +263,14 @@ export class WebSocketService {
           const tliveCacheKey = `${CacheKeyPrefix.TheSports}:ws:tlive:${matchId}`;
           await cacheService.set(tliveCacheKey, tliveMsg, CacheTTL.Minute);
 
+          // CRITICAL: Detect dangerous play / goal position from TLIVE
+          const dangerAlert = this.detectDangerousPlayFromTlive(matchId, tliveArr);
+          if (dangerAlert) {
+            const alertType = (dangerAlert as any).alertType || 'UNKNOWN';
+            logger.info(`[WebSocket/TLIVE] 🎯 ${alertType} detected for match ${matchId}`);
+            this.emitEvent(dangerAlert);
+          }
+
           // Infer status from tlive (fixes "45+ but actually HT")
           const inferredStatus = this.inferStatusFromTlive(tliveArr);
           if (inferredStatus !== null) {
@@ -330,6 +338,112 @@ export class WebSocketService {
       return dataStr.includes('kick off') || dataStr.includes('kickoff') || dataStr.includes('first half') || dataStr.includes('1st half') || dataStr.includes('1h') || dataStr.includes('başladı') || dataStr.includes('basladi');
     })) {
       return MatchState.FIRST_HALF as unknown as number;
+    }
+
+    return null;
+  }
+
+  /**
+   * Detect dangerous play (goal position) from TLIVE timeline entries.
+   * CRITICAL: This is how we show "GOL POZİSYONU!" badge before the goal happens!
+   * 
+   * Keywords detected:
+   * - "dangerous attack", "tehlikeli atak" → DANGEROUS_ATTACK
+   * - "shot", "şut", "shoot" → SHOT_ATTEMPT
+   * - "saved", "kurtarış" → SHOT_SAVED (near miss!)
+   * - "hit post", "direkten döndü" → HIT_POST (very close!)
+   * - "penalty" → PENALTY_SITUATION
+   * 
+   * Returns DANGER_ALERT event if detected
+   */
+  private detectDangerousPlayFromTlive(matchId: string, tlive: any[]): MatchEvent | null {
+    if (!Array.isArray(tlive) || tlive.length === 0) return null;
+
+    // Only check the most recent entries (last 3)
+    const recentEntries = tlive.slice(-3);
+    
+    for (const entry of recentEntries) {
+      const dataStr = String(entry?.data ?? '').toLowerCase();
+      const time = String(entry?.time ?? '').replace(/[^0-9+]/g, '');
+      const position = entry?.position ?? 0; // 1=home, 2=away
+      
+      // Determine team
+      const team = position === 1 ? 'home' : position === 2 ? 'away' : 'unknown';
+      
+      // Priority order: Most dangerous first
+      
+      // 1. HIT POST - Very close to goal!
+      if (dataStr.includes('hit post') || dataStr.includes('post') || 
+          dataStr.includes('direkten') || dataStr.includes('woodwork') ||
+          dataStr.includes('crossbar') || dataStr.includes('üst direk')) {
+        return {
+          type: 'DANGER_ALERT',
+          matchId,
+          alertType: 'HIT_POST',
+          team,
+          time,
+          message: entry?.data || 'Hit the post!',
+          timestamp: Date.now(),
+        } as any;
+      }
+      
+      // 2. PENALTY - Could be a goal!
+      if ((dataStr.includes('penalty') || dataStr.includes('penaltı')) &&
+          !dataStr.includes('missed') && !dataStr.includes('saved') && !dataStr.includes('kaçırdı')) {
+        return {
+          type: 'DANGER_ALERT',
+          matchId,
+          alertType: 'PENALTY_SITUATION',
+          team,
+          time,
+          message: entry?.data || 'Penalty!',
+          timestamp: Date.now(),
+        } as any;
+      }
+      
+      // 3. SHOT SAVED - Good save, was close!
+      if (dataStr.includes('saved') || dataStr.includes('kurtarış') || 
+          dataStr.includes('save') || dataStr.includes('kurtardı')) {
+        return {
+          type: 'DANGER_ALERT',
+          matchId,
+          alertType: 'SHOT_SAVED',
+          team,
+          time,
+          message: entry?.data || 'Shot saved!',
+          timestamp: Date.now(),
+        } as any;
+      }
+      
+      // 4. SHOT ATTEMPT - Danger building
+      if (dataStr.includes('shot') || dataStr.includes('şut') || 
+          dataStr.includes('shoot') || dataStr.includes('attempt') ||
+          dataStr.includes('vuruş')) {
+        return {
+          type: 'DANGER_ALERT',
+          matchId,
+          alertType: 'SHOT_ATTEMPT',
+          team,
+          time,
+          message: entry?.data || 'Shot attempt!',
+          timestamp: Date.now(),
+        } as any;
+      }
+      
+      // 5. DANGEROUS ATTACK - Initial danger
+      if (dataStr.includes('dangerous') || dataStr.includes('tehlikeli') ||
+          dataStr.includes('chance') || dataStr.includes('opportunity') ||
+          dataStr.includes('pozisyon') || dataStr.includes('fırsat')) {
+        return {
+          type: 'DANGER_ALERT',
+          matchId,
+          alertType: 'DANGEROUS_ATTACK',
+          team,
+          time,
+          message: entry?.data || 'Dangerous attack!',
+          timestamp: Date.now(),
+        } as any;
+      }
     }
 
     return null;

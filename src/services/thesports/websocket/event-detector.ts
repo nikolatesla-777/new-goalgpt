@@ -60,7 +60,24 @@ export interface ScoreChangeEvent {
   timestamp: number;
 }
 
-export type MatchEvent = GoalEvent | CardEvent | SubstitutionEvent | GoalCancelledEvent | ScoreChangeEvent;
+export interface DangerAlertEvent {
+  type: 'DANGER_ALERT';
+  matchId: string;
+  alertType: 'DANGEROUS_ATTACK' | 'SHOT_ATTEMPT' | 'SHOT_SAVED' | 'HIT_POST' | 'PENALTY_SITUATION';
+  team: 'home' | 'away' | 'unknown';
+  time: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface MatchStateChangeEvent {
+  type: 'MATCH_STATE_CHANGE';
+  matchId: string;
+  statusId: number;
+  timestamp: number;
+}
+
+export type MatchEvent = GoalEvent | CardEvent | SubstitutionEvent | GoalCancelledEvent | ScoreChangeEvent | DangerAlertEvent | MatchStateChangeEvent;
 
 export class EventDetector {
   private processedEvents = new Map<string, number>(); // Event ID -> timestamp
