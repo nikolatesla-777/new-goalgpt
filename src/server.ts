@@ -14,6 +14,8 @@ import { logEvent } from './utils/obsLogger';
 import matchRoutes from './routes/match.routes';
 import seasonRoutes from './routes/season.routes';
 import teamRoutes from './routes/team.routes';
+import playerRoutes from './routes/player.routes';
+import leagueRoutes from './routes/league.routes';
 import healthRoutes from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
@@ -40,6 +42,8 @@ import { DataUpdateWorker } from './jobs/dataUpdate.job';
 import { MatchMinuteWorker } from './jobs/matchMinute.job';
 import { MatchWatchdogWorker } from './jobs/matchWatchdog.job';
 import { MatchFreezeDetectionWorker } from './jobs/matchFreezeDetection.job';
+import { LineupRefreshJob } from './jobs/lineupRefresh.job';
+import { PostMatchProcessorJob } from './jobs/postMatchProcessor.job';
 import { MatchDetailLiveService } from './services/thesports/match/matchDetailLive.service';
 import { MatchRecentService } from './services/thesports/match/matchRecent.service';
 import { BootstrapService } from './services/bootstrap.service';
@@ -176,6 +180,8 @@ fastify.get('/', async (request, reply) => {
 fastify.register(matchRoutes, { prefix: '/api/matches' });
 fastify.register(seasonRoutes, { prefix: '/api/seasons' });
 fastify.register(teamRoutes, { prefix: '/api/teams' });
+fastify.register(playerRoutes, { prefix: '/api/players' });
+fastify.register(leagueRoutes, { prefix: '/api/leagues' });
 fastify.register(healthRoutes); // Health and readiness endpoints
 fastify.register(predictionRoutes); // AI Prediction ingestion (VPS backend)
 fastify.register(dashboardRoutes); // Admin dashboard endpoints
@@ -208,6 +214,8 @@ let dataUpdateWorker: DataUpdateWorker | null = null;
 let matchMinuteWorker: MatchMinuteWorker | null = null;
 let matchWatchdogWorker: MatchWatchdogWorker | null = null;
 let matchFreezeDetectionWorker: MatchFreezeDetectionWorker | null = null;
+let lineupRefreshJob: LineupRefreshJob | null = null;
+let postMatchProcessorJob: PostMatchProcessorJob | null = null;
 let websocketService: WebSocketService | null = null;
 let isShuttingDown = false;
 
@@ -321,6 +329,14 @@ const start = async () => {
     dailyMatchSyncWorker = new DailyMatchSyncWorker(theSportsClient);
     dailyMatchSyncWorker.start();
 
+    // Lineup refresh job - updates lineups 1 hour before match
+    lineupRefreshJob = new LineupRefreshJob(theSportsClient);
+    lineupRefreshJob.start();
+
+    // Post match processor - saves final data for ended matches
+    postMatchProcessorJob = new PostMatchProcessorJob(theSportsClient);
+    postMatchProcessorJob.start();
+
     competitionSyncWorker = new CompetitionSyncWorker();
     competitionSyncWorker.start();
 
@@ -400,6 +416,10 @@ const shutdown = async (signal?: string) => {
     try { teamLogoSyncWorker?.stop(); } catch (e: any) { logger.error('Failed to stop TeamLogoSyncWorker:', e); }
     try { matchSyncWorker?.stop(); } catch (e: any) { logger.error('Failed to stop MatchSyncWorker:', e); }
     try { dailyMatchSyncWorker?.stop(); } catch (e: any) { logger.error('Failed to stop DailyMatchSyncWorker:', e); }
+
+    try { lineupRefreshJob?.stop(); } catch (e: any) { logger.error('Failed to stop LineupRefreshJob:', e); }
+
+    try { postMatchProcessorJob?.stop(); } catch (e: any) { logger.error('Failed to stop PostMatchProcessorJob:', e); }
 
     try { competitionSyncWorker?.stop(); } catch (e: any) { logger.error('Failed to stop CompetitionSyncWorker:', e); }
     try { categorySyncWorker?.stop(); } catch (e: any) { logger.error('Failed to stop CategorySyncWorker:', e); }

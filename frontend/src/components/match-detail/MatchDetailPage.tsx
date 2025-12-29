@@ -242,8 +242,11 @@ export function MatchDetailPage() {
             {/* Match Info */}
             <div style={{ backgroundColor: '#1f2937', color: 'white', padding: '24px 16px 32px' }}>
                 <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
-                    {/* Home Team */}
-                    <div style={{ flex: 1, textAlign: 'center' }}>
+                    {/* Home Team - Clickable */}
+                    <button 
+                        onClick={() => match.home_team_id && navigate(`/team/${match.home_team_id}`)}
+                        style={{ flex: 1, textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'white' }}
+                    >
                         {match.home_team?.logo_url && (
                             <img
                                 src={match.home_team.logo_url}
@@ -254,7 +257,7 @@ export function MatchDetailPage() {
                         <p style={{ fontWeight: '600', fontSize: '16px', margin: 0 }}>
                             {match.home_team?.name || 'Ev Sahibi'}
                         </p>
-                    </div>
+                    </button>
 
                     {/* Score & Live Status */}
                     <div style={{ textAlign: 'center' }}>
@@ -344,8 +347,11 @@ export function MatchDetailPage() {
                         </p>
                     </div>
 
-                    {/* Away Team */}
-                    <div style={{ flex: 1, textAlign: 'center' }}>
+                    {/* Away Team - Clickable */}
+                    <button 
+                        onClick={() => match.away_team_id && navigate(`/team/${match.away_team_id}`)}
+                        style={{ flex: 1, textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'white' }}
+                    >
                         {match.away_team?.logo_url && (
                             <img
                                 src={match.away_team.logo_url}
@@ -356,7 +362,7 @@ export function MatchDetailPage() {
                         <p style={{ fontWeight: '600', fontSize: '16px', margin: 0 }}>
                             {match.away_team?.name || 'Deplasman'}
                         </p>
-                    </div>
+                    </button>
                 </div>
             </div>
 

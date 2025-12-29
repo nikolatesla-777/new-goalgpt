@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MatchDetailPage } from './components/match-detail/MatchDetailPage';
 import { TeamCardPage } from './components/team/TeamCardPage';
+import { PlayerProfilePage } from './components/player/PlayerProfilePage';
+import { LeaguePage } from './components/league/LeaguePage';
 
 // Admin Panel Components
 import {
@@ -46,6 +48,20 @@ function App() {
         <Route path="/team/:teamId" element={
           <ErrorBoundary>
             <TeamCardPage />
+          </ErrorBoundary>
+        } />
+
+        {/* Player Profile Page - Outside of admin layout */}
+        <Route path="/player/:playerId" element={
+          <ErrorBoundary>
+            <PlayerProfilePage />
+          </ErrorBoundary>
+        } />
+
+        {/* League Page - Outside of admin layout */}
+        <Route path="/league/:leagueId" element={
+          <ErrorBoundary>
+            <LeaguePage />
           </ErrorBoundary>
         } />
       </Routes>

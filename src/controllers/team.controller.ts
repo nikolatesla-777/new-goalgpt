@@ -387,6 +387,7 @@ export const getTeamStandings = async (
         season_id,
         team_id,
         standing: teamStanding,
+        standings: standingsResponse.results, // Full standings list
         total_teams: standingsResponse.results.length,
       },
     });

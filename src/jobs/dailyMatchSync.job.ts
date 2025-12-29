@@ -28,6 +28,7 @@ export class DailyMatchSyncWorker {
   private competitionService: CompetitionService;
   private cronJob: cron.ScheduledTask | null = null;
   private incrementalCronJob: cron.ScheduledTask | null = null;
+  private intradayCronJob: cron.ScheduledTask | null = null;
   private isRunning = false;
 
   // TSİ (UTC+3) bulletin date handling (server may run in UTC)
@@ -669,16 +670,29 @@ export class DailyMatchSyncWorker {
       { timezone: DailyMatchSyncWorker.CRON_TIMEZONE }
     );
 
+    // Intraday sync: Every 4 hours to catch new matches added during the day
+    this.intradayCronJob = cron.schedule(
+      '5 4,8,12,16,20 * * *',
+      async () => {
+        if (this.isRunning) return;
+
+        logger.info('🔄 [DailyDiary] INTRADAY SYNC: Running 4-hour diary refresh...');
+        await this.syncThreeDayWindow({ reason: 'INTRADAY_4H' });
+      },
+      { timezone: DailyMatchSyncWorker.CRON_TIMEZONE }
+    );
+
     const { dateStr: startDateStr, dateDisplay: startDateDisplay } = this.getTodayTsiStrings();
     logEvent('info', 'worker.started', {
       worker: 'DailyMatchSyncWorker',
-      schedule: '5 0 * * *, */30 * * *',
+      schedule: '5 0 * * *, */30 * * *, 5 4,8,12,16,20 * * *',
     });
     logger.info(`   🕒 Cron timezone: ${DailyMatchSyncWorker.CRON_TIMEZONE}`);
     logger.info(`   🗓️ Today (TSİ): ${startDateDisplay} (${startDateStr})`);
     logger.info(`   🌍 Server TZ offset (minutes): ${new Date().getTimezoneOffset()}`);
     logger.info('   📅 Full sync: Every day at 00:05 (3-day window: yesterday/today/tomorrow)');
     logger.info('   🛠️ Repair: Every 30 minutes (00:10–06:00 TSİ, only if needed)');
+    logger.info('   🔄 Intraday: Every 4 hours (04:05, 08:05, 12:05, 16:05, 20:05 TSİ)');
 
     // Run immediately on start to sync 3-day window
     setTimeout(() => {
@@ -697,6 +711,10 @@ export class DailyMatchSyncWorker {
     if (this.incrementalCronJob) {
       this.incrementalCronJob.stop();
       this.incrementalCronJob = null;
+    }
+    if (this.intradayCronJob) {
+      this.intradayCronJob.stop();
+      this.intradayCronJob = null;
     }
     logger.info('Daily match sync worker stopped');
   }
