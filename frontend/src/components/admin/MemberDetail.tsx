@@ -164,7 +164,7 @@ export default function MemberDetail() {
 
             try {
                 setLoading(true);
-                const response = await fetch(`${API_BASE}/api/admin/member/${id}`);
+                const response = await fetch(`${API_BASE}/admin/member/${id}`);
                 const data = await response.json();
 
                 if (data.success) {

@@ -71,6 +71,7 @@ interface TrendDataPoint {
 
 interface DetailItem {
     id: string;
+    user_id?: string;
     email: string;
     full_name: string;
     phone: string;
@@ -312,7 +313,9 @@ function DetailTable({ data, type, tableTitle, tableDesc }: { data: DetailItem[]
         alert('Excel export özelliği yakında eklenecek');
     };
 
-    const handleRowClick = (userId: string) => {
+    const handleRowClick = (item: DetailItem) => {
+        // Use user_id if available (for subscription-related tables), otherwise use id (for signups)
+        const userId = item.user_id || item.id;
         window.location.href = `/admin/member/${userId}`;
     };
 
