@@ -359,7 +359,7 @@ function DetailTable({ data, type, tableTitle, tableDesc }: { data: DetailItem[]
                             <tr
                                 key={item.id}
                                 className="clickable"
-                                onClick={() => handleRowClick(item.id)}
+                                onClick={() => handleRowClick(item)}
                                 style={{ cursor: 'pointer' }}
                             >
                                 <td>{index + 1}</td>
