@@ -1,15 +1,13 @@
 import type { Match } from '../api/matches';
 import { MatchCard } from './MatchCard';
 import type { Competition } from '../api/matches';
-import type { DangerAlertEvent } from '../hooks/useSocket';
 
 interface LeagueSectionProps {
   competition: Competition | null;
   matches: Match[];
-  dangerAlerts?: Map<string, DangerAlertEvent>;
 }
 
-export function LeagueSection({ competition, matches, dangerAlerts }: LeagueSectionProps) {
+export function LeagueSection({ competition, matches }: LeagueSectionProps) {
   // CRITICAL FIX: Safety checks
   if (!Array.isArray(matches)) {
     console.error('❌ [LeagueSection] matches is not an array:', typeof matches, matches);
@@ -84,13 +82,7 @@ export function LeagueSection({ competition, matches, dangerAlerts }: LeagueSect
             console.warn('⚠️ [LeagueSection] Invalid match skipped:', match);
             return null;
           }
-          return (
-            <MatchCard 
-              key={match.id} 
-              match={match} 
-              dangerAlert={dangerAlerts?.get(match.id) || null}
-            />
-          );
+          return <MatchCard key={match.id} match={match} />;
         })}
       </div>
     </div>

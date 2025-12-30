@@ -1,23 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import type { Match } from '../api/matches';
 import { isLiveMatch, isFinishedMatch, getMatchStatusText, formatMatchTime, MatchState } from '../utils/matchStatus';
-import type { DangerAlertEvent, AlertType } from '../hooks/useSocket';
 
 interface MatchCardProps {
   match: Match;
-  dangerAlert?: DangerAlertEvent | null;
 }
 
-// Badge colors and labels for danger alerts
-const DANGER_ALERT_CONFIG: Record<AlertType, { bg: string; label: string; emoji: string }> = {
-  'HIT_POST': { bg: '#dc2626', label: 'DİREKTEN DÖNDÜ!', emoji: '🎯' },
-  'PENALTY_SITUATION': { bg: '#dc2626', label: 'PENALTI!', emoji: '⚠️' },
-  'SHOT_SAVED': { bg: '#f97316', label: 'KURTARIŞ!', emoji: '🧤' },
-  'SHOT_ATTEMPT': { bg: '#ec4899', label: 'GOL POZİSYONU!', emoji: '🎯' },
-  'DANGEROUS_ATTACK': { bg: '#ec4899', label: 'TEHLİKELİ ATAK!', emoji: '⚡' },
-};
-
-export function MatchCard({ match, dangerAlert }: MatchCardProps) {
+export function MatchCard({ match }: MatchCardProps) {
   const navigate = useNavigate();
   // CRITICAL FIX: Safety checks
   if (!match || typeof match !== 'object' || !match.id) {
@@ -133,28 +122,6 @@ export function MatchCard({ match, dangerAlert }: MatchCardProps) {
                   borderRadius: '4px',
                 }}>
                   {minuteText}
-                </span>
-              )}
-              {/* DANGER ALERT BADGE - GOL POZİSYONU! */}
-              {dangerAlert && (
-                <span 
-                  style={{
-                    padding: '4px 10px',
-                    backgroundColor: DANGER_ALERT_CONFIG[dangerAlert.alertType]?.bg || '#ec4899',
-                    color: 'white',
-                    fontSize: '0.75rem',
-                    fontWeight: 'bold',
-                    borderRadius: '4px',
-                    animation: 'pulse 0.5s infinite',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    boxShadow: '0 0 10px rgba(236, 72, 153, 0.5)',
-                  }}
-                  title={dangerAlert.message}
-                >
-                  {DANGER_ALERT_CONFIG[dangerAlert.alertType]?.emoji || '🎯'}
-                  {DANGER_ALERT_CONFIG[dangerAlert.alertType]?.label || 'TEHLİKE!'}
                 </span>
               )}
               {/* Phase 4-4: Stale badge (informational only) */}
