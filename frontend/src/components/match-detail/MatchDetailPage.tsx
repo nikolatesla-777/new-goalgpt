@@ -5,7 +5,7 @@
  * Accessed via /match/:matchId route
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     getMatchH2H,
@@ -35,6 +35,7 @@ export function MatchDetailPage() {
     const [tabLoading, setTabLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [tabData, setTabData] = useState<any>(null);
+    const hasLoadedRef = useRef(false);
 
 
     // Fetch match info with periodic polling for live matches
@@ -44,7 +45,7 @@ export function MatchDetailPage() {
             if (!matchId) return;
 
             // Only show loading on initial fetch, not on poll updates
-            if (!match) setLoading(true);
+            if (!hasLoadedRef.current) setLoading(true);
 
             try {
                 let foundMatch: Match | undefined;
@@ -77,6 +78,7 @@ export function MatchDetailPage() {
                     setError(err.message || 'Maç yüklenirken hata oluştu');
                 }
             } finally {
+                hasLoadedRef.current = true;
                 setLoading(false);
             }
         };
