@@ -96,8 +96,12 @@ export function MatchDetailPage() {
         const fetchTabData = async () => {
             if (!matchId || !match) return;
 
-            setTabLoading(true);
-            setTabData(null);
+            // Silent Refresh for tabs: Only show loading/clear data on first load or tab change
+            // If data already exists, update it silently in the background
+            if (!tabData) {
+                setTabLoading(true);
+                setTabData(null);
+            }
             setError(null); // Clear previous errors
 
             try {
