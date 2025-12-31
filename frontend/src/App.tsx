@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MatchDetailPage } from './components/match-detail/MatchDetailPage';
 import { TeamCardPage } from './components/team/TeamCardPage';
+import { PlayerCardPage } from './components/player/PlayerCardPage';
 
 // Admin Panel Components
 import {
@@ -42,6 +43,13 @@ function App() {
         <Route path="/team/:teamId" element={
           <ErrorBoundary>
             <TeamCardPage />
+          </ErrorBoundary>
+        } />
+
+        {/* Player Card Page - Outside of admin layout */}
+        <Route path="/player/:playerId" element={
+          <ErrorBoundary>
+            <PlayerCardPage />
           </ErrorBoundary>
         } />
       </Routes>

@@ -23,7 +23,7 @@ export const getTeamById = async (
 ): Promise<void> => {
   try {
     const { team_id } = request.params;
-    
+
     const client = await pool.connect();
     try {
       // Get team info from ts_teams
@@ -32,7 +32,7 @@ export const getTeamById = async (
          FROM ts_teams WHERE external_id = $1`,
         [team_id]
       );
-      
+
       if (teamResult.rows.length === 0) {
         reply.status(404).send({
           success: false,
@@ -40,9 +40,9 @@ export const getTeamById = async (
         });
         return;
       }
-      
+
       const team = teamResult.rows[0];
-      
+
       // Get team's current season (from most recent match)
       const seasonResult = await client.query(
         `SELECT season_id, competition_id 
@@ -52,9 +52,9 @@ export const getTeamById = async (
          LIMIT 1`,
         [team_id]
       );
-      
+
       const currentSeasonId = seasonResult.rows[0]?.season_id || null;
-      
+
       // Get competition info
       let competition = null;
       if (team.competition_id) {
@@ -64,7 +64,7 @@ export const getTeamById = async (
         );
         competition = compResult.rows[0] || null;
       }
-      
+
       // Get recent form (last 5 matches)
       const formResult = await client.query(
         `SELECT 
@@ -86,17 +86,17 @@ export const getTeamById = async (
          LIMIT 5`,
         [team_id]
       );
-      
+
       // Calculate form (W/D/L)
       const recentForm = formResult.rows.map(match => {
         const isHome = match.home_team_id === team_id;
         const teamScore = isHome ? match.home_score_display : match.away_score_display;
         const opponentScore = isHome ? match.away_score_display : match.home_score_display;
-        
+
         let result = 'D';
         if (teamScore > opponentScore) result = 'W';
         else if (teamScore < opponentScore) result = 'L';
-        
+
         return {
           match_id: match.external_id,
           result,
@@ -106,7 +106,7 @@ export const getTeamById = async (
           date: new Date(match.match_time * 1000).toISOString().split('T')[0],
         };
       });
-      
+
       reply.send({
         success: true,
         data: {
@@ -137,7 +137,7 @@ export const getTeamById = async (
  * GET /api/teams/:team_id/fixtures
  */
 export const getTeamFixtures = async (
-  request: FastifyRequest<{ 
+  request: FastifyRequest<{
     Params: { team_id: string };
     Querystring: { season_id?: string; limit?: string };
   }>,
@@ -146,12 +146,12 @@ export const getTeamFixtures = async (
   try {
     const { team_id } = request.params;
     const { season_id, limit = '50' } = request.query;
-    
+
     // Try to fetch from TheSports API first (for full season data)
     try {
       // Get team's current season if not provided
       let targetSeasonId = season_id;
-      
+
       if (!targetSeasonId) {
         const client = await pool.connect();
         try {
@@ -166,26 +166,26 @@ export const getTeamFixtures = async (
           client.release();
         }
       }
-      
+
       if (targetSeasonId) {
         // Fetch season matches from API
         const apiResponse = await theSportsClient.get<any>('/match/season/recent', {
           uuid: targetSeasonId,
         });
-        
+
         if (apiResponse.results && Array.isArray(apiResponse.results)) {
           // Filter matches for this team
           const teamMatches = apiResponse.results.filter(
             (m: any) => m.home_team_id === team_id || m.away_team_id === team_id
           );
-          
+
           // Get team names from results_extra or database
           const teamIds = new Set<string>();
           teamMatches.forEach((m: any) => {
             teamIds.add(m.home_team_id);
             teamIds.add(m.away_team_id);
           });
-          
+
           // Fetch team names from database
           const client = await pool.connect();
           try {
@@ -195,12 +195,12 @@ export const getTeamFixtures = async (
               `SELECT external_id, name, logo_url FROM ts_teams WHERE external_id IN (${placeholders})`,
               teamIdsArray
             );
-            
+
             const teamMap = new Map<string, { name: string; logo_url: string }>();
             teamsResult.rows.forEach(t => {
               teamMap.set(t.external_id, { name: t.name, logo_url: t.logo_url });
             });
-            
+
             // Enrich matches with team names and sort
             const enrichedMatches = teamMatches.map((m: any) => ({
               id: m.id,
@@ -221,12 +221,12 @@ export const getTeamFixtures = async (
               round: m.round?.round_num || null,
               is_home: m.home_team_id === team_id,
             })).sort((a: any, b: any) => a.match_time - b.match_time);
-            
+
             // Separate past and upcoming
             const now = Math.floor(Date.now() / 1000);
             const pastMatches = enrichedMatches.filter((m: any) => m.status_id === 8 || m.match_time < now - 7200);
             const upcomingMatches = enrichedMatches.filter((m: any) => m.status_id !== 8 && m.match_time >= now - 7200);
-            
+
             reply.send({
               success: true,
               data: {
@@ -246,7 +246,7 @@ export const getTeamFixtures = async (
     } catch (apiError: any) {
       logger.warn(`[TeamController] API fetch failed for team fixtures: ${apiError.message}`);
     }
-    
+
     // Fallback: Get from database (limited to stored matches)
     const client = await pool.connect();
     try {
@@ -272,7 +272,7 @@ export const getTeamFixtures = async (
          LIMIT $2`,
         [team_id, parseInt(limit)]
       );
-      
+
       const matches = result.rows.map(m => ({
         id: m.id,
         match_time: m.match_time,
@@ -291,11 +291,11 @@ export const getTeamFixtures = async (
         away_score: m.away_score_display,
         is_home: m.home_team_id === team_id,
       }));
-      
+
       const now = Math.floor(Date.now() / 1000);
       const pastMatches = matches.filter(m => m.status_id === 8 || m.match_time < now - 7200);
       const upcomingMatches = matches.filter(m => m.status_id !== 8 && m.match_time >= now - 7200).reverse();
-      
+
       reply.send({
         success: true,
         data: {
@@ -323,7 +323,7 @@ export const getTeamFixtures = async (
  * GET /api/teams/:team_id/standings
  */
 export const getTeamStandings = async (
-  request: FastifyRequest<{ 
+  request: FastifyRequest<{
     Params: { team_id: string };
     Querystring: { season_id?: string };
   }>,
@@ -332,7 +332,7 @@ export const getTeamStandings = async (
   try {
     const { team_id } = request.params;
     let { season_id } = request.query;
-    
+
     // Get team's current season if not provided
     if (!season_id) {
       const client = await pool.connect();
@@ -348,7 +348,7 @@ export const getTeamStandings = async (
         client.release();
       }
     }
-    
+
     if (!season_id) {
       reply.status(404).send({
         success: false,
@@ -356,10 +356,10 @@ export const getTeamStandings = async (
       });
       return;
     }
-    
+
     // Get standings from service
     const standingsResponse = await seasonStandingsService.getSeasonStandings({ season_id });
-    
+
     if (!standingsResponse.results || !Array.isArray(standingsResponse.results)) {
       reply.status(404).send({
         success: false,
@@ -367,12 +367,12 @@ export const getTeamStandings = async (
       });
       return;
     }
-    
+
     // Find this team in standings
     const teamStanding = standingsResponse.results.find(
       (s: any) => s.team_id === team_id
     );
-    
+
     if (!teamStanding) {
       reply.status(404).send({
         success: false,
@@ -380,7 +380,7 @@ export const getTeamStandings = async (
       });
       return;
     }
-    
+
     reply.send({
       success: true,
       data: {
@@ -399,4 +399,56 @@ export const getTeamStandings = async (
     });
   }
 };
+
+/**
+ * Search teams by name
+ * GET /api/teams/search
+ */
+export const searchTeams = async (
+  request: FastifyRequest<{ Querystring: { q?: string; limit?: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { q, limit = '20' } = request.query;
+
+    if (!q || q.length < 2) {
+      reply.send({
+        success: true,
+        data: [],
+      });
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT external_id, name, logo_url, country_id 
+         FROM ts_teams 
+         WHERE name ILIKE $1 
+         ORDER BY name ASC 
+         LIMIT $2`,
+        [`%${q}%`, parseInt(limit)]
+      );
+
+      reply.send({
+        success: true,
+        data: result.rows.map(row => ({
+          id: row.external_id,
+          name: row.name,
+          logo_url: row.logo_url,
+          country_id: row.country_id,
+        })),
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    logger.error('[TeamController] Error in searchTeams:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
 

@@ -77,15 +77,52 @@ const navSections: { label: string; items: NavItem[] }[] = [
 
 export function AdminLayout() {
     // const location = useLocation(); // Available for future use
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+    const location = import('react-router-dom').then(m => m.useLocation());
+
+    // Close mobile menu when route changes
+    React.useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [location]);
 
     return (
         <div className="admin-container">
+            {/* Mobile Header */}
+            <div className="admin-mobile-header">
+                <button
+                    className="admin-hamburger-btn"
+                    onClick={() => setIsMobileMenuOpen(true)}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 24, height: 24 }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                    </svg>
+                </button>
+                <div className="admin-mobile-logo">
+                    <span>Goal</span>GPT
+                </div>
+                <div className="admin-mobile-header-spacer"></div>
+            </div>
+
+            {/* Mobile Overlay */}
+            <div
+                className={`admin-mobile-overlay ${isMobileMenuOpen ? 'open' : ''}`}
+                onClick={() => setIsMobileMenuOpen(false)}
+            />
+
             {/* Sidebar */}
-            <aside className="admin-sidebar">
+            <aside className={`admin-sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
                 <div className="admin-sidebar-logo">
                     <h1>
                         <span>Goal</span>GPT
                     </h1>
+                    <button
+                        className="admin-sidebar-close"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 24, height: 24 }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
 
                 <nav className="admin-sidebar-nav">
@@ -96,10 +133,11 @@ export function AdminLayout() {
                                 <NavLink
                                     key={item.path}
                                     to={item.path}
-                                    end={item.path === '/admin'}
+                                    end={item.path === '/'}
                                     className={({ isActive }) =>
                                         `admin-nav-item ${isActive ? 'active' : ''}`
                                     }
+                                    onClick={() => setIsMobileMenuOpen(false)}
                                 >
                                     <item.icon />
                                     <span>{item.label}</span>

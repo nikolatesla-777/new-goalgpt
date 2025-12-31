@@ -9,12 +9,19 @@ import {
   getTeamById,
   getTeamFixtures,
   getTeamStandings,
+  searchTeams,
 } from '../controllers/team.controller';
 
 export default async function teamRoutes(
   fastify: FastifyInstance,
   options: FastifyPluginOptions
 ) {
+  /**
+   * GET /api/teams/search
+   * Search teams by name
+   */
+  fastify.get('/search', searchTeams);
+
   /**
    * GET /api/teams/:team_id/fixtures
    * Get team fixtures (past and upcoming matches)

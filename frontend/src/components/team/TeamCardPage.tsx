@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTeamById, getTeamFixtures, getTeamStandings } from '../../api/matches';
+import { getTeamById, getTeamFixtures, getTeamStandings, getPlayersByTeam } from '../../api/matches';
 
 interface TeamData {
   id: string;
@@ -64,19 +64,34 @@ interface FixtureMatch {
   is_home: boolean;
 }
 
+interface Player {
+  external_id: string;
+  name: string;
+  short_name: string | null;
+  logo: string | null;
+  position: string | null;
+  shirt_number: number | null;
+  age: number | null;
+  nationality: string | null;
+  market_value: number | null;
+  market_value_currency: string | null;
+  season_stats: any;
+}
+
 export function TeamCardPage() {
   const { teamId } = useParams<{ teamId: string }>();
   const navigate = useNavigate();
-  
+
   const [team, setTeam] = useState<TeamData | null>(null);
   const [standing, setStanding] = useState<Standing | null>(null);
   const [fixtures, setFixtures] = useState<{
     past_matches: FixtureMatch[];
     upcoming_matches: FixtureMatch[];
   } | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'fixtures'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'fixtures' | 'standings' | 'stage' | 'players'>('overview');
 
   useEffect(() => {
     if (!teamId) return;
@@ -87,10 +102,11 @@ export function TeamCardPage() {
 
       try {
         // Fetch all data in parallel
-        const [teamData, standingsData, fixturesData] = await Promise.all([
+        const [teamData, standingsData, fixturesData, playersData] = await Promise.all([
           getTeamById(teamId),
           getTeamStandings(teamId).catch(() => null),
           getTeamFixtures(teamId).catch(() => null),
+          getPlayersByTeam(teamId).catch(() => ({ players: [] })),
         ]);
 
         setTeam(teamData);
@@ -99,6 +115,7 @@ export function TeamCardPage() {
           past_matches: fixturesData.past_matches || [],
           upcoming_matches: fixturesData.upcoming_matches || [],
         } : null);
+        setPlayers(playersData?.players || []);
       } catch (err: any) {
         setError(err.message || 'Takım bilgileri yüklenemedi');
       } finally {
@@ -111,8 +128,8 @@ export function TeamCardPage() {
 
   if (loading) {
     return (
-      <div style={{ 
-        minHeight: '100vh', 
+      <div style={{
+        minHeight: '100vh',
         backgroundColor: '#f3f4f6',
         display: 'flex',
         alignItems: 'center',
@@ -128,8 +145,8 @@ export function TeamCardPage() {
 
   if (error || !team) {
     return (
-      <div style={{ 
-        minHeight: '100vh', 
+      <div style={{
+        minHeight: '100vh',
         backgroundColor: '#f3f4f6',
         display: 'flex',
         alignItems: 'center',
@@ -139,7 +156,7 @@ export function TeamCardPage() {
           <div style={{ fontSize: '24px', marginBottom: '8px' }}>❌</div>
           {error || 'Takım bulunamadı'}
           <div style={{ marginTop: '16px' }}>
-            <button 
+            <button
               onClick={() => navigate(-1)}
               style={{
                 padding: '8px 16px',
@@ -167,14 +184,14 @@ export function TeamCardPage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
       {/* Header */}
-      <div style={{ 
+      <div style={{
         background: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)',
         color: 'white',
         padding: '24px 16px'
       }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           {/* Back Button */}
-          <button 
+          <button
             onClick={() => navigate(-1)}
             style={{
               background: 'rgba(255,255,255,0.1)',
@@ -195,15 +212,15 @@ export function TeamCardPage() {
           {/* Team Info */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             {team.logo_url ? (
-              <img 
-                src={team.logo_url} 
+              <img
+                src={team.logo_url}
                 alt={team.name}
                 style={{ width: '80px', height: '80px', objectFit: 'contain' }}
               />
             ) : (
-              <div style={{ 
-                width: '80px', 
-                height: '80px', 
+              <div style={{
+                width: '80px',
+                height: '80px',
                 backgroundColor: 'rgba(255,255,255,0.1)',
                 borderRadius: '12px',
                 display: 'flex',
@@ -219,15 +236,15 @@ export function TeamCardPage() {
                 {team.name}
               </h1>
               {team.competition && (
-                <div style={{ 
-                  marginTop: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <div style={{
+                  marginTop: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
                   gap: '8px',
                   color: 'rgba(255,255,255,0.8)'
                 }}>
                   {team.competition.logo_url && (
-                    <img 
+                    <img
                       src={team.competition.logo_url}
                       alt=""
                       style={{ width: '20px', height: '20px', objectFit: 'contain' }}
@@ -258,8 +275,8 @@ export function TeamCardPage() {
                       justifyContent: 'center',
                       fontWeight: 'bold',
                       fontSize: '14px',
-                      backgroundColor: match.result === 'W' ? '#22c55e' : 
-                                       match.result === 'D' ? '#eab308' : '#ef4444',
+                      backgroundColor: match.result === 'W' ? '#22c55e' :
+                        match.result === 'D' ? '#eab308' : '#ef4444',
                       color: 'white'
                     }}
                     title={`${match.opponent} (${match.score})`}
@@ -274,44 +291,40 @@ export function TeamCardPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ 
-        backgroundColor: 'white', 
+      <div style={{
+        backgroundColor: 'white',
         borderBottom: '1px solid #e5e7eb',
         position: 'sticky',
         top: 0,
         zIndex: 10
       }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex' }}>
-          <button
-            onClick={() => setActiveTab('overview')}
-            style={{
-              flex: 1,
-              padding: '16px',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              fontWeight: activeTab === 'overview' ? '600' : '400',
-              color: activeTab === 'overview' ? '#3b82f6' : '#6b7280',
-              borderBottom: activeTab === 'overview' ? '2px solid #3b82f6' : '2px solid transparent'
-            }}
-          >
-            📊 Genel Bakış
-          </button>
-          <button
-            onClick={() => setActiveTab('fixtures')}
-            style={{
-              flex: 1,
-              padding: '16px',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              fontWeight: activeTab === 'fixtures' ? '600' : '400',
-              color: activeTab === 'fixtures' ? '#3b82f6' : '#6b7280',
-              borderBottom: activeTab === 'fixtures' ? '2px solid #3b82f6' : '2px solid transparent'
-            }}
-          >
-            📅 Fikstür
-          </button>
+        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', overflowX: 'auto' }}>
+          {[
+            { id: 'overview', label: '📊 Genel' },
+            { id: 'fixtures', label: '📅 Fikstür' },
+            { id: 'standings', label: '🏆 Puan Durumu' },
+            { id: 'stage', label: '📍 Stage' },
+            { id: 'players', label: '👥 Kadro' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              style={{
+                flex: 1,
+                padding: '16px',
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontWeight: activeTab === tab.id ? '600' : '400',
+                color: activeTab === tab.id ? '#3b82f6' : '#6b7280',
+                borderBottom: activeTab === tab.id ? '2px solid #3b82f6' : '2px solid transparent',
+                whiteSpace: 'nowrap',
+                minWidth: '100px'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -319,109 +332,29 @@ export function TeamCardPage() {
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '16px' }}>
         {activeTab === 'overview' && (
           <div>
-            {/* Standings Card */}
-            {standing && (
-              <div style={{ 
-                backgroundColor: 'white', 
-                borderRadius: '12px', 
-                padding: '20px',
-                marginBottom: '16px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-              }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>
-                  📊 Puan Durumu
-                </h3>
-                
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(4, 1fr)', 
-                  gap: '12px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ 
-                    backgroundColor: '#f3f4f6', 
-                    padding: '16px', 
-                    borderRadius: '8px' 
-                  }}>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e3a5f' }}>
-                      {standing.position}.
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Sıra</div>
-                  </div>
-                  <div style={{ 
-                    backgroundColor: '#f3f4f6', 
-                    padding: '16px', 
-                    borderRadius: '8px' 
-                  }}>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#3b82f6' }}>
-                      {standing.points}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Puan</div>
-                  </div>
-                  <div style={{ 
-                    backgroundColor: '#f3f4f6', 
-                    padding: '16px', 
-                    borderRadius: '8px' 
-                  }}>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#22c55e' }}>
-                      {standing.won}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Galibiyet</div>
-                  </div>
-                  <div style={{ 
-                    backgroundColor: '#f3f4f6', 
-                    padding: '16px', 
-                    borderRadius: '8px' 
-                  }}>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: standing.goal_diff >= 0 ? '#22c55e' : '#ef4444' }}>
-                      {standing.goal_diff > 0 ? '+' : ''}{standing.goal_diff}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Averaj</div>
-                  </div>
-                </div>
-
-                {/* Stats Row */}
-                <div style={{ 
-                  marginTop: '16px', 
-                  display: 'flex', 
-                  justifyContent: 'space-around',
-                  padding: '12px',
-                  backgroundColor: '#f9fafb',
-                  borderRadius: '8px',
-                  fontSize: '14px'
-                }}>
-                  <div><span style={{ color: '#6b7280' }}>O:</span> <strong>{standing.played}</strong></div>
-                  <div><span style={{ color: '#6b7280' }}>G:</span> <strong style={{ color: '#22c55e' }}>{standing.won}</strong></div>
-                  <div><span style={{ color: '#6b7280' }}>B:</span> <strong style={{ color: '#eab308' }}>{standing.drawn}</strong></div>
-                  <div><span style={{ color: '#6b7280' }}>M:</span> <strong style={{ color: '#ef4444' }}>{standing.lost}</strong></div>
-                  <div><span style={{ color: '#6b7280' }}>AG:</span> <strong>{standing.goals_for}</strong></div>
-                  <div><span style={{ color: '#6b7280' }}>YG:</span> <strong>{standing.goals_against}</strong></div>
-                </div>
-              </div>
-            )}
-
-            {/* Upcoming Match */}
+            {/* Next Match Teaser */}
             {fixtures?.upcoming_matches && fixtures.upcoming_matches.length > 0 && (
-              <div style={{ 
-                backgroundColor: 'white', 
-                borderRadius: '12px', 
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
                 padding: '20px',
                 marginBottom: '16px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
               }}>
                 <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>
-                  ⏳ Sonraki Maç
+                  ⏳ Sıradaki Maç
                 </h3>
                 <MatchCard match={fixtures.upcoming_matches[0]} teamId={teamId!} navigate={navigate} />
               </div>
             )}
 
-            {/* Recent Matches */}
+            {/* Recent Matches Teaser */}
             {fixtures?.past_matches && fixtures.past_matches.length > 0 && (
-              <div style={{ 
-                backgroundColor: 'white', 
-                borderRadius: '12px', 
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
                 padding: '20px',
+                marginBottom: '16px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
               }}>
                 <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>
@@ -434,6 +367,43 @@ export function TeamCardPage() {
                 </div>
               </div>
             )}
+
+            {/* Standings Teaser */}
+            {standing && (
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '20px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>
+                  📊 Puan Durumu Özeti
+                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb', padding: '12px', borderRadius: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Pozisyon</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e3a5f' }}>#{standing.position}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Puan</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>{standing.points}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Form</div>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {team?.recent_form?.slice(0, 3).map((m, i) => (
+                        <span key={i} style={{
+                          width: '20px', height: '20px', borderRadius: '50%',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '10px', color: 'white', fontWeight: 'bold',
+                          backgroundColor: m.result === 'W' ? '#22c55e' : m.result === 'D' ? '#eab308' : '#ef4444'
+                        }}>{m.result === 'W' ? 'G' : m.result === 'D' ? 'B' : 'M'}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -441,9 +411,9 @@ export function TeamCardPage() {
           <div>
             {/* Upcoming Matches */}
             {fixtures?.upcoming_matches && fixtures.upcoming_matches.length > 0 && (
-              <div style={{ 
-                backgroundColor: 'white', 
-                borderRadius: '12px', 
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
                 padding: '20px',
                 marginBottom: '16px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
@@ -461,9 +431,9 @@ export function TeamCardPage() {
 
             {/* Past Matches */}
             {fixtures?.past_matches && fixtures.past_matches.length > 0 && (
-              <div style={{ 
-                backgroundColor: 'white', 
-                borderRadius: '12px', 
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
                 padding: '20px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
               }}>
@@ -479,15 +449,128 @@ export function TeamCardPage() {
             )}
 
             {(!fixtures?.upcoming_matches?.length && !fixtures?.past_matches?.length) && (
-              <div style={{ 
-                textAlign: 'center', 
-                padding: '40px', 
+              <div style={{
+                textAlign: 'center',
+                padding: '40px',
                 color: '#6b7280',
                 backgroundColor: 'white',
                 borderRadius: '12px'
               }}>
                 Fikstür bilgisi bulunamadı
               </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'standings' && (
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            {standing ? (
+              <>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>🏆 Lig Puan Durumu</h3>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>P</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Takım</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>O</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Av</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>P</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: '#f0f9ff' }}>
+                      <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>{standing.position}</td>
+                      <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {team?.logo_url && <img src={team.logo_url} width="24" height="24" alt="" />}
+                        <span style={{ fontWeight: '600' }}>{team?.name}</span>
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{standing.played}</td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{standing.goal_diff}</td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center', fontWeight: 'bold', color: '#3b82f6' }}>{standing.points}</td>
+                    </tr>
+                    {/* Note: Full standings table could be fetched if requested, currently showing team's context */}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: '16px', textAlign: 'center', color: '#6b7280', fontSize: '12px' }}>
+                  Bu takımın ligdeki sırasını gösterir. Tam puan durumu için Lig sayfasına gidiniz.
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>Puan durumu bilgisi bulunamadı.</div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'stage' && (
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>📍 Stage (Aşama) Bilgisi</h3>
+            <div style={{ padding: '24px', textAlign: 'center', color: '#4b5563', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+              {team?.competition ? (
+                <>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>{team.competition.name}</div>
+                  {/* If we have stage/round info in matches, we can calculate it. For now generic info */}
+                  <div>Mevcut Sezon</div>
+                </>
+              ) : (
+                <div>Lig/Kupa bilgisi mevcut değil.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'players' && (
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>👥 Kadro ({players.length})</h3>
+            {players.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '16px' }}>
+                {players.map(player => (
+                  <div
+                    key={player.external_id}
+                    onClick={() => navigate(`/player/${player.external_id}`)}
+                    style={{
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      backgroundColor: '#fff'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                  >
+                    {player.logo ? (
+                      <img src={player.logo} alt={player.name} style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', margin: '0 auto 8px' }} />
+                    ) : (
+                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#f3f4f6', margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>👤</div>
+                    )}
+                    <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '4px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{player.name}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{player.position} {player.shirt_number ? `• #${player.shirt_number}` : ''}</div>
+                    {player.market_value && (
+                      <div style={{ fontSize: '11px', color: '#059669', marginTop: '4px', fontWeight: '500' }}>
+                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumSignificantDigits: 3 }).format(player.market_value)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#6b7280' }}>Kadro bilgisi bulunamadı.</div>
             )}
           </div>
         )}
@@ -500,14 +583,14 @@ export function TeamCardPage() {
 function MatchCard({ match, teamId, navigate }: { match: FixtureMatch; teamId: string; navigate: any }) {
   const isFinished = match.status_id === 8;
   const isLive = [2, 3, 4, 5, 7].includes(match.status_id);
-  
+
   // Determine result for this team
   let resultColor = '#6b7280';
   if (isFinished && match.home_score !== null && match.away_score !== null) {
     const isHome = match.home_team.id === teamId;
     const teamScore = isHome ? match.home_score : match.away_score;
     const opponentScore = isHome ? match.away_score : match.home_score;
-    
+
     if (teamScore > opponentScore) resultColor = '#22c55e';
     else if (teamScore < opponentScore) resultColor = '#ef4444';
     else resultColor = '#eab308';
@@ -528,8 +611,8 @@ function MatchCard({ match, teamId, navigate }: { match: FixtureMatch; teamId: s
       }}
     >
       {/* Date/Time */}
-      <div style={{ 
-        width: '70px', 
+      <div style={{
+        width: '70px',
         textAlign: 'center',
         fontSize: '12px',
         color: '#6b7280'
@@ -541,8 +624,8 @@ function MatchCard({ match, teamId, navigate }: { match: FixtureMatch; teamId: s
           </div>
         )}
         {isLive && (
-          <div style={{ 
-            fontWeight: '600', 
+          <div style={{
+            fontWeight: '600',
             color: '#ef4444',
             animation: 'pulse 2s infinite'
           }}>
@@ -554,10 +637,10 @@ function MatchCard({ match, teamId, navigate }: { match: FixtureMatch; teamId: s
       {/* Teams */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
         {/* Home Team */}
-        <div style={{ 
-          flex: 1, 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
           gap: '8px',
           justifyContent: 'flex-end',
           fontWeight: match.home_team.id === teamId ? '600' : '400'
@@ -569,8 +652,8 @@ function MatchCard({ match, teamId, navigate }: { match: FixtureMatch; teamId: s
         </div>
 
         {/* Score */}
-        <div style={{ 
-          width: '60px', 
+        <div style={{
+          width: '60px',
           textAlign: 'center',
           fontWeight: 'bold',
           fontSize: '16px',
@@ -584,10 +667,10 @@ function MatchCard({ match, teamId, navigate }: { match: FixtureMatch; teamId: s
         </div>
 
         {/* Away Team */}
-        <div style={{ 
-          flex: 1, 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
           gap: '8px',
           fontWeight: match.away_team.id === teamId ? '600' : '400'
         }}>
@@ -600,8 +683,8 @@ function MatchCard({ match, teamId, navigate }: { match: FixtureMatch; teamId: s
 
       {/* Round */}
       {match.round && (
-        <div style={{ 
-          width: '50px', 
+        <div style={{
+          width: '50px',
           textAlign: 'right',
           fontSize: '12px',
           color: '#9ca3af'

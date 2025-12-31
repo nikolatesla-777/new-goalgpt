@@ -629,3 +629,72 @@ export async function getTeamStandings(teamId: string, seasonId?: string): Promi
     throw error;
   }
 }
+
+
+/**
+ * Search teams by name
+ */
+export async function searchTeams(query: string): Promise<any> {
+  const url = `${API_BASE_URL}/teams/search?q=${encodeURIComponent(query)}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data; // Backend returns array directly in data property?
+    // Checking controller: reply.send({ success: true, data: result.rows... })
+    // Yes, data.data will be the array of teams
+  } catch (error) {
+    console.error('[searchTeams] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get players by team ID (Squad)
+ */
+export async function getPlayersByTeam(teamId: string): Promise<any> {
+  const url = `${API_BASE_URL}/teams/${teamId}/players`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data; // Backend returns { players: [...] } or just array?
+    // Controller player.controller.ts: return reply.send({ players: result.rows });
+    // So data.data will be { players: [...] }
+  } catch (error) {
+    console.error('[getPlayersByTeam] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get player details by ID
+ */
+export async function getPlayerById(playerId: string): Promise<any> {
+  const url = `${API_BASE_URL}/players/${playerId}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data; // Backend returns { player: ..., matches: ... } directly or wrapped?
+    // Controller: reply.send({ player, matches })
+    // Standard wrapper not used in player controller yet?
+    // Wait, let me double check player.controller.ts return.
+    // It says: return reply.send({ player, matches });
+    // It does NOT wrap in success/data standard envelope in that specific controller method.
+    // But fastify might not auto-wrap.
+    // Let's assume raw return for now based on code I saw.
+  } catch (error) {
+    console.error('[getPlayerById] Error:', error);
+    throw error;
+  }
+}

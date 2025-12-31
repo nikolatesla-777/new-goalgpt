@@ -249,7 +249,7 @@ export function MatchDetailPage() {
             <div style={{ backgroundColor: '#1f2937', color: 'white', padding: '24px 16px 32px' }}>
                 <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
                     {/* Home Team */}
-                    <div style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ flex: 1, textAlign: 'center', cursor: 'pointer' }} onClick={() => navigate(`/team/${match.home_team_id}`)}>
                         {match.home_team?.logo_url && (
                             <img
                                 src={match.home_team.logo_url}
@@ -351,7 +351,7 @@ export function MatchDetailPage() {
                     </div>
 
                     {/* Away Team */}
-                    <div style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ flex: 1, textAlign: 'center', cursor: 'pointer' }} onClick={() => navigate(`/team/${match.away_team_id}`)}>
                         {match.away_team?.logo_url && (
                             <img
                                 src={match.away_team.logo_url}
@@ -419,7 +419,7 @@ export function MatchDetailPage() {
                         {activeTab === 'events' && <EventsContent data={tabData} match={match} />}
                         {activeTab === 'h2h' && <H2HContent data={tabData} />}
                         {activeTab === 'standings' && <StandingsContent data={tabData} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
-                        {activeTab === 'lineup' && <LineupContent data={tabData} match={match} />}
+                        {activeTab === 'lineup' && <LineupContent data={tabData} match={match} navigate={navigate} />}
                         {activeTab === 'trend' && <TrendContent data={tabData} match={match} />}
                     </>
                 )}
@@ -920,7 +920,7 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
 }
 
 // Lineup Content
-function LineupContent({ data, match }: { data: any; match: Match }) {
+function LineupContent({ data, match, navigate }: { data: any; match: Match; navigate: any }) {
     const lineup = data?.results || data;
     const homeLineup = lineup?.home || lineup?.home_lineup || [];
     const awayLineup = lineup?.away || lineup?.away_lineup || [];
@@ -942,7 +942,21 @@ function LineupContent({ data, match }: { data: any; match: Match }) {
                 {homeLineup.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {homeLineup.slice(0, 11).map((player: any, idx: number) => (
-                            <div key={idx} style={{ padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '8px', fontSize: '14px' }}>
+                            <div
+                                key={idx}
+                                onClick={() => player.id && navigate(`/player/${player.id}`)}
+                                style={{
+                                    padding: '10px',
+                                    backgroundColor: '#f0f9ff',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    cursor: player.id ? 'pointer' : 'default',
+                                    border: player.id ? '1px solid transparent' : 'none',
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => { if (player.id) { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+                                onMouseLeave={(e) => { if (player.id) { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = 'translateY(0)'; } }}
+                            >
                                 {player.shirt_number && <span style={{ fontWeight: '700', marginRight: '12px', color: '#3b82f6' }}>{player.shirt_number}</span>}
                                 {player.name || player.player_name || `Oyuncu ${idx + 1}`}
                             </div>
@@ -959,7 +973,21 @@ function LineupContent({ data, match }: { data: any; match: Match }) {
                 {awayLineup.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {awayLineup.slice(0, 11).map((player: any, idx: number) => (
-                            <div key={idx} style={{ padding: '10px', backgroundColor: '#fef2f2', borderRadius: '8px', fontSize: '14px' }}>
+                            <div
+                                key={idx}
+                                onClick={() => player.id && navigate(`/player/${player.id}`)}
+                                style={{
+                                    padding: '10px',
+                                    backgroundColor: '#fef2f2',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    cursor: player.id ? 'pointer' : 'default',
+                                    border: player.id ? '1px solid transparent' : 'none',
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => { if (player.id) { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+                                onMouseLeave={(e) => { if (player.id) { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = 'translateY(0)'; } }}
+                            >
                                 {player.shirt_number && <span style={{ fontWeight: '700', marginRight: '12px', color: '#ef4444' }}>{player.shirt_number}</span>}
                                 {player.name || player.player_name || `Oyuncu ${idx + 1}`}
                             </div>
