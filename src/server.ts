@@ -53,13 +53,6 @@ fastify.register(cors, {
   credentials: true,
 });
 
-// Health check - Basic check for uptime
-fastify.get('/api/health', async (request, reply) => {
-  return {
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  };
-});
 
 // Register routes
 fastify.register(matchRoutes, { prefix: '/api/matches' });
