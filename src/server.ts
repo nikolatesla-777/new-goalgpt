@@ -11,21 +11,24 @@ import dotenv from 'dotenv';
 import { randomUUID } from 'crypto';
 import { logger } from './utils/logger';
 import { logEvent } from './utils/obsLogger';
+
+// Routes - Corrected Imports
 import matchRoutes from './routes/match.routes';
 import seasonRoutes from './routes/season.routes';
-import { teamRoutes } from './routes/team.routes';
+import teamRoutes from './routes/team.routes';
 import playerRoutes from './routes/player.routes';
-import { leagueRoutes } from './routes/league.routes';
+import leagueRoutes from './routes/league.routes';
 import healthRoutes from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
+
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
 import { config } from './config';
 import { WebSocketService } from './services/thesports/websocket/websocket.service';
 import { TheSportsClient } from './services/thesports/client/thesports-client';
 
-// Workers - Correct existing files
+// Workers - Correct existing files from src/jobs
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
 import { TeamLogoSyncWorker } from './jobs/teamLogoSync.job';
 import { MatchSyncWorker } from './jobs/matchSync.job';
