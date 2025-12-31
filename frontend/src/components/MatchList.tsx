@@ -31,7 +31,10 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
     isFetchingRef.current = true;
     try {
       setError(null);
-      setLoading(true);
+      // Silent Refresh: Only show loading spinner on initial load (when no matches exist)
+      if (matches.length === 0) {
+        setLoading(true);
+      }
 
       let response;
       if (view === 'live') {
