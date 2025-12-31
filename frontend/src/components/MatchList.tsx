@@ -18,6 +18,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const hasLoadedRef = useRef(false);
   const isFetchingRef = useRef(false);
   const fetchRef = useRef<() => Promise<void>>(async () => { });
 
@@ -31,8 +32,10 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
     isFetchingRef.current = true;
     try {
       setError(null);
-      // Silent Refresh: Only show loading spinner on initial load (when no matches exist)
-      if (matches.length === 0) {
+
+      // CRITICAL FIX: Silent Refresh
+      // Use Ref instead of 'matches.length' to avoid stale closure flickering
+      if (!hasLoadedRef.current) {
         setLoading(true);
       }
 
@@ -44,26 +47,13 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         // For diary, finished, not_started views - use diary endpoint with date
         const { getTodayInTurkey } = await import('../utils/dateUtils');
         const dateStr = date || getTodayInTurkey();
-        console.log('📅 [MatchList] Fetching diary for date:', dateStr);
         response = await getMatchDiary(dateStr);
-        console.log('📦 [MatchList] Diary response received:', {
-          hasResults: !!response.results,
-          resultsCount: response.results?.length || 0,
-          hasErr: !!response.err,
-        });
       }
 
       // Check for error in response even if API call succeeded
       if (response.err) {
-        console.error('❌ [MatchList] Response has error:', response.err);
         throw new Error(response.err);
       }
-
-      // CRITICAL FIX: Ensure response.results is always an array before setting state
-      console.log('🔄 [MatchList] Setting matches - response type:', typeof response);
-      console.log('🔄 [MatchList] Setting matches - has results:', !!response?.results);
-      console.log('🔄 [MatchList] Setting matches - results is array:', Array.isArray(response?.results));
-      console.log('🔄 [MatchList] Setting matches - results count:', response?.results?.length || 0);
 
       // Safety check: ensure we have a valid array
       if (response && typeof response === 'object' && 'results' in response) {
@@ -88,16 +78,11 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
               return status === MatchState.NOT_STARTED;
             });
           }
-          // 'diary' view shows all matches
-
-          console.log('✅ [MatchList] Setting', filteredResults.length, 'matches (view:', view, ')');
           setMatches(filteredResults);
         } else {
-          console.warn('⚠️ [MatchList] results is not an array, type:', typeof results, 'value:', results);
           setMatches([]);
         }
       } else {
-        console.error('❌ [MatchList] Invalid response structure:', response);
         setMatches([]);
       }
       setLastUpdate(new Date());
@@ -108,6 +93,8 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       setError(errorMessage);
       setMatches([]);
     } finally {
+      // Mark as loaded and turn off spinner
+      hasLoadedRef.current = true;
       setLoading(false);
       isFetchingRef.current = false;
     }
