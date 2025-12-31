@@ -2,36 +2,47 @@
  * Fastify Server
  * 
  * Main application entry point - High performance for real-time match data processing
- * With Socket.IO integration for real-time frontend updates
  */
 
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import websocket from '@fastify/websocket';
 import dotenv from 'dotenv';
+import { randomUUID } from 'crypto';
 import { logger } from './utils/logger';
+import { logEvent } from './utils/obsLogger';
 import matchRoutes from './routes/match.routes';
-import { dashboardRoutes } from './routes/dashboard.routes';
 import seasonRoutes from './routes/season.routes';
 import { teamRoutes } from './routes/team.routes';
+import playerRoutes from './routes/player.routes';
 import { leagueRoutes } from './routes/league.routes';
+import healthRoutes from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
+import { dashboardRoutes } from './routes/dashboard.routes';
+import { setWebSocketState } from './controllers/health.controller';
+import { pool } from './database/connection';
 import { config } from './config';
 import { WebSocketService } from './services/thesports/websocket/websocket.service';
 import { TheSportsClient } from './services/thesports/client/thesports-client';
+
+// Workers - Correct existing files
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
 import { TeamLogoSyncWorker } from './jobs/teamLogoSync.job';
 import { MatchSyncWorker } from './jobs/matchSync.job';
 import { DailyMatchSyncWorker } from './jobs/dailyMatchSync.job';
-import { MatchLifecycleJob } from './jobs/matchLifecycle.job';
-import { LiveStatusSyncJob } from './jobs/liveStatusSync.job';
-import { socketIOService } from './services/socket/socketio.service';
-import { liveDataCoordinator } from './services/thesports/websocket/livedata.coordinator';
+import { LineupRefreshJob } from './jobs/lineupRefresh.job';
+import { PostMatchProcessorJob } from './jobs/postMatchProcessor.job';
+import { DataUpdateWorker } from './jobs/dataUpdate.job';
+import { MatchMinuteWorker } from './jobs/matchMinute.job';
 
 dotenv.config();
 
 const fastify = Fastify({
-  logger: false, // We use winston for logging
+  logger: false,
 });
+
+// Register WebSocket
+fastify.register(websocket);
 
 // Register CORS
 fastify.register(cors, {
@@ -49,48 +60,36 @@ fastify.get('/health', async (request, reply) => {
 
 // Register routes
 fastify.register(matchRoutes, { prefix: '/api/matches' });
-fastify.register(dashboardRoutes);
 fastify.register(seasonRoutes, { prefix: '/api/seasons' });
 fastify.register(teamRoutes, { prefix: '/api/teams' });
+fastify.register(playerRoutes, { prefix: '/api/players' });
 fastify.register(leagueRoutes, { prefix: '/api/leagues' });
 fastify.register(predictionRoutes);
-
-// Error handler
-fastify.setErrorHandler((error, request, reply) => {
-  logger.error('Error:', error);
-  reply.status(500).send({
-    success: false,
-    message: error.message || 'Internal server error',
-  });
-});
+fastify.register(dashboardRoutes, { prefix: '/api/admin' });
+fastify.register(healthRoutes, { prefix: '/api/health' });
 
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
 let teamLogoSyncWorker: TeamLogoSyncWorker | null = null;
 let matchSyncWorker: MatchSyncWorker | null = null;
 let dailyMatchSyncWorker: DailyMatchSyncWorker | null = null;
-let matchLifecycleJob: MatchLifecycleJob | null = null;
-let liveStatusSyncJob: LiveStatusSyncJob | null = null;
+let lineupRefreshJob: LineupRefreshJob | null = null;
+let postMatchProcessorJob: PostMatchProcessorJob | null = null;
+let dataUpdateWorker: DataUpdateWorker | null = null;
+let matchMinuteWorker: MatchMinuteWorker | null = null;
 let websocketService: WebSocketService | null = null;
 
-// Start server
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = '0.0.0.0';
 
 const start = async () => {
   try {
     await fastify.listen({ port: PORT, host: HOST });
     logger.info(`🚀 Fastify server running on port ${PORT}`);
-    logger.info(`📊 API: http://localhost:${PORT}/api`);
 
-    // Initialize Socket.IO with Fastify's HTTP server
-    const httpServer = fastify.server;
-    socketIOService.initialize(httpServer);
-    logger.info('✅ Socket.IO service initialized');
-
-    // Start background workers
     const theSportsClient = new TheSportsClient();
 
+    // Start workers
     teamDataSyncWorker = new TeamDataSyncWorker(theSportsClient);
     teamDataSyncWorker.start();
 
@@ -103,57 +102,35 @@ const start = async () => {
     dailyMatchSyncWorker = new DailyMatchSyncWorker(theSportsClient);
     dailyMatchSyncWorker.start();
 
-    matchLifecycleJob = new MatchLifecycleJob(theSportsClient);
-    matchLifecycleJob.start();
+    lineupRefreshJob = new LineupRefreshJob();
+    lineupRefreshJob.start();
 
-    // CRITICAL: LiveStatusSyncJob - polls /match/detail_live every 5 seconds
-    // This is the fix for delayed match status updates (was 5+ minutes, now 5 seconds)
-    liveStatusSyncJob = new LiveStatusSyncJob(theSportsClient);
-    liveStatusSyncJob.start();
+    postMatchProcessorJob = new PostMatchProcessorJob();
+    postMatchProcessorJob.start();
 
-    // Initialize WebSocket service (TheSports API connection)
+    dataUpdateWorker = new DataUpdateWorker();
+    dataUpdateWorker.start();
+
+    matchMinuteWorker = new MatchMinuteWorker();
+    matchMinuteWorker.start();
+
+    // WebSocket Service
     websocketService = new WebSocketService();
-
-    // Register event handlers - Push to frontend via Socket.IO
-    websocketService.onEvent((event) => {
-      logger.info(`⚡ WebSocket Event: ${event.type} for match ${event.matchId}`);
-
-      // Push event to frontend via Socket.IO
-      socketIOService.pushMatchEvent(event);
-
-      // Update coordinator state
-      if (event.type === 'GOAL') {
-        const goalEvent = event as any;
-        liveDataCoordinator.processWebSocketUpdate(
-          event.matchId,
-          goalEvent.homeScore,
-          goalEvent.awayScore,
-          0, // status will be updated from full message
-          `${goalEvent.time}'`
-        );
-      }
-    });
-
-    // Connect to TheSports WebSocket
     try {
       await websocketService.connect();
-      liveDataCoordinator.setWebSocketActive(true);
-      logger.info('✅ TheSports WebSocket connected');
-    } catch (error: any) {
-      logger.error('⚠️ WebSocket connection failed, will retry:', error.message);
-      liveDataCoordinator.setWebSocketActive(false);
-      // Continue without WebSocket, fallback to HTTP polling
+      setWebSocketState(true, true);
+    } catch (e: any) {
+      logger.error('WebSocket connection failed:', e.message);
+      setWebSocketState(false, false);
     }
 
-    logger.info('✅ All services started');
-    logger.info(`🔌 Socket.IO available at ws://localhost:${PORT}/socket.io`);
+    logger.info('✅ Startup complete: bootstrap OK, workers started');
   } catch (err) {
     logger.error('Error starting server:', err);
     process.exit(1);
   }
 };
 
-// Graceful shutdown
 const shutdown = async () => {
   logger.info('Shutting down gracefully...');
 
@@ -161,9 +138,14 @@ const shutdown = async () => {
   if (teamLogoSyncWorker) teamLogoSyncWorker.stop();
   if (matchSyncWorker) matchSyncWorker.stop();
   if (dailyMatchSyncWorker) dailyMatchSyncWorker.stop();
-  if (matchLifecycleJob) matchLifecycleJob.stop();
-  if (websocketService) websocketService.disconnect();
+  if (lineupRefreshJob) lineupRefreshJob.stop();
+  if (postMatchProcessorJob) postMatchProcessorJob.stop();
+  if (dataUpdateWorker) dataUpdateWorker.stop();
+  if (matchMinuteWorker) matchMinuteWorker.stop();
 
+  if (websocketService) await websocketService.disconnect();
+
+  await pool.end();
   await fastify.close();
   process.exit(0);
 };
@@ -172,4 +154,3 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 start();
-
