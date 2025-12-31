@@ -228,7 +228,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
     // CRITICAL: Poll every 10 seconds for real-time score updates
     // Reduced from 60s to 10s for faster live match updates
     // CRITICAL: If 502 error, retry more frequently (every 3 seconds) to catch backend when it comes back
-    const pollInterval = error && error.includes('502') ? 3000 : 10000;
+    const pollInterval = error && error.includes('502') ? 3000 : 3000;
     const interval = setInterval(() => {
       fetchMatches();
     }, pollInterval);
