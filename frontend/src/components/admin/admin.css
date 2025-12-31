@@ -1215,7 +1215,7 @@
   right: 0;
   height: 60px;
   background-color: var(--admin-sidebar-bg);
-  z-index: 100;
+  z-index: 1000;
   padding: 0 16px;
   align-items: center;
   justify-content: space-between;
@@ -1244,6 +1244,8 @@
   cursor: pointer;
   border-radius: var(--admin-radius-md);
   transition: background-color 0.15s ease;
+  z-index: 1001;
+  position: relative;
 }
 
 .admin-hamburger-btn:hover {
@@ -1263,15 +1265,17 @@
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 199;
+  z-index: 1990;
   opacity: 0;
   visibility: hidden;
+  pointer-events: none;
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .admin-mobile-overlay.open {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
 }
 
 /* Sidebar Close Button - Only on mobile */
@@ -1315,7 +1319,7 @@
     left: -300px;
     width: 280px;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 200;
+    z-index: 2000;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
   }
 
