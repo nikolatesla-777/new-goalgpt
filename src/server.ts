@@ -53,8 +53,8 @@ fastify.register(cors, {
   credentials: true,
 });
 
-// Health check
-fastify.get('/health', async (request, reply) => {
+// Health check - Basic check for uptime
+fastify.get('/api/health', async (request, reply) => {
   return {
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -68,8 +68,8 @@ fastify.register(teamRoutes, { prefix: '/api/teams' });
 fastify.register(playerRoutes, { prefix: '/api/players' });
 fastify.register(leagueRoutes, { prefix: '/api/leagues' });
 fastify.register(predictionRoutes);
-fastify.register(dashboardRoutes, { prefix: '/api/admin' });
-fastify.register(healthRoutes, { prefix: '/api/health' });
+fastify.register(dashboardRoutes);
+fastify.register(healthRoutes, { prefix: '/api' });
 
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
@@ -105,10 +105,10 @@ const start = async () => {
     dailyMatchSyncWorker = new DailyMatchSyncWorker(theSportsClient);
     dailyMatchSyncWorker.start();
 
-    lineupRefreshJob = new LineupRefreshJob();
+    lineupRefreshJob = new LineupRefreshJob(theSportsClient);
     lineupRefreshJob.start();
 
-    postMatchProcessorJob = new PostMatchProcessorJob();
+    postMatchProcessorJob = new PostMatchProcessorJob(theSportsClient);
     postMatchProcessorJob.start();
 
     dataUpdateWorker = new DataUpdateWorker();
