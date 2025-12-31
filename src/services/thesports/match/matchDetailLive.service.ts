@@ -540,7 +540,7 @@ export class MatchDetailLiveService {
 
       const existing = existingResult.rows[0];
       const existingStatusId = existing.status_id;
-      const matchTime = existing.match_time;
+      const matchTime = existing.match_time ? Number(existing.match_time) : null;
       const nowTs = Math.floor(Date.now() / 1000);
 
       // CRITICAL FIX: If provider didn't return match data AND match is currently LIVE status,
@@ -570,7 +570,7 @@ export class MatchDetailLiveService {
           // This likely means match has finished. Check if enough time has passed (150 minutes)
           // Standard match: 90 minutes + 15 min HT = 105 minutes, with overtime: up to 120 minutes
           // Safety margin: 150 minutes (2.5 hours) from match_time
-          const minTimeForEnd = matchTime + (150 * 60); // 150 minutes in seconds
+          const minTimeForEnd = (matchTime || 0) + (150 * 60); // 150 minutes in seconds
 
           if (nowTs >= minTimeForEnd) {
             // Match time is old enough (>150 min), safe to transition to END
@@ -664,7 +664,7 @@ export class MatchDetailLiveService {
           `[DetailLive] CRITICAL TRANSITION detected for ${match_id}: ${existingStatusId} → ${live.statusId}. ` +
           `Allowing update despite timestamp check.`
         );
-        
+
         // CRITICAL: Save first half stats when transitioning to HALF_TIME
         if (existingStatusId === 2 && live.statusId === 3) {
           logger.info(`[DetailLive] ⚽ HALF_TIME TRANSITION! Saving first half stats for ${match_id}`);
@@ -707,9 +707,9 @@ export class MatchDetailLiveService {
 
       // CRITICAL FIX: Track which kickoff timestamps we're setting in this update
       // This allows minute calculation to use the NEW values, not just existing ones
-      let firstHalfKickoffToUse = existing.first_half_kickoff_ts;
-      let secondHalfKickoffToUse = existing.second_half_kickoff_ts;
-      let overtimeKickoffToUse = existing.overtime_kickoff_ts;
+      let firstHalfKickoffToUse = existing.first_half_kickoff_ts ? Number(existing.first_half_kickoff_ts) : null;
+      let secondHalfKickoffToUse = existing.second_half_kickoff_ts ? Number(existing.second_half_kickoff_ts) : null;
+      let overtimeKickoffToUse = existing.overtime_kickoff_ts ? Number(existing.overtime_kickoff_ts) : null;
 
       if (hasLiveData && live.statusId !== null) {
         // CRITICAL FIX: Set first_half_kickoff_ts for status 2, 3, 4, 5, 7 if NULL
@@ -962,17 +962,17 @@ export class MatchDetailLiveService {
       // Import CombinedStatsService dynamically to avoid circular dependency
       const { CombinedStatsService } = await import('./combinedStats.service');
       const combinedStatsService = new CombinedStatsService(this.client);
-      
+
       // Check if first_half_stats already exists
       const hasStats = await combinedStatsService.hasFirstHalfStats(matchId);
       if (hasStats) {
         logger.debug(`[DetailLive] First half stats already saved for ${matchId}, skipping`);
         return;
       }
-      
+
       // Fetch current stats from API
       const result = await combinedStatsService.getCombinedMatchStats(matchId);
-      
+
       if (result && result.allStats && result.allStats.length > 0) {
         await combinedStatsService.saveFirstHalfStats(matchId, result.allStats);
         logger.info(`[DetailLive] ✅ Saved first half stats for ${matchId} (${result.allStats.length} stats)`);

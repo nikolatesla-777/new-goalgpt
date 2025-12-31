@@ -178,8 +178,8 @@ export class MatchWatchdogWorker {
               if (matchInfo.rows.length > 0) {
                 const match = matchInfo.rows[0];
                 const nowTs = Math.floor(Date.now() / 1000);
-                const matchTime = match.match_time;
-                const firstHalfKickoff = match.first_half_kickoff_ts;
+                const matchTime = Number(match.match_time);
+                const firstHalfKickoff = match.first_half_kickoff_ts ? Number(match.first_half_kickoff_ts) : null;
 
                 // Calculate minimum time for match to be finished
                 // First half (45) + HT (15) + Second half (45) + margin (15) = 120 minutes
@@ -254,7 +254,7 @@ export class MatchWatchdogWorker {
 
               const match = matchInfo.rows[0];
               const nowTs = Math.floor(Date.now() / 1000);
-              const matchTime = match.match_time;
+              const matchTime = Number(match.match_time);
 
               // Calculate minimum time for match to be finished
               // Standard match: 90 minutes + 15 min HT = 105 minutes minimum

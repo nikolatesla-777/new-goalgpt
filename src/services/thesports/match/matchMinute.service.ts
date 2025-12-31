@@ -32,13 +32,18 @@ export class MatchMinuteService {
     existingMinute: number | null,
     nowTs: number
   ): number | null {
+    // PHASE 4-2: Cast bigints from DB to Number to prevent string concatenation
+    const firstHalfTs = firstHalfKickoffTs !== null ? Number(firstHalfKickoffTs) : null;
+    const secondHalfTs = secondHalfKickoffTs !== null ? Number(secondHalfKickoffTs) : null;
+    const overtimeTs = overtimeKickoffTs !== null ? Number(overtimeKickoffTs) : null;
+
     // Status 2 (FIRST_HALF)
     if (statusId === 2) {
-      if (firstHalfKickoffTs === null) {
+      if (firstHalfTs === null) {
         logger.warn(`[MinuteEngine] Cannot calculate minute for status 2: first_half_kickoff_ts is NULL`);
         return null;
       }
-      const calculated = Math.floor((nowTs - firstHalfKickoffTs) / 60) + 1;
+      const calculated = Math.floor((nowTs - firstHalfTs) / 60) + 1;
       return Math.min(calculated, 45); // Clamp max 45
     }
 
@@ -49,11 +54,11 @@ export class MatchMinuteService {
 
     // Status 4 (SECOND_HALF)
     if (statusId === 4) {
-      if (secondHalfKickoffTs === null) {
+      if (secondHalfTs === null) {
         // FALLBACK: If second_half_kickoff_ts is missing, estimate from first_half
         // Usually second half starts ~60 minutes after first half kickoff (45m play + 15m break)
-        if (firstHalfKickoffTs !== null) {
-          const estimatedSecondHalfStart = firstHalfKickoffTs + 3600; // 60 minutes
+        if (firstHalfTs !== null) {
+          const estimatedSecondHalfStart = firstHalfTs + 3600; // 60 minutes
           const calculated = 45 + Math.floor((nowTs - estimatedSecondHalfStart) / 60) + 1;
           logger.debug(`[MinuteEngine] Using fallback for status 4 (estimated_start=${estimatedSecondHalfStart}): minute=${calculated}`);
           return Math.max(calculated, 46); // Clamp min 46
@@ -61,17 +66,17 @@ export class MatchMinuteService {
         logger.warn(`[MinuteEngine] Cannot calculate minute for status 4: both second_half_kickoff_ts and first_half_kickoff_ts are NULL`);
         return null;
       }
-      const calculated = 45 + Math.floor((nowTs - secondHalfKickoffTs) / 60) + 1;
+      const calculated = 45 + Math.floor((nowTs - secondHalfTs) / 60) + 1;
       return Math.max(calculated, 46); // Clamp min 46
     }
 
     // Status 5 (OVERTIME)
     if (statusId === 5) {
-      if (overtimeKickoffTs === null) {
+      if (overtimeTs === null) {
         logger.warn(`[MinuteEngine] Cannot calculate minute for status 5: overtime_kickoff_ts is NULL`);
         return null;
       }
-      return 90 + Math.floor((nowTs - overtimeKickoffTs) / 60) + 1;
+      return 90 + Math.floor((nowTs - overtimeTs) / 60) + 1;
     }
 
     // Status 7 (PENALTY) - retain existing minute
