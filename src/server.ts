@@ -18,7 +18,7 @@ import seasonRoutes from './routes/season.routes';
 import teamRoutes from './routes/team.routes';
 import playerRoutes from './routes/player.routes';
 import leagueRoutes from './routes/league.routes';
-import healthRoutes from './routes/health.routes';
+import { healthRoutes } from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
 

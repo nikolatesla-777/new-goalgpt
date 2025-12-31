@@ -177,13 +177,19 @@ export class MatchWatchdogWorker {
 
               if (matchInfo.rows.length > 0) {
                 const match = matchInfo.rows[0];
+                const toSafeNum = (val: any) => {
+                  if (val === null || val === undefined || val === '') return null;
+                  const num = Number(val);
+                  return isNaN(num) ? null : num;
+                };
+
                 const nowTs = Math.floor(Date.now() / 1000);
-                const matchTime = Number(match.match_time);
-                const firstHalfKickoff = match.first_half_kickoff_ts ? Number(match.first_half_kickoff_ts) : null;
+                const matchTime = toSafeNum(match.match_time);
+                const firstHalfKickoff = toSafeNum(match.first_half_kickoff_ts);
 
                 // Calculate minimum time for match to be finished
                 // First half (45) + HT (15) + Second half (45) + margin (15) = 120 minutes
-                const minTimeForEnd = (firstHalfKickoff || matchTime) + (120 * 60);
+                const minTimeForEnd = (firstHalfKickoff || matchTime || 0) + (120 * 60);
 
                 if (nowTs < minTimeForEnd) {
                   logger.warn(
@@ -254,13 +260,20 @@ export class MatchWatchdogWorker {
 
               const match = matchInfo.rows[0];
               const nowTs = Math.floor(Date.now() / 1000);
-              const matchTime = Number(match.match_time);
+
+              const toSafeNum = (val: any) => {
+                if (val === null || val === undefined || val === '') return null;
+                const num = Number(val);
+                return isNaN(num) ? null : num;
+              };
+
+              const matchTime = toSafeNum(match.match_time);
 
               // Calculate minimum time for match to be finished
               // Standard match: 90 minutes + 15 min HT = 105 minutes minimum
               // With overtime: up to 120 minutes
               // Safety margin: 150 minutes (2.5 hours) from match_time
-              const minTimeForEnd = matchTime + (150 * 60); // 150 minutes in seconds
+              const minTimeForEnd = (matchTime || 0) + (150 * 60); // 150 minutes in seconds
 
               // If match started less than 150 minutes ago, DO NOT transition to END
               if (nowTs < minTimeForEnd) {

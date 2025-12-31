@@ -33,9 +33,16 @@ export class MatchMinuteService {
     nowTs: number
   ): number | null {
     // PHASE 4-2: Cast bigints from DB to Number to prevent string concatenation
-    const firstHalfTs = firstHalfKickoffTs !== null ? Number(firstHalfKickoffTs) : null;
-    const secondHalfTs = secondHalfKickoffTs !== null ? Number(secondHalfKickoffTs) : null;
-    const overtimeTs = overtimeKickoffTs !== null ? Number(overtimeKickoffTs) : null;
+    // Ensure we don't return NaN which would crash DB integer columns
+    const toSafeNum = (val: any) => {
+      if (val === null || val === undefined || val === '') return null;
+      const num = Number(val);
+      return Number.isNaN(num) ? null : num;
+    };
+
+    const firstHalfTs = toSafeNum(firstHalfKickoffTs);
+    const secondHalfTs = toSafeNum(secondHalfKickoffTs);
+    const overtimeTs = toSafeNum(overtimeKickoffTs);
 
     // Status 2 (FIRST_HALF)
     if (statusId === 2) {

@@ -7,7 +7,7 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { getHealth, getReady } from '../controllers/health.controller';
 
-export default async function healthRoutes(
+export async function healthRoutes(
   fastify: FastifyInstance,
   options: FastifyPluginOptions
 ) {

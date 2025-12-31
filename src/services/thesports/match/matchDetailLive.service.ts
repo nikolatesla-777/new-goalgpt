@@ -361,12 +361,24 @@ export class MatchDetailLiveService {
     existingMinute: number | null,
     nowTs: number
   ): number | null {
+    // PHASE 4-2: Cast bigints from DB to Number to prevent string concatenation
+    // Ensure we don't return NaN which would crash DB integer columns
+    const toSafeNum = (val: any) => {
+      if (val === null || val === undefined || val === '') return null;
+      const num = Number(val);
+      return isNaN(num) ? null : num;
+    };
+
+    const firstHalfTs = toSafeNum(firstHalfKickoffTs);
+    const secondHalfTs = toSafeNum(secondHalfKickoffTs);
+    const overtimeTs = toSafeNum(overtimeKickoffTs);
+
     if (statusId === null) return null;
 
     // Status 2 (FIRST_HALF)
     if (statusId === 2) {
-      if (firstHalfKickoffTs === null) return null;
-      const calculated = Math.floor((nowTs - firstHalfKickoffTs) / 60) + 1;
+      if (firstHalfTs === null) return null;
+      const calculated = Math.floor((nowTs - firstHalfTs) / 60) + 1;
       return Math.min(calculated, 45); // Clamp max 45
     }
 
@@ -377,25 +389,25 @@ export class MatchDetailLiveService {
 
     // Status 4 (SECOND_HALF)
     if (statusId === 4) {
-      if (secondHalfKickoffTs === null) {
+      if (secondHalfTs === null) {
         // CRITICAL FIX: If second_half_kickoff_ts is NULL but first_half_kickoff_ts exists,
         // estimate second half start time (typically 15 minutes after first half ends)
         // First half = 45 minutes, half-time break = 15 minutes, so second half starts ~60 minutes after first half kickoff
-        if (firstHalfKickoffTs !== null) {
-          const estimatedSecondHalfStart = firstHalfKickoffTs + (45 * 60) + (15 * 60); // 45 min first half + 15 min break
+        if (firstHalfTs !== null) {
+          const estimatedSecondHalfStart = firstHalfTs + (45 * 60) + (15 * 60); // 45 min first half + 15 min break
           const calculated = 45 + Math.floor((nowTs - estimatedSecondHalfStart) / 60) + 1;
           return Math.max(calculated, 46); // Clamp min 46
         }
         return null;
       }
-      const calculated = 45 + Math.floor((nowTs - secondHalfKickoffTs) / 60) + 1;
+      const calculated = 45 + Math.floor((nowTs - secondHalfTs) / 60) + 1;
       return Math.max(calculated, 46); // Clamp min 46
     }
 
     // Status 5 (OVERTIME)
     if (statusId === 5) {
-      if (overtimeKickoffTs === null) return null;
-      return 90 + Math.floor((nowTs - overtimeKickoffTs) / 60) + 1;
+      if (overtimeTs === null) return null;
+      return 90 + Math.floor((nowTs - overtimeTs) / 60) + 1;
     }
 
     // Status 7 (PENALTY) - retain existing minute
@@ -540,7 +552,14 @@ export class MatchDetailLiveService {
 
       const existing = existingResult.rows[0];
       const existingStatusId = existing.status_id;
-      const matchTime = existing.match_time ? Number(existing.match_time) : null;
+
+      const toSafeNum = (val: any) => {
+        if (val === null || val === undefined || val === '') return null;
+        const num = Number(val);
+        return isNaN(num) ? null : num;
+      };
+
+      const matchTime = toSafeNum(existing.match_time);
       const nowTs = Math.floor(Date.now() / 1000);
 
       // CRITICAL FIX: If provider didn't return match data AND match is currently LIVE status,
@@ -707,9 +726,9 @@ export class MatchDetailLiveService {
 
       // CRITICAL FIX: Track which kickoff timestamps we're setting in this update
       // This allows minute calculation to use the NEW values, not just existing ones
-      let firstHalfKickoffToUse = existing.first_half_kickoff_ts ? Number(existing.first_half_kickoff_ts) : null;
-      let secondHalfKickoffToUse = existing.second_half_kickoff_ts ? Number(existing.second_half_kickoff_ts) : null;
-      let overtimeKickoffToUse = existing.overtime_kickoff_ts ? Number(existing.overtime_kickoff_ts) : null;
+      let firstHalfKickoffToUse = toSafeNum(existing.first_half_kickoff_ts);
+      let secondHalfKickoffToUse = toSafeNum(existing.second_half_kickoff_ts);
+      let overtimeKickoffToUse = toSafeNum(existing.overtime_kickoff_ts);
 
       if (hasLiveData && live.statusId !== null) {
         // CRITICAL FIX: Set first_half_kickoff_ts for status 2, 3, 4, 5, 7 if NULL
