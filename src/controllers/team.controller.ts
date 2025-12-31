@@ -155,13 +155,34 @@ export const getTeamFixtures = async (
       if (!targetSeasonId) {
         const client = await pool.connect();
         try {
-          const seasonResult = await client.query(
-            `SELECT season_id FROM ts_matches 
-             WHERE home_team_id = $1 OR away_team_id = $1
-             ORDER BY match_time DESC LIMIT 1`,
+          // First, get team's main competition
+          const teamResult = await client.query(
+            `SELECT competition_id FROM ts_teams WHERE external_id = $1`,
             [team_id]
           );
-          targetSeasonId = seasonResult.rows[0]?.season_id;
+          const teamCompetitionId = teamResult.rows[0]?.competition_id;
+
+          // Find season for team's main competition (priority)
+          if (teamCompetitionId) {
+            const mainSeasonResult = await client.query(
+              `SELECT DISTINCT season_id FROM ts_matches 
+               WHERE competition_id = $1 AND (home_team_id = $2 OR away_team_id = $2)
+               ORDER BY season_id DESC LIMIT 1`,
+              [teamCompetitionId, team_id]
+            );
+            targetSeasonId = mainSeasonResult.rows[0]?.season_id;
+          }
+
+          // Fallback: get any recent season for the team
+          if (!targetSeasonId) {
+            const seasonResult = await client.query(
+              `SELECT season_id FROM ts_matches 
+               WHERE home_team_id = $1 OR away_team_id = $1
+               ORDER BY match_time DESC LIMIT 1`,
+              [team_id]
+            );
+            targetSeasonId = seasonResult.rows[0]?.season_id;
+          }
         } finally {
           client.release();
         }
