@@ -81,8 +81,8 @@ export async function getPlayerById(
     const matches = matchesResult.rows.map(match => {
       let playerStats = null;
       if (match.player_stats) {
-        const stats = Array.isArray(match.player_stats) 
-          ? match.player_stats 
+        const stats = Array.isArray(match.player_stats)
+          ? match.player_stats
           : [];
         const playerMatchStats = stats.find((s: any) => s.player_id === playerId);
         if (playerMatchStats) {
@@ -131,11 +131,11 @@ export async function searchPlayers(
   reply: FastifyReply
 ) {
   let client;
-  
+
   try {
     const q = request.query.q || '';
     const limit = parseInt(request.query.limit || '20', 10);
-    
+
     if (!q || q.length < 2) {
       return reply.send({ players: [] });
     }
@@ -175,10 +175,13 @@ export async function searchPlayers(
  * Get players by team ID
  */
 export async function getPlayersByTeam(
-  request: FastifyRequest<{ Params: { teamId: string } }>,
+  request: FastifyRequest<{ Params: { teamId?: string; team_id?: string } }>,
   reply: FastifyReply
 ) {
-  const { teamId } = request.params;
+  const teamId = request.params.teamId || request.params.team_id;
+  if (!teamId) {
+    return reply.status(400).send({ error: 'Team ID is required' });
+  }
   const client = await pool.connect();
 
   try {
