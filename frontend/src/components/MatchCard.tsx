@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import type { Match } from '../api/matches';
 import { isLiveMatch, isFinishedMatch, getMatchStatusText, formatMatchTime, MatchState } from '../utils/matchStatus';
+import { useAIPredictions } from '../context/AIPredictionsContext';
+import { Robot } from '@phosphor-icons/react';
 
 interface MatchCardProps {
   match: Match;
@@ -8,6 +10,9 @@ interface MatchCardProps {
 
 export function MatchCard({ match }: MatchCardProps) {
   const navigate = useNavigate();
+  const { matchIds } = useAIPredictions();
+  const hasPrediction = matchIds.has(match.id);
+
   // CRITICAL FIX: Safety checks
   if (!match || typeof match !== 'object' || !match.id) {
     console.error('❌ [MatchCard] Invalid match object:', match);
@@ -164,9 +169,20 @@ export function MatchCard({ match }: MatchCardProps) {
             {matchTime > 0 ? formatMatchTime(matchTime) : 'Tarih yok'}
           </span>
         </div>
-        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-          {getMatchStatusText(status)}
-        </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {hasPrediction && (
+            <div
+              title="Yapay Zeka Tahmini Var"
+              className="bg-blue-100 text-blue-600 p-1 rounded-md animate-pulse"
+            >
+              <Robot size={16} weight="fill" />
+            </div>
+          )}
+          <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            {getMatchStatusText(status)}
+          </span>
+        </div>
       </div>
 
       <div style={{
@@ -418,6 +434,6 @@ export function MatchCard({ match }: MatchCardProps) {
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }
