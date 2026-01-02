@@ -565,24 +565,68 @@ export class AIPredictionService {
           p.score_at_prediction,
           m.status_id,
           m.home_score_display,
-          m.away_score_display
+          m.away_score_display,
+          m.home_scores,
+          m.away_scores
         FROM ai_prediction_matches pm
         JOIN ai_predictions p ON p.id = pm.prediction_id
         JOIN ts_matches m ON m.external_id = pm.match_external_id
         WHERE pm.prediction_result = 'pending'
-          AND m.status_id IN (8, 9, 10, 11, 12, 13)
+          AND m.status_id IN (3, 8, 9, 10, 11, 12, 13) -- include HALF_TIME (3) for IY bets
       `;
 
             const pending = await client.query(pendingQuery);
             let updatedCount = 0;
 
             for (const row of pending.rows) {
+                // Determine Period based on prediction type
+                const typeUpper = (row.prediction_type || '').toUpperCase();
+                const valueUpper = (row.prediction_value || '').toUpperCase();
+                const fullPred = `${typeUpper} ${valueUpper}`;
+
+                let period: 'IY' | 'MS' = 'MS';
+                if (fullPred.includes('IY') || fullPred.includes('HT') || fullPred.includes('1.Y') || fullPred.includes('HALF')) {
+                    period = 'IY';
+                }
+
+                // Skip IY evaluation if match hasn't reached HT yet
+                // Status 3=Half Time, 8=Finished. (and others are late status)
+                // If period is IY, we can result it as soon as status >= 3
+                if (period === 'IY' && row.status_id < 3) {
+                    continue;
+                }
+                // If period is MS, we need status 8 (Finished) or similar end states
+                if (period === 'MS' && row.status_id !== 8 && row.status_id !== 9 && row.status_id !== 10 && row.status_id !== 11 && row.status_id !== 12 && row.status_id !== 13) {
+                    continue;
+                }
+
+                // Extract Scores
+                // MS Scores
+                const finalHome = row.home_score_display;
+                const finalAway = row.away_score_display;
+
+                // IY Scores (from JSON arrays, Index 1 is usually Period 1)
+                let htHome = 0;
+                let htAway = 0;
+                try {
+                    // home_scores: [total, p1, p2, ...]
+                    const hScores = Array.isArray(row.home_scores) ? row.home_scores : JSON.parse(row.home_scores || '[]');
+                    const aScores = Array.isArray(row.away_scores) ? row.away_scores : JSON.parse(row.away_scores || '[]');
+                    htHome = hScores[1] !== undefined ? parseInt(hScores[1]) : 0;
+                    htAway = aScores[1] !== undefined ? parseInt(aScores[1]) : 0;
+                } catch (e) {
+                    // Fallback using half-time logic if needed, or default 0-0
+                }
+
                 const result = this.calculatePredictionResult(
                     row.prediction_type,
                     row.prediction_value,
                     row.score_at_prediction,
-                    row.home_score_display,
-                    row.away_score_display
+                    finalHome,
+                    finalAway,
+                    htHome,
+                    htAway,
+                    period
                 );
 
                 if (result) {
@@ -607,7 +651,9 @@ export class AIPredictionService {
                 }
             }
 
-            logger.info(`[AIPrediction] Updated ${updatedCount} prediction results`);
+            if (updatedCount > 0) {
+                logger.info(`[AIPrediction] Updated ${updatedCount} prediction results`);
+            }
             return updatedCount;
 
         } finally {
@@ -623,60 +669,94 @@ export class AIPredictionService {
         predictionValue: string,
         scoreAtPrediction: string,
         finalHome: number,
-        finalAway: number
+        finalAway: number,
+        htHome: number,
+        htAway: number,
+        period: 'IY' | 'MS'
     ): { outcome: 'winner' | 'loser'; reason: string } | null {
         const fullPrediction = `${predictionType} ${predictionValue}`.toUpperCase();
-        const totalGoals = finalHome + finalAway;
 
-        // Parse initial score
-        const [initHome, initAway] = scoreAtPrediction.split('-').map(s => parseInt(s) || 0);
-        const goalsAfterPrediction = totalGoals - (initHome + initAway);
+        // Determine scores to use based on period
+        const targetHome = period === 'IY' ? htHome : finalHome;
+        const targetAway = period === 'IY' ? htAway : finalAway;
+        const totalGoals = targetHome + targetAway;
 
         // Over/Under patterns
+        // Standard Betting Rule: 2.5 OVER means Total Goals > 2.5
+        // (Regardless of when the bet was placed, unless it's a specific "Rest of match" bet which is rare in this context)
         const overMatch = fullPrediction.match(/([\d.]+)\s*(ÜST|OVER|O)/i);
         const underMatch = fullPrediction.match(/([\d.]+)\s*(ALT|UNDER|U)/i);
 
         if (overMatch) {
             const line = parseFloat(overMatch[1]);
-            const isOver = goalsAfterPrediction > line;
+            const isOver = totalGoals > line;
             return {
                 outcome: isOver ? 'winner' : 'loser',
-                reason: `Goals after prediction: ${goalsAfterPrediction}, Line: ${line}`
+                reason: `Total Goals: ${totalGoals}, Line: ${line} (${period})`
             };
         }
 
         if (underMatch) {
             const line = parseFloat(underMatch[1]);
-            const isUnder = goalsAfterPrediction < line;
+            // Exact line rule (e.g. 3.0) usually logic is void, but for .5 lines it's binary.
+            // If strictly < line.
+            const isUnder = totalGoals < line;
+            // What if = line? (e.g 2.0 under, result 2). usually Push.
+            // For now assuming binary (winner/loser).
             return {
                 outcome: isUnder ? 'winner' : 'loser',
-                reason: `Goals after prediction: ${goalsAfterPrediction}, Line: ${line}`
+                reason: `Total Goals: ${totalGoals}, Line: ${line} (${period})`
             };
         }
 
-        // Home/Away win patterns
-        if (fullPrediction.includes('MS 1') || fullPrediction.includes('HOME WIN')) {
+        // Side patterns (1, X, 2)
+        const isHomeWin = targetHome > targetAway;
+        const isAwayWin = targetAway > targetHome;
+        const isDraw = targetHome === targetAway;
+
+        if (fullPrediction.match(/\b(MS 1|HOME WIN|IY 1|1\.Y 1)\b/)) {
             return {
-                outcome: finalHome > finalAway ? 'winner' : 'loser',
-                reason: `Final: ${finalHome}-${finalAway}`
+                outcome: isHomeWin ? 'winner' : 'loser',
+                reason: `Score: ${targetHome}-${targetAway} (${period})`
             };
         }
 
-        if (fullPrediction.includes('MS 2') || fullPrediction.includes('AWAY WIN')) {
+        if (fullPrediction.match(/\b(MS 2|AWAY WIN|IY 2|1\.Y 2)\b/)) {
             return {
-                outcome: finalAway > finalHome ? 'winner' : 'loser',
-                reason: `Final: ${finalHome}-${finalAway}`
+                outcome: isAwayWin ? 'winner' : 'loser',
+                reason: `Score: ${targetHome}-${targetAway} (${period})`
             };
         }
 
-        if (fullPrediction.includes('MS X') || fullPrediction.includes('DRAW')) {
+        if (fullPrediction.match(/\b(MS X|DRAW|IY X|1\.Y X|BERABERE)\b/)) {
             return {
-                outcome: finalHome === finalAway ? 'winner' : 'loser',
-                reason: `Final: ${finalHome}-${finalAway}`
+                outcome: isDraw ? 'winner' : 'loser',
+                reason: `Score: ${targetHome}-${targetAway} (${period})`
             };
         }
 
-        logger.warn(`[AIPrediction] Unknown prediction type: ${fullPrediction}`);
+        // If simple "1", "X", "2" in prediction_value (and type is generic)
+        if (predictionValue === '1') return { outcome: isHomeWin ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
+        if (predictionValue === '2') return { outcome: isAwayWin ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
+        if (predictionValue === 'X' || predictionValue === '0') return { outcome: isDraw ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
+
+        // Gol Var/Yok (Both Teams To Score)
+        if (fullPrediction.includes('VAR') || fullPrediction.includes('KG VAR') || fullPrediction.includes('BTTSYES')) {
+            const btts = targetHome > 0 && targetAway > 0;
+            return {
+                outcome: btts ? 'winner' : 'loser',
+                reason: `Score: ${targetHome}-${targetAway}`
+            };
+        }
+
+        if (fullPrediction.includes('YOK') || fullPrediction.includes('KG YOK') || fullPrediction.includes('BTTSNO')) {
+            const btts = targetHome > 0 && targetAway > 0;
+            return {
+                outcome: !btts ? 'winner' : 'loser',
+                reason: `Score: ${targetHome}-${targetAway}`
+            };
+        }
+
         return null;
     }
 }
