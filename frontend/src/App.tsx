@@ -12,6 +12,7 @@ import {
   AdminPredictions,
   AdminLogs,
   AdminBots,
+  AdminBotDetail,
   AdminLivescore
 } from './components/admin';
 
@@ -31,6 +32,7 @@ function App() {
           <Route path="/admin/predictions" element={<AdminPredictions />} />
           <Route path="/admin/logs" element={<AdminLogs />} />
           <Route path="/admin/bots" element={<AdminBots />} />
+          <Route path="/admin/bots/:botName" element={<AdminBotDetail />} />
 
           {/* New Integrated Detail Pages */}
           <Route path="/match/:matchId" element={

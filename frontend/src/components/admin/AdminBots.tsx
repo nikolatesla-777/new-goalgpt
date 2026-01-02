@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './admin.css';
 
 interface BotRule {
@@ -22,6 +23,7 @@ interface BotRule {
 // const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export function AdminBots() {
+    const navigate = useNavigate();
     const [rules, setRules] = useState<BotRule[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -136,7 +138,14 @@ export function AdminBots() {
                         </div>
                     ) : (
                         rules.sort((a, b) => b.priority - a.priority).map((rule) => (
-                            <div key={rule.id} className="admin-stat-card" style={{ padding: 0, overflow: 'hidden' }}>
+                            <div
+                                key={rule.id}
+                                className="admin-stat-card"
+                                style={{ padding: 0, overflow: 'hidden', cursor: 'pointer', transition: 'transform 0.15s ease, box-shadow 0.15s ease' }}
+                                onClick={() => navigate(`/admin/bots/${encodeURIComponent(rule.bot_display_name)}`)}
+                                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.1)'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = ''; }}
+                            >
                                 {/* Card Header */}
                                 <div style={{
                                     padding: '20px 24px',
