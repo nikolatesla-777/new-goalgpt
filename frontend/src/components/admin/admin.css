@@ -754,6 +754,11 @@
   color: #8B5CF6;
 }
 
+.admin-stat-icon.yellow {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #F59E0B;
+}
+
 /* Period Selector */
 .admin-period-selector {
   display: flex;

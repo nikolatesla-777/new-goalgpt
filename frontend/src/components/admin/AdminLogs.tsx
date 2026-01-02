@@ -22,7 +22,7 @@ interface RequestLog {
     created_at: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export function AdminLogs() {
     const [logs, setLogs] = useState<RequestLog[]>([]);
@@ -38,7 +38,7 @@ export function AdminLogs() {
 
     const fetchLogs = async () => {
         try {
-            let url = `${API_BASE}/api/predictions/requests?limit=100`;
+            let url = `${API_BASE}/predictions/requests?limit=100`;
             if (filter === 'success') {
                 url += '&success=true';
             } else if (filter === 'failed') {

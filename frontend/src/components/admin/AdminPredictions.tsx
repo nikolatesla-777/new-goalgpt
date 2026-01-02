@@ -25,26 +25,58 @@ interface Prediction {
     match_external_id?: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 type FilterType = 'all' | 'pending' | 'matched' | 'winners' | 'losers';
+
+interface Stats {
+    total: number;
+    pending: number;
+    matched: number;
+    winners: number;
+    losers: number;
+    winRate: string;
+}
 
 export function AdminPredictions() {
     const [predictions, setPredictions] = useState<Prediction[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<FilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [stats, setStats] = useState<Stats | null>(null);
 
     useEffect(() => {
+        fetchStats();
         fetchPredictions();
     }, [filter]);
+
+    const fetchStats = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/predictions/stats`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setStats({
+                        total: data.stats.predictions.total || 0,
+                        pending: data.stats.predictions.pending || 0,
+                        matched: data.stats.predictions.matched || 0,
+                        winners: data.stats.predictions.winners || 0,
+                        losers: data.stats.predictions.losers || 0,
+                        winRate: data.stats.predictions.win_rate || 'N/A'
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('Fetch stats error:', err);
+        }
+    };
 
     const fetchPredictions = async () => {
         setLoading(true);
         try {
-            let endpoint = '/api/predictions/pending?limit=100';
+            let endpoint = '/predictions/pending?limit=100';
             if (filter === 'matched' || filter === 'winners' || filter === 'losers') {
-                endpoint = '/api/predictions/matched?limit=100';
+                endpoint = '/predictions/matched?limit=100';
             }
 
             const res = await fetch(`${API_BASE}${endpoint}`);
@@ -117,9 +149,78 @@ export function AdminPredictions() {
                     <h1 className="admin-header-title">AI Tahminleri</h1>
                     <p className="admin-header-subtitle">Dış yapay zekadan gelen tüm tahminler</p>
                 </div>
+                <button className="admin-btn admin-btn-primary" onClick={() => { fetchStats(); fetchPredictions(); }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                        <path d="M21 3v5h-5" />
+                    </svg>
+                    Yenile
+                </button>
             </header>
 
             <div className="admin-content">
+                {/* Stats Cards */}
+                {stats && (
+                    <div className="admin-stats-grid" style={{ marginBottom: '24px' }}>
+                        <div className="admin-stat-card">
+                            <div className="admin-stat-card-header">
+                                <div className="admin-stat-icon blue">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div className="admin-stat-value">{stats.total}</div>
+                            <div className="admin-stat-label">Toplam Tahmin</div>
+                        </div>
+                        <div className="admin-stat-card">
+                            <div className="admin-stat-card-header">
+                                <div className="admin-stat-icon yellow">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M12 6v6l4 2" />
+                                        <circle cx="12" cy="12" r="10" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div className="admin-stat-value">{stats.pending}</div>
+                            <div className="admin-stat-label">Bekleyen</div>
+                        </div>
+                        <div className="admin-stat-card">
+                            <div className="admin-stat-card-header">
+                                <div className="admin-stat-icon green">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div className="admin-stat-value">{stats.winners}</div>
+                            <div className="admin-stat-label">Kazanan</div>
+                        </div>
+                        <div className="admin-stat-card">
+                            <div className="admin-stat-card-header">
+                                <div className="admin-stat-icon red">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div className="admin-stat-value">{stats.losers}</div>
+                            <div className="admin-stat-label">Kaybeden</div>
+                        </div>
+                        <div className="admin-stat-card">
+                            <div className="admin-stat-card-header">
+                                <div className="admin-stat-icon purple">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M16 8v8m-8-8v8M8 8h8a4 4 0 014 4 4 4 0 01-4 4H8a4 4 0 01-4-4 4 4 0 014-4z" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div className="admin-stat-value">{stats.winRate}</div>
+                            <div className="admin-stat-label">Kazanma Oranı</div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Filters and Search */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
                     <div className="admin-filter-pills">
