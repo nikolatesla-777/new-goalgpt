@@ -321,7 +321,7 @@ export function MatchDetailPage() {
                                 <div className="flex items-center justify-center gap-1.5 mb-2 w-full">
                                     {isLive && (
                                         <>
-                                            {status === MatchState.HALF_TIME ? (
+                                            {status === 3 ? (
                                                 <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] md:text-xs font-bold rounded-full whitespace-nowrap">
                                                     İY
                                                 </span>
