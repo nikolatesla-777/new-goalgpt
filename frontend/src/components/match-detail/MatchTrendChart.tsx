@@ -1,10 +1,10 @@
 /**
- * Premium Match Trend Chart Component
+ * Premium Match Trend Chart Component (Bar Chart / Equalizer Style)
  * 
- * Displays offensive intensity "Pressure" trend visualization using a Mirror Area Chart.
+ * Displays offensive intensity "Pressure" trend visualization using a Mirror Bar Chart.
  * Features:
- * - Smooth Bezier Curve interpolation
- * - SVG Gradients for visual depth
+ * - Individual Bars for each minute (Equalizer look)
+ * - Vertical SVG Gradients for visual depth
  * - Interactive Cursor & Tooltip
  * - Match Event Overlays (Goals, Cards)
  */
@@ -33,26 +33,6 @@ interface MatchTrendChartProps {
     awayTeamLogo?: string | null;
     currentMinute?: number | null;
 }
-
-// Helper: Catmull-Rom to Cubic Bezier conversion for smooth curves
-// Calculates control points for a smooth path through points
-const getControlPoints = (p0: number[], p1: number[], p2: number[], t: number = 0.2) => {
-    const d1 = Math.sqrt(Math.pow(p1[0] - p0[0], 2) + Math.pow(p1[1] - p0[1], 2));
-    const d2 = Math.sqrt(Math.pow(p2[0] - p1[0], 2) + Math.pow(p2[1] - p1[1], 2));
-
-    // Check for zero distance to avoid division by zero or NaN
-    if (d1 + d2 === 0) {
-        return [p1[0], p1[1], p1[0], p1[1]];
-    }
-
-    const fa = t * d1 / (d1 + d2);
-    const fb = t * d2 / (d1 + d2);
-    const p1x = p1[0] - fa * (p2[0] - p0[0]);
-    const p1y = p1[1] - fa * (p2[1] - p0[1]);
-    const p2x = p1[0] + fb * (p2[0] - p0[0]);
-    const p2y = p1[1] + fb * (p2[1] - p0[1]);
-    return [p1x, p1y, p2x, p2y];
-};
 
 export function MatchTrendChart({
     data,
@@ -109,12 +89,16 @@ export function MatchTrendChart({
 
     // Dimensions
     const height = 280;
-    const padding = { top: 40, bottom: 40, left: 0, right: 0 };
+    const padding = { top: 40, bottom: 40, left: 10, right: 10 };
     const plotHeight = height - padding.top - padding.bottom;
     const centerY = padding.top + plotHeight / 2;
     // X Scale: 0 to 90+ minutes
     const maxMinute = Math.max(90, trendPoints.length > 0 ? trendPoints[trendPoints.length - 1].minute : 90);
-    const pixelsPerMinute = chartWidth / maxMinute;
+    const pixelsPerMinute = (chartWidth - padding.left - padding.right) / maxMinute;
+
+    // Bar dimensions
+    const barWidth = Math.max(2, pixelsPerMinute * 0.7); // 70% of minute width, min 2px
+    const barGap = pixelsPerMinute - barWidth;
 
     // Y Scale: Normalize based on max pressure value
     const maxPressure = useMemo(() => {
@@ -130,96 +114,28 @@ export function MatchTrendChart({
         return (val / maxPressure) * (plotHeight / 2);
     };
 
-    // Generate Path Data for SVG
-    const generateAreaPath = (team: 'home' | 'away') => {
-        if (trendPoints.length === 0) return '';
-
-        const points: [number, number][] = trendPoints.map(p => {
-            const x = p.minute * pixelsPerMinute;
-            const val = team === 'home' ? p.home_value : p.away_value;
-            // Home goes UP (negative Y relative to center), Away goes DOWN (positive Y relative to center)
-            const yOffset = scaleY(val);
-            const y = team === 'home' ? centerY - yOffset : centerY + yOffset;
-            return [x, y];
-        });
-
-        if (points.length < 2) return '';
-
-        // Start at center Y
-        let d = `M ${points[0][0]} ${centerY}`;
-
-        // Curve to first point
-        d += ` L ${points[0][0]} ${points[0][1]}`;
-
-        // Smooth curves between points with Catmull-Rom
-        for (let i = 0; i < points.length - 1; i++) {
-            const p0 = points[i > 0 ? i - 1 : 0]; // Prev
-            const p1 = points[i];   // Current
-            const p2 = points[i + 1]; // Next
-            // const p3 = points[i + 2 < points.length ? i + 2 : i + 1]; // NextNext (unused in current implementation of getControlPoints)
-
-            const [cp1x, cp1y, cp2x, cp2y] = getControlPoints(p0, p1, p2);
-
-            d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2[0]} ${p2[1]}`;
-        }
-
-        // Close path to center Y at end X
-        const lastX = points[points.length - 1][0];
-        d += ` L ${lastX} ${centerY}`;
-
-        // Close back to start (optional, but good for fill)
-        d += ` L ${points[0][0]} ${centerY} Z`;
-
-        return d;
-    };
-
-    // Generate Line Path (stroke only)
-    const generateLinePath = (team: 'home' | 'away') => {
-        if (trendPoints.length === 0) return '';
-        const points: [number, number][] = trendPoints.map(p => {
-            const x = p.minute * pixelsPerMinute;
-            const val = team === 'home' ? p.home_value : p.away_value;
-            const yOffset = scaleY(val);
-            const y = team === 'home' ? centerY - yOffset : centerY + yOffset;
-            return [x, y];
-        });
-
-        if (points.length < 2) return '';
-
-        let d = `M ${points[0][0]} ${points[0][1]}`;
-
-        for (let i = 0; i < points.length - 1; i++) {
-            const p0 = points[i > 0 ? i - 1 : 0]; // Prev
-            const p1 = points[i];   // Current
-            const p2 = points[i + 1]; // Next
-
-            const [cp1x, cp1y, cp2x, cp2y] = getControlPoints(p0, p1, p2);
-            d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2[0]} ${p2[1]}`;
-        }
-        return d;
-    };
-
     // Filter Important Events
     const significantEvents = useMemo(() => {
         // Filter goals and red cards
         return incidents.filter(inc => {
+            // Check both potentially property structures
             const type = inc.type || inc.incident_type;
             // 1: Goal, 3: Yellow, 4: Red, 8: Pen Goal, etc.
             // Adjust based on your API types
             return [1, 4, 8, 9, 3].includes(type);
         }).map(inc => ({
             ...inc,
-            x: (inc.minute || 0) * pixelsPerMinute,
+            x: padding.left + (inc.minute || 0) * pixelsPerMinute,
             team: inc.position === 1 ? 'home' : 'away', // 1=Home, 2=Away usually
             typeId: inc.type || inc.incident_type
         }));
-    }, [incidents, pixelsPerMinute]);
+    }, [incidents, pixelsPerMinute, padding.left]);
 
     // Handle Mouse Move
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
+        const x = e.clientX - rect.left - padding.left;
         const minute = Math.min(Math.max(0, Math.round(x / pixelsPerMinute)), maxMinute);
 
         setHoveredMinute(minute);
@@ -285,54 +201,78 @@ export function MatchTrendChart({
             {/* SVG Chart */}
             <svg width="100%" height="100%" className="block">
                 <defs>
-                    <linearGradient id="gradHome" x1="0" y1="1" x2="0" y2="0">
-                        <stop offset="0%" stopColor="rgba(16, 185, 129, 0)" />
-                        <stop offset="100%" stopColor="rgba(16, 185, 129, 0.4)" />
+                    {/* Vertical Gradients for Bars */}
+                    <linearGradient id="gradHomeBar" x1="0" y1="1" x2="0" y2="0">
+                        <stop offset="0%" stopColor="#059669" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="#34d399" stopOpacity="1" />
                     </linearGradient>
-                    <linearGradient id="gradAway" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(59, 130, 246, 0.1)" />
-                        <stop offset="100%" stopColor="rgba(59, 130, 246, 0.4)" />
+                    <linearGradient id="gradAwayBar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2563eb" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="#60a5fa" stopOpacity="1" />
                     </linearGradient>
+
                     {/* Glow Filter */}
                     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="3" result="blur" />
+                        <feGaussianBlur stdDeviation="2" result="blur" />
                         <feComposite in="SourceGraphic" in2="blur" operator="over" />
                     </filter>
                 </defs>
 
                 {/* Center Axis */}
-                <line x1="0" y1={centerY} x2="100%" y2={centerY} stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeDasharray="4 4" />
-
-                {/* --- HOME TEAM (Top) --- */}
-                <path
-                    d={generateAreaPath('home')}
-                    fill="url(#gradHome)"
-                />
-                <path
-                    d={generateLinePath('home')}
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="2"
-                    filter="url(#glow)"
-                    className="drop-shadow-lg"
+                <line
+                    x1={padding.left}
+                    y1={centerY}
+                    x2={chartWidth - padding.right}
+                    y2={centerY}
+                    stroke="rgba(255,255,255,0.1)"
+                    strokeWidth="1"
                 />
 
-                {/* --- AWAY TEAM (Bottom) --- */}
-                <path
-                    d={generateAreaPath('away')}
-                    fill="url(#gradAway)"
-                />
-                <path
-                    d={generateLinePath('away')}
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth="2"
-                    filter="url(#glow)"
-                />
+                {/* Render Bars */}
+                {trendPoints.map((point) => {
+                    const x = padding.left + point.minute * pixelsPerMinute - (barWidth / 2); // Center on minute tick
+                    const homeHeight = scaleY(point.home_value);
+                    const awayHeight = scaleY(Math.abs(point.away_value));
+
+                    // Highlight hovered bar
+                    const isHovered = hoveredMinute === point.minute;
+                    const opacity = hoveredMinute !== null && !isHovered ? 0.4 : 0.9;
+                    const filter = isHovered ? 'url(#glow)' : undefined;
+
+                    return (
+                        <g key={point.minute} opacity={opacity}>
+                            {/* Home Bar (Upwards) */}
+                            {homeHeight > 1 && (
+                                <rect
+                                    x={x}
+                                    y={centerY - homeHeight}
+                                    width={barWidth}
+                                    height={homeHeight}
+                                    fill="url(#gradHomeBar)"
+                                    rx={2}
+                                    filter={filter}
+                                />
+                            )}
+
+                            {/* Away Bar (Downwards) */}
+                            {awayHeight > 1 && (
+                                <rect
+                                    x={x}
+                                    y={centerY}
+                                    width={barWidth}
+                                    height={awayHeight}
+                                    fill="url(#gradAwayBar)"
+                                    rx={2}
+                                    filter={filter}
+                                />
+                            )}
+                        </g>
+                    );
+                })}
 
                 {/* Time Markers (X Axis) */}
                 {[0, 15, 30, 45, 60, 75, 90].map(min => (
-                    <g key={min} transform={`translate(${min * pixelsPerMinute}, ${height - 15})`}>
+                    <g key={min} transform={`translate(${padding.left + min * pixelsPerMinute}, ${height - 15})`}>
                         <text fill="#64748b" fontSize="10" textAnchor="middle" fontWeight="500">{min}'</text>
                     </g>
                 ))}
@@ -374,16 +314,17 @@ export function MatchTrendChart({
                     );
                 })}
 
-                {/* Interactive Cursor Line */}
-                {hoveredMinute !== null && (
+                {/* Current Minute Line (if live) */}
+                {currentMinute && currentMinute <= maxMinute && (
                     <line
-                        x1={hoveredMinute * pixelsPerMinute}
+                        x1={padding.left + currentMinute * pixelsPerMinute}
                         y1={padding.top}
-                        x2={hoveredMinute * pixelsPerMinute}
+                        x2={padding.left + currentMinute * pixelsPerMinute}
                         y2={height - padding.bottom}
-                        stroke="white"
+                        stroke="#ef4444"
                         strokeWidth="1"
-                        strokeOpacity="0.5"
+                        strokeDasharray="4 2"
+                        opacity="0.6"
                     />
                 )}
             </svg>
@@ -391,25 +332,29 @@ export function MatchTrendChart({
             {/* Tooltip */}
             {hoveredMinute !== null && hoveredData && (
                 <div
-                    className="absolute z-20 pointer-events-none bg-slate-800/90 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl transform -translate-x-1/2 -translate-y-full"
+                    className="absolute z-20 pointer-events-none bg-slate-800/95 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl transform -translate-x-1/2 -translate-y-full"
                     style={{
-                        left: hoveredMinute * pixelsPerMinute,
+                        left: padding.left + hoveredMinute * pixelsPerMinute,
                         top: centerY - 40, // Float above center line
                         minWidth: '140px'
                     }}
                 >
-                    <div className="text-center text-xs font-bold text-gray-400 mb-2 border-b border-gray-700 pb-1">
-                        Dakika {hoveredMinute}'
+                    {/* Triangle Arrow */}
+                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1 w-2 h-2 bg-slate-800 rotate-45 border-r border-b border-slate-700"></div>
+
+                    <div className="text-center text-xs font-bold text-gray-400 mb-2 border-b border-gray-700 pb-1 flex justify-between">
+                        <span>Dakika {hoveredMinute}'</span>
+                        {/* Show if it's a Goal/Card minute? Optional */}
                     </div>
-                    <div className="flex justify-between items-center gap-4">
+                    <div className="flex justify-between items-center gap-4 relative z-10">
                         <div className="text-center">
-                            <div className="text-emerald-400 font-bold text-lg">{hoveredData.home_value}</div>
-                            <div className="text-[10px] text-gray-500 uppercase">Ev Basıncı</div>
+                            <div className="text-emerald-400 font-bold text-xl drop-shadow-sm">{hoveredData.home_value.toFixed(1)}</div>
+                            <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold">EV</div>
                         </div>
                         <div className="w-px h-8 bg-gray-700"></div>
                         <div className="text-center">
-                            <div className="text-blue-400 font-bold text-lg">{Math.abs(hoveredData.away_value)}</div>
-                            <div className="text-[10px] text-gray-500 uppercase">Dep Basıncı</div>
+                            <div className="text-blue-400 font-bold text-xl drop-shadow-sm">{Math.abs(hoveredData.away_value).toFixed(1)}</div>
+                            <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold">DEP</div>
                         </div>
                     </div>
                 </div>
