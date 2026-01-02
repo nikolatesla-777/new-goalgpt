@@ -151,19 +151,25 @@ export class AIPredictionService {
 
             // Extract teams and score from first line
             // Match pattern: *TeamA - TeamB ( H - A )*
-            const teamsScoreMatch = firstLine.match(/\*([^*]+?)\s*-\s*([^*]+?)\s*\(\s*(\d+)\s*-\s*(\d+)\s*\)\s*\*/);
+            // CRITICAL FIX: Use ' - ' (space-hyphen-space) as separator to avoid splitting team names with hyphens
+            // Old regex: /\*([^*]+?)\s*-\s*([^*]+?)\s*\(\s*(\d+)\s*-\s*(\d+)\s*\)\s*\*/
+            // Problem: Lazy quantifier splits "Al-Shabab(KUW)" into "Al" + "Shabab(KUW)"
+            // New regex: Split on ' - ' (with mandatory spaces) and use score parenthesis as anchor
+            const teamsScoreMatch = firstLine.match(/\*(.+?)\s+-\s+([^(]+)\s*\(\s*(\d+)\s*-\s*(\d+)\s*\)\s*\*/);
             if (teamsScoreMatch) {
                 homeTeam = teamsScoreMatch[1].trim();
                 awayTeam = teamsScoreMatch[2].trim();
                 score = `${teamsScoreMatch[3]}-${teamsScoreMatch[4]}`;
             } else {
-                // Try simpler pattern: TeamA - TeamB
-                const simpleTeamsMatch = firstLine.match(/\*?([^*-]+?)\s*-\s*([^*(]+)/i);
+                // Try simpler pattern: TeamA - TeamB (using space-hyphen-space separator)
+                // CRITICAL FIX: Also use ' - ' here instead of just '-'
+                const simpleTeamsMatch = firstLine.match(/\*?(.+?)\s+-\s+([^*(]+)/i);
                 if (simpleTeamsMatch) {
                     homeTeam = simpleTeamsMatch[1].trim().replace(/^[\d⚽🏟]+/, '').trim();
                     awayTeam = simpleTeamsMatch[2].trim();
                 }
             }
+
 
             // Parse remaining lines
             for (let i = 1; i < lines.length; i++) {

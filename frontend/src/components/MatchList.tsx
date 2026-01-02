@@ -179,9 +179,18 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
           const message = JSON.parse(event.data);
           console.log('📨 WebSocket event received:', message);
 
-          // If it's a goal or score change, immediately refresh matches
-          if (message.type === 'GOAL' || message.type === 'SCORE_CHANGE') {
-            console.log(`⚽ Goal/Score update for match ${message.matchId} - refreshing matches...`);
+          // CRITICAL FIX: Listen to all critical events for real-time updates
+          // GOAL: Goal scored
+          // SCORE_CHANGE: Score updated (includes goal cancellations)
+          // MATCH_STATE_CHANGE: Status changed (NOT_STARTED → FIRST_HALF, HALF_TIME → SECOND_HALF, etc.)
+          if (
+            message.type === 'GOAL' ||
+            message.type === 'SCORE_CHANGE' ||
+            message.type === 'MATCH_STATE_CHANGE'
+          ) {
+            console.log(
+              `⚡ Real-time update (${message.type}) for match ${message.matchId} - refreshing matches...`
+            );
             fetchRef.current(); // Always call latest fetch
           }
         } catch (error) {
@@ -215,10 +224,10 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   useEffect(() => {
     fetchMatches();
 
-    // CRITICAL: Poll every 10 seconds for real-time score updates
-    // Reduced from 60s to 10s for faster live match updates
-    // CRITICAL: If 502 error, retry more frequently (every 3 seconds) to catch backend when it comes back
-    const pollInterval = error && error.includes('502') ? 3000 : 3000;
+    // CRITICAL FIX: Poll every 10 seconds for real-time score updates
+    // If 502 error, retry more frequently (every 3 seconds) to catch backend when it comes back
+    // Normal polling: 10 seconds (reduced load on backend)
+    const pollInterval = error && error.includes('502') ? 3000 : 10000;
     const interval = setInterval(() => {
       fetchMatches();
     }, pollInterval);

@@ -711,7 +711,8 @@ export class MatchDetailLiveService {
       } else {
         logger.info(
           `[DetailLive] CRITICAL TRANSITION detected for ${match_id}: ${existingStatusId} → ${live.statusId}. ` +
-          `Allowing update despite timestamp check.`
+          `Allowing update despite timestamp check. ` +
+          `(provider_time: ${incomingProviderUpdateTime}, existing_time: ${existingProviderTime}, ingestion_ts: ${ingestionTs})`
         );
 
         // CRITICAL: Save first half stats when transitioning to HALF_TIME
@@ -744,10 +745,52 @@ export class MatchDetailLiveService {
       // If we only have providerUpdateTimeOverride (no live data), skip status/score updates
       const hasLiveData = live.statusId !== null || live.homeScoreDisplay !== null || live.awayScoreDisplay !== null;
 
-      // Status update (only if we have live data)
+      // CRITICAL FIX: Status update with regression guard
       if (hasLiveData && live.statusId !== null) {
-        setParts.push(`status_id = $${i++}`);
-        values.push(live.statusId);
+        // Status hierarchy to prevent regression
+        const statusHierarchy: Record<number, number> = {
+          1: 0,  // NOT_STARTED
+          2: 1,  // FIRST_HALF
+          3: 2,  // HALF_TIME
+          4: 3,  // SECOND_HALF
+          5: 4,  // OVERTIME
+          7: 5,  // PENALTY_SHOOTOUT
+          8: 6,  // END
+        };
+        
+        const existingLevel = statusHierarchy[existingStatusId] ?? 0;
+        const newLevel = statusHierarchy[live.statusId] ?? 0;
+        
+        // CRITICAL: Prevent status regression (except END which is always allowed)
+        if (live.statusId === 8) {
+          // END (8) is always allowed from any status (match can end anytime)
+          setParts.push(`status_id = $${i++}`);
+          values.push(live.statusId);
+          logger.info(
+            `[DetailLive] Status transition to END (8) for ${match_id} from status ${existingStatusId} - allowed`
+          );
+        } else if (newLevel < existingLevel) {
+          // Status regression detected - reject update
+          logger.error(
+            `[DetailLive] ❌ STATUS REGRESSION DETECTED for ${match_id}: ` +
+            `${existingStatusId} (level ${existingLevel}) → ${live.statusId} (level ${newLevel}). ` +
+            `Rejecting update to prevent data corruption.`
+          );
+          
+          // Don't update status, but continue with other updates (scores, etc.)
+          // This allows score updates even if status is wrong
+        } else {
+          // Forward transition or same status - allowed
+          setParts.push(`status_id = $${i++}`);
+          values.push(live.statusId);
+          
+          if (existingStatusId !== live.statusId) {
+            logger.info(
+              `[DetailLive] ✅ Status transition for ${match_id}: ${existingStatusId} → ${live.statusId} ` +
+              `(provider_time: ${providerTimeToWrite}, existing_time: ${existingProviderTime})`
+            );
+          }
+        }
       }
 
       // Kickoff timestamp write-once (status transition based)

@@ -228,33 +228,20 @@ export class DataUpdateWorker {
               run_id: runId,
             });
 
-            // PHASE 4+: On match end (status=8), sync final stats/trend to database
-            // This ensures data is persisted before API stops returning it
+            // CRITICAL FIX: On match end (status=8), trigger comprehensive post-match persistence
+            // This ensures ALL match data (stats, incidents, trend, player stats, standings) is saved
             if (result.statusId === 8) {
-              logger.info(`[DataUpdate:${runId}] Match ${matchIdStr} ended (status=8), syncing final stats/trend...`);
+              logger.info(`[DataUpdate:${runId}] Match ${matchIdStr} ended (status=8), triggering post-match persistence...`);
               try {
-                // Fetch and save final combined stats (includes incidents)
-                const stats = await this.combinedStatsService.getCombinedMatchStats(matchIdStr);
-                if (stats && stats.allStats.length > 0) {
-                  await this.combinedStatsService.saveCombinedStatsToDatabase(matchIdStr, stats);
-                  logger.info(`[DataUpdate:${runId}] Saved ${stats.allStats.length} final stats for ${matchIdStr}`);
-                }
-
-                // Fetch and save final trend data
-                const trend = await this.matchTrendService.getMatchTrend({ match_id: matchIdStr }, 8);
-                const trendResults = trend?.results;
-                const hasTrendData = Array.isArray(trendResults) ? trendResults.length > 0 : !!trendResults;
-                if (hasTrendData) {
-                  // Save trend to statistics JSONB field
-                  await dbClient.query(`
-                    UPDATE ts_matches 
-                    SET statistics = COALESCE(statistics, '{}'::jsonb) || jsonb_build_object('trend', $2::jsonb)
-                    WHERE external_id = $1
-                  `, [matchIdStr, JSON.stringify(trend)]);
-                  logger.info(`[DataUpdate:${runId}] Saved trend data for ${matchIdStr}`);
-                }
+                // Use PostMatchProcessor for comprehensive data persistence
+                const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
+                const processor = new PostMatchProcessor(this.client);
+                
+                // Trigger comprehensive post-match processing
+                await processor.onMatchEnded(matchIdStr);
+                logger.info(`[DataUpdate:${runId}] ✅ Post-match persistence completed for ${matchIdStr}`);
               } catch (syncErr: any) {
-                logger.warn(`[DataUpdate:${runId}] Failed to sync final stats/trend for ${matchIdStr}:`, syncErr.message);
+                logger.warn(`[DataUpdate:${runId}] Failed to trigger post-match persistence for ${matchIdStr}:`, syncErr.message);
               }
             }
           } catch (err: any) {

@@ -238,6 +238,9 @@ export const getMatchDiary = async (
  * Get single match by ID
  * GET /api/matches/:match_id
  * Fetches match from database by external_id
+ * 
+ * CRITICAL: No cache - always fetches fresh from database
+ * Match status can change rapidly, cache would cause stale data
  */
 export const getMatchById = async (
   request: FastifyRequest<{ Params: { match_id: string } }>,
@@ -246,6 +249,8 @@ export const getMatchById = async (
   try {
     const { match_id } = request.params;
     
+    // CRITICAL: Always fetch fresh from database (no cache)
+    // Match status changes frequently, cache would cause inconsistencies
     const { pool } = await import('../database/connection');
     const client = await pool.connect();
     
@@ -313,14 +318,75 @@ export const getMatchById = async (
       const row = result.rows[0];
       const { generateMinuteText } = await import('../utils/matchMinuteText');
       
-      // Validate status (future match cannot be END)
+      // CRITICAL FIX: Validate status and prevent regression
       let validatedStatus = row.status_id ?? 0;
       const now = Math.floor(Date.now() / 1000);
       const matchTime = row.match_time;
 
+      // CRITICAL FIX: Prevent status regression
+      // If match_time has passed, status cannot be NOT_STARTED (1)
+      if (matchTime && matchTime <= now) {
+        if (validatedStatus === 1) {
+          // Match time passed but status is NOT_STARTED - this is inconsistent
+          const ageMinutes = Math.floor((now - matchTime) / 60);
+          
+          if (ageMinutes < 150) {  // Within 150 minutes (match duration)
+            // Match should be live or finished, not NOT_STARTED
+            logger.warn(
+              `[getMatchById] Match ${match_id} has status=1 but match_time passed ${ageMinutes} minutes ago. ` +
+              `This is inconsistent. Attempting to get correct status from live matches...`
+            );
+            
+            // Try to get correct status from live matches
+            try {
+              const { MatchDatabaseService } = await import('../services/thesports/match/matchDatabase.service');
+              const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
+              const matchDatabaseService = new MatchDatabaseService(new TheSportsClient());
+              const liveMatches = await matchDatabaseService.getLiveMatches();
+              const found = liveMatches.results.find((m: any) => m.id === match_id);
+              
+              if (found && found.status_id) {
+                validatedStatus = found.status_id;
+                logger.info(
+                  `[getMatchById] ✅ Corrected status for ${match_id}: 1 → ${validatedStatus} ` +
+                  `(from live matches)`
+                );
+              } else {
+                // Not in live matches, check if match is finished
+                const finishedCheck = await client.query(
+                  'SELECT status_id FROM ts_matches WHERE external_id = $1 AND status_id = 8',
+                  [match_id]
+                );
+                
+                if (finishedCheck.rows.length > 0) {
+                  validatedStatus = 8;
+                  logger.info(
+                    `[getMatchById] ✅ Corrected status for ${match_id}: 1 → 8 (match is finished)`
+                  );
+                } else {
+                  // Unknown state, keep original but log error
+                  logger.error(
+                    `[getMatchById] ❌ Cannot determine correct status for ${match_id}. ` +
+                    `Keeping status=1 but this is likely wrong. Match age: ${ageMinutes} minutes.`
+                  );
+                }
+              }
+            } catch (reconcileError: any) {
+              logger.error(
+                `[getMatchById] Failed to reconcile status for ${match_id}: ${reconcileError.message}`
+              );
+            }
+          }
+        }
+      }
+
+      // CRITICAL FIX: Future matches cannot have END status
       if (matchTime && matchTime > now) {
         if (validatedStatus === 8 || validatedStatus === 12) {
           validatedStatus = 1; // NOT_STARTED
+          logger.warn(
+            `[getMatchById] Future match ${match_id} had END status, corrected to NOT_STARTED`
+          );
         }
       }
 

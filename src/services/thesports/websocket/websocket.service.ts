@@ -124,6 +124,14 @@ export class WebSocketService {
                 statusId: parsedScore.statusId,
                 timestamp: Date.now(),
               } as any);
+
+              // CRITICAL FIX: Trigger post-match persistence when match ends (status 8)
+              if (parsedScore.statusId === 8) {
+                logger.info(`[WebSocket] Match ${parsedScore.matchId} ended (status=8), triggering post-match persistence...`);
+                this.triggerPostMatchPersistence(parsedScore.matchId).catch(err => {
+                  logger.error(`[WebSocket] Failed to trigger post-match persistence for ${parsedScore.matchId}:`, err);
+                });
+              }
             }
 
             // CRITICAL: Check for score rollback (Goal Cancellation)
@@ -1476,6 +1484,28 @@ export class WebSocketService {
    */
   getMatchState(matchId: string): { status: MatchState; lastStatus8Time: number | null } | null {
     return this.matchStates.get(matchId) || null;
+  }
+
+  /**
+   * Trigger post-match persistence when match ends
+   * CRITICAL: Ensures all match data (stats, incidents, trend, player stats, standings) is saved
+   */
+  private async triggerPostMatchPersistence(matchId: string): Promise<void> {
+    try {
+      // Import PostMatchProcessor dynamically to avoid circular dependencies
+      const { PostMatchProcessor } = await import('../../services/liveData/postMatchProcessor');
+      const { TheSportsClient } = await import('../thesports/client/thesports-client');
+      
+      const client = new TheSportsClient();
+      const processor = new PostMatchProcessor(client);
+      
+      // Trigger post-match processing
+      await processor.onMatchEnded(matchId);
+      logger.info(`[WebSocket] ✅ Post-match persistence completed for ${matchId}`);
+    } catch (error: any) {
+      logger.error(`[WebSocket] ❌ Failed to trigger post-match persistence for ${matchId}:`, error);
+      // Don't throw - this is a background operation, shouldn't block WebSocket processing
+    }
   }
 
   /**

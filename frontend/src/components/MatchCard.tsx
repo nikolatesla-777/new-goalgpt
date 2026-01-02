@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import type { Match } from '../api/matches';
-import { isLiveMatch, isFinishedMatch, formatMatchTime, MatchState } from '../utils/matchStatus';
-import { useAIPredictions } from '../context/AIPredictionsContext';
+import { isLiveMatch, isFinishedMatch, getMatchStatusText, formatMatchTime, MatchState } from '../utils/matchStatus';
 
 interface MatchCardProps {
   match: Match;
@@ -9,11 +8,6 @@ interface MatchCardProps {
 
 export function MatchCard({ match }: MatchCardProps) {
   const navigate = useNavigate();
-  const { matchIds, predictions } = useAIPredictions();
-
-  // Check if this match has an AI prediction
-  const hasAIPrediction = match?.id && matchIds.has(match.id);
-  const aiPrediction = hasAIPrediction ? predictions.get(match.id) : null;
   // CRITICAL FIX: Safety checks
   if (!match || typeof match !== 'object' || !match.id) {
     console.error('❌ [MatchCard] Invalid match object:', match);
@@ -169,32 +163,10 @@ export function MatchCard({ match }: MatchCardProps) {
           <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
             {matchTime > 0 ? formatMatchTime(matchTime) : 'Tarih yok'}
           </span>
-          {/* AI Prediction Badge */}
-          {hasAIPrediction && aiPrediction && (
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px 8px',
-                background: 'linear-gradient(135deg, #8B5CF6, #6366F1)',
-                color: 'white',
-                fontSize: '0.7rem',
-                fontWeight: 'bold',
-                borderRadius: '4px',
-                marginLeft: '8px',
-              }}
-              title={`AI Tahmini: ${aiPrediction.prediction_type || aiPrediction.prediction_value} (${Math.round((aiPrediction.overall_confidence || 0) * 100)}%)`}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 011 1v3a1 1 0 01-1 1h-1v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1H2a1 1 0 01-1-1v-3a1 1 0 011-1h1a7 7 0 017-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 012-2z" />
-                <circle cx="7.5" cy="14.5" r="1" fill="currentColor" />
-                <circle cx="16.5" cy="14.5" r="1" fill="currentColor" />
-              </svg>
-              AI
-            </span>
-          )}
         </div>
+        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+          {getMatchStatusText(status)}
+        </span>
       </div>
 
       <div style={{
@@ -446,6 +418,6 @@ export function MatchCard({ match }: MatchCardProps) {
           )}
         </div>
       </div>
-    </div >
+    </div>
   );
 }
