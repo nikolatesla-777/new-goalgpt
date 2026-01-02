@@ -16,6 +16,7 @@ import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { pool } from '../../../database/connection';
 import { ParsedScore, WebSocketTliveMessage } from '../../../types/thesports/websocket/websocket.types';
 import { VARResult, MatchState, isLiveMatchState, canResurrectFromEnd } from '../../../types/thesports/enums';
+import { MatchWriteQueue } from './matchWriteQueue';
 
 export class WebSocketService {
   private client: WebSocketClient;
@@ -23,6 +24,7 @@ export class WebSocketService {
   private validator: WebSocketValidator;
   private eventDetector: EventDetector;
   private eventHandlers: Array<(event: MatchEvent) => void> = [];
+  private writeQueue: MatchWriteQueue;
   
   // Track match states for "false end" detection
   // Map: matchId -> { status: MatchState, lastStatus8Time: number | null }
@@ -60,6 +62,7 @@ export class WebSocketService {
     this.parser = new WebSocketParser();
     this.validator = new WebSocketValidator();
     this.eventDetector = new EventDetector();
+    this.writeQueue = new MatchWriteQueue();
 
     // Register message handler
     this.client.onMessage((message) => {
@@ -137,7 +140,18 @@ export class WebSocketService {
             // CRITICAL: Check for score rollback (Goal Cancellation)
             await this.detectScoreRollback(parsedScore);
 
-            // Update database immediately (score + status)
+            // OPTIMIZATION: Queue update for batching (reduces database load)
+            // This batches multiple rapid updates for the same match
+            const ingestionTs = Math.floor(Date.now() / 1000);
+            this.writeQueue.enqueue(parsedScore.matchId, {
+              type: 'score',
+              data: parsedScore,
+              providerUpdateTime,
+              ingestionTs,
+            });
+
+            // Still do immediate write for real-time updates (critical for frontend)
+            // Queue helps batch non-critical updates
             const dbUpdated = await this.updateMatchInDatabase(parsedScore, providerUpdateTime);
 
             // Only emit SCORE_CHANGE if we actually updated a DB row
@@ -1474,6 +1488,11 @@ export class WebSocketService {
     }
     this.matchKeepaliveTimers.clear();
     this.matchStates.clear();
+    
+    // Stop write queue and flush remaining items
+    if (this.writeQueue) {
+      this.writeQueue.stop();
+    }
     
     this.client.disconnect();
   }

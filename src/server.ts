@@ -21,6 +21,7 @@ import leagueRoutes from './routes/league.routes';
 import { healthRoutes } from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
+import websocketRoutes from './routes/websocket.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -66,6 +67,7 @@ fastify.register(leagueRoutes, { prefix: '/api/leagues' });
 fastify.register(predictionRoutes);
 fastify.register(dashboardRoutes);
 fastify.register(healthRoutes, { prefix: '/api' });
+fastify.register(websocketRoutes); // WebSocket route: /ws
 
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
@@ -125,6 +127,15 @@ const start = async () => {
     try {
       await websocketService.connect();
       setWebSocketState(true, true);
+      
+      // CRITICAL: Connect WebSocketService events to Fastify WebSocket broadcasting
+      // This ensures real-time events reach frontend clients
+      const { broadcastEvent } = await import('./routes/websocket.routes');
+      websocketService.onEvent((event) => {
+        broadcastEvent(event);
+      });
+      
+      logger.info('✅ WebSocketService connected and event broadcasting enabled');
     } catch (e: any) {
       logger.error('WebSocket connection failed:', e.message);
       setWebSocketState(false, false);
