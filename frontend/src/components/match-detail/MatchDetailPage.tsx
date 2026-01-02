@@ -77,7 +77,7 @@ export function MatchDetailPage() {
                 // Step 3: If found in both, prefer live matches data (more up-to-date)
                 if (foundMatch) {
                     // Double-check: if match is live, prefer live matches data
-                    const isLiveStatus = [2, 3, 4, 5, 7].includes(foundMatch.status_id ?? 0);
+                    const isLiveStatus = [2, 3, 4, 5, 7].includes((foundMatch as any).status_id ?? 0);
                     if (isLiveStatus) {
                         // Try to get from live matches again to ensure consistency
                         try {
@@ -214,14 +214,7 @@ export function MatchDetailPage() {
         fetchTabData();
     }, [activeTab, matchId, match]);
 
-    const tabs: { id: TabType; label: string; icon: string }[] = [
-        { id: 'stats', label: 'İstatistikler', icon: '📊' },
-        { id: 'events', label: 'Etkinlikler', icon: '📋' },
-        { id: 'h2h', label: 'H2H', icon: '⚔️' },
-        { id: 'standings', label: 'Puan Durumu', icon: '🏆' },
-        { id: 'lineup', label: 'Kadro', icon: '👥' },
-        { id: 'trend', label: 'Trend', icon: '📈' },
-    ];
+
 
     if (loading) {
         return (
@@ -438,7 +431,7 @@ export function MatchDetailPage() {
                     </div>
                 ) : (
                     <>
-                        {activeTab === 'ai' && <AIContent matchId={matchId || ''} homeTeam={match.home_team?.name} awayTeam={match.away_team?.name} />}
+                        {activeTab === 'ai' && <AIContent matchId={matchId || ''} />}
                         {activeTab === 'stats' && <StatsContent data={tabData} match={match} />}
                         {activeTab === 'events' && <EventsContent data={tabData} match={match} />}
                         {activeTab === 'h2h' && <H2HContent data={tabData} />}
@@ -857,7 +850,7 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
 }
 
 // AI Content
-function AIContent({ matchId, homeTeam, awayTeam }: { matchId: string; homeTeam?: string; awayTeam?: string }) {
+function AIContent({ matchId }: { matchId: string }) {
     const { predictions, loading } = useAIPredictions();
     const prediction = predictions.get(matchId);
 
