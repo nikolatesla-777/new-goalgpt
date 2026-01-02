@@ -290,6 +290,56 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     });
 
     /**
+     * GET /api/predictions/bots
+     * List bot stats with prediction counts
+     */
+    fastify.get('/api/predictions/bots', async (request: FastifyRequest, reply: FastifyReply) => {
+        try {
+            const botStats = await aiPredictionService.getBotStats();
+
+            return reply.status(200).send({
+                success: true,
+                count: botStats.length,
+                bots: botStats
+            });
+        } catch (error) {
+            logger.error('[Predictions] Get bot stats error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
+     * GET /api/predictions/by-bot/:botName
+     * List predictions for a specific bot
+     */
+    fastify.get('/api/predictions/by-bot/:botName', async (request: FastifyRequest<{ Params: { botName: string }; Querystring: { limit?: string } }>, reply: FastifyReply) => {
+        try {
+            const { botName } = request.params;
+            const limit = parseInt(request.query.limit || '50', 10);
+
+            // URL decode the bot name
+            const decodedBotName = decodeURIComponent(botName);
+            const predictions = await aiPredictionService.getPredictionsByBotName(decodedBotName, limit);
+
+            return reply.status(200).send({
+                success: true,
+                bot_name: decodedBotName,
+                count: predictions.length,
+                predictions
+            });
+        } catch (error) {
+            logger.error('[Predictions] Get predictions by bot error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
      * POST /api/predictions/update-results
      * Manually trigger result updates for completed matches
      */

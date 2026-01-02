@@ -507,6 +507,48 @@ export class AIPredictionService {
     }
 
     /**
+     * Get predictions by bot name (for bot detail page)
+     */
+    async getPredictionsByBotName(botName: string, limit: number = 50): Promise<any[]> {
+        const query = `
+      SELECT 
+        p.*,
+        pm.match_external_id,
+        pm.overall_confidence,
+        pm.prediction_result,
+        pm.final_home_score,
+        pm.final_away_score,
+        pm.matched_at,
+        pm.resulted_at
+      FROM ai_predictions p
+      LEFT JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
+      WHERE p.bot_name = $1
+      ORDER BY p.created_at DESC
+      LIMIT $2
+    `;
+        const result = await pool.query(query, [botName, limit]);
+        return result.rows;
+    }
+
+    /**
+     * Get available bot names with prediction counts
+     */
+    async getBotStats(): Promise<{ bot_name: string; count: number; pending: number; matched: number }[]> {
+        const query = `
+      SELECT 
+        p.bot_name,
+        COUNT(*) as count,
+        COUNT(*) FILTER (WHERE p.processed = false) as pending,
+        COUNT(*) FILTER (WHERE p.processed = true) as matched
+      FROM ai_predictions p
+      GROUP BY p.bot_name
+      ORDER BY count DESC
+    `;
+        const result = await pool.query(query);
+        return result.rows;
+    }
+
+    /**
      * Update prediction results based on match outcome
      */
     async updatePredictionResults(): Promise<number> {
