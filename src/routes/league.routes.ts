@@ -20,3 +20,4 @@ export default async function leagueRoutes(fastify: FastifyInstance) {
   fastify.get('/:league_id', getLeagueById);
 }
 
+

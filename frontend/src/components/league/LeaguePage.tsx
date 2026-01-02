@@ -470,3 +470,4 @@ function MatchCard({ match, navigate }: { match: Fixture; navigate: any }) {
 
 export default LeaguePage;
 
+

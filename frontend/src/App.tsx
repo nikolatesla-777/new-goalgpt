@@ -3,6 +3,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { MatchDetailPage } from './components/match-detail/MatchDetailPage';
 import { TeamCardPage } from './components/team/TeamCardPage';
 import { PlayerCardPage } from './components/player/PlayerCardPage';
+import { CompetitionDetailPage } from './components/competition/CompetitionDetailPage';
 
 // Admin Panel Components
 import {
@@ -30,28 +31,32 @@ function App() {
           <Route path="/admin/predictions" element={<AdminPredictions />} />
           <Route path="/admin/logs" element={<AdminLogs />} />
           <Route path="/admin/bots" element={<AdminBots />} />
+
+          {/* New Integrated Detail Pages */}
+          <Route path="/match/:matchId" element={
+            <ErrorBoundary>
+              <MatchDetailPage />
+            </ErrorBoundary>
+          } />
+
+          <Route path="/team/:teamId" element={
+            <ErrorBoundary>
+              <TeamCardPage />
+            </ErrorBoundary>
+          } />
+
+          <Route path="/player/:playerId" element={
+            <ErrorBoundary>
+              <PlayerCardPage />
+            </ErrorBoundary>
+          } />
+
+          <Route path="/competition/:id" element={
+            <ErrorBoundary>
+              <CompetitionDetailPage />
+            </ErrorBoundary>
+          } />
         </Route>
-
-        {/* Match Detail Page - Outside of admin layout */}
-        <Route path="/match/:matchId" element={
-          <ErrorBoundary>
-            <MatchDetailPage />
-          </ErrorBoundary>
-        } />
-
-        {/* Team Card Page - Outside of admin layout */}
-        <Route path="/team/:teamId" element={
-          <ErrorBoundary>
-            <TeamCardPage />
-          </ErrorBoundary>
-        } />
-
-        {/* Player Card Page - Outside of admin layout */}
-        <Route path="/player/:playerId" element={
-          <ErrorBoundary>
-            <PlayerCardPage />
-          </ErrorBoundary>
-        } />
       </Routes>
     </BrowserRouter>
   );

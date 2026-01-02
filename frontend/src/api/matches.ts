@@ -698,3 +698,90 @@ export async function getPlayerById(playerId: string): Promise<any> {
     throw error;
   }
 }
+// ===== LEAGUE/COMPETITION API FUNCTIONS =====
+
+/**
+ * Get league by ID
+ */
+export async function getLeagueById(leagueId: string): Promise<any> {
+  const url = `${API_BASE_URL}/leagues/${leagueId}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('League not found');
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data; // Backend returns { league: ..., currentSeason: ... }
+  } catch (error) {
+    console.error('[getLeagueById] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get league fixtures
+ */
+export async function getLeagueFixtures(leagueId: string, params?: { limit?: number; status?: 'upcoming' | 'finished' | 'live' }): Promise<any> {
+  let url = `${API_BASE_URL}/leagues/${leagueId}/fixtures`;
+  const queryParams = new URLSearchParams();
+
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.status) queryParams.append('status', params.status);
+
+  const queryString = queryParams.toString();
+  if (queryString) url += `?${queryString}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data; // returns { fixtures: [...] }
+  } catch (error) {
+    console.error('[getLeagueFixtures] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get league standings
+ */
+export async function getLeagueStandings(leagueId: string): Promise<any> {
+  const url = `${API_BASE_URL}/leagues/${leagueId}/standings`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data; // returns { standings: [...], season_id: ... }
+  } catch (error) {
+    console.error('[getLeagueStandings] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get league teams
+ */
+export async function getLeagueTeams(leagueId: string): Promise<any> {
+  const url = `${API_BASE_URL}/leagues/${leagueId}/teams`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data; // returns { teams: [...] }
+  } catch (error) {
+    console.error('[getLeagueTeams] Error:', error);
+    throw error;
+  }
+}

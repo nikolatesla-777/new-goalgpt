@@ -58,11 +58,20 @@ interface BotRule {
 
 export class AIPredictionService {
     /**
-     * Decode Base64 prediction payload
+     * Decode Base64 prediction payload and URL-decode the content
      */
     decodePayload(base64String: string): string {
         try {
-            return Buffer.from(base64String, 'base64').toString('utf-8');
+            // First decode Base64
+            const base64Decoded = Buffer.from(base64String, 'base64').toString('utf-8');
+
+            // Then try to URL-decode (handles emoji characters like %E2%9A%BD -> ⚽)
+            try {
+                return decodeURIComponent(base64Decoded);
+            } catch {
+                // If URL decode fails, return the base64-decoded string as-is
+                return base64Decoded;
+            }
         } catch (error) {
             logger.error('[AIPrediction] Failed to decode Base64 payload:', error);
             return base64String; // Return as-is if not valid base64
@@ -103,14 +112,144 @@ export class AIPredictionService {
     }
 
     /**
+     * Parse multi-line prediction format (emoji-based or simple)
+     * 
+     * Format 1 (Emoji-based):
+     *   00084⚽ *Sunderland A.F.C - Manchester City  ( 0 - 0 )*
+     *   🏟 English Premier League
+     *   ⏰ 10
+     *   ❗ IY Gol
+     *   👉 AlertCode: IY-1 Ev: 18.5 Dep: 6.2
+     * 
+     * Format 2 (Simple):
+     *   00053*Denbigh Town - Gresford Athletic ( 1 - 2 )*
+     *   Wales Championship North
+     *   Minute: 65 SonGol dk: 51
+     *   *3.5 ÜST*
+     */
+    parseMultiLineFormat(content: string, externalId: string): ParsedPrediction | null {
+        try {
+            // Split by newlines (handle both \r\n and \n)
+            const lines = content.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+
+            if (lines.length < 2) {
+                return null;
+            }
+
+            let homeTeam = '';
+            let awayTeam = '';
+            let score = '0-0';
+            let minute = 0;
+            let league = '';
+            let predictionType = '';
+            let predictionValue = '';
+
+            // Parse first line: Teams and score
+            // Format: "00084⚽ *Sunderland A.F.C - Manchester City  ( 0 - 0 )*"
+            // Or: "00053*Denbigh Town - Gresford Athletic ( 1 - 2 )*"
+            const firstLine = lines[0];
+
+            // Extract teams and score from first line
+            // Match pattern: *TeamA - TeamB ( H - A )*
+            const teamsScoreMatch = firstLine.match(/\*([^*]+?)\s*-\s*([^*]+?)\s*\(\s*(\d+)\s*-\s*(\d+)\s*\)\s*\*/);
+            if (teamsScoreMatch) {
+                homeTeam = teamsScoreMatch[1].trim();
+                awayTeam = teamsScoreMatch[2].trim();
+                score = `${teamsScoreMatch[3]}-${teamsScoreMatch[4]}`;
+            } else {
+                // Try simpler pattern: TeamA - TeamB
+                const simpleTeamsMatch = firstLine.match(/\*?([^*-]+?)\s*-\s*([^*(]+)/i);
+                if (simpleTeamsMatch) {
+                    homeTeam = simpleTeamsMatch[1].trim().replace(/^[\d⚽🏟]+/, '').trim();
+                    awayTeam = simpleTeamsMatch[2].trim();
+                }
+            }
+
+            // Parse remaining lines
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i];
+
+                // League line (🏟 or second line without special prefix)
+                if (line.startsWith('🏟') || (i === 1 && !line.startsWith('⏰') && !line.startsWith('❗') && !line.startsWith('Minute'))) {
+                    league = line.replace(/^🏟\s*/, '').trim();
+                }
+
+                // Minute line: "⏰ 10" or "Minute: 65 SonGol dk: 51"
+                else if (line.startsWith('⏰') || line.toLowerCase().startsWith('minute')) {
+                    const minuteMatch = line.match(/(\d+)/);
+                    if (minuteMatch) {
+                        minute = parseInt(minuteMatch[1], 10);
+                    }
+                }
+
+                // Prediction type line: "❗ IY Gol"
+                else if (line.startsWith('❗')) {
+                    predictionType = line.replace(/^❗\s*/, '').trim();
+                    predictionValue = predictionType;
+                }
+
+                // Prediction value line: "*3.5 ÜST*" or "*2.5 ALT*"
+                else if (line.match(/^\*[\d.]+\s*(ÜST|ALT|OVER|UNDER)\*$/i)) {
+                    predictionValue = line.replace(/^\*|\*$/g, '').trim();
+                    predictionType = predictionValue;
+                }
+
+                // AlertCode line (extract additional info if needed)
+                else if (line.startsWith('👉') || line.toLowerCase().includes('alertcode')) {
+                    // Extract AlertCode value if prediction type not set
+                    if (!predictionType) {
+                        const alertMatch = line.match(/AlertCode:\s*([\w-]+)/i);
+                        if (alertMatch) {
+                            predictionType = alertMatch[1];
+                        }
+                    }
+                }
+            }
+
+            // Validate we got minimum required fields
+            if (!homeTeam || !awayTeam) {
+                logger.debug('[AIPrediction] Multi-line parse: No teams found');
+                return null;
+            }
+
+            logger.info(`[AIPrediction] Multi-line parsed: ${homeTeam} vs ${awayTeam} | Score: ${score} | Min: ${minute} | League: ${league} | Type: ${predictionType}`);
+
+            return {
+                externalId: externalId || `pred_${Date.now()}`,
+                botName: 'external',
+                leagueName: league,
+                homeTeamName: homeTeam,
+                awayTeamName: awayTeam,
+                scoreAtPrediction: score,
+                minuteAtPrediction: minute,
+                predictionType: predictionType,
+                predictionValue: predictionValue,
+                rawPayload: content
+            };
+
+        } catch (error) {
+            logger.error('[AIPrediction] Error in multi-line parser:', error);
+            return null;
+        }
+    }
+
+    /**
      * Parse prediction content from decoded string
-     * Expected formats:
-     * - "TeamA - TeamB | 0-0 | 10' | League Name | IY 0.5 ÜST"
-     * - JSON object with fields
+     * Tries multiple formats in order:
+     * 1. Multi-line format (emoji-based or simple) - NEW
+     * 2. JSON object
+     * 3. Pipe-delimited format
+     * 4. Simple team format
      */
     parsePredictionContent(content: string, externalId: string): ParsedPrediction | null {
         try {
-            // Try JSON parse first
+            // Try multi-line format first (most common from external systems)
+            const multiLineResult = this.parseMultiLineFormat(content, externalId);
+            if (multiLineResult) {
+                return multiLineResult;
+            }
+
+            // Try JSON parse
             try {
                 const json = JSON.parse(content);
                 if (json.home_team || json.homeTeam) {
@@ -128,7 +267,7 @@ export class AIPredictionService {
                     };
                 }
             } catch {
-                // Not JSON, try pipe-delimited format
+                // Not JSON, continue to other formats
             }
 
             // Try pipe-delimited format: "Teams | Score | Minute | League | Prediction"
@@ -171,7 +310,7 @@ export class AIPredictionService {
                 };
             }
 
-            logger.warn('[AIPrediction] Could not parse prediction content:', content.substring(0, 100));
+            logger.warn('[AIPrediction] Could not parse prediction content:', content.substring(0, 200));
             return null;
 
         } catch (error) {

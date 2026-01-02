@@ -159,11 +159,15 @@ export async function searchPlayers(
       LIMIT $2
     `, [`%${q}%`, limit]);
 
-    return reply.send({ players: result.rows });
+    return reply.send({ success: true, data: { players: result.rows } });
 
   } catch (error: any) {
     logger.error('Error searching players:', { error: error.message, stack: error.stack });
-    return reply.status(500).send({ error: 'Internal server error', details: error.message });
+    return reply.status(500).send({
+      success: false,
+      error: 'Internal server error',
+      details: error.message
+    });
   } finally {
     if (client) {
       client.release();
@@ -180,7 +184,7 @@ export async function getPlayersByTeam(
 ) {
   const teamId = request.params.teamId || request.params.team_id;
   if (!teamId) {
-    return reply.status(400).send({ error: 'Team ID is required' });
+    return reply.status(400).send({ success: false, error: 'Team ID is required' });
   }
   const client = await pool.connect();
 
@@ -216,11 +220,11 @@ export async function getPlayersByTeam(
         p.name
     `, [teamId]);
 
-    return reply.send({ players: result.rows });
+    return reply.send({ success: true, data: { players: result.rows } });
 
   } catch (error: any) {
     logger.error('Error fetching team players:', error);
-    return reply.status(500).send({ error: 'Internal server error' });
+    return reply.status(500).send({ success: false, error: 'Internal server error' });
   } finally {
     client.release();
   }

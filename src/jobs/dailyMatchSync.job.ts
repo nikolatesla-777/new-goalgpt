@@ -635,37 +635,16 @@ export class DailyMatchSyncWorker {
       { timezone: DailyMatchSyncWorker.CRON_TIMEZONE }
     );
 
-    // Repair sync: only during early-hours window (provider can lag after midnight)
-    // We DO NOT want to re-run full-day diary sync all day long.
+    // Live Catch-up sync: Every 5 minutes (Increased from 30m for real-time status protection)
+    // We run this all day to catch transitions (NOT_STARTED -> LIVE) that incremental sync might miss.
     this.incrementalCronJob = cron.schedule(
-      '*/30 * * * *',
+      '*/5 * * * *',
       async () => {
         if (this.isRunning) return;
 
-        if (!this.isInTsiRepairWindow()) {
-          return;
-        }
-
-        const state = await this.getTodaySyncState();
-
-        // Run repair only if:
-        // - no state yet (e.g., startup before first full sync), OR
-        // - last sync failed, OR
-        // - suspiciously low totalMatches (provider lag / partial bulletin)
-        const needsRepair =
-          !state ||
-          state.ok === false ||
-          (typeof state.totalMatches === 'number' && state.totalMatches > 0 && state.totalMatches < 500) ||
-          (typeof state.synced === 'number' && typeof state.totalMatches === 'number' && state.totalMatches > 0 && state.synced < state.totalMatches);
-
-        if (!needsRepair) {
-          logger.debug('🟢 [DailyDiary] Repair skipped: sync state looks healthy');
-          return;
-        }
-
-        logger.warn('🟡 [DailyDiary] Repair sync triggered (early-hours window)');
+        logger.info('🔄 [DailyDiary] LIVE CATCH-UP: Syncing today\'s diary for status updates...');
         const { dateStr } = this.getTodayTsiStrings();
-        await this.syncDateDiary(dateStr, { reason: 'REPAIR', maxAttempts: 3, batchSize: 100, interBatchDelayMs: 500 });
+        await this.syncDateDiary(dateStr, { reason: 'LIVE_CATCHUP', maxAttempts: 3, batchSize: 100, interBatchDelayMs: 500 });
       },
       { timezone: DailyMatchSyncWorker.CRON_TIMEZONE }
     );

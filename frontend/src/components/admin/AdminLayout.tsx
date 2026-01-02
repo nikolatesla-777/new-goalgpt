@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import './admin.css';
 
 // Icons as simple SVG components
@@ -76,14 +76,13 @@ const navSections: { label: string; items: NavItem[] }[] = [
 ];
 
 export function AdminLayout() {
-    // const location = useLocation(); // Available for future use
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
-    const location = import('react-router-dom').then(m => m.useLocation());
+    const location = useLocation();
 
     // Close mobile menu when route changes
     React.useEffect(() => {
         setIsMobileMenuOpen(false);
-    }, [location]);
+    }, [location.pathname]);
 
     return (
         <div className="admin-container">
@@ -91,11 +90,18 @@ export function AdminLayout() {
             <div className="admin-mobile-header">
                 <button
                     className="admin-hamburger-btn"
-                    onClick={() => setIsMobileMenuOpen(true)}
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    aria-label="Toggle Menu"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 24, height: 24 }}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-                    </svg>
+                    {isMobileMenuOpen ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 24, height: 24 }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 24, height: 24 }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                        </svg>
+                    )}
                 </button>
                 <div className="admin-mobile-logo">
                     <span>Goal</span>GPT
@@ -103,13 +109,7 @@ export function AdminLayout() {
                 <div className="admin-mobile-header-spacer"></div>
             </div>
 
-            {/* Mobile Overlay */}
-            <div
-                className={`admin-mobile-overlay ${isMobileMenuOpen ? 'open' : ''}`}
-                onClick={() => setIsMobileMenuOpen(false)}
-            />
-
-            {/* Sidebar */}
+            {/* Sidebar (Dropdown on mobile) */}
             <aside className={`admin-sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
                 <div className="admin-sidebar-logo">
                     <h1>

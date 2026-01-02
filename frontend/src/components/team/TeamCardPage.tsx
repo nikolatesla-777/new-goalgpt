@@ -84,6 +84,7 @@ export function TeamCardPage() {
 
   const [team, setTeam] = useState<TeamData | null>(null);
   const [standing, setStanding] = useState<Standing | null>(null);
+  const [allStandings, setAllStandings] = useState<Standing[]>([]);
   const [fixtures, setFixtures] = useState<{
     past_matches: FixtureMatch[];
     upcoming_matches: FixtureMatch[];
@@ -99,6 +100,7 @@ export function TeamCardPage() {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
+      setActiveTab('overview');
 
       try {
         // Fetch all data in parallel
@@ -111,6 +113,7 @@ export function TeamCardPage() {
 
         setTeam(teamData);
         setStanding(standingsData?.standing || null);
+        setAllStandings(standingsData?.standings || []);
         setFixtures(fixturesData ? {
           past_matches: fixturesData.past_matches || [],
           upcoming_matches: fixturesData.upcoming_matches || [],
@@ -236,13 +239,20 @@ export function TeamCardPage() {
                 {team.name}
               </h1>
               {team.competition && (
-                <div style={{
-                  marginTop: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  color: 'rgba(255,255,255,0.8)'
-                }}>
+                <div
+                  onClick={() => team.competition && navigate(`/competition/${team.competition.external_id}`)}
+                  style={{
+                    marginTop: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    color: 'rgba(255,255,255,0.8)',
+                    cursor: 'pointer',
+                    transition: 'color 0.2s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = '#ffffff'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
+                >
                   {team.competition.logo_url && (
                     <img
                       src={team.competition.logo_url}
@@ -475,29 +485,50 @@ export function TeamCardPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
-                      <th style={{ padding: '8px', textAlign: 'left' }}>P</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>#</th>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Takım</th>
                       <th style={{ padding: '8px', textAlign: 'center' }}>O</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>G</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>B</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>M</th>
                       <th style={{ padding: '8px', textAlign: 'center' }}>Av</th>
                       <th style={{ padding: '8px', textAlign: 'center' }}>P</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: '#f0f9ff' }}>
-                      <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>{standing.position}</td>
-                      <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {team?.logo_url && <img src={team.logo_url} width="24" height="24" alt="" />}
-                        <span style={{ fontWeight: '600' }}>{team?.name}</span>
-                      </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{standing.played}</td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{standing.goal_diff}</td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center', fontWeight: 'bold', color: '#3b82f6' }}>{standing.points}</td>
-                    </tr>
-                    {/* Note: Full standings table could be fetched if requested, currently showing team's context */}
+                    {allStandings.map((s: any) => (
+                      <tr key={s.team_id} style={{
+                        borderBottom: '1px solid #f3f4f6',
+                        backgroundColor: s.team_id === teamId ? '#f0f9ff' : 'transparent'
+                      }}>
+                        <td style={{ padding: '10px 8px', fontWeight: s.team_id === teamId ? 'bold' : 'normal' }}>{s.position}</td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span
+                            onClick={() => s.team_id !== teamId && navigate(`/team/${s.team_id}`)}
+                            style={{
+                              fontWeight: s.team_id === teamId ? '600' : 'normal',
+                              cursor: s.team_id !== teamId ? 'pointer' : 'default',
+                              color: s.team_id !== teamId ? '#2563eb' : 'inherit',
+                              textDecoration: s.team_id !== teamId ? 'none' : 'none'
+                            }}
+                            onMouseOver={(e) => s.team_id !== teamId && (e.currentTarget.style.textDecoration = 'underline')}
+                            onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
+                          >
+                            {s.team_name || (s.team_id === teamId ? team?.name : s.team_id.slice(-6))}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>{s.played}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>{s.won}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>{s.drawn}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>{s.lost}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>{s.goal_diff > 0 ? '+' : ''}{s.goal_diff}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: s.team_id === teamId ? '#3b82f6' : 'inherit' }}>{s.points}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
                 <div style={{ marginTop: '16px', textAlign: 'center', color: '#6b7280', fontSize: '12px' }}>
-                  Bu takımın ligdeki sırasını gösterir. Tam puan durumu için Lig sayfasına gidiniz.
+                  Toplam {allStandings.length} takım
                 </div>
               </>
             ) : (

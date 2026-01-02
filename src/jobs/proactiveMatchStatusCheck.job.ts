@@ -119,123 +119,14 @@ export class ProactiveMatchStatusCheckWorker {
               reason: checkReason,
             });
 
-            // CRITICAL FIX: Try detail_live first, then diary as fallback
+            // Perform authoritative detail_live reconciliation
             let reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(
               match.external_id,
               null
             );
 
-            // If detail_live failed, try diary fallback
-            if (reconcileResult.rowCount === 0) {
-              try {
-                // Extract date from match_time
-                const matchDate = new Date(match.match_time * 1000);
-                const dateStr = `${matchDate.getUTCFullYear()}${String(matchDate.getUTCMonth() + 1).padStart(2, '0')}${String(matchDate.getUTCDate()).padStart(2, '0')}`;
-
-                const { MatchDiaryService } = await import('../services/thesports/match/matchDiary.service');
-                const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
-                const client = (this.matchDetailLiveService as any).client;
-                const diaryService = new MatchDiaryService(client);
-                const diaryResponse = await diaryService.getMatchDiary({ date: dateStr, forceRefresh: true } as any);
-                const diaryMatch = (diaryResponse.results || []).find((m: any) =>
-                  String(m.id || m.external_id || m.match_id) === match.external_id
-                );
-
-                if (diaryMatch) {
-                  const diaryStatusId = diaryMatch.status_id ?? diaryMatch.status ?? null;
-                  const diaryHomeScore = diaryMatch.home_score ?? null;
-                  const diaryAwayScore = diaryMatch.away_score ?? null;
-                  const diaryMinute = diaryMatch.minute !== null && diaryMatch.minute !== undefined ? Number(diaryMatch.minute) : null;
-
-                  // CRITICAL: Update if status changed OR score/minute changed (even if status still 1)
-                  const dbClient = await pool.connect();
-                  try {
-                    const existingResult = await dbClient.query(
-                      `SELECT provider_update_time, status_id, home_score_regular, away_score_regular, minute FROM ts_matches WHERE external_id = $1`,
-                      [match.external_id]
-                    );
-
-                    if (existingResult.rows.length > 0) {
-                      const existing = existingResult.rows[0];
-                      const ingestionTs = Math.floor(Date.now() / 1000);
-
-                      // Update if:
-                      // 1. Status changed (diaryStatusId != existing.status_id) - CRITICAL: Even if diaryStatusId = 1, if match_time passed, accept provider status
-                      // 2. Score changed (even if status still 1)
-                      // 3. Minute changed (even if status still 1)
-                      // 4. Match time passed and status is still 1 - force check (provider might have updated status)
-                      const matchTimePassed = match.match_time <= nowTs;
-                      const statusChanged = diaryStatusId !== null && diaryStatusId !== existing.status_id;
-                      // CRITICAL FIX: If match_time passed and diary shows status != 1, always update (even if existing is 1)
-                      const shouldForceUpdate = matchTimePassed && diaryStatusId !== null && diaryStatusId !== 1 && existing.status_id === 1;
-                      const scoreChanged = (diaryHomeScore !== null && diaryHomeScore !== existing.home_score_regular) ||
-                        (diaryAwayScore !== null && diaryAwayScore !== existing.away_score_regular);
-                      const minuteChanged = diaryMinute !== null && diaryMinute !== existing.minute;
-
-                      if (statusChanged || shouldForceUpdate || scoreChanged || minuteChanged) {
-                        // CRITICAL FIX: If status is 2, 3, 4, 5, 7 and first_half_kickoff_ts is NULL, set it from match_time
-                        const needsKickoffTs = (diaryStatusId === 2 || diaryStatusId === 3 || diaryStatusId === 4 || diaryStatusId === 5 || diaryStatusId === 7);
-                        const existingKickoffResult = await dbClient.query(
-                          `SELECT first_half_kickoff_ts FROM ts_matches WHERE external_id = $1`,
-                          [match.external_id]
-                        );
-                        const existingKickoffTs = existingKickoffResult.rows[0]?.first_half_kickoff_ts;
-                        const shouldSetKickoffTs = needsKickoffTs && existingKickoffTs === null;
-
-                        const updateQuery = `
-                          UPDATE ts_matches
-                          SET 
-                            status_id = COALESCE($1, status_id),
-                            home_score_regular = COALESCE($2, home_score_regular),
-                            away_score_regular = COALESCE($3, away_score_regular),
-                            minute = COALESCE($4, minute),
-                            ${shouldSetKickoffTs ? 'first_half_kickoff_ts = $8,' : ''}
-                            provider_update_time = GREATEST(COALESCE(provider_update_time, 0)::BIGINT, $5::BIGINT),
-                            last_event_ts = $6::BIGINT,
-                            updated_at = NOW()
-                          WHERE external_id = $7
-                            AND (
-                              status_id = 1 
-                              OR provider_update_time IS NULL 
-                              OR provider_update_time < $5
-                              OR home_score_regular IS DISTINCT FROM $2
-                              OR away_score_regular IS DISTINCT FROM $3
-                              OR minute IS DISTINCT FROM $4
-                            )
-                        `;
-                        const updateParams = [
-                          diaryStatusId,
-                          diaryHomeScore,
-                          diaryAwayScore,
-                          diaryMinute,
-                          ingestionTs,
-                          ingestionTs,
-                          match.external_id,
-                        ];
-                        if (shouldSetKickoffTs) {
-                          updateParams.push(match.match_time); // Use match_time for first_half_kickoff_ts
-                        }
-
-                        const updateResult = await dbClient.query(updateQuery, updateParams);
-
-                        if (updateResult.rowCount && updateResult.rowCount > 0) {
-                          reconcileResult = {
-                            updated: true,
-                            rowCount: updateResult.rowCount || 0,
-                            statusId: diaryStatusId,
-                            score: null
-                          };
-                        }
-                      }
-                    }
-                  } finally {
-                    dbClient.release();
-                  }
-                }
-              } catch (diaryError: any) {
-                logger.debug(`[ProactiveCheck] Diary fallback failed for ${match.external_id}:`, diaryError.message);
-              }
-            }
+            // NOTE: Diary fallback removed here because DailyMatchSyncWorker now syncs today's diary every 5 minutes globally.
+            // This prevents redundant and rate-limited API calls within this loop.
 
             if (reconcileResult.rowCount > 0) {
               updatedCount++;

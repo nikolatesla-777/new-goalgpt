@@ -286,6 +286,31 @@ export class MatchDetailLiveService {
       (Array.isArray(root?.match_incidents) ? root.match_incidents : null) ??
       null;
 
+    // CRITICAL FIX: Calculate score from incidents if available (TheSports API sometimes delays score array update)
+    // Incident types: 1=Goal, 8=Penalty, 17=Own Goal
+    if (Array.isArray(incidents) && incidents.length > 0) {
+      let incHomeScore = -1;
+      let incAwayScore = -1;
+
+      for (const inc of incidents) {
+        if (inc && (inc.type === 1 || inc.type === 8 || inc.type === 17)) {
+          // Track max score found in incidents
+          if (typeof inc.home_score === 'number' && inc.home_score > incHomeScore) incHomeScore = inc.home_score;
+          if (typeof inc.away_score === 'number' && inc.away_score > incAwayScore) incAwayScore = inc.away_score;
+        }
+      }
+
+      // Override display scores if incidents show a higher score
+      if (incHomeScore > -1 && (homeScoreDisplay === null || incHomeScore > homeScoreDisplay)) {
+        logger.debug(`[DetailLive] Overriding homeScoreDisplay (${homeScoreDisplay}) with incident score (${incHomeScore})`);
+        homeScoreDisplay = incHomeScore;
+      }
+      if (incAwayScore > -1 && (awayScoreDisplay === null || incAwayScore > awayScoreDisplay)) {
+        logger.debug(`[DetailLive] Overriding awayScoreDisplay (${awayScoreDisplay}) with incident score (${incAwayScore})`);
+        awayScoreDisplay = incAwayScore;
+      }
+    }
+
     const statistics =
       (Array.isArray(root?.statistics) ? root.statistics : null) ??
       (Array.isArray(root?.stats) ? root.stats : null) ??
@@ -646,11 +671,10 @@ export class MatchDetailLiveService {
       // Continue with normal reconciliation flow below
       // Note: existing, existingStatusId, matchTime, nowTs are already defined above
 
-      const existingProviderTime = existing.provider_update_time;
-      const existingEventTime = existing.last_event_ts;
+      const existingProviderTime = toSafeNum(existing.provider_update_time);
+      const existingEventTime = toSafeNum(existing.last_event_ts);
 
       // CRITICAL FIX: Allow status transitions even if timestamps suggest stale data
-      // Status transitions (e.g., 1→2, 2→3, 3→4) are critical and should always be applied
       const isStatusTransition = live.statusId !== null && live.statusId !== existingStatusId;
       const isCriticalTransition =
         (existingStatusId === 1 && live.statusId === 2) || // NOT_STARTED → FIRST_HALF
@@ -659,8 +683,14 @@ export class MatchDetailLiveService {
         (existingStatusId === 4 && live.statusId === 8) || // SECOND_HALF → END
         ([2, 3, 4, 5, 7].includes(existingStatusId) && live.statusId === 8); // Any LIVE → END
 
-      // Check freshness (idempotent guard) - but allow critical status transitions
-      if (!isCriticalTransition) {
+      // CRITICAL FIX: If match is live but scores are NULL/undefined in DB, 
+      // we MUST update them to at least 0 even if the update is technically "stale"
+      // to fix the "GOL BİLGİSİ ANA EKRANDA YOK" issue.
+      const dbScoresAreNull = existing.home_score_regular === null || existing.away_score_regular === null;
+      const isCurrentlyLive = [2, 3, 4, 5, 7].includes(live.statusId || existingStatusId);
+
+      // Check freshness (idempotent guard) - but allow critical status transitions OR score initialization
+      if (!isCriticalTransition && !(isCurrentlyLive && dbScoresAreNull)) {
         if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
           // Provider supplied update_time
           if (existingProviderTime !== null && incomingProviderUpdateTime <= existingProviderTime) {
@@ -697,7 +727,7 @@ export class MatchDetailLiveService {
       const providerTimeToWrite =
         incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined
           ? Math.max(existingProviderTime || 0, incomingProviderUpdateTime)
-          : null;
+          : (existingProviderTime || null);
 
       const setParts: string[] = [
         'updated_at = NOW()',
@@ -869,32 +899,37 @@ export class MatchDetailLiveService {
 
       // Canonical score update (independent of status)
       if (this.hasNewScoreColumns) {
-        if (live.homeScoreDisplay !== null) {
+        // If match is live but scores are NULL/undefined, initialize to 0
+        const isCurrentlyLive = [2, 3, 4, 5, 7].includes(live.statusId || existingStatusId);
+
+        let homeScore = live.homeScoreDisplay;
+        let awayScore = live.awayScoreDisplay;
+
+        if (isCurrentlyLive) {
+          if (homeScore === null || homeScore === undefined) homeScore = 0;
+          if (awayScore === null || awayScore === undefined) awayScore = 0;
+        }
+
+        if (homeScore !== null) {
           setParts.push(`home_score_regular = $${i++}`);
-          values.push(live.homeScoreDisplay);
+          values.push(homeScore);
 
           setParts.push(`home_score_display = $${i++}`);
-          values.push(live.homeScoreDisplay);
+          values.push(homeScore);
+
+          setParts.push(`home_scores = $${i++}::jsonb`);
+          values.push(JSON.stringify([homeScore]));
         }
-        if (live.awayScoreDisplay !== null) {
+        if (awayScore !== null) {
           setParts.push(`away_score_regular = $${i++}`);
-          values.push(live.awayScoreDisplay);
+          values.push(awayScore);
 
           setParts.push(`away_score_display = $${i++}`);
-          values.push(live.awayScoreDisplay);
+          values.push(awayScore);
+
+          setParts.push(`away_scores = $${i++}::jsonb`);
+          values.push(JSON.stringify([awayScore]));
         }
-      }
-
-      // CRITICAL FIX: home_scores is JSONB, not PostgreSQL array
-      if (live.homeScoreDisplay !== null) {
-        setParts.push(`home_scores = $${i++}::jsonb`);
-        values.push(JSON.stringify([live.homeScoreDisplay]));
-      }
-
-      // CRITICAL FIX: away_scores is JSONB, not PostgreSQL array
-      if (live.awayScoreDisplay !== null) {
-        setParts.push(`away_scores = $${i++}::jsonb`);
-        values.push(JSON.stringify([live.awayScoreDisplay]));
       }
 
       if (this.hasIncidentsColumn && live.incidents !== null) {

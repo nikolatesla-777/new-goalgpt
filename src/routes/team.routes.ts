@@ -49,3 +49,4 @@ export default async function teamRoutes(
   fastify.get('/:team_id', getTeamById);
 }
 
+

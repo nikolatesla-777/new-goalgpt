@@ -54,7 +54,7 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                             getMatchHalfStats(matchId).catch(() => null), // Don't fail if half stats fails
                             getMatchTrend(matchId).catch(() => null) // Don't fail if trend fails
                         ]);
-                        
+
                         // If liveStats failed, fallback to teamStats
                         let fullTimeData = null;
                         if (liveStatsResult.status === 'fulfilled' && liveStatsResult.value) {
@@ -71,7 +71,7 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                                 fullTimeData = null;
                             }
                         }
-                        
+
                         result = {
                             fullTime: fullTimeData,
                             halfTime: halfStatsResult.status === 'fulfilled' ? halfStatsResult.value : null,
@@ -307,13 +307,13 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
 function StatsContent({ data, match, trendData }: { data: any; match?: Match; trendData?: any }) {
     // Determine match status
     const matchStatus = match ? ((match as any).status ?? (match as any).status_id ?? 1) : 1;
-    
+
     // Determine which tabs to show based on match status:
     // - 2 = FIRST_HALF, 3 = HALF_TIME: Only TÜMÜ/1.YARI (same data)
     // - 4+ = SECOND_HALF, OVERTIME, PENALTIES, END: Show all tabs
     const isFirstHalf = matchStatus === 2 || matchStatus === 3;
     const isSecondHalfOrLater = matchStatus >= 4;
-    
+
     const [activePeriod, setActivePeriod] = useState<'full' | 'first' | 'second'>('full');
 
     // Parse half time stats data
@@ -371,8 +371,8 @@ function StatsContent({ data, match, trendData }: { data: any; match?: Match; tr
     const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
 
     // Tabs to show
-    const tabs: Array<'full' | 'first' | 'second'> = isSecondHalfOrLater 
-        ? ['full', 'first', 'second'] 
+    const tabs: Array<'full' | 'first' | 'second'> = isSecondHalfOrLater
+        ? ['full', 'first', 'second']
         : ['full', 'first'];
 
     return (
@@ -498,7 +498,14 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                                 }}
                             >
                                 <td style={{ padding: '8px', fontWeight: '600' }}>{team.position || idx + 1}</td>
-                                <td style={{ padding: '8px' }}>{team.team_name || `Takım ${idx + 1}`}</td>
+                                <td
+                                    style={{ padding: '8px', cursor: 'pointer', color: '#2563eb' }}
+                                    onClick={() => window.location.href = `/team/${team.team_id}`}
+                                >
+                                    <span style={{ textDecoration: 'none' }}>
+                                        {team.team_name || `Takım ${idx + 1}`}
+                                    </span>
+                                </td>
                                 <td style={{ padding: '8px', textAlign: 'center' }}>{team.played}</td>
                                 <td style={{ padding: '8px', textAlign: 'center' }}>{team.won}</td>
                                 <td style={{ padding: '8px', textAlign: 'center' }}>{team.drawn}</td>

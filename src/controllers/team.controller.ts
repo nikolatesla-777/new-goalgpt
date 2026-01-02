@@ -136,141 +136,37 @@ export const getTeamById = async (
  * Get team fixtures (past and upcoming matches)
  * GET /api/teams/:team_id/fixtures
  */
+/**
+ * Get team fixtures (past and upcoming matches)
+ * GET /api/teams/:team_id/fixtures
+ * REFACTORED: DB-First to support multiple competitions (League, Cup, UCL)
+ */
 export const getTeamFixtures = async (
   request: FastifyRequest<{
     Params: { team_id: string };
-    Querystring: { season_id?: string; limit?: string };
+    Querystring: { limit?: string; season_id?: string };
   }>,
   reply: FastifyReply
 ): Promise<void> => {
   try {
     const { team_id } = request.params;
-    const { season_id, limit = '50' } = request.query;
+    const { limit = '100', season_id } = request.query;
 
-    // Try to fetch from TheSports API first (for full season data)
-    try {
-      // Get team's current season if not provided
-      let targetSeasonId = season_id;
-
-      if (!targetSeasonId) {
-        const client = await pool.connect();
-        try {
-          // First, get team's main competition
-          const teamResult = await client.query(
-            `SELECT competition_id FROM ts_teams WHERE external_id = $1`,
-            [team_id]
-          );
-          const teamCompetitionId = teamResult.rows[0]?.competition_id;
-
-          // Find season for team's main competition (priority)
-          if (teamCompetitionId) {
-            const mainSeasonResult = await client.query(
-              `SELECT DISTINCT season_id FROM ts_matches 
-               WHERE competition_id = $1 AND (home_team_id = $2 OR away_team_id = $2)
-               ORDER BY season_id DESC LIMIT 1`,
-              [teamCompetitionId, team_id]
-            );
-            targetSeasonId = mainSeasonResult.rows[0]?.season_id;
-          }
-
-          // Fallback: get any recent season for the team
-          if (!targetSeasonId) {
-            const seasonResult = await client.query(
-              `SELECT season_id FROM ts_matches 
-               WHERE home_team_id = $1 OR away_team_id = $1
-               ORDER BY match_time DESC LIMIT 1`,
-              [team_id]
-            );
-            targetSeasonId = seasonResult.rows[0]?.season_id;
-          }
-        } finally {
-          client.release();
-        }
-      }
-
-      if (targetSeasonId) {
-        // Fetch season matches from API
-        const apiResponse = await theSportsClient.get<any>('/match/season/recent', {
-          uuid: targetSeasonId,
-        });
-
-        if (apiResponse.results && Array.isArray(apiResponse.results)) {
-          // Filter matches for this team
-          const teamMatches = apiResponse.results.filter(
-            (m: any) => m.home_team_id === team_id || m.away_team_id === team_id
-          );
-
-          // Get team names from results_extra or database
-          const teamIds = new Set<string>();
-          teamMatches.forEach((m: any) => {
-            teamIds.add(m.home_team_id);
-            teamIds.add(m.away_team_id);
-          });
-
-          // Fetch team names from database
-          const client = await pool.connect();
-          try {
-            const teamIdsArray = Array.from(teamIds);
-            const placeholders = teamIdsArray.map((_, i) => `$${i + 1}`).join(',');
-            const teamsResult = await client.query(
-              `SELECT external_id, name, logo_url FROM ts_teams WHERE external_id IN (${placeholders})`,
-              teamIdsArray
-            );
-
-            const teamMap = new Map<string, { name: string; logo_url: string }>();
-            teamsResult.rows.forEach(t => {
-              teamMap.set(t.external_id, { name: t.name, logo_url: t.logo_url });
-            });
-
-            // Enrich matches with team names and sort
-            const enrichedMatches = teamMatches.map((m: any) => ({
-              id: m.id,
-              match_time: m.match_time,
-              status_id: m.status_id,
-              home_team: {
-                id: m.home_team_id,
-                name: teamMap.get(m.home_team_id)?.name || 'Unknown',
-                logo_url: teamMap.get(m.home_team_id)?.logo_url || null,
-              },
-              away_team: {
-                id: m.away_team_id,
-                name: teamMap.get(m.away_team_id)?.name || 'Unknown',
-                logo_url: teamMap.get(m.away_team_id)?.logo_url || null,
-              },
-              home_score: m.home_scores?.[0] ?? null,
-              away_score: m.away_scores?.[0] ?? null,
-              round: m.round?.round_num || null,
-              is_home: m.home_team_id === team_id,
-            })).sort((a: any, b: any) => a.match_time - b.match_time);
-
-            // Separate past and upcoming
-            const now = Math.floor(Date.now() / 1000);
-            const pastMatches = enrichedMatches.filter((m: any) => m.status_id === 8 || m.match_time < now - 7200);
-            const upcomingMatches = enrichedMatches.filter((m: any) => m.status_id !== 8 && m.match_time >= now - 7200);
-
-            reply.send({
-              success: true,
-              data: {
-                team_id,
-                season_id: targetSeasonId,
-                total_matches: enrichedMatches.length,
-                past_matches: pastMatches.reverse(), // Most recent first
-                upcoming_matches: upcomingMatches,
-              },
-            });
-            return;
-          } finally {
-            client.release();
-          }
-        }
-      }
-    } catch (apiError: any) {
-      logger.warn(`[TeamController] API fetch failed for team fixtures: ${apiError.message}`);
-    }
-
-    // Fallback: Get from database (limited to stored matches)
     const client = await pool.connect();
     try {
+      // If season_id is provided, filter by it. Otherwise get all recent/upcoming.
+      // We want to fetch ALL matches for this team across ALL competitions.
+
+      let whereClause = `(m.home_team_id = $1 OR m.away_team_id = $1)`;
+      const params: any[] = [team_id];
+      let paramIndex = 2;
+
+      if (season_id) {
+        whereClause += ` AND m.season_id = $${paramIndex++}`;
+        params.push(season_id);
+      }
+
+      // Query DB for matches with Competition info
       const result = await client.query(
         `SELECT 
           m.external_id as id,
@@ -281,6 +177,10 @@ export const getTeamFixtures = async (
           m.home_score_display,
           m.away_score_display,
           m.season_id,
+          m.competition_id,
+          c.name as competition_name,
+          c.logo_url as competition_logo,
+          c.short_name as competition_short_name,
           ht.name as home_team_name,
           ht.logo_url as home_team_logo,
           at.name as away_team_name,
@@ -288,16 +188,23 @@ export const getTeamFixtures = async (
          FROM ts_matches m
          LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
          LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
-         WHERE m.home_team_id = $1 OR m.away_team_id = $1
+         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+         WHERE ${whereClause}
          ORDER BY m.match_time DESC
-         LIMIT $2`,
-        [team_id, parseInt(limit)]
+         LIMIT $${paramIndex}`,
+        [...params, parseInt(limit)]
       );
 
       const matches = result.rows.map(m => ({
         id: m.id,
         match_time: m.match_time,
         status_id: m.status_id,
+        competition: {
+          id: m.competition_id,
+          name: m.competition_name,
+          short_name: m.competition_short_name,
+          logo_url: m.competition_logo
+        },
         home_team: {
           id: m.home_team_id,
           name: m.home_team_name,
@@ -314,17 +221,25 @@ export const getTeamFixtures = async (
       }));
 
       const now = Math.floor(Date.now() / 1000);
+
+      // Split into past and upcoming
+      // Past: Finished matches or matches older than 2 hours
       const pastMatches = matches.filter(m => m.status_id === 8 || m.match_time < now - 7200);
-      const upcomingMatches = matches.filter(m => m.status_id !== 8 && m.match_time >= now - 7200).reverse();
+
+      // Upcoming: Not finished and in future (or currently live)
+      // Reverse upcoming so closest match is first
+      const upcomingMatches = matches
+        .filter(m => m.status_id !== 8 && m.match_time >= now - 7200)
+        .sort((a, b) => a.match_time - b.match_time);
 
       reply.send({
         success: true,
         data: {
           team_id,
           total_matches: matches.length,
-          past_matches: pastMatches,
+          past_matches: pastMatches, // Already ordered DESC (most recent first)
           upcoming_matches: upcomingMatches,
-          source: 'database',
+          source: 'database_multi_comp',
         },
       });
     } finally {

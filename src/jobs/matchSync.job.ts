@@ -35,12 +35,12 @@ export class MatchSyncWorker {
   private liveTickInterval: NodeJS.Timeout | null = null;
 
   // Reconcile backpressure constants
-  private readonly RECONCILE_BATCH_LIMIT = 25;
-  private readonly RECONCILE_DELAY_MS = 200; // per API call delay
+  private readonly RECONCILE_BATCH_LIMIT = 15;
+  private readonly RECONCILE_DELAY_MS = 50; // fast updates (50ms per API call)
 
   // TheSports status buckets (adjust if your enums differ)
-  // LIVE phases: first/second half, overtime, etc.
-  private readonly LIVE_STATUS_IDS = [2, 4, 5];
+  // LIVE phases: first/second half, halftime, overtime, penalties
+  private readonly LIVE_STATUS_IDS = [2, 3, 4, 5, 7];
   // HALF_TIME is special: minute should not "run", but status/score can still change.
   private readonly HALFTIME_STATUS_IDS = [3];
   // SECOND_HALF matches need more frequent checks for END transition (FT detection)
@@ -53,7 +53,7 @@ export class MatchSyncWorker {
     const teamDataService = new TeamDataService(client);
     const competitionService = new CompetitionService(client);
     const matchSyncService = new MatchSyncService(teamDataService, competitionService);
-    
+
     this.recentSyncService = new RecentSyncService(client, matchSyncService);
     this.matchDetailLiveService = new MatchDetailLiveService(client);
   }
@@ -183,10 +183,10 @@ export class MatchSyncWorker {
       await this.syncMatches();
     });
 
-    // Tier-1 reconcile: enqueue LIVE-phase matches every 30 seconds
+    // Tier-1 reconcile: enqueue LIVE-phase matches every 3 seconds for REAL-TIME updates
     this.liveInterval = setInterval(() => {
       this.reconcileLiveMatches().catch(err => logger.error('[LiveReconcile] enqueue interval error:', err));
-    }, 30000);
+    }, 3000);
 
     // Tier-1.5 reconcile: enqueue FIRST_HALF matches every 20 seconds (for HALF_TIME transition detection)
     // CRITICAL: First half matches can transition to HALF_TIME (status 2 → 3) at any time around 45 minutes

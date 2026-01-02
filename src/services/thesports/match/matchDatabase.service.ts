@@ -41,12 +41,12 @@ export class MatchDatabaseService {
       const year = parseInt(dateStr.substring(0, 4));
       const month = parseInt(dateStr.substring(4, 6)) - 1; // Month is 0-indexed
       const day = parseInt(dateStr.substring(6, 8));
-      
+
       // TSİ (UTC+3) day boundaries: convert local midnight to UTC by subtracting 3 hours
       const TSI_OFFSET_SECONDS = 3 * 3600;
       const startOfDayUTC = new Date(Date.UTC(year, month, day, 0, 0, 0) - TSI_OFFSET_SECONDS * 1000);
       const endOfDayUTC = new Date(Date.UTC(year, month, day, 23, 59, 59) - TSI_OFFSET_SECONDS * 1000);
-      
+
       const startUnix = Math.floor(startOfDayUTC.getTime() / 1000);
       const endUnix = Math.floor(endOfDayUTC.getTime() / 1000);
 
@@ -265,7 +265,8 @@ export class MatchDatabaseService {
         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-        WHERE m.status_id IN (2, 3, 4, 5, 7)  -- STRICT: Only explicitly live statuses
+        WHERE m.status_id IN (2, 3, 4, 5, 7)  -- Strictly playing
+           OR (m.status_id IN (9, 10, 13) AND m.match_time >= ${now - 24 * 3600}) -- Recently finished/interrupted (last 24h)
         ORDER BY m.match_time DESC, c.name ASC
       `;
 

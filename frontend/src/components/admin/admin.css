@@ -1306,25 +1306,34 @@
   /* Show mobile header */
   .admin-mobile-header {
     display: flex;
+    z-index: 1100;
   }
 
-  /* Show mobile overlay */
+  /* Hide mobile overlay - interfering with top-down menu */
   .admin-mobile-overlay {
-    display: block;
+    display: none !important;
   }
 
-  /* Hide sidebar by default, show when open */
+  /* Hide sidebar by default, show when open - UPDATED: Opening Downwards */
   .admin-sidebar {
     position: fixed;
-    left: -300px;
-    width: 280px;
-    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 2000;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+    top: -100vh;
+    /* Start above the screen */
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 60px);
+    /* Full height minus header */
+    transition: top 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1000;
+    /* Same as mobile header to stay below it when sliding */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    margin-top: 60px;
+    /* Offset by header height */
   }
 
   .admin-sidebar.mobile-open {
-    left: 0;
+    top: 0;
+    /* Slide down into view */
   }
 
   /* Show close button on mobile */
@@ -1333,9 +1342,7 @@
   }
 
   .admin-sidebar-logo {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: none;
   }
 
   /* Show nav labels on mobile menu */
