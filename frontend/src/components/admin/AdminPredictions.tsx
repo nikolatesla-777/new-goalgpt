@@ -74,25 +74,49 @@ export function AdminPredictions() {
     const fetchPredictions = async () => {
         setLoading(true);
         try {
-            let endpoint = '/predictions/pending?limit=100';
-            if (filter === 'matched' || filter === 'winners' || filter === 'losers') {
-                endpoint = '/predictions/matched?limit=100';
-            }
+            let results: Prediction[] = [];
 
-            const res = await fetch(`${API_BASE}${endpoint}`);
-            if (res.ok) {
-                const data = await res.json();
-                let results = data.predictions || [];
+            if (filter === 'all') {
+                // Fetch both pending and matched for "Tümü" view
+                const [pendingRes, matchedRes] = await Promise.all([
+                    fetch(`${API_BASE}/predictions/pending?limit=100`),
+                    fetch(`${API_BASE}/predictions/matched?limit=100`)
+                ]);
 
-                // Client-side filter for winners/losers
-                if (filter === 'winners') {
-                    results = results.filter((p: Prediction) => p.prediction_result === 'winner');
-                } else if (filter === 'losers') {
-                    results = results.filter((p: Prediction) => p.prediction_result === 'loser');
+                if (pendingRes.ok) {
+                    const pendingData = await pendingRes.json();
+                    results = [...(pendingData.predictions || [])];
+                }
+                if (matchedRes.ok) {
+                    const matchedData = await matchedRes.json();
+                    results = [...results, ...(matchedData.predictions || [])];
                 }
 
-                setPredictions(results);
+                // Sort by created_at descending (newest first)
+                results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            } else if (filter === 'pending') {
+                const res = await fetch(`${API_BASE}/predictions/pending?limit=100`);
+                if (res.ok) {
+                    const data = await res.json();
+                    results = data.predictions || [];
+                }
+            } else {
+                // matched, winners, losers
+                const res = await fetch(`${API_BASE}/predictions/matched?limit=100`);
+                if (res.ok) {
+                    const data = await res.json();
+                    results = data.predictions || [];
+
+                    // Client-side filter for winners/losers
+                    if (filter === 'winners') {
+                        results = results.filter((p: Prediction) => p.prediction_result === 'winner');
+                    } else if (filter === 'losers') {
+                        results = results.filter((p: Prediction) => p.prediction_result === 'loser');
+                    }
+                }
             }
+
+            setPredictions(results);
         } catch (err) {
             console.error('Fetch predictions error:', err);
         } finally {
