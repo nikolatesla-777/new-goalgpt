@@ -12,6 +12,9 @@ interface AIPrediction {
     prediction_type: string;
     prediction_value: string;
     overall_confidence: number;
+    bot_name?: string;
+    minute_at_prediction?: number;
+    prediction_result?: 'pending' | 'winner' | 'loser';
 }
 
 interface AIPredictionsContextType {
@@ -62,6 +65,9 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
                             prediction_type: pred.prediction_type,
                             prediction_value: pred.prediction_value,
                             overall_confidence: pred.overall_confidence,
+                            bot_name: pred.bot_name,
+                            minute_at_prediction: pred.minute_at_prediction,
+                            prediction_result: pred.prediction_result,
                         });
                     }
                 }

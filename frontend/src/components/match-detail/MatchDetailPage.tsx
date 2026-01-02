@@ -22,7 +22,7 @@ import {
 import type { Match } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 import { MatchEventsTimeline } from './MatchEventsTimeline';
-import { ChartBar, ListBullets, Sword, Trophy, Users, TrendUp, Robot, CaretLeft } from '@phosphor-icons/react';
+import { ChartBar, ListBullets, Sword, Trophy, Users, TrendUp, Robot, CaretLeft, WarningCircle } from '@phosphor-icons/react';
 
 import { useAIPredictions } from '../../context/AIPredictionsContext';
 
@@ -880,13 +880,7 @@ function AIContent({ matchId }: { matchId: string }) {
     }
 
     // Determine confidence color
-    const getConfidenceColor = (conf: number) => {
-        if (conf >= 80) return 'text-green-600 bg-green-50 border-green-200';
-        if (conf >= 60) return 'text-blue-600 bg-blue-50 border-blue-200';
-        return 'text-amber-600 bg-amber-50 border-amber-200';
-    };
 
-    const confColorClass = getConfidenceColor(prediction.overall_confidence);
 
     return (
         <div className="flex flex-col gap-6">
@@ -898,9 +892,18 @@ function AIContent({ matchId }: { matchId: string }) {
                     </div>
 
                     <div className="relative z-10">
-                        <div className="flex items-center gap-3 mb-2">
-                            <Robot size={24} weight="fill" className="text-blue-200" />
-                            <span className="text-blue-100 font-bold tracking-wider text-xs uppercase">GoalGPT AI Analizi</span>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                                <Robot size={24} weight="fill" className="text-blue-200" />
+                                <span className="text-blue-100 font-bold tracking-wider text-xs uppercase">
+                                    {prediction.bot_name || 'GoalGPT AI'}
+                                </span>
+                            </div>
+                            {prediction.minute_at_prediction && (
+                                <span className="text-blue-100 text-xs font-medium bg-blue-800/30 px-2 py-1 rounded">
+                                    ⏱ {prediction.minute_at_prediction}. dk
+                                </span>
+                            )}
                         </div>
                         <h2 className="text-2xl font-bold">Maç Tahmini</h2>
                     </div>
@@ -918,24 +921,30 @@ function AIContent({ matchId }: { matchId: string }) {
                         </div>
                     </div>
 
-                    {/* Confidence Meter */}
-                    <div className={`rounded-xl p-4 border ${confColorClass} mb-6`}>
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="font-bold flex items-center gap-2">
-                                <ChartBar size={18} weight="fill" />
-                                Güven Skoru
-                            </span>
-                            <span className="text-xl font-black">{prediction.overall_confidence}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                            <div
-                                className="h-2.5 rounded-full transition-all duration-1000 ease-out"
-                                style={{
-                                    width: `${prediction.overall_confidence}%`,
-                                    backgroundColor: 'currentColor'
-                                }}
-                            ></div>
-                        </div>
+                    {/* Status Badge (Replaces Confidence Meter) */}
+                    <div className="mb-6">
+                        {(!prediction.prediction_result || prediction.prediction_result === 'pending') && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-center gap-3 text-amber-700">
+                                <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
+                                <span className="font-bold text-lg">BEKLİYOR</span>
+                            </div>
+                        )}
+                        {prediction.prediction_result === 'winner' && (
+                            <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-center gap-3 text-green-700">
+                                <div className="p-1 bg-green-100 rounded-full">
+                                    <Trophy size={20} weight="fill" className="text-green-600" />
+                                </div>
+                                <span className="font-bold text-lg">KAZANDI</span>
+                            </div>
+                        )}
+                        {prediction.prediction_result === 'loser' && (
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-center gap-3 text-red-700">
+                                <div className="p-1 bg-red-100 rounded-full">
+                                    <WarningCircle size={20} weight="fill" className="text-red-600" />
+                                </div>
+                                <span className="font-bold text-lg">KAYBETTİ</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="text-xs text-center text-gray-400">
