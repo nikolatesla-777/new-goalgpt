@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getMatchDiary, getLiveMatches } from '../api/matches';
+import { getMatchDiary, getLiveMatches, getMatchedPredictions } from '../api/matches';
 import type { Match, Competition } from '../api/matches';
 import { LeagueSection } from './LeagueSection';
 import { isLiveMatch, isFinishedMatch, MatchState } from '../utils/matchStatus';
 
 interface MatchListProps {
-  view: 'diary' | 'live' | 'finished' | 'not_started';
+  view: 'diary' | 'live' | 'finished' | 'not_started' | 'ai';
   date?: string;
   sortBy?: 'league' | 'time';
 }
@@ -43,6 +43,47 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       if (view === 'live') {
         // Use dedicated live matches endpoint
         response = await getLiveMatches();
+      } else if (view === 'ai') {
+        // Fetch matched AI predictions
+        const aiData = await getMatchedPredictions(50);
+        // Map AI predictions to Match objects
+        // The API returns predictions with joined match data
+        const mappedMatches = (aiData.predictions || []).map((p: any) => {
+          // Construct Match object from prediction data
+          // We prioritize match data from the join
+          return {
+            id: p.match_external_id || p.id, // Use match_external_id as the primary ID for the card
+            match_time: p.match_time,
+            status: p.status ?? p.status_id,
+            minute_text: p.minute_text || '',
+            home_team_id: p.home_team_id,
+            away_team_id: p.away_team_id,
+            home_score: p.home_score,
+            away_score: p.away_score,
+            home_team: {
+              id: p.home_team_id,
+              name: p.home_team_name,
+              logo_url: p.home_team_logo
+            },
+            away_team: {
+              id: p.away_team_id,
+              name: p.away_team_name,
+              logo_url: p.away_team_logo
+            },
+            competition_id: p.competition_id,
+            competition: {
+              id: p.competition_id,
+              name: p.league_name,
+              logo_url: p.league_logo,
+              country_name: p.country_name
+            },
+            // Add AI specific flag if needed, but MatchCard handles it via context
+          } as Match;
+        });
+
+        // Wrap in expected response structure
+        response = { results: mappedMatches };
+
       } else {
         // For diary, finished, not_started views - use diary endpoint with date
         const { getTodayInTurkey } = await import('../utils/dateUtils');
@@ -51,8 +92,8 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       }
 
       // Check for error in response even if API call succeeded
-      if (response.err) {
-        throw new Error(response.err);
+      if (response && (response as any).err) {
+        throw new Error((response as any).err);
       }
 
       // Safety check: ensure we have a valid array

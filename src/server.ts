@@ -130,9 +130,16 @@ const start = async () => {
       
       // CRITICAL: Connect WebSocketService events to Fastify WebSocket broadcasting
       // This ensures real-time events reach frontend clients
-      const { broadcastEvent } = await import('./routes/websocket.routes');
-      websocketService.onEvent((event) => {
-        broadcastEvent(event);
+      const { broadcastEvent, setLatencyMonitor } = await import('./routes/websocket.routes');
+      
+      // LATENCY MONITORING: Share latency monitor instance
+      const latencyMonitor = (websocketService as any).latencyMonitor;
+      if (latencyMonitor) {
+        setLatencyMonitor(latencyMonitor);
+      }
+      
+      websocketService.onEvent((event: any, mqttReceivedTs?: number) => {
+        broadcastEvent(event, mqttReceivedTs);
       });
       
       logger.info('✅ WebSocketService connected and event broadcasting enabled');

@@ -785,3 +785,23 @@ export async function getLeagueTeams(leagueId: string): Promise<any> {
     throw error;
   }
 }
+
+/**
+ * Get matched AI predictions
+ * Returns predictions joined with match data
+ */
+export async function getMatchedPredictions(limit = 100): Promise<any> {
+  const url = `${API_BASE_URL}/predictions/matched?limit=${limit}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data; // returns { predictions: [...] }
+  } catch (error) {
+    console.error('[getMatchedPredictions] Error:', error);
+    throw error;
+  }
+}

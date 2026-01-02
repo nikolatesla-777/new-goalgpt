@@ -17,14 +17,17 @@ import { pool } from '../../../database/connection';
 import { ParsedScore, WebSocketTliveMessage } from '../../../types/thesports/websocket/websocket.types';
 import { VARResult, MatchState, isLiveMatchState, canResurrectFromEnd } from '../../../types/thesports/enums';
 import { MatchWriteQueue } from './matchWriteQueue';
+import { EventLatencyMonitor } from './eventLatencyMonitor';
 
 export class WebSocketService {
   private client: WebSocketClient;
   private parser: WebSocketParser;
   private validator: WebSocketValidator;
   private eventDetector: EventDetector;
-  private eventHandlers: Array<(event: MatchEvent) => void> = [];
+  private eventHandlers: Array<(event: MatchEvent, mqttReceivedTs?: number) => void> = [];
   private writeQueue: MatchWriteQueue;
+  private latencyMonitor: EventLatencyMonitor;
+  private mqttReceivedTimestamps: Map<string, number> = new Map(); // Key: matchId:eventType, Value: mqttReceivedTs
   
   // Track match states for "false end" detection
   // Map: matchId -> { status: MatchState, lastStatus8Time: number | null }
@@ -63,6 +66,7 @@ export class WebSocketService {
     this.validator = new WebSocketValidator();
     this.eventDetector = new EventDetector();
     this.writeQueue = new MatchWriteQueue();
+    this.latencyMonitor = new EventLatencyMonitor();
 
     // Register message handler
     this.client.onMessage((message) => {
@@ -100,6 +104,9 @@ export class WebSocketService {
    */
   private async handleMessage(message: any): Promise<void> {
     try {
+      // LATENCY MONITORING: Record MQTT message received timestamp
+      const mqttReceivedTs = Date.now();
+      
       // Extract provider update_time from message if available (for optimistic locking)
       const providerUpdateTime = this.extractProviderUpdateTimeFromMessage(message);
 
@@ -108,8 +115,8 @@ export class WebSocketService {
         const scoreMessages = Array.isArray((message as any).score) ? (message as any).score : [];
         for (const scoreMsg of scoreMessages) {
           try {
-            const parsedScore = this.parser.parseScoreToStructured(scoreMsg);
-
+        const parsedScore = this.parser.parseScoreToStructured(scoreMsg);
+        
             // Detect status change BEFORE updating local map
             const previousState = this.matchStates.get(parsedScore.matchId)?.status ?? null;
             const nextState = parsedScore.statusId as MatchState;
@@ -121,12 +128,17 @@ export class WebSocketService {
             // If status changed (and we had a previous state), persist to DB + notify frontend
             if (statusChanged) {
               await this.updateMatchStatusInDatabase(parsedScore.matchId, parsedScore.statusId, providerUpdateTime);
+              
+              // LATENCY MONITORING: Store mqttReceivedTs for this event
+              const eventKey = `${parsedScore.matchId}:MATCH_STATE_CHANGE`;
+              this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
+              
               this.emitEvent({
                 type: 'MATCH_STATE_CHANGE',
                 matchId: parsedScore.matchId,
                 statusId: parsedScore.statusId,
                 timestamp: Date.now(),
-              } as any);
+              } as any, mqttReceivedTs);
 
               // CRITICAL FIX: Trigger post-match persistence when match ends (status 8)
               if (parsedScore.statusId === 8) {
@@ -156,13 +168,17 @@ export class WebSocketService {
 
             // Only emit SCORE_CHANGE if we actually updated a DB row
             if (dbUpdated) {
+              // LATENCY MONITORING: Store mqttReceivedTs for this event
+              const eventKey = `${parsedScore.matchId}:SCORE_CHANGE`;
+              this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
+              
               this.emitEvent({
                 type: 'SCORE_CHANGE',
                 matchId: parsedScore.matchId,
                 homeScore: parsedScore.home.score,
                 awayScore: parsedScore.away.score,
                 timestamp: Date.now(),
-              });
+              }, mqttReceivedTs);
 
               // Update cache
               const scoreCacheKey = `${CacheKeyPrefix.TheSports}:ws:score:${parsedScore.matchId}`;
@@ -198,10 +214,10 @@ export class WebSocketService {
           await cacheService.set(incidentsCacheKey, incidentsMsg, CacheTTL.Minute);
 
           for (const incident of incidentsArr) {
-            const parsedIncident = this.parser.parseIncidentToStructured(
+          const parsedIncident = this.parser.parseIncidentToStructured(
               matchId,
-              incident
-            );
+            incident
+          );
 
             // Log VAR incidents (especially goal cancellations)
             if (parsedIncident.isVAR) {
@@ -211,31 +227,40 @@ export class WebSocketService {
               }
             }
 
+            // LATENCY MONITORING: Use message timestamp for incidents
+            const incidentsMqttTs = mqttReceivedTs; // Use same mqttReceivedTs from handleMessage
+            
             // Detect goal (but don't rely on VAR incidents for score updates - use score field)
-            const goalEvent = this.eventDetector.detectGoalFromIncident(
-              parsedIncident.matchId,
-              parsedIncident
-            );
-            if (goalEvent) {
-              this.emitEvent(goalEvent);
-            }
+          const goalEvent = this.eventDetector.detectGoalFromIncident(
+            parsedIncident.matchId,
+            parsedIncident
+          );
+          if (goalEvent) {
+              const eventKey = `${parsedIncident.matchId}:GOAL`;
+              this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
+              this.emitEvent(goalEvent, incidentsMqttTs);
+          }
 
-            // Detect card
-            const cardEvent = this.eventDetector.detectCardFromIncident(
-              parsedIncident.matchId,
-              parsedIncident
-            );
-            if (cardEvent) {
-              this.emitEvent(cardEvent);
-            }
+          // Detect card
+          const cardEvent = this.eventDetector.detectCardFromIncident(
+            parsedIncident.matchId,
+            parsedIncident
+          );
+          if (cardEvent) {
+              const eventKey = `${parsedIncident.matchId}:CARD`;
+              this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
+              this.emitEvent(cardEvent, incidentsMqttTs);
+          }
 
-            // Detect substitution
-            const substitutionEvent = this.eventDetector.detectSubstitutionFromIncident(
-              parsedIncident.matchId,
-              parsedIncident
-            );
-            if (substitutionEvent) {
-              this.emitEvent(substitutionEvent);
+          // Detect substitution
+          const substitutionEvent = this.eventDetector.detectSubstitutionFromIncident(
+            parsedIncident.matchId,
+            parsedIncident
+          );
+          if (substitutionEvent) {
+              const eventKey = `${parsedIncident.matchId}:SUBSTITUTION`;
+              this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
+              this.emitEvent(substitutionEvent, incidentsMqttTs);
             }
           }
         }
@@ -290,7 +315,9 @@ export class WebSocketService {
           if (dangerAlert) {
             const alertType = (dangerAlert as any).alertType || 'UNKNOWN';
             logger.info(`[WebSocket/TLIVE] 🎯 ${alertType} detected for match ${matchId}`);
-            this.emitEvent(dangerAlert);
+            const eventKey = `${matchId}:DANGER_ALERT`;
+            this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
+            this.emitEvent(dangerAlert, mqttReceivedTs);
           }
 
           // Infer status from tlive (fixes "45+ but actually HT")
@@ -304,12 +331,14 @@ export class WebSocketService {
             await this.updateMatchStatusInDatabase(matchId, inferredStatus, providerUpdateTime);
 
             // Emit event so frontend can refresh live cards immediately
+            const eventKey = `${matchId}:MATCH_STATE_CHANGE`;
+            this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
             this.emitEvent({
               type: 'MATCH_STATE_CHANGE',
               matchId,
               statusId: inferredStatus,
               timestamp: Date.now(),
-            } as any);
+            } as any, mqttReceivedTs);
           }
         }
       }
@@ -836,6 +865,10 @@ export class WebSocketService {
           );
           
           // Emit goal cancelled event
+          // Note: mqttReceivedTs not available here, use current timestamp
+          const goalCancelledTs = Date.now();
+          const eventKey = `${parsedScore.matchId}:GOAL_CANCELLED`;
+          this.mqttReceivedTimestamps.set(eventKey, goalCancelledTs);
           this.emitEvent({
             type: 'GOAL_CANCELLED',
             matchId: parsedScore.matchId,
@@ -844,7 +877,7 @@ export class WebSocketService {
             previousHomeScore: currentHomeScore,
             previousAwayScore: currentAwayScore,
             timestamp: Date.now(),
-          });
+          }, goalCancelledTs);
         }
       } finally {
         client.release();
@@ -1440,12 +1473,23 @@ export class WebSocketService {
   /**
    * Emit event to handlers
    */
-  private emitEvent(event: MatchEvent): void {
+  private emitEvent(event: MatchEvent, mqttReceivedTs?: number): void {
     logger.info(`Event detected: ${event.type} for match ${event.matchId}`);
+    
+    // LATENCY MONITORING: Record event emitted timestamp
+    // If mqttReceivedTs not provided, try to get from stored timestamps
+    const eventKey = `${event.matchId}:${event.type}`;
+    const storedMqttTs = mqttReceivedTs || this.mqttReceivedTimestamps.get(eventKey);
+    
+    if (storedMqttTs) {
+      this.latencyMonitor.recordEventEmitted(event.type, event.matchId, storedMqttTs);
+      // Clean up stored timestamp after use
+      this.mqttReceivedTimestamps.delete(eventKey);
+    }
     
     this.eventHandlers.forEach(handler => {
       try {
-        handler(event);
+        handler(event, storedMqttTs); // Pass mqttReceivedTs to handler
       } catch (error: any) {
         logger.error('Error in event handler:', error);
       }
@@ -1455,7 +1499,7 @@ export class WebSocketService {
   /**
    * Register event handler
    */
-  onEvent(handler: (event: MatchEvent) => void): void {
+  onEvent(handler: (event: MatchEvent, mqttReceivedTs?: number) => void): void {
     this.eventHandlers.push(handler);
   }
 

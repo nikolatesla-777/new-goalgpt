@@ -8,14 +8,30 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { logger } from '../utils/logger';
 import { MatchEvent } from '../services/thesports/websocket/event-detector';
+import { EventLatencyMonitor } from '../services/thesports/websocket/eventLatencyMonitor';
 
 // Store active WebSocket connections
 const activeConnections = new Set<any>();
 
+// Latency monitor instance (shared with WebSocketService)
+let latencyMonitor: EventLatencyMonitor | null = null;
+
+/**
+ * Set latency monitor instance (called from server.ts)
+ */
+export function setLatencyMonitor(monitor: EventLatencyMonitor): void {
+  latencyMonitor = monitor;
+}
+
 /**
  * Broadcast event to all connected clients
  */
-export function broadcastEvent(event: MatchEvent): void {
+export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void {
+  // LATENCY MONITORING: Record broadcast sent timestamp
+  if (latencyMonitor && mqttReceivedTs) {
+    latencyMonitor.recordBroadcastSent(event.type, event.matchId, mqttReceivedTs);
+  }
+
   const message = JSON.stringify({
     type: event.type,
     matchId: event.matchId,
@@ -25,6 +41,7 @@ export function broadcastEvent(event: MatchEvent): void {
 
   let sentCount = 0;
   let errorCount = 0;
+  const broadcastStartTs = Date.now();
 
   activeConnections.forEach((socket) => {
     try {
@@ -42,8 +59,13 @@ export function broadcastEvent(event: MatchEvent): void {
     }
   });
 
+  const broadcastDuration = Date.now() - broadcastStartTs;
+
   if (sentCount > 0) {
-    logger.debug(`[WebSocket Route] Broadcasted ${event.type} event to ${sentCount} clients (${errorCount} errors)`);
+    logger.debug(
+      `[WebSocket Route] Broadcasted ${event.type} event to ${sentCount} clients ` +
+      `(${errorCount} errors, ${broadcastDuration}ms)`
+    );
   }
 }
 
