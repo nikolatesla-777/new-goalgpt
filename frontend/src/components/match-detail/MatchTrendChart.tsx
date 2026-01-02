@@ -98,7 +98,6 @@ export function MatchTrendChart({
 
     // Bar dimensions
     const barWidth = Math.max(2, pixelsPerMinute * 0.7); // 70% of minute width, min 2px
-    const barGap = pixelsPerMinute - barWidth;
 
     // Y Scale: Normalize based on max pressure value
     const maxPressure = useMemo(() => {
