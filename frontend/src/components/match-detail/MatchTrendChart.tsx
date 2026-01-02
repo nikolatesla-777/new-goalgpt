@@ -7,9 +7,10 @@
  * - Vertical SVG Gradients for visual depth
  * - Interactive Cursor & Tooltip
  * - Match Event Overlays (Goals, Cards)
+ * - Responsive SVG (viewBox scaling)
  */
 
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef } from 'react';
 
 interface TrendPoint {
     minute: number;
@@ -45,7 +46,13 @@ export function MatchTrendChart({
 }: MatchTrendChartProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [hoveredMinute, setHoveredMinute] = useState<number | null>(null);
-    const [chartWidth, setChartWidth] = useState(1000); // Default, updates on mount
+
+    // Logical Dimensions for SVG Coordinate System
+    const LOGICAL_WIDTH = 1000;
+    const HEIGHT = 280;
+    const PADDING = { top: 40, bottom: 40, left: 20, right: 20 };
+    const PLOT_HEIGHT = HEIGHT - PADDING.top - PADDING.bottom;
+    const CENTER_Y = PADDING.top + PLOT_HEIGHT / 2;
 
     // Extract trend data
     const trendPoints = useMemo(() => {
@@ -75,29 +82,20 @@ export function MatchTrendChart({
         return all.sort((a, b) => a.minute - b.minute);
     }, [data, currentMinute]);
 
-    // Update chart width on resize
-    useEffect(() => {
-        if (!containerRef.current) return;
-        const resizeObserver = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                setChartWidth(entry.contentRect.width);
-            }
-        });
-        resizeObserver.observe(containerRef.current);
-        return () => resizeObserver.disconnect();
-    }, []);
+    // X Scale: Always Map 0..MaxMinute to LOGICAL_WIDTH
+    // If Overtime exists (minute > 95), scale extends. Otherwise defaults to 90.
+    const maxMinute = useMemo(() => {
+        const lastDataMinute = trendPoints.length > 0 ? trendPoints[trendPoints.length - 1].minute : 0;
+        // If current minute > 90, we might need to extend
+        const effectiveMax = Math.max(90, lastDataMinute, currentMinute || 0);
+        // Add a buffer if we are close to the edge? No, strict fit requested.
+        return effectiveMax;
+    }, [trendPoints, currentMinute]);
 
-    // Dimensions
-    const height = 280;
-    const padding = { top: 40, bottom: 40, left: 10, right: 10 };
-    const plotHeight = height - padding.top - padding.bottom;
-    const centerY = padding.top + plotHeight / 2;
-    // X Scale: 0 to 90+ minutes
-    const maxMinute = Math.max(90, trendPoints.length > 0 ? trendPoints[trendPoints.length - 1].minute : 90);
-    const pixelsPerMinute = (chartWidth - padding.left - padding.right) / maxMinute;
+    const pixelsPerMinute = (LOGICAL_WIDTH - PADDING.left - PADDING.right) / maxMinute;
 
-    // Bar dimensions
-    const barWidth = Math.max(2, pixelsPerMinute * 0.7); // 70% of minute width, min 2px
+    // Bar dimensions - slightly thicker for better "Equalizer" look in 1000px width
+    const barWidth = Math.max(4, pixelsPerMinute * 0.6);
 
     // Y Scale: Normalize based on max pressure value
     const maxPressure = useMemo(() => {
@@ -110,32 +108,40 @@ export function MatchTrendChart({
     }, [trendPoints]);
 
     const scaleY = (val: number) => {
-        return (val / maxPressure) * (plotHeight / 2);
+        return (val / maxPressure) * (PLOT_HEIGHT / 2);
     };
 
     // Filter Important Events
     const significantEvents = useMemo(() => {
-        // Filter goals and red cards
         return incidents.filter(inc => {
-            // Check both potentially property structures
             const type = inc.type || inc.incident_type;
             // 1: Goal, 3: Yellow, 4: Red, 8: Pen Goal, etc.
-            // Adjust based on your API types
             return [1, 4, 8, 9, 3].includes(type);
         }).map(inc => ({
             ...inc,
-            x: padding.left + (inc.minute || 0) * pixelsPerMinute,
-            team: inc.position === 1 ? 'home' : 'away', // 1=Home, 2=Away usually
+            x: PADDING.left + (inc.minute || 0) * pixelsPerMinute,
+            team: inc.position === 1 ? 'home' : 'away',
             typeId: inc.type || inc.incident_type
         }));
-    }, [incidents, pixelsPerMinute, padding.left]);
+    }, [incidents, pixelsPerMinute, PADDING.left]);
 
-    // Handle Mouse Move
+    // Handle Mouse Move - use getBoundingClientRect to map DOM pixels to SVG coordinates
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left - padding.left;
-        const minute = Math.min(Math.max(0, Math.round(x / pixelsPerMinute)), maxMinute);
+
+        // 1. Get mouse X relative to container (DOM pixels)
+        const domX = e.clientX - rect.left;
+
+        // 2. Scale DOM X to SVG Logical Coordinate X
+        const scaleFactor = LOGICAL_WIDTH / rect.width;
+        const svgX = domX * scaleFactor;
+
+        // 3. Subtract padding to get 'plot X'
+        const plotX = svgX - PADDING.left;
+
+        // 4. Convert plot X to minute
+        const minute = Math.min(Math.max(0, Math.round(plotX / pixelsPerMinute)), maxMinute);
 
         setHoveredMinute(minute);
     };
@@ -144,7 +150,6 @@ export function MatchTrendChart({
         setHoveredMinute(null);
     };
 
-    // Get value for hovered minute
     const hoveredData = useMemo(() => {
         if (hoveredMinute === null) return null;
         return trendPoints.find(p => p.minute === hoveredMinute) || null;
@@ -164,9 +169,13 @@ export function MatchTrendChart({
             ref={containerRef}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
-            style={{ height: height }}
+            style={{
+                // Aspect ratio trick or just let SVG control height?
+                // SVG viewBox preserves aspect ratio.
+                position: 'relative'
+            }}
         >
-            {/* Header: Logos & Titles */}
+            {/* Header: Logos & Titles - Absolute positioned over SVG */}
             <div className="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none z-10">
                 {/* Home Team */}
                 <div className="flex items-center gap-3">
@@ -197,10 +206,14 @@ export function MatchTrendChart({
                 </div>
             </div>
 
-            {/* SVG Chart */}
-            <svg width="100%" height="100%" className="block">
+            {/* SVG Chart with viewBox for responsiveness */}
+            <svg
+                viewBox={`0 0 ${LOGICAL_WIDTH} ${HEIGHT}`}
+                preserveAspectRatio="none" // Stretch to fill width
+                className="block w-full h-full"
+                style={{ maxHeight: '280px' }} // Constrain huge height on mobile, but let width flow
+            >
                 <defs>
-                    {/* Vertical Gradients for Bars */}
                     <linearGradient id="gradHomeBar" x1="0" y1="1" x2="0" y2="0">
                         <stop offset="0%" stopColor="#059669" stopOpacity="0.4" />
                         <stop offset="100%" stopColor="#34d399" stopOpacity="1" />
@@ -209,8 +222,6 @@ export function MatchTrendChart({
                         <stop offset="0%" stopColor="#2563eb" stopOpacity="0.4" />
                         <stop offset="100%" stopColor="#60a5fa" stopOpacity="1" />
                     </linearGradient>
-
-                    {/* Glow Filter */}
                     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
                         <feGaussianBlur stdDeviation="2" result="blur" />
                         <feComposite in="SourceGraphic" in2="blur" operator="over" />
@@ -219,32 +230,30 @@ export function MatchTrendChart({
 
                 {/* Center Axis */}
                 <line
-                    x1={padding.left}
-                    y1={centerY}
-                    x2={chartWidth - padding.right}
-                    y2={centerY}
+                    x1={PADDING.left}
+                    y1={CENTER_Y}
+                    x2={LOGICAL_WIDTH - PADDING.right}
+                    y2={CENTER_Y}
                     stroke="rgba(255,255,255,0.1)"
-                    strokeWidth="1"
+                    strokeWidth="2"
                 />
 
                 {/* Render Bars */}
                 {trendPoints.map((point) => {
-                    const x = padding.left + point.minute * pixelsPerMinute - (barWidth / 2); // Center on minute tick
+                    const x = PADDING.left + point.minute * pixelsPerMinute - (barWidth / 2);
                     const homeHeight = scaleY(point.home_value);
                     const awayHeight = scaleY(Math.abs(point.away_value));
 
-                    // Highlight hovered bar
                     const isHovered = hoveredMinute === point.minute;
                     const opacity = hoveredMinute !== null && !isHovered ? 0.4 : 0.9;
                     const filter = isHovered ? 'url(#glow)' : undefined;
 
                     return (
                         <g key={point.minute} opacity={opacity}>
-                            {/* Home Bar (Upwards) */}
                             {homeHeight > 1 && (
                                 <rect
                                     x={x}
-                                    y={centerY - homeHeight}
+                                    y={CENTER_Y - homeHeight}
                                     width={barWidth}
                                     height={homeHeight}
                                     fill="url(#gradHomeBar)"
@@ -252,12 +261,10 @@ export function MatchTrendChart({
                                     filter={filter}
                                 />
                             )}
-
-                            {/* Away Bar (Downwards) */}
                             {awayHeight > 1 && (
                                 <rect
                                     x={x}
-                                    y={centerY}
+                                    y={CENTER_Y}
                                     width={barWidth}
                                     height={awayHeight}
                                     fill="url(#gradAwayBar)"
@@ -269,43 +276,46 @@ export function MatchTrendChart({
                     );
                 })}
 
-                {/* Time Markers (X Axis) */}
-                {[0, 15, 30, 45, 60, 75, 90].map(min => (
-                    <g key={min} transform={`translate(${padding.left + min * pixelsPerMinute}, ${height - 15})`}>
-                        <text fill="#64748b" fontSize="10" textAnchor="middle" fontWeight="500">{min}'</text>
-                    </g>
-                ))}
+                {/* Time Markers - Simplified 0 - 45 - 90 */}
+                {[0, 45, 90].map(min => {
+                    // Only show if within logical bounds (e.g. 90 tick might be weird if max is 120, but usually fine)
+                    if (min > maxMinute) return null;
+                    return (
+                        <g key={min} transform={`translate(${PADDING.left + min * pixelsPerMinute}, ${HEIGHT - 10})`}>
+                            <text
+                                fill="#94a3b8"
+                                fontSize="12"
+                                fontWeight="bold"
+                                textAnchor="middle"
+                            >
+                                {min}'
+                            </text>
+                            {/* Little tick mark */}
+                            <line y1={-5} y2={-15} stroke="#334155" strokeWidth="1" />
+                        </g>
+                    );
+                })}
 
-                {/* Significant Events Markers */}
+                {/* Events */}
                 {significantEvents.map((ev, idx) => {
-                    // Position Y: Fixed offset from center based on home/away
-                    // Home events above center, Away events below
-                    const yPos = ev.team === 'home' ? centerY - 20 : centerY + 20;
+                    const yPos = ev.team === 'home' ? CENTER_Y - 30 : CENTER_Y + 30; // moved further out
                     const color = ev.team === 'home' ? '#10b981' : '#3b82f6';
-
                     return (
                         <g key={idx}>
-                            {/* Vertical Line to Event */}
                             <line
-                                x1={ev.x} y1={centerY} x2={ev.x} y2={yPos}
+                                x1={ev.x} y1={CENTER_Y} x2={ev.x} y2={yPos}
                                 stroke={color}
                                 strokeWidth="1"
-                                strokeOpacity="0.5"
-                                strokeDasharray="2 2"
+                                strokeOpacity="0.6"
+                                strokeDasharray="3 3"
                             />
-                            {/* Icon Circle */}
-                            <circle cx={ev.x} cy={yPos} r="8" fill="#1e293b" stroke={color} strokeWidth="1.5" />
-
-                            {/* Icon Content */}
-                            {/* Goal */}
+                            <circle cx={ev.x} cy={yPos} r="10" fill="#0f172a" stroke={color} strokeWidth="1.5" />
                             {(ev.typeId === 1 || ev.typeId === 8) && (
-                                <text x={ev.x} y={yPos} dy="3" textAnchor="middle" fontSize="10">⚽</text>
+                                <text x={ev.x} y={yPos} dy="3" textAnchor="middle" fontSize="12">⚽</text>
                             )}
-                            {/* Red Card */}
                             {ev.typeId === 4 && (
                                 <rect x={ev.x - 3} y={yPos - 4} width="6" height="8" fill="#ef4444" rx="1" />
                             )}
-                            {/* Yellow Card */}
                             {ev.typeId === 3 && (
                                 <rect x={ev.x - 3} y={yPos - 4} width="6" height="8" fill="#eab308" rx="1" />
                             )}
@@ -313,47 +323,69 @@ export function MatchTrendChart({
                     );
                 })}
 
-                {/* Current Minute Line (if live) */}
+                {/* Current Minute Line */}
                 {currentMinute && currentMinute <= maxMinute && (
-                    <line
-                        x1={padding.left + currentMinute * pixelsPerMinute}
-                        y1={padding.top}
-                        x2={padding.left + currentMinute * pixelsPerMinute}
-                        y2={height - padding.bottom}
-                        stroke="#ef4444"
-                        strokeWidth="1"
-                        strokeDasharray="4 2"
-                        opacity="0.6"
-                    />
+                    <g>
+                        <line
+                            x1={PADDING.left + currentMinute * pixelsPerMinute}
+                            y1={PADDING.top}
+                            x2={PADDING.left + currentMinute * pixelsPerMinute}
+                            y2={HEIGHT - PADDING.bottom}
+                            stroke="#ef4444"
+                            strokeWidth="1.5"
+                            strokeDasharray="4 2"
+                            opacity="0.8"
+                        />
+                        {/* Current Time Badge at bottom */}
+                        {/* <rect 
+                            x={PADDING.left + currentMinute * pixelsPerMinute - 12} 
+                            y={HEIGHT - 25} 
+                            width="24" 
+                            height="16" 
+                            rx="4" 
+                            fill="#ef4444" 
+                        />
+                        <text 
+                            x={PADDING.left + currentMinute * pixelsPerMinute} 
+                            y={HEIGHT - 13} 
+                            textAnchor="middle" 
+                            fill="white" 
+                            fontSize="10" 
+                            fontWeight="bold"
+                        >
+                            {currentMinute}'
+                        </text> */}
+                    </g>
                 )}
             </svg>
 
             {/* Tooltip */}
             {hoveredMinute !== null && hoveredData && (
                 <div
-                    className="absolute z-20 pointer-events-none bg-slate-800/95 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl transform -translate-x-1/2 -translate-y-full"
+                    className="absolute z-30 pointer-events-none"
                     style={{
-                        left: padding.left + hoveredMinute * pixelsPerMinute,
-                        top: centerY - 40, // Float above center line
-                        minWidth: '140px'
+                        left: `${(PADDING.left + hoveredMinute * pixelsPerMinute) / LOGICAL_WIDTH * 100}%`, // Percent positioning
+                        top: '50%', // Centered Y roughly, or specific calculation
+                        transform: 'translate(-50%, -100%) translateY(-20px)'
                     }}
                 >
-                    {/* Triangle Arrow */}
-                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1 w-2 h-2 bg-slate-800 rotate-45 border-r border-b border-slate-700"></div>
+                    <div className="bg-slate-800/95 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl min-w-[140px]">
+                        {/* Triangle Arrow */}
+                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1 w-2 h-2 bg-slate-800 rotate-45 border-r border-b border-slate-700"></div>
 
-                    <div className="text-center text-xs font-bold text-gray-400 mb-2 border-b border-gray-700 pb-1 flex justify-between">
-                        <span>Dakika {hoveredMinute}'</span>
-                        {/* Show if it's a Goal/Card minute? Optional */}
-                    </div>
-                    <div className="flex justify-between items-center gap-4 relative z-10">
-                        <div className="text-center">
-                            <div className="text-emerald-400 font-bold text-xl drop-shadow-sm">{hoveredData.home_value.toFixed(1)}</div>
-                            <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold">EV</div>
+                        <div className="text-center text-xs font-bold text-gray-400 mb-2 border-b border-gray-700 pb-1">
+                            Dakika {hoveredMinute}'
                         </div>
-                        <div className="w-px h-8 bg-gray-700"></div>
-                        <div className="text-center">
-                            <div className="text-blue-400 font-bold text-xl drop-shadow-sm">{Math.abs(hoveredData.away_value).toFixed(1)}</div>
-                            <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold">DEP</div>
+                        <div className="flex justify-between items-center gap-4">
+                            <div className="text-center">
+                                <div className="text-emerald-400 font-bold text-xl drop-shadow-sm">{hoveredData.home_value.toFixed(1)}</div>
+                                <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold">EV</div>
+                            </div>
+                            <div className="w-px h-8 bg-gray-700"></div>
+                            <div className="text-center">
+                                <div className="text-blue-400 font-bold text-xl drop-shadow-sm">{Math.abs(hoveredData.away_value).toFixed(1)}</div>
+                                <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold">DEP</div>
+                            </div>
                         </div>
                     </div>
                 </div>
