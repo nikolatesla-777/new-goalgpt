@@ -220,8 +220,8 @@ export class TeamNameMatcherService {
                 }
             }
 
-            // Only return if confidence is above threshold
-            if (bestMatch && bestMatch.confidence >= 0.5) {
+            // Only return if confidence is above threshold (60%)
+            if (bestMatch && bestMatch.confidence >= 0.6) {
                 return bestMatch;
             }
 
