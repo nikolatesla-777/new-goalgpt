@@ -1020,10 +1020,14 @@ function TrendContent({ data, match }: { data: any; match: Match }) {
     // Get current minute from match
     const currentMinute = (match as any).minute ?? null;
 
+    // Get incidents from data (passed from parent)
+    const incidents = data?.incidents || [];
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <MatchTrendChart
                 data={data?.trend}
+                incidents={incidents}
                 homeTeamName={match.home_team?.name}
                 awayTeamName={match.away_team?.name}
                 homeTeamLogo={match.home_team?.logo_url}
