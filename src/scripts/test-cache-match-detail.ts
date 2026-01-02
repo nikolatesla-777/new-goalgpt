@@ -1,118 +1,98 @@
 /**
  * Test Cache Match Detail
  * 
- * Tests if ended matches can be read from database (cache) correctly.
- * This verifies that post-match persistence works and users can see complete data.
+ * Tests that ended match data is correctly cached and retrievable
  */
 
+import 'dotenv/config';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
+import { cacheService } from '../services/cache/cache.service';
+import { CacheKeyPrefix, CacheTTL } from '../services/cache/cache.types';
 
 async function testCacheMatchDetail() {
+  logger.info('🧪 Testing Cache Match Detail...\n');
   const client = await pool.connect();
   try {
-    logger.info('🧪 Testing cache (database) match detail reading...\n');
-
-    // Find a recently ended match that should have complete data
-    const result = await client.query(`
+    // 1. Find a recently ended match with complete data
+    const matchResult = await client.query(`
       SELECT 
         external_id,
-        status_id,
         match_time,
+        status_id,
         statistics,
         incidents,
         trend_data,
-        player_stats,
-        home_score_display,
-        away_score_display,
-        home_team_id,
-        away_team_id
+        player_stats
       FROM ts_matches 
       WHERE status_id = 8
         AND match_time >= EXTRACT(EPOCH FROM NOW()) - 86400
         AND statistics IS NOT NULL
         AND incidents IS NOT NULL
         AND trend_data IS NOT NULL
+        AND player_stats IS NOT NULL
       ORDER BY match_time DESC
-      LIMIT 5
+      LIMIT 1
     `);
-
-    logger.info(`📊 Found ${result.rows.length} ended matches with complete data\n`);
-
-    if (result.rows.length === 0) {
-      logger.warn('⚠️ No matches with complete data found. Batch processing may still be running.');
+    
+    if (matchResult.rows.length === 0) {
+      logger.warn('⚠️ No complete ended matches found. Cannot test cache.');
       return;
     }
-
-    for (const match of result.rows) {
-      logger.info(`\n=== Testing Match: ${match.external_id} ===`);
-      logger.info(`Status: ${match.status_id} (END)`);
-      logger.info(`Match Time: ${new Date(match.match_time * 1000).toISOString()}`);
-      logger.info(`Score: ${match.home_score_display} - ${match.away_score_display}`);
-
-      // Check statistics
-      const stats = match.statistics;
-      if (stats && typeof stats === 'object') {
-        const statsCount = Object.keys(stats).length;
-        logger.info(`✅ Statistics: ${statsCount} stats available`);
-        
-        // Show sample stats
-        const sampleStats = Object.keys(stats).slice(0, 5);
-        logger.info(`   Sample: ${sampleStats.join(', ')}`);
-      } else {
-        logger.warn(`❌ Statistics: Missing or invalid`);
-      }
-
-      // Check incidents
-      const incidents = match.incidents;
-      if (incidents && Array.isArray(incidents)) {
-        logger.info(`✅ Incidents: ${incidents.length} events available`);
-        
-        // Show sample incidents
-        const sampleIncidents = incidents.slice(0, 3).map((inc: any) => 
-          `${inc.type || 'unknown'} (${inc.minute || '?'}')`
-        );
-        logger.info(`   Sample: ${sampleIncidents.join(', ')}`);
-      } else {
-        logger.warn(`❌ Incidents: Missing or invalid`);
-      }
-
-      // Check trend data
-      const trend = match.trend_data;
-      if (trend && Array.isArray(trend)) {
-        logger.info(`✅ Trend Data: ${trend.length} data points available`);
-      } else {
-        logger.warn(`❌ Trend Data: Missing or invalid`);
-      }
-
-      // Check player stats
-      const playerStats = match.player_stats;
-      if (playerStats && Array.isArray(playerStats)) {
-        logger.info(`✅ Player Stats: ${playerStats.length} players available`);
-      } else {
-        logger.info(`⚠️ Player Stats: Missing (may be due to API limit) - This is OK`);
-      }
-
-      // Overall assessment
-      const hasCompleteData = 
-        stats && typeof stats === 'object' && Object.keys(stats).length > 0 &&
-        incidents && Array.isArray(incidents) && incidents.length > 0 &&
-        trend && Array.isArray(trend) && trend.length > 0;
-
-      if (hasCompleteData) {
-        logger.info(`\n✅ Match ${match.external_id} has COMPLETE data - Users will see all tabs with data!`);
-      } else {
-        logger.warn(`\n⚠️ Match ${match.external_id} has INCOMPLETE data - Some tabs may be empty`);
-      }
+    
+    const match = matchResult.rows[0];
+    logger.info(`Testing cache for match: ${match.external_id}\n`);
+    
+    // 2. Test cache key generation
+    const cacheKey = `${CacheKeyPrefix.TheSports}:match:detail:${match.external_id}`;
+    logger.info(`Cache key: ${cacheKey}`);
+    
+    // 3. Test cache set
+    logger.info('\n1️⃣ Testing cache SET...');
+    const matchData = {
+      match_id: match.external_id,
+      statistics: match.statistics,
+      incidents: match.incidents,
+      trend_data: match.trend_data,
+      player_stats: match.player_stats,
+    };
+    
+    await cacheService.set(cacheKey, matchData, CacheTTL.Day);
+    logger.info('   ✅ Cache SET successful');
+    
+    // 4. Test cache get
+    logger.info('\n2️⃣ Testing cache GET...');
+    const cachedData = await cacheService.get(cacheKey);
+    
+    if (cachedData) {
+      logger.info('   ✅ Cache GET successful');
+      logger.info(`   Statistics: ${cachedData.statistics ? '✅' : '❌'}`);
+      logger.info(`   Incidents: ${cachedData.incidents ? '✅' : '❌'}`);
+      logger.info(`   Trend Data: ${cachedData.trend_data ? '✅' : '❌'}`);
+      logger.info(`   Player Stats: ${cachedData.player_stats ? '✅' : '❌'}`);
+    } else {
+      logger.warn('   ❌ Cache GET failed - data not found');
     }
-
-    logger.info(`\n=== SUMMARY ===`);
-    logger.info(`✅ Cache (database) reading test completed`);
-    logger.info(`✅ Ended matches can be read from database with complete data`);
-    logger.info(`✅ Users will see statistics, incidents, and trend data in match detail pages`);
-
+    
+    // 5. Test cache TTL
+    logger.info('\n3️⃣ Testing cache TTL...');
+    const ttl = await cacheService.getTTL(cacheKey);
+    if (ttl !== null) {
+      logger.info(`   ✅ TTL: ${ttl} seconds (${Math.round(ttl / 60)} minutes)`);
+    } else {
+      logger.warn('   ⚠️ TTL not available');
+    }
+    
+    // 6. Summary
+    logger.info('\n=== SUMMARY ===');
+    if (cachedData) {
+      logger.info('✅ Cache is working correctly!');
+    } else {
+      logger.warn('❌ Cache test failed');
+    }
+    
   } catch (error: any) {
-    logger.error('Test failed:', error);
+    logger.error('Error testing cache:', error);
   } finally {
     client.release();
     await pool.end();
@@ -120,4 +100,3 @@ async function testCacheMatchDetail() {
 }
 
 testCacheMatchDetail().catch(console.error);
-

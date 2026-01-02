@@ -6,6 +6,19 @@
  */
 
 import { useMemo } from 'react';
+import {
+    SoccerBall,
+    Cards,
+    ArrowsLeftRight,
+    Flag,
+    HandPalm,
+    Timer,
+    PlayCircle,
+    MonitorPlay,
+    XCircle,
+    Prohibit,
+    Lightning
+} from '@phosphor-icons/react';
 
 const EVENT_TYPES = {
     GOAL: 1,
@@ -55,55 +68,173 @@ interface MatchEventsTimelineProps {
     matchStatusId?: number; // 1=NOT_STARTED, 2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5+=OVERTIME/END
 }
 
+// Get event styling and icon component
 function getEventStyle(incident: Incident) {
     const type = incident.type;
     switch (type) {
         case EVENT_TYPES.GOAL:
         case EVENT_TYPES.PENALTY:
-            return { icon: '⚽', color: '#10b981', label: 'GOL' };
+            return {
+                Icon: SoccerBall,
+                colorClass: 'text-emerald-500',
+                bgClass: 'bg-emerald-50',
+                borderClass: 'border-emerald-100',
+                label: 'GOL'
+            };
         case EVENT_TYPES.OWN_GOAL:
-            return { icon: '⚽', color: '#10b981', label: 'KENDİ KALESİNE GOL' };
+            return {
+                Icon: SoccerBall,
+                colorClass: 'text-red-500',
+                bgClass: 'bg-red-50',
+                borderClass: 'border-red-100',
+                label: 'KENDİ KALESİNE'
+            };
         case EVENT_TYPES.YELLOW_CARD:
-            return { icon: '🟨', color: '#fbbf24', label: 'SARI KART' };
+            return {
+                Icon: Cards,
+                colorClass: 'text-yellow-500',
+                bgClass: 'bg-yellow-50',
+                borderClass: 'border-yellow-100',
+                label: 'SARI KART',
+                iconWeight: 'fill'
+            };
         case EVENT_TYPES.RED_CARD:
-            return { icon: '🟥', color: '#dc2626', label: 'KIRMIZI KART' };
+            return {
+                Icon: Cards,
+                colorClass: 'text-red-600',
+                bgClass: 'bg-red-50',
+                borderClass: 'border-red-100',
+                label: 'KIRMIZI KART',
+                iconWeight: 'fill'
+            };
         case EVENT_TYPES.CARD_UPGRADE:
-            return { icon: '🟨🟥', color: '#dc2626', label: 'İKİNCİ SARI' };
+            return {
+                Icon: Cards,
+                colorClass: 'text-red-600',
+                bgClass: 'bg-red-50',
+                borderClass: 'border-red-100',
+                label: 'İKİNCİ SARI',
+                iconWeight: 'duotone'
+            };
         case EVENT_TYPES.SUBSTITUTION:
-            return { icon: '🔄', color: '#3b82f6', label: 'DEĞİŞİKLİK' };
+            return {
+                Icon: ArrowsLeftRight,
+                colorClass: 'text-blue-500',
+                bgClass: 'bg-blue-50',
+                borderClass: 'border-blue-100',
+                label: 'DEĞİŞİKLİK'
+            };
         case EVENT_TYPES.VAR:
-            return { icon: '📺', color: '#6366f1', label: 'VAR' };
+            return {
+                Icon: MonitorPlay,
+                colorClass: 'text-indigo-500',
+                bgClass: 'bg-indigo-50',
+                borderClass: 'border-indigo-100',
+                label: 'VAR'
+            };
         case EVENT_TYPES.START:
-            return { icon: '🏁', color: '#22c55e', label: 'MAÇ BAŞLADI' };
+            return {
+                Icon: PlayCircle,
+                colorClass: 'text-green-600',
+                bgClass: 'bg-green-50',
+                borderClass: 'border-green-100',
+                label: 'MAÇ BAŞLADI',
+                iconWeight: 'fill'
+            };
         case EVENT_TYPES.MIDFIELD:
-            // Type 11 at 45-47' = 2nd half start (shown), other times = restart after goal (filtered out)
-            return { icon: '▶️', color: '#22c55e', label: '2. YARI BAŞLADI' };
+            return {
+                Icon: PlayCircle,
+                colorClass: 'text-blue-600',
+                bgClass: 'bg-blue-50',
+                borderClass: 'border-blue-100',
+                label: '2. YARI BAŞLADI',
+                iconWeight: 'fill'
+            };
         case EVENT_TYPES.END:
-            return { icon: '🏁', color: '#6b7280', label: 'MAÇ BİTTİ' };
+            return {
+                Icon: Flag,
+                colorClass: 'text-gray-800',
+                bgClass: 'bg-gray-100',
+                borderClass: 'border-gray-200',
+                label: 'MAÇ BİTTİ',
+                iconWeight: 'fill'
+            };
         case EVENT_TYPES.HALFTIME_SCORE:
-            return { icon: '⏸️', color: '#f59e0b', label: 'DEVRE ARASI' };
+            return {
+                Icon: Timer,
+                colorClass: 'text-amber-500',
+                bgClass: 'bg-amber-50',
+                borderClass: 'border-amber-100',
+                label: 'DEVRE ARASI'
+            };
         case EVENT_TYPES.INJURY_TIME:
-            return { icon: '⏱️', color: '#f59e0b', label: 'UZATMA SÜRESİ' };
-        case EVENT_TYPES.OVERTIME_OVER:
-            return { icon: '🏁', color: '#6b7280', label: 'UZATMA BİTTİ' };
-        case EVENT_TYPES.PENALTY_KICK_ENDED:
-            return { icon: '🏁', color: '#6b7280', label: 'PENALTİLAR BİTTİ' };
+            return {
+                Icon: Timer,
+                colorClass: 'text-amber-600',
+                bgClass: 'bg-amber-50',
+                borderClass: 'border-amber-100',
+                label: 'UZATMA SÜRESİ'
+            };
         case EVENT_TYPES.PENALTY_SHOOTOUT:
-            return { icon: '⚽', color: '#10b981', label: 'PENALTİ GOL' };
+            return {
+                Icon: SoccerBall,
+                colorClass: 'text-emerald-600',
+                bgClass: 'bg-emerald-50',
+                borderClass: 'border-emerald-100',
+                label: 'PENALTI GOL'
+            };
         case EVENT_TYPES.PENALTY_MISSED_SHOOTOUT:
-            return { icon: '❌', color: '#ef4444', label: 'PENALTİ KAÇTI' };
-        case EVENT_TYPES.SHOT_ON_POST:
-            return { icon: '🥅', color: '#f59e0b', label: 'DİREKTEN DÖNEN' };
-        case EVENT_TYPES.CORNER:
-            return { icon: '🚩', color: '#8b5cf6', label: 'KORNER' };
-        case EVENT_TYPES.OFFSIDE:
-            return { icon: '🚫', color: '#6b7280', label: 'OFSAYT' };
-        case EVENT_TYPES.FREE_KICK:
-            return { icon: '⚡', color: '#0ea5e9', label: 'SERBEST VURUŞ' };
         case EVENT_TYPES.PENALTY_MISSED:
-            return { icon: '❌', color: '#ef4444', label: 'PENALTI KAÇTI' };
+            return {
+                Icon: XCircle,
+                colorClass: 'text-red-500',
+                bgClass: 'bg-red-50',
+                borderClass: 'border-red-100',
+                label: 'PENALTI KAÇTI'
+            };
+        case EVENT_TYPES.SHOT_ON_POST:
+            return {
+                Icon: Prohibit,
+                colorClass: 'text-amber-500',
+                bgClass: 'bg-amber-50',
+                borderClass: 'border-amber-100',
+                label: 'DİREKTEN DÖNEN'
+            };
+        case EVENT_TYPES.CORNER:
+            return {
+                Icon: Flag,
+                colorClass: 'text-violet-500',
+                bgClass: 'bg-violet-50',
+                borderClass: 'border-violet-100',
+                label: 'KORNER',
+                iconWeight: 'fill'
+            };
+        case EVENT_TYPES.OFFSIDE:
+            return {
+                Icon: HandPalm,
+                colorClass: 'text-gray-500',
+                bgClass: 'bg-gray-50',
+                borderClass: 'border-gray-100',
+                label: 'OFSAYT',
+                iconWeight: 'fill'
+            };
+        case EVENT_TYPES.FREE_KICK:
+            return {
+                Icon: Lightning,
+                colorClass: 'text-sky-500',
+                bgClass: 'bg-sky-50',
+                borderClass: 'border-sky-100',
+                label: 'SERBEST VURUŞ',
+                iconWeight: 'fill'
+            };
         default:
-            return { icon: '•', color: '#9ca3af', label: 'DİĞER' };
+            return {
+                Icon: Prohibit,
+                colorClass: 'text-gray-400',
+                bgClass: 'bg-gray-50',
+                borderClass: 'border-gray-100',
+                label: 'DİĞER'
+            };
     }
 }
 
@@ -136,18 +267,17 @@ function getEventText(incident: Incident, label: string): string {
 }
 
 export function MatchEventsTimeline({ incidents, matchStatusId }: MatchEventsTimelineProps) {
-    // Match has started if status_id >= 2 (FIRST_HALF, HALF_TIME, SECOND_HALF, OVERTIME, END, etc.)
+    // Match has started if status_id >= 2
     const matchHasStarted = (matchStatusId ?? 0) >= 2;
-    
+
+    // Process and sort incidents
     const sortedIncidents = useMemo(() => {
         if (!incidents || !Array.isArray(incidents)) return [];
         return [...incidents]
             .filter(inc => {
                 if (!inc || typeof inc.time !== 'number') return false;
-                // Filter out MIDFIELD (type 11) ONLY if it's not at halftime (45-47')
-                // At 45-47' it means "2nd half started", at other times it's restart after goal
+                // Filter Midfield/Start logic
                 if (inc.type === EVENT_TYPES.MIDFIELD && (inc.time < 45 || inc.time > 47)) return false;
-                // Filter out START (type 10) events - we show "BAŞLADI" marker at the bottom
                 if (inc.type === EVENT_TYPES.START) return false;
                 return true;
             })
@@ -156,94 +286,54 @@ export function MatchEventsTimeline({ incidents, matchStatusId }: MatchEventsTim
 
     if (sortedIncidents.length === 0) {
         return (
-            <div style={{
-                textAlign: 'center',
-                padding: '60px 20px',
-                backgroundColor: '#ffffff',
-                borderRadius: '24px',
-                border: '1px solid #f1f5f9',
-                boxShadow: '0 10px 30px -10px rgba(0,0,0,0.05)'
-            }}>
+            <div className="text-center py-16 px-6 bg-white rounded-3xl border border-gray-100 shadow-sm">
                 {matchHasStarted ? (
-                    <>
-                        <div style={{ fontSize: '48px', marginBottom: '20px' }}>⚽</div>
-                        <div style={{ color: '#1f2937', fontSize: '16px', fontWeight: 600 }}>Maç devam ediyor</div>
-                        <div style={{ color: '#9ca3af', fontSize: '13px', marginTop: '8px' }}>Henüz önemli bir olay gerçekleşmedi.</div>
-                        
-                        {/* KICK OFF MARKER */}
-                        <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'center' }}>
-                            <div style={{
-                                backgroundColor: '#22c55e',
-                                color: '#fff',
-                                padding: '10px 28px',
-                                borderRadius: '50px',
-                                fontSize: '13px',
-                                fontWeight: 700,
-                                letterSpacing: '0.05em',
-                                boxShadow: '0 10px 15px -3px rgba(34, 197, 94, 0.3)'
-                            }}>
-                                🏁 MAÇ BAŞLADI
-                            </div>
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center animate-pulse">
+                            <SoccerBall size={48} weight="duotone" className="text-emerald-500" />
                         </div>
-                    </>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800">Maç Devam Ediyor</h3>
+                            <p className="text-sm text-gray-500 mt-1">Henüz önemli bir olay gerçekleşmedi.</p>
+                        </div>
+
+                        <div className="mt-6 px-6 py-2 bg-emerald-500 text-white rounded-full text-xs font-bold tracking-wider shadow-lg shadow-emerald-200 flex items-center gap-2">
+                            <PlayCircle size={16} weight="fill" />
+                            MAÇ BAŞLADI
+                        </div>
+                    </div>
                 ) : (
-                    <>
-                        <div style={{ fontSize: '48px', marginBottom: '20px' }}>📋</div>
-                        <div style={{ color: '#1f2937', fontSize: '16px', fontWeight: 600 }}>Henüz etkinlik yok</div>
-                        <div style={{ color: '#9ca3af', fontSize: '13px', marginTop: '8px' }}>Bu maç için etkinlik verisi henüz oluşmamış olabilir.</div>
-                    </>
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center">
+                            <Prohibit size={48} weight="duotone" className="text-gray-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-800">Henüz Etkinlik Yok</h3>
+                            <p className="text-sm text-gray-500 mt-1">Bu maç için etkinlik verisi henüz oluşmamış olabilir.</p>
+                        </div>
+                    </div>
                 )}
             </div>
         );
     }
 
     return (
-        <div style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: '900px',
-            margin: '20px auto',
-            padding: '60px 0',
-            backgroundColor: '#ffffff',
-            borderRadius: '24px',
-            border: '1px solid #f1f5f9',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
-            fontFamily: '"Inter", sans-serif'
-        }}>
+        <div className="relative w-full max-w-4xl mx-auto py-12 px-4 md:px-0 font-sans">
             {/* CENTRAL AXIS */}
-            <div style={{
-                position: 'absolute',
-                left: '50%',
-                top: '40px',
-                bottom: '80px',
-                width: '4px',
-                backgroundColor: '#f8fafc',
-                backgroundImage: 'linear-gradient(to bottom, #f1f5f9 0%, #f1f5f9 100%)',
-                transform: 'translateX(-50%)',
-                borderRadius: '2px',
-                zIndex: 1
-            }}></div>
+            <div className="absolute left-1/2 top-4 bottom-20 w-0.5 bg-gray-100 -translate-x-1/2 rounded-full z-0 hidden md:block"></div>
 
             {/* EVENT ROWS */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '48px', position: 'relative', zIndex: 2 }}>
+            <div className="flex flex-col gap-8 md:gap-12 relative z-10">
                 {sortedIncidents.map((incident, idx) => (
                     <EventTimelineRow key={idx} incident={incident} />
                 ))}
             </div>
 
             {/* KICK OFF MARKER */}
-            <div style={{ marginTop: '60px', display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 10 }}>
-                <div style={{
-                    backgroundColor: '#1e293b',
-                    color: '#fff',
-                    padding: '8px 24px',
-                    borderRadius: '50px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    letterSpacing: '0.05em',
-                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
-                }}>
-                    🏁 BAŞLADI
+            <div className="mt-16 flex justify-center relative z-20">
+                <div className="bg-gray-800 text-white px-6 py-2 rounded-full text-xs font-bold tracking-wider shadow-xl flex items-center gap-2">
+                    <PlayCircle size={16} weight="fill" className="text-green-400" />
+                    MAÇ BAŞLADI
                 </div>
             </div>
         </div>
@@ -251,77 +341,53 @@ export function MatchEventsTimeline({ incidents, matchStatusId }: MatchEventsTim
 }
 
 function EventTimelineRow({ incident }: { incident: Incident }) {
-    const isHome = incident.position === 1;
+    const isHome = incident.position === 1; // 1 = Home
     const isNeutral = incident.position === 0;
-    const { icon, color, label } = getEventStyle(incident);
+    const { Icon, colorClass, bgClass, borderClass, label, iconWeight } = getEventStyle(incident);
     const showScore = incident.type === EVENT_TYPES.GOAL || incident.type === EVENT_TYPES.OWN_GOAL || incident.type === EVENT_TYPES.PENALTY;
 
+    // determine alignment classes based on side
+    const isRightSide = !isHome && !isNeutral; // Away team is right
+
     return (
-        <div style={{
-            display: 'flex',
-            width: '100%',
-            alignItems: 'center',
-            flexDirection: (isHome || isNeutral) ? 'row' : 'row-reverse'
-        }}>
+        <div className={`flex w-full items-center ${isRightSide ? 'flex-row-reverse md:flex-row-reverse' : 'flex-row md:flex-row'}`}>
+
             {/* CONTENT SIDE */}
-            <div style={{
-                width: '50%',
-                padding: (isHome || isNeutral) ? '0 40px 0 20px' : '0 20px 0 40px',
-                textAlign: (isHome || isNeutral) ? 'right' : 'left',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px'
-            }}>
-                <div style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    color: color,
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase'
-                }}>
+            <div className={`
+                flex-1 flex flex-col gap-1 
+                ${isRightSide ? 'items-start md:items-start text-left md:text-left pl-3 md:pl-10' : 'items-end md:items-end text-right md:text-right pr-3 md:pr-10'}
+            `}>
+                {/* Label Badge */}
+                <div className={`
+                    text-[10px] font-black tracking-widest uppercase px-2 py-0.5 rounded
+                    ${bgClass} ${colorClass} bg-opacity-50
+                `}>
                     {label}
                 </div>
 
-                <div style={{
-                    fontSize: '15px',
-                    fontWeight: 700,
-                    color: '#1e293b'
-                }}>
+                {/* Player Name / Main Text */}
+                <div className="text-sm md:text-base font-bold text-gray-800 leading-tight">
                     {getEventText(incident, label)}
                 </div>
 
+                {/* Sub-info (Assist, Substitution, etc.) */}
                 {incident.type === EVENT_TYPES.SUBSTITUTION ? (
-                    <div style={{
-                        fontSize: '13px',
-                        color: '#64748b',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: (isHome || isNeutral) ? 'flex-end' : 'flex-start',
-                        gap: '6px'
-                    }}>
-                        <span style={{ color: '#ef4444' }}>↓</span> {incident.out_player_name || 'Çıkan Oyuncu'}
+                    <div className={`text-xs text-gray-500 flex items-center gap-1.5 mt-0.5 ${isRightSide ? '' : 'justify-end'}`}>
+                        <div className="w-4 h-4 rounded-full bg-red-50 flex items-center justify-center border border-red-100">
+                            <span className="text-red-500 text-[8px]">⬇</span>
+                        </div>
+                        {incident.out_player_name || 'Çıkan Oyuncu'}
                     </div>
                 ) : incident.assist1_name ? (
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                        asist: <span style={{ fontWeight: 600 }}>{incident.assist1_name}</span>
+                    <div className="text-xs text-gray-400 font-medium">
+                        asist: <span className="text-gray-600 font-semibold">{incident.assist1_name}</span>
                     </div>
                 ) : null}
 
+                {/* Score Badge if Goal */}
                 {showScore && incident.home_score !== undefined && (
-                    <div style={{
-                        marginTop: '6px',
-                        display: 'flex',
-                        justifyContent: (isHome || isNeutral) ? 'flex-end' : 'flex-start'
-                    }}>
-                        <div style={{
-                            backgroundColor: '#1e293b',
-                            color: '#fff',
-                            padding: '4px 12px',
-                            borderRadius: '8px',
-                            fontSize: '13px',
-                            fontWeight: 800,
-                            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                        }}>
+                    <div className={`mt-1.5 ${isRightSide ? 'self-start' : 'self-end'}`}>
+                        <div className="bg-gray-800 text-white px-3 py-1 rounded-lg text-xs font-bold shadow-md tracking-wider font-mono">
                             {incident.home_score} - {incident.away_score}
                         </div>
                     </div>
@@ -329,46 +395,27 @@ function EventTimelineRow({ incident }: { incident: Incident }) {
             </div>
 
             {/* CENTER AXIS ICON */}
-            <div style={{
-                position: 'relative',
-                width: '1px',
-                height: '0px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 5
-            }}>
-                {/* MINUTE BADGE */}
-                <div style={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: '-35px',
-                    transform: 'translateX(-50%)',
-                    fontSize: '12px',
-                    fontWeight: 900,
-                    color: '#cbd5e1',
-                    whiteSpace: 'nowrap'
-                }}>
+            <div className="relative z-10 shrink-0 flex items-center justify-center w-12 md:w-16">
+                {/* Minute Marker */}
+                <div className="absolute -top-6 md:-top-7 left-1/2 -translate-x-1/2 text-[10px] md:text-xs font-black text-gray-300">
                     {incident.time}'
                 </div>
 
-                {/* ICON CONTAINER */}
-                <div style={{
-                    width: '44px',
-                    height: '44px',
-                    backgroundColor: 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transform: 'translateX(-50%)',
-                    zIndex: 10
-                }}>
-                    <span style={{ fontSize: '24px' }}>{icon}</span>
+                {/* Icon Circle */}
+                <div className={`
+                    w-10 h-10 md:w-12 md:h-12 rounded-full border-4 ${bgClass} ${borderClass}
+                    flex items-center justify-center shadow-sm transition-transform hover:scale-110 duration-200 cursor-default
+                `}>
+                    <Icon
+                        size={20}
+                        weight={iconWeight as any || 'duotone'}
+                        className={colorClass}
+                    />
                 </div>
             </div>
 
-            {/* SPACER FOR OTHER SIDE */}
-            <div style={{ width: '50%' }}></div>
+            {/* SPACER FOR OTHER SIDE (Desktop Only) */}
+            <div className="flex-1 hidden md:block"></div>
         </div>
     );
 }

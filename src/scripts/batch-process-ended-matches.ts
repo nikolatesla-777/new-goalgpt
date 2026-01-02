@@ -39,8 +39,12 @@ async function batchProcessEndedMatches() {
       ORDER BY match_time DESC
     `);
 
-    const matches = result.rows;
-    logger.info(`📊 Found ${matches.length} ended matches missing data\n`);
+    // Ensure match_id is set correctly (use external_id if match_id is null/undefined)
+    const matches = result.rows.map(match => ({
+      ...match,
+      match_id: match.match_id || match.external_id
+    }));
+
 
     if (matches.length === 0) {
       logger.info('✅ No matches need processing');

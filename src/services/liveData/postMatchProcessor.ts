@@ -58,8 +58,11 @@ export class PostMatchProcessor {
    * Process a single match after it ends
    */
   async processMatchEnd(matchData: MatchData): Promise<ProcessingResult> {
+    // Ensure match_id is set correctly (use external_id if match_id is null/undefined)
+    const matchId = matchData.match_id || matchData.external_id;
+    
     const result: ProcessingResult = {
-      match_id: matchData.match_id,
+      match_id: matchId,
       success: false,
       stats_saved: false,
       incidents_saved: false,
@@ -69,42 +72,42 @@ export class PostMatchProcessor {
     };
 
     try {
-      logger.info(`[PostMatch] Processing ended match: ${matchData.match_id}`);
+      logger.info(`[PostMatch] Processing ended match: ${matchId}`);
 
       // 1. Save final statistics
       try {
-        await this.saveFinalStats(matchData.match_id);
+        await this.saveFinalStats(matchId);
         result.stats_saved = true;
-        logger.debug(`[PostMatch] Stats saved for ${matchData.match_id}`);
+        logger.debug(`[PostMatch] Stats saved for ${matchId}`);
       } catch (error: any) {
-        logger.warn(`[PostMatch] Failed to save stats for ${matchData.match_id}: ${error.message}`);
+        logger.warn(`[PostMatch] Failed to save stats for ${matchId}: ${error.message}`);
       }
 
       // 2. Save final incidents
       try {
-        await this.saveFinalIncidents(matchData.match_id);
+        await this.saveFinalIncidents(matchId);
         result.incidents_saved = true;
-        logger.debug(`[PostMatch] Incidents saved for ${matchData.match_id}`);
+        logger.debug(`[PostMatch] Incidents saved for ${matchId}`);
       } catch (error: any) {
-        logger.warn(`[PostMatch] Failed to save incidents for ${matchData.match_id}: ${error.message}`);
+        logger.warn(`[PostMatch] Failed to save incidents for ${matchId}: ${error.message}`);
       }
 
       // 3. Save final trend data
       try {
-        await this.saveFinalTrend(matchData.match_id);
+        await this.saveFinalTrend(matchId);
         result.trend_saved = true;
-        logger.debug(`[PostMatch] Trend saved for ${matchData.match_id}`);
+        logger.debug(`[PostMatch] Trend saved for ${matchId}`);
       } catch (error: any) {
-        logger.warn(`[PostMatch] Failed to save trend for ${matchData.match_id}: ${error.message}`);
+        logger.warn(`[PostMatch] Failed to save trend for ${matchId}: ${error.message}`);
       }
 
       // 4. Process player statistics
       try {
-        await this.processPlayerStats(matchData);
+        await this.processPlayerStats({ ...matchData, match_id: matchId });
         result.player_stats_saved = true;
-        logger.debug(`[PostMatch] Player stats saved for ${matchData.match_id}`);
+        logger.debug(`[PostMatch] Player stats saved for ${matchId}`);
       } catch (error: any) {
-        logger.warn(`[PostMatch] Failed to save player stats for ${matchData.match_id}: ${error.message}`);
+        logger.warn(`[PostMatch] Failed to save player stats for ${matchId}: ${error.message}`);
       }
 
       // 5. Update standings for the season
@@ -119,11 +122,11 @@ export class PostMatchProcessor {
       }
 
       result.success = true;
-      logger.info(`[PostMatch] ✅ Completed processing match ${matchData.match_id}: stats=${result.stats_saved}, incidents=${result.incidents_saved}, trend=${result.trend_saved}, players=${result.player_stats_saved}, standings=${result.standings_updated}`);
+      logger.info(`[PostMatch] ✅ Completed processing match ${matchId}: stats=${result.stats_saved}, incidents=${result.incidents_saved}, trend=${result.trend_saved}, players=${result.player_stats_saved}, standings=${result.standings_updated}`);
 
     } catch (error: any) {
       result.error = error.message;
-      logger.error(`[PostMatch] Failed to process match ${matchData.match_id}: ${error.message}`);
+      logger.error(`[PostMatch] Failed to process match ${matchId}: ${error.message}`);
     }
 
     return result;
@@ -285,7 +288,11 @@ export class PostMatchProcessor {
         LIMIT $1
       `, [limit]);
 
-      const matches = result.rows;
+      // Ensure match_id is set correctly (use external_id if match_id is null/undefined)
+      const matches = result.rows.map(match => ({
+        ...match,
+        match_id: match.match_id || match.external_id
+      }));
       logger.info(`[PostMatch] Found ${matches.length} ended matches needing processing`);
 
       let success = 0;

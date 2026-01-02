@@ -170,27 +170,32 @@ export class MatchWriteQueue {
     let paramIndex = 1;
 
     // Status update
-    if (batch.updates.status !== undefined) {
+    if (batch.updates.status !== undefined && batch.updates.status !== null && !isNaN(Number(batch.updates.status))) {
       setParts.push(`status_id = $${paramIndex++}`);
-      values.push(batch.updates.status);
+      values.push(Number(batch.updates.status)); // Ensure number type
     }
 
     // Score update (from ParsedScore)
     if (batch.updates.score) {
       const score = batch.updates.score;
-      setParts.push(`home_score_display = $${paramIndex++}`);
-      values.push(score.home.score);
-      setParts.push(`away_score_display = $${paramIndex++}`);
-      values.push(score.away.score);
+      // Only update scores if they are valid numbers (not null/undefined/NaN)
+      if (score.home?.score !== undefined && score.home?.score !== null && !isNaN(Number(score.home.score))) {
+        setParts.push(`home_score_display = $${paramIndex++}`);
+        values.push(Number(score.home.score));
+      }
+      if (score.away?.score !== undefined && score.away?.score !== null && !isNaN(Number(score.away.score))) {
+        setParts.push(`away_score_display = $${paramIndex++}`);
+        values.push(Number(score.away.score));
+      }
       
       // Add other score fields if needed
-      if (score.home.regularScore !== undefined) {
+      if (score.home?.regularScore !== undefined && score.home?.regularScore !== null && !isNaN(Number(score.home.regularScore))) {
         setParts.push(`home_score_regular = $${paramIndex++}`);
-        values.push(score.home.regularScore);
+        values.push(Number(score.home.regularScore));
       }
-      if (score.away.regularScore !== undefined) {
+      if (score.away?.regularScore !== undefined && score.away?.regularScore !== null && !isNaN(Number(score.away.regularScore))) {
         setParts.push(`away_score_regular = $${paramIndex++}`);
-        values.push(score.away.regularScore);
+        values.push(Number(score.away.regularScore));
       }
     }
 
@@ -207,27 +212,44 @@ export class MatchWriteQueue {
     }
 
     // Timestamps
-    if (freshnessCheck.providerTimeToWrite !== null) {
-      setParts.push(`provider_update_time = GREATEST(COALESCE(provider_update_time, 0), $${paramIndex++})`);
-      values.push(freshnessCheck.providerTimeToWrite);
+    if (freshnessCheck.providerTimeToWrite !== null && freshnessCheck.providerTimeToWrite !== undefined && !isNaN(Number(freshnessCheck.providerTimeToWrite))) {
+      setParts.push(`provider_update_time = GREATEST(COALESCE(provider_update_time, 0), $${paramIndex++}::bigint)`);
+      values.push(Number(freshnessCheck.providerTimeToWrite)); // Ensure number type
     }
-    setParts.push(`last_event_ts = $${paramIndex++}`);
-    values.push(freshnessCheck.ingestionTs);
+    if (freshnessCheck.ingestionTs !== null && freshnessCheck.ingestionTs !== undefined && !isNaN(Number(freshnessCheck.ingestionTs))) {
+      setParts.push(`last_event_ts = $${paramIndex++}::bigint`);
+      values.push(Number(freshnessCheck.ingestionTs)); // Ensure number type
+    }
     setParts.push(`updated_at = NOW()`);
 
     if (setParts.length === 0) {
       return; // Nothing to update
     }
 
-    // Execute UPDATE
+    // Execute UPDATE - matchId as last parameter
+    const matchIdParam = paramIndex;
+    values.push(String(batch.matchId)); // Ensure string type for external_id
+    
     const query = `
       UPDATE ts_matches
       SET ${setParts.join(', ')}
-      WHERE external_id = $${paramIndex}
+      WHERE external_id = $${matchIdParam}
     `;
-    values.push(batch.matchId);
 
-    const res = await client.query(query, values);
+    try {
+      const res = await client.query(query, values);
+      
+      if (res.rowCount === 0) {
+        logger.warn(`[MatchWriteQueue] UPDATE affected 0 rows for match ${batch.matchId}`);
+      }
+    } catch (error: any) {
+      // Enhanced error logging for debugging
+      logger.error(`[MatchWriteQueue] Error writing batch for match ${batch.matchId}:`, error);
+      logger.error(`[MatchWriteQueue] Query: ${query}`);
+      logger.error(`[MatchWriteQueue] Values: ${JSON.stringify(values.map((v, i) => ({ index: i + 1, type: typeof v, value: v })))}`);
+      logger.error(`[MatchWriteQueue] SetParts: ${JSON.stringify(setParts)}`);
+      throw error; // Re-throw to be caught by batchWrite
+    }
     
     if (res.rowCount === 0) {
       logger.warn(`[MatchWriteQueue] UPDATE affected 0 rows for match ${batch.matchId}`);
@@ -255,8 +277,9 @@ export class MatchWriteQueue {
     }
 
     const existing = result.rows[0];
-    const existingProviderTime = existing.provider_update_time;
-    const existingEventTime = existing.last_event_ts;
+    // Convert string to number (PostgreSQL returns BIGINT as string)
+    const existingProviderTime = existing.provider_update_time != null ? Number(existing.provider_update_time) : null;
+    const existingEventTime = existing.last_event_ts != null ? Number(existing.last_event_ts) : null;
 
     if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
       if (existingProviderTime !== null && incomingProviderUpdateTime <= existingProviderTime) {
