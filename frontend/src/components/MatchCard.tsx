@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import type { Match } from '../api/matches';
 import { isLiveMatch, isFinishedMatch, getMatchStatusText, formatMatchTime, MatchState } from '../utils/matchStatus';
+import { useAIPredictions } from '../context/AIPredictionsContext';
 
 interface MatchCardProps {
   match: Match;
@@ -8,6 +9,11 @@ interface MatchCardProps {
 
 export function MatchCard({ match }: MatchCardProps) {
   const navigate = useNavigate();
+  const { matchIds, predictions } = useAIPredictions();
+
+  // Check if this match has an AI prediction
+  const hasAIPrediction = match?.id && matchIds.has(match.id);
+  const aiPrediction = hasAIPrediction ? predictions.get(match.id) : null;
   // CRITICAL FIX: Safety checks
   if (!match || typeof match !== 'object' || !match.id) {
     console.error('❌ [MatchCard] Invalid match object:', match);
@@ -164,9 +170,6 @@ export function MatchCard({ match }: MatchCardProps) {
             {matchTime > 0 ? formatMatchTime(matchTime) : 'Tarih yok'}
           </span>
         </div>
-        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-          {getMatchStatusText(status)}
-        </span>
       </div>
 
       <div style={{
@@ -418,6 +421,6 @@ export function MatchCard({ match }: MatchCardProps) {
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }

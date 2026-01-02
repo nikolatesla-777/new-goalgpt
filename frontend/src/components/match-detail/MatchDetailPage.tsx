@@ -22,12 +22,14 @@ import {
 import type { Match } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 import { MatchEventsTimeline } from './MatchEventsTimeline';
+import { useAIPredictions } from '../../context/AIPredictionsContext';
 
-type TabType = 'stats' | 'h2h' | 'standings' | 'lineup' | 'trend' | 'events';
+type TabType = 'stats' | 'h2h' | 'standings' | 'lineup' | 'trend' | 'events' | 'ai';
 
 export function MatchDetailPage() {
     const { matchId } = useParams<{ matchId: string }>();
     const navigate = useNavigate();
+    const { matchIds, predictions } = useAIPredictions();
 
     const [match, setMatch] = useState<Match | null>(null);
     const [activeTab, setActiveTab] = useState<TabType>('stats');
@@ -190,7 +192,10 @@ export function MatchDetailPage() {
         fetchTabData();
     }, [activeTab, matchId, match]);
 
+    const hasAIPrediction = matchId && matchIds.has(matchId);
+
     const tabs: { id: TabType; label: string; icon: string }[] = [
+        ...(hasAIPrediction ? [{ id: 'ai' as TabType, label: 'AI TAHMİN', icon: '🤖' }] : []),
         { id: 'stats', label: 'İstatistikler', icon: '📊' },
         { id: 'events', label: 'Etkinlikler', icon: '📋' },
         { id: 'h2h', label: 'H2H', icon: '⚔️' },
@@ -421,6 +426,7 @@ export function MatchDetailPage() {
                         {activeTab === 'standings' && <StandingsContent data={tabData} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
                         {activeTab === 'lineup' && <LineupContent data={tabData} match={match} navigate={navigate} />}
                         {activeTab === 'trend' && <TrendContent data={tabData} match={match} />}
+                        {activeTab === 'ai' && matchId && <AIContent prediction={predictions.get(matchId)} />}
                     </>
                 )}
             </div>
@@ -1117,4 +1123,68 @@ function sortStats(stats: any[]): any[] {
         if (indexB !== -1) return 1;  // Only B in list, B comes first
         return a.type - b.type; // Neither in list, sort by ID
     });
+}
+
+function AIContent({ prediction }: { prediction: any }) {
+    if (!prediction) return null;
+
+    return (
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '24px', textAlign: 'center' }}>
+            <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '16px',
+                background: 'linear-gradient(135deg, #8B5CF6, #6366F1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)'
+            }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 011 1v3a1 1 0 01-1 1h-1v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1H2a1 1 0 01-1-1v-3a1 1 0 011-1h1a7 7 0 017-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 012-2z" />
+                    <circle cx="7.5" cy="14.5" r="1.5" />
+                    <circle cx="16.5" cy="14.5" r="1.5" />
+                </svg>
+            </div>
+
+            <h3 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px', color: '#1f2937' }}>
+                Yapay Zeka Tahmini
+            </h3>
+            <p style={{ color: '#6b7280', margin: '0 0 24px' }}>
+                Bu maç için yapay zeka tarafından analiz edilmiş tahmin
+            </p>
+
+            <div style={{
+                display: 'inline-flex',
+                flexDirection: 'column',
+                gap: '8px',
+                padding: '20px 40px',
+                backgroundColor: '#f3f4f6',
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb'
+            }}>
+                <div style={{ fontSize: '14px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    TAHMİN
+                </div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#8B5CF6' }}>
+                    {prediction.prediction_type || prediction.prediction_value}
+                </div>
+                {prediction.overall_confidence > 0 && (
+                    <div style={{
+                        marginTop: '8px',
+                        padding: '4px 12px',
+                        background: '#dbeafe',
+                        color: '#1e40af',
+                        borderRadius: '20px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        alignSelf: 'center'
+                    }}>
+                        %{Math.round(prediction.overall_confidence * 100)} Güven
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }
