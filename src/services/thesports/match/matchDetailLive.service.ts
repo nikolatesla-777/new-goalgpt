@@ -501,6 +501,26 @@ export class MatchDetailLiveService {
    * - match_time must remain immutable (fixture time) and is NOT touched here
    * - live_kickoff_time is only persisted if the provider explicitly supplies a kickoff epoch (we never derive it)
    */
+  /**
+   * Trigger post-match persistence when match ends
+   * CRITICAL: Ensures all match data (stats, incidents, trend, player stats, standings) is saved
+   */
+  private async triggerPostMatchPersistence(matchId: string): Promise<void> {
+    try {
+      // Import PostMatchProcessor dynamically to avoid circular dependencies
+      const { PostMatchProcessor } = await import('../../../services/liveData/postMatchProcessor');
+      
+      const processor = new PostMatchProcessor(this.client);
+      
+      // Trigger post-match processing
+      await processor.onMatchEnded(matchId);
+      logger.info(`[DetailLive] ✅ Post-match persistence completed for ${matchId}`);
+    } catch (error: any) {
+      logger.error(`[DetailLive] ❌ Failed to trigger post-match persistence for ${matchId}:`, error);
+      // Don't throw - this is a background operation, shouldn't block reconciliation
+    }
+  }
+
   async reconcileMatchToDatabase(
     match_id: string,
     providerUpdateTimeOverride: number | null = null
@@ -640,6 +660,13 @@ export class MatchDetailLiveService {
                 status_id: 8,
                 reason: 'finished_not_in_provider_response',
               });
+
+              // CRITICAL FIX: Trigger post-match persistence when match transitions to END
+              logger.info(`[DetailLive] Match ${match_id} transitioned to END (8), triggering post-match persistence...`);
+              this.triggerPostMatchPersistence(match_id).catch(err => {
+                logger.error(`[DetailLive] Failed to trigger post-match persistence for ${match_id}:`, err);
+              });
+
               return { updated: true, rowCount: updateResult.rowCount, statusId: 8, score: null, providerUpdateTime: null };
             }
           } else {
@@ -769,6 +796,12 @@ export class MatchDetailLiveService {
           logger.info(
             `[DetailLive] Status transition to END (8) for ${match_id} from status ${existingStatusId} - allowed`
           );
+
+          // CRITICAL FIX: Trigger post-match persistence when match transitions to END
+          // This ensures all match data is saved immediately
+          this.triggerPostMatchPersistence(match_id).catch(err => {
+            logger.error(`[DetailLive] Failed to trigger post-match persistence for ${match_id}:`, err);
+          });
         } else if (newLevel < existingLevel) {
           // Status regression detected - reject update
           logger.error(

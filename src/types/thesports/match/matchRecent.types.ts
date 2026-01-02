@@ -73,5 +73,6 @@ export interface MatchRecentParams {
   competition_id?: string;
   season_id?: string;
   date?: string; // YYYY-MM-DD format
+  time?: number; // Unix timestamp for incremental updates (Last Sync Timestamp + 1)
 }
 

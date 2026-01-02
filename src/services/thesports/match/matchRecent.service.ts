@@ -39,6 +39,11 @@ export class MatchRecentService {
       // Convert YYYY-MM-DD to YYYYMMDD
       apiParams.date = params.date.replace(/-/g, '');
     }
+    if (params.time !== undefined && params.time !== null) {
+      // CRITICAL: Time parameter for incremental updates (Last Sync Timestamp + 1)
+      // According to TheSports docs: "obtain new or changed data according to the time"
+      apiParams.time = params.time;
+    }
     if (params.competition_id) apiParams.competition_id = params.competition_id;
     if (params.season_id) apiParams.season_id = params.season_id;
     

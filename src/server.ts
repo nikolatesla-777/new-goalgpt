@@ -27,6 +27,9 @@ import { pool } from './database/connection';
 import { config } from './config';
 import { WebSocketService } from './services/thesports/websocket/websocket.service';
 import { TheSportsClient } from './services/thesports/client/thesports-client';
+import { MatchWatchdogWorker } from './jobs/matchWatchdog.job';
+import { MatchDetailLiveService } from './services/thesports/match/matchDetailLive.service';
+import { MatchRecentService } from './services/thesports/match/matchRecent.service';
 
 // Workers - Correct existing files from src/jobs
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
@@ -73,6 +76,7 @@ let lineupRefreshJob: LineupRefreshJob | null = null;
 let postMatchProcessorJob: PostMatchProcessorJob | null = null;
 let dataUpdateWorker: DataUpdateWorker | null = null;
 let matchMinuteWorker: MatchMinuteWorker | null = null;
+let matchWatchdogWorker: MatchWatchdogWorker | null = null;
 let websocketService: WebSocketService | null = null;
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -109,6 +113,12 @@ const start = async () => {
 
     matchMinuteWorker = new MatchMinuteWorker();
     matchMinuteWorker.start();
+
+    // Match Watchdog Worker (for should-be-live matches)
+    const matchDetailLiveService = new MatchDetailLiveService(theSportsClient);
+    const matchRecentService = new MatchRecentService(theSportsClient);
+    matchWatchdogWorker = new MatchWatchdogWorker(matchDetailLiveService, matchRecentService);
+    matchWatchdogWorker.start();
 
     // WebSocket Service
     websocketService = new WebSocketService();

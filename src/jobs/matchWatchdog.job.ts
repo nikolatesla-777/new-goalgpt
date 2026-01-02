@@ -51,9 +51,15 @@ export class MatchWatchdogWorker {
       // This is used for both:
       // 1. Should-be-live matches -> transition to LIVE
       // 2. Stale LIVE matches that are finished -> transition to END
+      // CRITICAL FIX: Use time parameter for incremental updates (last 30 seconds for watchdog)
+      // According to TheSports docs: "obtain new or changed data according to the time"
+      // Recommended frequency: 1 min/time, but we use 30 seconds for watchdog
       let recentListAllMatches: Map<string, { statusId: number; updateTime: number | null }> = new Map();
       try {
-        const recentListResponse = await this.matchRecentService.getMatchRecentList({ page: 1, limit: 500 }, true); // forceRefresh = true
+        // Use time parameter: last 30 seconds (watchdog runs every 30 seconds)
+        // This is more efficient than fetching all 500 matches every time
+        const timeParam = nowTs - 30; // Last 30 seconds
+        const recentListResponse = await this.matchRecentService.getMatchRecentList({ time: timeParam, limit: 500 }, true); // forceRefresh = true
         const recentListResults = recentListResponse?.results ?? [];
 
         // Build map of ALL matches from recent/list (including END status=8)
@@ -75,9 +81,9 @@ export class MatchWatchdogWorker {
         // Continue processing, but reconciliation will fall back to detail_live only
       }
 
-      // Find stale matches (120s for live, 900s for HALF_TIME)
-      // CRITICAL FIX: Increase limit to 100 to process more matches per tick
-      const stales = await this.matchWatchdogService.findStaleLiveMatches(nowTs, 120, 900, 100);
+      // CRITICAL FIX: Disable stale match detection - /data/update handles live match updates
+      // Only process "should-be-live" matches (status=1 but match_time passed)
+      const stales: any[] = []; // Disabled - /data/update handles stale matches
 
       // CRITICAL FIX: Also find matches that should be live (match_time passed but status still NOT_STARTED)
       // This ensures matches transition from NOT_STARTED to LIVE when they actually start
@@ -472,104 +478,19 @@ export class MatchWatchdogWorker {
                 continue;
               }
 
-              // detail_live failed - try diary as fallback (CRITICAL FIX)
-              // Extract date from match_time
-              const matchDate = new Date(match.matchTime * 1000);
-              const dateStr = `${matchDate.getUTCFullYear()}${String(matchDate.getUTCMonth() + 1).padStart(2, '0')}${String(matchDate.getUTCDate()).padStart(2, '0')}`;
-
-              try {
-                const diaryResponse = await this.matchDiaryService.getMatchDiary({ date: dateStr, forceRefresh: true } as any);
-                const diaryMatch = (diaryResponse.results || []).find((m: any) =>
-                  String(m.id || m.external_id || m.match_id) === match.matchId
-                );
-
-                if (diaryMatch) {
-                  // CRITICAL FIX: Use diary data to update DB (provider-authoritative, no heuristic)
-                  const diaryStatusId = diaryMatch.status_id ?? diaryMatch.status ?? null;
-                  const diaryHomeScore = diaryMatch.home_score ?? null;
-                  const diaryAwayScore = diaryMatch.away_score ?? null;
-                  const diaryMinute = diaryMatch.minute !== null && diaryMatch.minute !== undefined ? Number(diaryMatch.minute) : null;
-
-                  // CRITICAL: Update even if status is still 1 (score/minute might have changed)
-                  // But prioritize status change if provider says status != 1
-                  const client = await pool.connect();
-                  try {
-                    const existingResult = await client.query(
-                      `SELECT provider_update_time, status_id, home_score_regular, away_score_regular, minute FROM ts_matches WHERE external_id = $1`,
-                      [match.matchId]
-                    );
-
-                    if (existingResult.rows.length > 0) {
-                      const existing = existingResult.rows[0];
-                      const ingestionTs = Math.floor(Date.now() / 1000);
-
-                      // Update if:
-                      // 1. Status changed (diaryStatusId != 1 and != existing.status_id)
-                      // 2. Score changed (even if status still 1)
-                      // 3. Minute changed (even if status still 1)
-                      const statusChanged = diaryStatusId !== null && diaryStatusId !== 1 && diaryStatusId !== existing.status_id;
-                      const scoreChanged = (diaryHomeScore !== null && diaryHomeScore !== existing.home_score_regular) ||
-                        (diaryAwayScore !== null && diaryAwayScore !== existing.away_score_regular);
-                      const minuteChanged = diaryMinute !== null && diaryMinute !== existing.minute;
-
-                      if (statusChanged || scoreChanged || minuteChanged) {
-                        const updateQuery = `
-                          UPDATE ts_matches
-                          SET 
-                            status_id = COALESCE($1, status_id),
-                            home_score_regular = COALESCE($2, home_score_regular),
-                            away_score_regular = COALESCE($3, away_score_regular),
-                            minute = COALESCE($4, minute),
-                            provider_update_time = GREATEST(COALESCE(provider_update_time, 0)::BIGINT, $5::BIGINT),
-                            last_event_ts = $6::BIGINT,
-                            updated_at = NOW()
-                          WHERE external_id = $7
-                            AND (
-                              status_id = 1 
-                              OR provider_update_time IS NULL 
-                              OR provider_update_time < $5
-                              OR home_score_regular IS DISTINCT FROM $2
-                              OR away_score_regular IS DISTINCT FROM $3
-                              OR minute IS DISTINCT FROM $4
-                            )
-                        `;
-
-                        const updateResult = await client.query(updateQuery, [
-                          diaryStatusId,
-                          diaryHomeScore,
-                          diaryAwayScore,
-                          diaryStatusId === 1 ? diaryMinute : null, // Reset minute if NOT_STARTED
-                          ingestionTs,
-                          ingestionTs,
-                          match.matchId,
-                        ]);
-
-                        if (updateResult.rowCount && updateResult.rowCount > 0) {
-                          successCount++;
-                          reasons['should_be_live_diary_fallback'] = (reasons['should_be_live_diary_fallback'] || 0) + 1;
-                          logEvent('info', 'watchdog.reconcile.done', {
-                            match_id: match.matchId,
-                            result: 'success',
-                            reason: 'should_be_live_diary_fallback',
-                            duration_ms: Date.now() - reconcileStartTime,
-                            row_count: updateResult.rowCount,
-                            source: 'diary_fallback',
-                            provider_status_id: diaryStatusId,
-                            status_changed: statusChanged,
-                            score_changed: scoreChanged,
-                            minute_changed: minuteChanged,
-                          });
-                          continue;
-                        }
-                      }
-                    }
-                  } finally {
-                    client.release();
-                  }
-                }
-              } catch (diaryError: any) {
-                logger.debug(`[Watchdog] Diary fallback failed for ${match.matchId}:`, diaryError.message);
-              }
+              // detail_live failed - DO NOT use diary as fallback
+              // According to TheSports docs: "Real-time data is obtained through the real-time data interface"
+              // /match/diary is for schedule, NOT for real-time status/score
+              // If detail_live fails, we cannot reliably determine the match status
+              logger.warn(
+                `[Watchdog] detail_live failed for ${match.matchId}. ` +
+                `Cannot use /match/diary as fallback (diary is for schedule, not real-time data). ` +
+                `Match will be retried on next watchdog tick.`
+              );
+              
+              // REMOVED: Diary fallback (incorrect usage according to docs)
+              // The diary endpoint is for schedule, not real-time status
+              // If we need status, we should rely on detail_live or recent/list
 
               // Both detail_live and diary failed
               skippedCount++;
@@ -805,42 +726,34 @@ export class MatchWatchdogWorker {
 
   /**
    * Start the worker
-   * DISABLED: Watchdog is unnecessary - /data/update → /match/detail_live handles all status transitions
+   * CRITICAL FIX: Re-enabled for "should-be-live" matches (status=1 but match_time passed)
    * 
-   * Normal flow:
-   * 1. /data/update lists changed matches (every 20s)
-   * 2. DataUpdateWorker calls /match/detail_live for each changed match
-   * 3. /match/detail_live updates status (HALF_TIME → SECOND_HALF, etc.)
+   * /data/update only handles matches that provider marks as "changed"
+   * But "should-be-live" matches (status=1, match_time passed) may not appear in /data/update
+   * So we need watchdog to proactively check and transition them to LIVE
    * 
-   * Watchdog was causing issues:
-   * - Incorrectly transitioning HALF_TIME → END
-   * - Incorrectly transitioning active matches → END
-   * - Unnecessary recent/list checks
+   * Watchdog now ONLY handles:
+   * - Should-be-live matches (status=1, match_time passed) → transition to LIVE
+   * - Stale match detection is still disabled (handled by /data/update)
    */
   start(): void {
-    logger.warn('[Watchdog] DISABLED: Status transitions handled by /data/update → /match/detail_live');
-    logger.warn('[Watchdog] MatchWatchdogWorker.start() called but worker is disabled');
-    logEvent('info', 'worker.disabled', {
+    if (this.intervalId) {
+      logger.warn('Match watchdog worker already started');
+      return;
+    }
+    
+    logger.info('[Watchdog] Starting MatchWatchdogWorker for should-be-live matches');
+    // Run immediately on start
+    void this.tick();
+    // CRITICAL FIX: Run every 30 seconds to catch should-be-live matches
+    this.intervalId = setInterval(() => {
+      void this.tick();
+    }, 30000); // 30 seconds
+    logEvent('info', 'worker.started', {
       worker: 'MatchWatchdogWorker',
-      reason: 'data_update_handles_transitions',
+      interval_sec: 30,
+      purpose: 'should_be_live_transitions',
     });
-    return; // Worker disabled - /data/update → /match/detail_live handles all transitions
-
-    // OLD CODE (commented out - /data/update handles transitions):
-    // if (this.intervalId) {
-    //   logger.warn('Match watchdog worker already started');
-    //   return;
-    // }
-    // // Run immediately on start
-    // void this.tick();
-    // // CRITICAL FIX: Run every 20 seconds (was 30) for more aggressive checking
-    // this.intervalId = setInterval(() => {
-    //   void this.tick();
-    // }, 20000); // 20 seconds
-    // logEvent('info', 'worker.started', {
-    //   worker: 'MatchWatchdogWorker',
-    //   interval_sec: 20,
-    // });
   }
 
   /**
