@@ -555,6 +555,7 @@ export class AIPredictionService {
         const client = await pool.connect();
         try {
             // Get matched predictions that haven't been resulted yet
+            // Now checking ALL matched pending predictions, even for live matches
             const pendingQuery = `
         SELECT 
           pm.id as match_id,
@@ -572,7 +573,7 @@ export class AIPredictionService {
         JOIN ai_predictions p ON p.id = pm.prediction_id
         JOIN ts_matches m ON m.external_id = pm.match_external_id
         WHERE pm.prediction_result = 'pending'
-          AND m.status_id IN (3, 8, 9, 10, 11, 12, 13) -- include HALF_TIME (3) for IY bets
+          AND m.status_id >= 2 -- Check any match that has started (2=First Half)
       `;
 
             const pending = await client.query(pendingQuery);
@@ -589,21 +590,10 @@ export class AIPredictionService {
                     period = 'IY';
                 }
 
-                // Skip IY evaluation if match hasn't reached HT yet
-                // Status 3=Half Time, 8=Finished. (and others are late status)
-                // If period is IY, we can result it as soon as status >= 3
-                if (period === 'IY' && row.status_id < 3) {
-                    continue;
-                }
-                // If period is MS, we need status 8 (Finished) or similar end states
-                if (period === 'MS' && row.status_id !== 8 && row.status_id !== 9 && row.status_id !== 10 && row.status_id !== 11 && row.status_id !== 12 && row.status_id !== 13) {
-                    continue;
-                }
-
                 // Extract Scores
                 // MS Scores
-                const finalHome = row.home_score_display;
-                const finalAway = row.away_score_display;
+                const finalHome = row.home_score_display ?? 0;
+                const finalAway = row.away_score_display ?? 0;
 
                 // IY Scores (from JSON arrays, Index 1 is usually Period 1)
                 let htHome = 0;
@@ -615,7 +605,7 @@ export class AIPredictionService {
                     htHome = hScores[1] !== undefined ? parseInt(hScores[1]) : 0;
                     htAway = aScores[1] !== undefined ? parseInt(aScores[1]) : 0;
                 } catch (e) {
-                    // Fallback using half-time logic if needed, or default 0-0
+                    // Fallback
                 }
 
                 const result = this.calculatePredictionResult(
@@ -626,7 +616,8 @@ export class AIPredictionService {
                     finalAway,
                     htHome,
                     htAway,
-                    period
+                    period,
+                    row.status_id
                 );
 
                 if (result) {
@@ -652,7 +643,7 @@ export class AIPredictionService {
             }
 
             if (updatedCount > 0) {
-                logger.info(`[AIPrediction] Updated ${updatedCount} prediction results`);
+                logger.info(`[AIPrediction] Updated ${updatedCount} prediction results (Instant/Final)`);
             }
             return updatedCount;
 
@@ -663,53 +654,150 @@ export class AIPredictionService {
 
     /**
      * Calculate if prediction was correct
+     * Supports Instant Win logic for Live Matches
      */
     calculatePredictionResult(
         predictionType: string,
         predictionValue: string,
         scoreAtPrediction: string,
-        finalHome: number,
+        finalHome: number, // Current Live Score if match is live
         finalAway: number,
         htHome: number,
         htAway: number,
-        period: 'IY' | 'MS'
+        period: 'IY' | 'MS',
+        statusId: number
     ): { outcome: 'winner' | 'loser'; reason: string } | null {
         const fullPrediction = `${predictionType} ${predictionValue}`.toUpperCase();
 
+        // Status Map:
+        // 2: 1st Half, 3: HT, 4: 2nd Half, 8: FT, 9-13: OT/Pen/Ended
+        const isMatchFinished = statusId >= 8;
+        const isHalftimeReached = statusId >= 3;
+
         // Determine scores to use based on period
-        const targetHome = period === 'IY' ? htHome : finalHome;
-        const targetAway = period === 'IY' ? htAway : finalAway;
+        // If Period is IY, but we are LIVE in 1st Half (Status 2), we use current scores to check for instant wins.
+        // If Period is MS, we always use current scores to check for instant wins.
+
+        let targetHome = finalHome;
+        let targetAway = finalAway;
+
+        // Specific check for IY finished
+        if (period === 'IY' && isHalftimeReached) {
+            targetHome = htHome;
+            targetAway = htAway;
+        }
+
         const totalGoals = targetHome + targetAway;
 
-        // Over/Under patterns
-        // Standard Betting Rule: 2.5 OVER means Total Goals > 2.5
-        // (Regardless of when the bet was placed, unless it's a specific "Rest of match" bet which is rare in this context)
+        // ---------------------------------------------------------
+        // 1. OVER / ÜST Logic (Can WIN instantly)
+        // ---------------------------------------------------------
         const overMatch = fullPrediction.match(/([\d.]+)\s*(ÜST|OVER|O)/i);
-        const underMatch = fullPrediction.match(/([\d.]+)\s*(ALT|UNDER|U)/i);
-
         if (overMatch) {
             const line = parseFloat(overMatch[1]);
             const isOver = totalGoals > line;
-            return {
-                outcome: isOver ? 'winner' : 'loser',
-                reason: `Total Goals: ${totalGoals}, Line: ${line} (${period})`
-            };
+
+            if (isOver) {
+                // Instantly WIN, regardless of status (goals can't be un-scored)
+                return {
+                    outcome: 'winner',
+                    reason: `Instant Win: Total Goals ${totalGoals} > ${line} (${period})`
+                };
+            }
+
+            // If not yet over, we can only lose if period is finished
+            if (period === 'IY') {
+                if (isHalftimeReached) return { outcome: 'loser', reason: `Finished IY: ${totalGoals} <= ${line}` };
+                return null; // Wait
+            } else { // MS
+                if (isMatchFinished) return { outcome: 'loser', reason: `Finished MS: ${totalGoals} <= ${line}` };
+                return null; // Wait
+            }
         }
 
+        // ---------------------------------------------------------
+        // 2. BTTS YES / VAR Logic (Can WIN instantly)
+        // ---------------------------------------------------------
+        if (fullPrediction.includes('VAR') || fullPrediction.includes('KG VAR') || fullPrediction.includes('BTTSYES')) {
+            const btts = targetHome > 0 && targetAway > 0;
+
+            if (btts) {
+                return {
+                    outcome: 'winner',
+                    reason: `Instant Win: Both teams scored (${period})`
+                };
+            }
+
+            if (period === 'IY') {
+                if (isHalftimeReached) return { outcome: 'loser', reason: `Finished IY: BTTS No` };
+                return null;
+            } else {
+                if (isMatchFinished) return { outcome: 'loser', reason: `Finished MS: BTTS No` };
+                return null;
+            }
+        }
+
+        // ---------------------------------------------------------
+        // 3. UNDER / ALT (Can LOSE instantly, but we settle usually at end?)
+        //    Actually, if Total > Line, we LOSE instantly.
+        // ---------------------------------------------------------
+        const underMatch = fullPrediction.match(/([\d.]+)\s*(ALT|UNDER|U)/i);
         if (underMatch) {
             const line = parseFloat(underMatch[1]);
-            // Exact line rule (e.g. 3.0) usually logic is void, but for .5 lines it's binary.
-            // If strictly < line.
-            const isUnder = totalGoals < line;
-            // What if = line? (e.g 2.0 under, result 2). usually Push.
-            // For now assuming binary (winner/loser).
-            return {
-                outcome: isUnder ? 'winner' : 'loser',
-                reason: `Total Goals: ${totalGoals}, Line: ${line} (${period})`
-            };
+            const isOver = totalGoals > line; // Opposed to Under
+
+            if (isOver) {
+                // Instantly LOSE (Line exceeded)
+                return {
+                    outcome: 'loser',
+                    reason: `Instant Loss: Total Goals ${totalGoals} > ${line} (${period})`
+                };
+            }
+
+            // To WIN, we must wait for period end
+            if (period === 'IY') {
+                if (isHalftimeReached) return { outcome: 'winner', reason: `Finished IY: Under ${line}` };
+                return null;
+            } else {
+                if (isMatchFinished) return { outcome: 'winner', reason: `Finished MS: Under ${line}` };
+                return null;
+            }
         }
 
-        // Side patterns (1, X, 2)
+        // ---------------------------------------------------------
+        // 4. BTTS NO / YOK (Can LOSE instantly)
+        // ---------------------------------------------------------
+        if (fullPrediction.includes('YOK') || fullPrediction.includes('KG YOK') || fullPrediction.includes('BTTSNO')) {
+            const btts = targetHome > 0 && targetAway > 0;
+            if (btts) {
+                return {
+                    outcome: 'loser',
+                    reason: `Instant Loss: Both teams scored (${period})`
+                };
+            }
+
+            if (period === 'IY') {
+                if (isHalftimeReached) return { outcome: 'winner', reason: `Finished IY: BTTS No` };
+                return null;
+            } else {
+                if (isMatchFinished) return { outcome: 'winner', reason: `Finished MS: BTTS No` };
+                return null;
+            }
+        }
+
+        // ---------------------------------------------------------
+        // 5. 1/X/2 (Result) - Must wait for End of Period
+        //    (Unless mathematically impossible? No, always possible in football)
+        // ---------------------------------------------------------
+
+        // Determine if we can settle (must be finished)
+        let canSettle = false;
+        if (period === 'IY' && isHalftimeReached) canSettle = true;
+        if (period === 'MS' && isMatchFinished) canSettle = true;
+
+        if (!canSettle) return null; // Wait for end
+
+        // Logic for 1/X/2 at end of period
         const isHomeWin = targetHome > targetAway;
         const isAwayWin = targetAway > targetHome;
         const isDraw = targetHome === targetAway;
@@ -735,27 +823,9 @@ export class AIPredictionService {
             };
         }
 
-        // If simple "1", "X", "2" in prediction_value (and type is generic)
         if (predictionValue === '1') return { outcome: isHomeWin ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
         if (predictionValue === '2') return { outcome: isAwayWin ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
         if (predictionValue === 'X' || predictionValue === '0') return { outcome: isDraw ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
-
-        // Gol Var/Yok (Both Teams To Score)
-        if (fullPrediction.includes('VAR') || fullPrediction.includes('KG VAR') || fullPrediction.includes('BTTSYES')) {
-            const btts = targetHome > 0 && targetAway > 0;
-            return {
-                outcome: btts ? 'winner' : 'loser',
-                reason: `Score: ${targetHome}-${targetAway}`
-            };
-        }
-
-        if (fullPrediction.includes('YOK') || fullPrediction.includes('KG YOK') || fullPrediction.includes('BTTSNO')) {
-            const btts = targetHome > 0 && targetAway > 0;
-            return {
-                outcome: !btts ? 'winner' : 'loser',
-                reason: `Score: ${targetHome}-${targetAway}`
-            };
-        }
 
         return null;
     }
