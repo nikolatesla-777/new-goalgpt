@@ -282,29 +282,35 @@ export function MatchDetailPage() {
                 </div>
             </header>
 
-            {/* Match Info Area - Keep existing structure but improve styling slightly if needed, 
-                current structure is complex so I will leave it mostly as is but ensure it integrates well.
-                User specifically asked for TABS redesign. */}
-            <div style={{ backgroundColor: '#1f2937', color: 'white', padding: '24px 16px 32px' }}>
-                <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
-                    {/* ... existing match info ... */}
-                    {/* I am not replacing this part in this block, just the tabs below */}
-                    <div style={{ flex: 1, textAlign: 'center', cursor: 'pointer' }} onClick={() => navigate(`/team/${match.home_team_id}`)}>
-                        {match.home_team?.logo_url && (
-                            <img
-                                src={match.home_team.logo_url}
-                                alt=""
-                                style={{ width: '64px', height: '64px', objectFit: 'contain', margin: '0 auto 8px' }}
-                            />
+            {/* Match Info Area */}
+            <div className="bg-gray-900 text-white pt-6 pb-8 px-4">
+                <div className="max-w-3xl mx-auto flex items-start justify-between gap-2 md:gap-8 relative">
+
+                    {/* Home Team */}
+                    <div
+                        className="flex-1 flex flex-col items-center text-center cursor-pointer group"
+                        onClick={() => navigate(`/team/${match.home_team_id}`)}
+                    >
+                        {match.home_team?.logo_url ? (
+                            <div className="relative mb-3 transform transition-transform group-hover:scale-105 duration-200">
+                                <img
+                                    src={match.home_team.logo_url}
+                                    alt=""
+                                    className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg"
+                                />
+                            </div>
+                        ) : (
+                            <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-800 rounded-full mb-3 flex items-center justify-center">
+                                <Users size={24} className="text-gray-600" />
+                            </div>
                         )}
-                        <p style={{ fontWeight: '600', fontSize: '16px', margin: 0 }}>
+                        <p className="font-bold text-sm md:text-lg leading-tight w-full break-words px-1">
                             {match.home_team?.name || 'Ev Sahibi'}
                         </p>
                     </div>
 
                     {/* Score & Live Status */}
-                    <div style={{ textAlign: 'center' }}>
-                        {/* ... Existing Score Logic ... */}
+                    <div className="flex flex-col items-center shrink-0 w-[100px] md:w-[140px]">
                         {(() => {
                             const status = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
                             const isLive = status >= 2 && status <= 7;
@@ -312,37 +318,41 @@ export function MatchDetailPage() {
                             const minuteText = match.minute_text || '—';
 
                             return (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
+                                <div className="flex items-center justify-center gap-1.5 mb-2 w-full">
                                     {isLive && (
                                         <>
-                                            {status === 3 ? (
-                                                <span className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">
-                                                    DEVRE ARASI
+                                            {status === MatchState.HALF_TIME ? (
+                                                <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] md:text-xs font-bold rounded-full whitespace-nowrap">
+                                                    İY
                                                 </span>
                                             ) : (
-                                                <span className="px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse">
+                                                <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] md:text-xs font-bold rounded-full animate-pulse whitespace-nowrap">
                                                     CANLI
                                                 </span>
                                             )}
                                             {minuteText && minuteText !== '—' && (
-                                                <span className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">
+                                                <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] md:text-xs font-bold rounded-full whitespace-nowrap min-w-[24px] text-center">
                                                     {minuteText}
                                                 </span>
                                             )}
                                         </>
                                     )}
                                     {isFinished && (
-                                        <span className="px-3 py-1 bg-gray-500 text-white text-xs font-bold rounded-full">
+                                        <span className="px-3 py-1 bg-gray-600 text-white text-[10px] md:text-xs font-bold rounded-full">
                                             MS
                                         </span>
                                     )}
                                 </div>
                             );
                         })()}
-                        <div className="text-5xl font-bold tracking-widest my-2">
-                            {match.home_score ?? 0} - {match.away_score ?? 0}
+
+                        <div className="bg-white/10 rounded-xl px-4 py-2 md:px-6 md:py-3 backdrop-blur-sm border border-white/5 shadow-inner">
+                            <div className="text-3xl md:text-5xl font-bold tracking-widest leading-none font-mono">
+                                {match.home_score ?? 0}<span className="text-gray-400 mx-1">-</span>{match.away_score ?? 0}
+                            </div>
                         </div>
-                        <p className="text-sm text-gray-400">
+
+                        <p className="text-xs text-gray-400 mt-2 font-medium">
                             {(() => {
                                 const status = (match as any).status ?? (match as any).status_id ?? 0;
                                 switch (status) {
@@ -359,15 +369,25 @@ export function MatchDetailPage() {
                         </p>
                     </div>
 
-                    <div style={{ flex: 1, textAlign: 'center', cursor: 'pointer' }} onClick={() => navigate(`/team/${match.away_team_id}`)}>
-                        {match.away_team?.logo_url && (
-                            <img
-                                src={match.away_team.logo_url}
-                                alt=""
-                                style={{ width: '64px', height: '64px', objectFit: 'contain', margin: '0 auto 8px' }}
-                            />
+                    {/* Away Team */}
+                    <div
+                        className="flex-1 flex flex-col items-center text-center cursor-pointer group"
+                        onClick={() => navigate(`/team/${match.away_team_id}`)}
+                    >
+                        {match.away_team?.logo_url ? (
+                            <div className="relative mb-3 transform transition-transform group-hover:scale-105 duration-200">
+                                <img
+                                    src={match.away_team.logo_url}
+                                    alt=""
+                                    className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg"
+                                />
+                            </div>
+                        ) : (
+                            <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-800 rounded-full mb-3 flex items-center justify-center">
+                                <Users size={24} className="text-gray-600" />
+                            </div>
                         )}
-                        <p style={{ fontWeight: '600', fontSize: '16px', margin: 0 }}>
+                        <p className="font-bold text-sm md:text-lg leading-tight w-full break-words px-1">
                             {match.away_team?.name || 'Deplasman'}
                         </p>
                     </div>
