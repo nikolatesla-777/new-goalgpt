@@ -10,7 +10,6 @@
  */
 
 import { useMemo, useState, useRef, useEffect } from 'react';
-import { SoccerBall } from '@phosphor-icons/react';
 
 interface TrendPoint {
     minute: number;
@@ -40,6 +39,12 @@ interface MatchTrendChartProps {
 const getControlPoints = (p0: number[], p1: number[], p2: number[], t: number = 0.2) => {
     const d1 = Math.sqrt(Math.pow(p1[0] - p0[0], 2) + Math.pow(p1[1] - p0[1], 2));
     const d2 = Math.sqrt(Math.pow(p2[0] - p1[0], 2) + Math.pow(p2[1] - p1[1], 2));
+
+    // Check for zero distance to avoid division by zero or NaN
+    if (d1 + d2 === 0) {
+        return [p1[0], p1[1], p1[0], p1[1]];
+    }
+
     const fa = t * d1 / (d1 + d2);
     const fb = t * d2 / (d1 + d2);
     const p1x = p1[0] - fa * (p2[0] - p0[0]);
@@ -60,7 +65,6 @@ export function MatchTrendChart({
 }: MatchTrendChartProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [hoveredMinute, setHoveredMinute] = useState<number | null>(null);
-    const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
     const [chartWidth, setChartWidth] = useState(1000); // Default, updates on mount
 
     // Extract trend data
@@ -139,20 +143,24 @@ export function MatchTrendChart({
             return [x, y];
         });
 
+        if (points.length < 2) return '';
+
         // Start at center Y
         let d = `M ${points[0][0]} ${centerY}`;
 
         // Curve to first point
         d += ` L ${points[0][0]} ${points[0][1]}`;
 
-        // Smooth curves between points
+        // Smooth curves between points with Catmull-Rom
         for (let i = 0; i < points.length - 1; i++) {
-            const current = points[i];
-            const next = points[i + 1];
+            const p0 = points[i > 0 ? i - 1 : 0]; // Prev
+            const p1 = points[i];   // Current
+            const p2 = points[i + 1]; // Next
+            // const p3 = points[i + 2 < points.length ? i + 2 : i + 1]; // NextNext (unused in current implementation of getControlPoints)
 
-            // Simple smoothing: use midpoint control points for now or catmull-rom
-            const midX = (current[0] + next[0]) / 2;
-            d += ` C ${midX} ${current[1]}, ${midX} ${next[1]}, ${next[0]} ${next[1]}`;
+            const [cp1x, cp1y, cp2x, cp2y] = getControlPoints(p0, p1, p2);
+
+            d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2[0]} ${p2[1]}`;
         }
 
         // Close path to center Y at end X
@@ -176,13 +184,17 @@ export function MatchTrendChart({
             return [x, y];
         });
 
+        if (points.length < 2) return '';
+
         let d = `M ${points[0][0]} ${points[0][1]}`;
 
         for (let i = 0; i < points.length - 1; i++) {
-            const current = points[i];
-            const next = points[i + 1];
-            const midX = (current[0] + next[0]) / 2;
-            d += ` C ${midX} ${current[1]}, ${midX} ${next[1]}, ${next[0]} ${next[1]}`;
+            const p0 = points[i > 0 ? i - 1 : 0]; // Prev
+            const p1 = points[i];   // Current
+            const p2 = points[i + 1]; // Next
+
+            const [cp1x, cp1y, cp2x, cp2y] = getControlPoints(p0, p1, p2);
+            d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2[0]} ${p2[1]}`;
         }
         return d;
     };
@@ -211,7 +223,6 @@ export function MatchTrendChart({
         const minute = Math.min(Math.max(0, Math.round(x / pixelsPerMinute)), maxMinute);
 
         setHoveredMinute(minute);
-        setTooltipPos({ x, y: e.clientY - rect.top });
     };
 
     const handleMouseLeave = () => {
