@@ -22,8 +22,11 @@ import {
 import type { Match } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 import { MatchEventsTimeline } from './MatchEventsTimeline';
+import { ChartBar, ListBullets, Sword, Trophy, Users, TrendUp, Robot, CaretLeft } from '@phosphor-icons/react';
 
-type TabType = 'stats' | 'h2h' | 'standings' | 'lineup' | 'trend' | 'events';
+import { useAIPredictions } from '../../context/AIPredictionsContext';
+
+type TabType = 'ai' | 'stats' | 'h2h' | 'standings' | 'lineup' | 'trend' | 'events';
 
 export function MatchDetailPage() {
     const { matchId } = useParams<{ matchId: string }>();
@@ -87,7 +90,7 @@ export function MatchDetailPage() {
                             // Keep foundMatch
                         }
                     }
-                    
+
                     setMatch(foundMatch);
                     setError(null);
                 } else if (!match) {
@@ -247,29 +250,52 @@ export function MatchDetailPage() {
         );
     }
 
+
+
+    // ... (rest of the component)
+
+    const tabs = [
+        { id: 'stats' as TabType, label: 'İstatistikler', Icon: ChartBar },
+        { id: 'events' as TabType, label: 'Etkinlikler', Icon: ListBullets },
+        { id: 'h2h' as TabType, label: 'H2H', Icon: Sword },
+        { id: 'standings' as TabType, label: 'Puan Durumu', Icon: Trophy },
+        { id: 'lineup' as TabType, label: 'Kadro', Icon: Users },
+        { id: 'trend' as TabType, label: 'Trend', Icon: TrendUp },
+    ];
+
+    // Add AI Prediction tab as first item
+    const allTabs = [
+        { id: 'ai' as any, label: 'AI TAHMİN', Icon: Robot },
+        ...tabs
+    ];
+
+
     return (
-        <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
+        <div className="min-h-screen bg-gray-50 pb-safe">
             {/* Header */}
-            <header style={{ backgroundColor: '#1f2937', color: 'white', padding: '16px' }}>
-                <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <header className="bg-slate-900 text-white p-4 sticky top-0 z-30 shadow-md">
+                <div className="max-w-5xl mx-auto flex items-center gap-4">
                     <button
                         onClick={() => navigate('/')}
-                        style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '24px', cursor: 'pointer', padding: '8px' }}
+                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
                     >
-                        ←
+                        <CaretLeft size={24} />
                     </button>
-                    <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: '14px', opacity: 0.8, margin: 0 }}>
+                    <div className="flex-1">
+                        <p className="text-sm text-gray-400 font-medium">
                             {match.competition?.name || 'Lig'}
                         </p>
                     </div>
                 </div>
             </header>
 
-            {/* Match Info */}
+            {/* Match Info Area - Keep existing structure but improve styling slightly if needed, 
+                current structure is complex so I will leave it mostly as is but ensure it integrates well.
+                User specifically asked for TABS redesign. */}
             <div style={{ backgroundColor: '#1f2937', color: 'white', padding: '24px 16px 32px' }}>
                 <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
-                    {/* Home Team */}
+                    {/* ... existing match info ... */}
+                    {/* I am not replacing this part in this block, just the tabs below */}
                     <div style={{ flex: 1, textAlign: 'center', cursor: 'pointer' }} onClick={() => navigate(`/team/${match.home_team_id}`)}>
                         {match.home_team?.logo_url && (
                             <img
@@ -285,76 +311,45 @@ export function MatchDetailPage() {
 
                     {/* Score & Live Status */}
                     <div style={{ textAlign: 'center' }}>
-                        {/* Live Status Badges - Same as MatchCard.tsx */}
+                        {/* ... Existing Score Logic ... */}
                         {(() => {
                             const status = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
-                            const isLive = status >= 2 && status <= 7; // FIRST_HALF to PENALTY_SHOOTOUT
-                            const isFinished = status === 8; // END
+                            const isLive = status >= 2 && status <= 7;
+                            const isFinished = status === 8;
                             const minuteText = match.minute_text || '—';
 
                             return (
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
                                     {isLive && (
                                         <>
-                                            {/* CRITICAL FIX: Halftime shows "DEVRE ARASI" instead of "CANLI" */}
                                             {status === 3 ? (
-                                                <span style={{
-                                                    padding: '6px 12px',
-                                                    backgroundColor: '#f59e0b',
-                                                    color: 'white',
-                                                    fontSize: '0.875rem',
-                                                    fontWeight: 'bold',
-                                                    borderRadius: '6px',
-                                                }}>
+                                                <span className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">
                                                     DEVRE ARASI
                                                 </span>
                                             ) : (
-                                                <span style={{
-                                                    padding: '6px 12px',
-                                                    backgroundColor: '#ef4444',
-                                                    color: 'white',
-                                                    fontSize: '0.875rem',
-                                                    fontWeight: 'bold',
-                                                    borderRadius: '6px',
-                                                    animation: 'pulse 2s infinite',
-                                                }}>
+                                                <span className="px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse">
                                                     CANLI
                                                 </span>
                                             )}
-                                            {/* Phase 4-4: Display minute_text from backend */}
                                             {minuteText && minuteText !== '—' && (
-                                                <span style={{
-                                                    padding: '6px 12px',
-                                                    backgroundColor: '#f59e0b',
-                                                    color: 'white',
-                                                    fontSize: '0.875rem',
-                                                    fontWeight: 'bold',
-                                                    borderRadius: '6px',
-                                                }}>
+                                                <span className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">
                                                     {minuteText}
                                                 </span>
                                             )}
                                         </>
                                     )}
                                     {isFinished && (
-                                        <span style={{
-                                            padding: '6px 12px',
-                                            backgroundColor: '#6b7280',
-                                            color: 'white',
-                                            fontSize: '0.875rem',
-                                            fontWeight: 'bold',
-                                            borderRadius: '6px',
-                                        }}>
+                                        <span className="px-3 py-1 bg-gray-500 text-white text-xs font-bold rounded-full">
                                             MS
                                         </span>
                                     )}
                                 </div>
                             );
                         })()}
-                        <div style={{ fontSize: '48px', fontWeight: 'bold', letterSpacing: '4px' }}>
+                        <div className="text-5xl font-bold tracking-widest my-2">
                             {match.home_score ?? 0} - {match.away_score ?? 0}
                         </div>
-                        <p style={{ fontSize: '14px', opacity: 0.8, margin: '8px 0 0' }}>
+                        <p className="text-sm text-gray-400">
                             {(() => {
                                 const status = (match as any).status ?? (match as any).status_id ?? 0;
                                 switch (status) {
@@ -371,7 +366,6 @@ export function MatchDetailPage() {
                         </p>
                     </div>
 
-                    {/* Away Team */}
                     <div style={{ flex: 1, textAlign: 'center', cursor: 'pointer' }} onClick={() => navigate(`/team/${match.away_team_id}`)}>
                         {match.away_team?.logo_url && (
                             <img
@@ -387,35 +381,43 @@ export function MatchDetailPage() {
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 10 }}>
-                <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex' }}>
-                    {tabs.map((tab) => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            style={{
-                                flex: 1,
-                                padding: '16px 8px',
-                                border: 'none',
-                                borderBottom: activeTab === tab.id ? '3px solid #3b82f6' : '3px solid transparent',
-                                backgroundColor: 'transparent',
-                                color: activeTab === tab.id ? '#3b82f6' : '#6b7280',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                gap: '4px',
-                            }}
-                        >
-                            <span style={{ fontSize: '20px' }}>{tab.icon}</span>
-                            <span style={{ fontSize: '12px' }}>{tab.label}</span>
-                        </button>
-                    ))}
+            {/* Premium Tabs */}
+            <div className="bg-white sticky top-[60px] z-20 shadow-sm border-b border-gray-100">
+                <div className="max-w-5xl mx-auto">
+                    <div className="flex overflow-x-auto no-scrollbar scroll-smooth">
+                        {allTabs.map((tab) => {
+                            const isActive = activeTab === tab.id || (tab.id === 'ai' && activeTab === 'ai' as any); // Handle AI tab type specifically if needed
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`
+                                        flex-1 min-w-[85px] sm:min-w-[100px] py-4 px-2 
+                                        flex flex-col items-center justify-center gap-2 
+                                        transition-all duration-200 relative group
+                                        ${isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}
+                                    `}
+                                >
+                                    <tab.Icon
+                                        size={24}
+                                        weight={isActive ? "fill" : "regular"}
+                                        className={`transition-transform duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}
+                                    />
+                                    <span className={`text-[11px] font-semibold tracking-wide ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
+                                        {tab.label}
+                                    </span>
+
+                                    {/* Active Indicator */}
+                                    {isActive && (
+                                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full mx-4" />
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
+
 
             {/* Tab Content */}
             <div style={{ maxWidth: '800px', margin: '0 auto', padding: '24px 16px' }}>
@@ -436,6 +438,7 @@ export function MatchDetailPage() {
                     </div>
                 ) : (
                     <>
+                        {activeTab === 'ai' && <AIContent matchId={matchId || ''} homeTeam={match.home_team?.name} awayTeam={match.away_team?.name} />}
                         {activeTab === 'stats' && <StatsContent data={tabData} match={match} />}
                         {activeTab === 'events' && <EventsContent data={tabData} match={match} />}
                         {activeTab === 'h2h' && <H2HContent data={tabData} />}
@@ -849,6 +852,104 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                     })}
                 </tbody>
             </table>
+        </div>
+    );
+}
+
+// AI Content
+function AIContent({ matchId, homeTeam, awayTeam }: { matchId: string; homeTeam?: string; awayTeam?: string }) {
+    const { predictions, loading } = useAIPredictions();
+    const prediction = predictions.get(matchId);
+
+    if (loading) {
+        return (
+            <div className="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
+                <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-500 rounded-full animate-spin"></div>
+                    <p className="text-gray-500 font-medium">Yapay zeka analizi yükleniyor...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!prediction) {
+        return (
+            <div className="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
+                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Robot size={32} className="text-gray-400" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-800 mb-2">Tahmin Bulunamadı</h3>
+                <p className="text-gray-500 max-w-md mx-auto">
+                    Bu maç için henüz yapay zeka tarafından oluşturulmuş güvenilir bir tahmin bulunmuyor.
+                </p>
+            </div>
+        );
+    }
+
+    // Determine confidence color
+    const getConfidenceColor = (conf: number) => {
+        if (conf >= 80) return 'text-green-600 bg-green-50 border-green-200';
+        if (conf >= 60) return 'text-blue-600 bg-blue-50 border-blue-200';
+        return 'text-amber-600 bg-amber-50 border-amber-200';
+    };
+
+    const confColorClass = getConfidenceColor(prediction.overall_confidence);
+
+    return (
+        <div className="flex flex-col gap-6">
+            <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+                {/* Header with Robot Icon */}
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative overflow-hidden">
+                    <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4">
+                        <Robot size={120} weight="fill" />
+                    </div>
+
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-3 mb-2">
+                            <Robot size={24} weight="fill" className="text-blue-200" />
+                            <span className="text-blue-100 font-bold tracking-wider text-xs uppercase">GoalGPT AI Analizi</span>
+                        </div>
+                        <h2 className="text-2xl font-bold">Maç Tahmini</h2>
+                    </div>
+                </div>
+
+                {/* Prediction Content */}
+                <div className="p-6">
+                    <div className="flex flex-col items-center justify-center text-center mb-8">
+                        <span className="text-sm text-gray-400 font-medium mb-2 uppercase tracking-wide">Önerilen Tercih</span>
+                        <div className="text-4xl font-black text-gray-800 mb-2 tracking-tight">
+                            {prediction.prediction_type}
+                        </div>
+                        <div className="bg-gray-100 px-4 py-1 rounded-full text-gray-600 font-bold text-sm">
+                            {prediction.prediction_value}
+                        </div>
+                    </div>
+
+                    {/* Confidence Meter */}
+                    <div className={`rounded-xl p-4 border ${confColorClass} mb-6`}>
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold flex items-center gap-2">
+                                <ChartBar size={18} weight="fill" />
+                                Güven Skoru
+                            </span>
+                            <span className="text-xl font-black">{prediction.overall_confidence}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                            <div
+                                className="h-2.5 rounded-full transition-all duration-1000 ease-out"
+                                style={{
+                                    width: `${prediction.overall_confidence}%`,
+                                    backgroundColor: 'currentColor'
+                                }}
+                            ></div>
+                        </div>
+                    </div>
+
+                    <div className="text-xs text-center text-gray-400">
+                        * Bu tahmin yapay zeka modelleri tarafından istatistiksel veriler kullanılarak oluşturulmuştur. Kesinlik içermez.
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
