@@ -1,5 +1,5 @@
 
-import { pool } from '../connection';
+import { pool } from '../database/connection';
 
 async function main() {
     const matchId = process.argv[2];
