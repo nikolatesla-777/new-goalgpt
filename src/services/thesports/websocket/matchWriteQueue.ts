@@ -220,10 +220,14 @@ export class MatchWriteQueue {
       setParts.push(`last_event_ts = $${paramIndex++}::bigint`);
       values.push(Number(freshnessCheck.ingestionTs)); // Ensure number type
     }
+    
+    // Always update updated_at timestamp
     setParts.push(`updated_at = NOW()`);
 
-    if (setParts.length === 0) {
-      return; // Nothing to update
+    // Check if we have anything meaningful to update (besides updated_at)
+    if (setParts.length === 1) {
+      // Only updated_at, nothing else to update - skip
+      return;
     }
 
     // Execute UPDATE - matchId as last parameter
@@ -237,22 +241,20 @@ export class MatchWriteQueue {
     `;
 
     try {
-      const res = await client.query(query, values);
+      const result = await client.query(query, values);
       
-      if (res.rowCount === 0) {
+      if (result.rowCount === 0) {
         logger.warn(`[MatchWriteQueue] UPDATE affected 0 rows for match ${batch.matchId}`);
       }
     } catch (error: any) {
-      // Enhanced error logging for debugging
-      logger.error(`[MatchWriteQueue] Error writing batch for match ${batch.matchId}:`, error);
-      logger.error(`[MatchWriteQueue] Query: ${query}`);
-      logger.error(`[MatchWriteQueue] Values: ${JSON.stringify(values.map((v, i) => ({ index: i + 1, type: typeof v, value: v })))}`);
-      logger.error(`[MatchWriteQueue] SetParts: ${JSON.stringify(setParts)}`);
+      // Enhanced error logging for debugging (only log detailed info on actual errors)
+      logger.error(`[MatchWriteQueue] Error writing batch for match ${batch.matchId}:`, error.message || error);
+      if (process.env.NODE_ENV === 'development') {
+        logger.error(`[MatchWriteQueue] Query: ${query}`);
+        logger.error(`[MatchWriteQueue] Values: ${JSON.stringify(values.map((v, i) => ({ index: i + 1, type: typeof v, value: v })))}`);
+        logger.error(`[MatchWriteQueue] SetParts: ${JSON.stringify(setParts)}`);
+      }
       throw error; // Re-throw to be caught by batchWrite
-    }
-    
-    if (res.rowCount === 0) {
-      logger.warn(`[MatchWriteQueue] UPDATE affected 0 rows for match ${batch.matchId}`);
     }
   }
 
@@ -293,6 +295,23 @@ export class MatchWriteQueue {
       }
       return { apply: true, providerTimeToWrite: null, ingestionTs };
     }
+  }
+
+  /**
+   * Get queue statistics
+   */
+  getStats(): {
+    queueSize: number;
+    batchSize: number;
+    flushIntervalMs: number;
+    isFlushing: boolean;
+  } {
+    return {
+      queueSize: this.queue.size,
+      batchSize: this.batchSize,
+      flushIntervalMs: this.flushIntervalMs,
+      isFlushing: this.isFlushing,
+    };
   }
 
   /**

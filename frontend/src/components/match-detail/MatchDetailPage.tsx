@@ -99,7 +99,7 @@ export function MatchDetailPage() {
                 }
             } catch (err: any) {
                 if (!match) {
-                    setError(err.message || 'Maç yüklenirken hata oluştu');
+                setError(err.message || 'Maç yüklenirken hata oluştu');
                 }
             } finally {
                 hasLoadedRef.current = true;
@@ -120,12 +120,10 @@ export function MatchDetailPage() {
         const fetchTabData = async () => {
             if (!matchId || !match) return;
 
-            // Silent Refresh for tabs: Only show loading/clear data on first load or tab change
-            // If data already exists, update it silently in the background
-            if (!tabData) {
-                setTabLoading(true);
-                setTabData(null);
-            }
+            // CRITICAL FIX: Always set loading state when fetching new tab data
+            // Clear previous data to prevent showing stale empty states
+            setTabLoading(true);
+            setTabData(null); // Clear data to prevent empty state flash
             setError(null); // Clear previous errors
 
             try {
@@ -293,11 +291,11 @@ export function MatchDetailPage() {
                     >
                         {match.home_team?.logo_url ? (
                             <div className="relative mb-3 transform transition-transform group-hover:scale-105 duration-200">
-                                <img
-                                    src={match.home_team.logo_url}
-                                    alt=""
+                            <img
+                                src={match.home_team.logo_url}
+                                alt=""
                                     className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg"
-                                />
+                            />
                             </div>
                         ) : (
                             <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-800 rounded-full mb-3 flex items-center justify-center">
@@ -342,7 +340,7 @@ export function MatchDetailPage() {
                                             MS
                                         </span>
                                     )}
-                                </div>
+                        </div>
                             );
                         })()}
 
@@ -376,11 +374,11 @@ export function MatchDetailPage() {
                     >
                         {match.away_team?.logo_url ? (
                             <div className="relative mb-3 transform transition-transform group-hover:scale-105 duration-200">
-                                <img
-                                    src={match.away_team.logo_url}
-                                    alt=""
+                            <img
+                                src={match.away_team.logo_url}
+                                alt=""
                                     className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg"
-                                />
+                            />
                             </div>
                         ) : (
                             <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-800 rounded-full mb-3 flex items-center justify-center">
@@ -401,9 +399,9 @@ export function MatchDetailPage() {
                         {allTabs.map((tab) => {
                             const isActive = activeTab === tab.id || (tab.id === 'ai' && activeTab === 'ai' as any); // Handle AI tab type specifically if needed
                             return (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
                                     className={`
                                         flex-1 min-w-[85px] sm:min-w-[100px] py-4 px-2 
                                         flex flex-col items-center justify-center gap-2 
@@ -424,7 +422,7 @@ export function MatchDetailPage() {
                                     {isActive && (
                                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full mx-4" />
                                     )}
-                                </button>
+                        </button>
                             );
                         })}
                     </div>
@@ -452,8 +450,8 @@ export function MatchDetailPage() {
                 ) : (
                     <>
                         {activeTab === 'ai' && <AIContent matchId={matchId || ''} />}
-                        {activeTab === 'stats' && <StatsContent data={tabData} match={match} />}
-                        {activeTab === 'events' && <EventsContent data={tabData} match={match} />}
+                        {activeTab === 'stats' && <StatsContent data={tabData} match={match} isLoading={false} />}
+                        {activeTab === 'events' && <EventsContent data={tabData} match={match} isLoading={false} />}
                         {activeTab === 'h2h' && <H2HContent data={tabData} />}
                         {activeTab === 'standings' && <StandingsContent data={tabData} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
                         {activeTab === 'lineup' && <LineupContent data={tabData} match={match} navigate={navigate} />}
@@ -469,6 +467,19 @@ export function MatchDetailPage() {
 type StatsPeriod = 'full' | 'first' | 'second';
 
 function StatsContent({ data, match }: { data: any; match: Match }) {
+    // CRITICAL FIX: Don't process stats if data is null/undefined (still loading)
+    // Only process when data has been fetched (even if empty)
+    const hasData = data !== null && data !== undefined;
+    
+    // If data is still loading (null/undefined), show loading state
+    if (!hasData) {
+        return (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                Yükleniyor...
+            </div>
+        );
+    }
+
     // Determine match status
     const matchStatus = (match as any).status ?? (match as any).status_id ?? 1;
 
@@ -604,12 +615,12 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     const stats = sortStats(rawStats).filter(s => getStatName(s.type) !== '');
 
     // Get basic stats fallback (for match info from database)
-    const basicStats = [
-        { label: 'Gol', home: match.home_score ?? 0, away: match.away_score ?? 0 },
-        { label: 'Sarı Kart', home: (match as any).home_yellow_cards ?? 0, away: (match as any).away_yellow_cards ?? 0 },
-        { label: 'Kırmızı Kart', home: (match as any).home_red_cards ?? 0, away: (match as any).away_red_cards ?? 0 },
-        { label: 'Korner', home: (match as any).home_corners ?? 0, away: (match as any).away_corners ?? 0 },
-    ];
+        const basicStats = [
+            { label: 'Gol', home: match.home_score ?? 0, away: match.away_score ?? 0 },
+            { label: 'Sarı Kart', home: (match as any).home_yellow_cards ?? 0, away: (match as any).away_yellow_cards ?? 0 },
+            { label: 'Kırmızı Kart', home: (match as any).home_red_cards ?? 0, away: (match as any).away_red_cards ?? 0 },
+            { label: 'Korner', home: (match as any).home_corners ?? 0, away: (match as any).away_corners ?? 0 },
+        ];
 
     // Check if we have any full time stats (to determine if tabs should be shown)
     const hasFullTimeStats = getFullTimeStats().length > 0;
@@ -670,8 +681,8 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
                     2. YARI
                 </button>
             )}
-        </div>
-    );
+            </div>
+        );
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -680,10 +691,10 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
 
             {/* Stats List */}
             {stats.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {stats.map((stat: any, idx: number) => (
-                        <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
-                    ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {stats.map((stat: any, idx: number) => (
+                <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
+            ))}
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -978,6 +989,19 @@ function AIContent({ matchId }: { matchId: string }) {
 
 // Events Content (Timeline)
 function EventsContent({ data, match }: { data: any; match: Match }) {
+    // CRITICAL FIX: Don't process incidents if data is null/undefined (still loading)
+    // Only process when data has been fetched (even if empty)
+    const hasData = data !== null && data !== undefined;
+    
+    // If data is still loading (null/undefined), show loading state
+    if (!hasData) {
+        return (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                Yükleniyor...
+            </div>
+        );
+    }
+
     const incidents = data?.incidents || [];
     const matchStatusId = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
 

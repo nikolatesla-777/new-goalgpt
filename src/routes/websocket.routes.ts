@@ -16,11 +16,40 @@ const activeConnections = new Set<any>();
 // Latency monitor instance (shared with WebSocketService)
 let latencyMonitor: EventLatencyMonitor | null = null;
 
+// Connection statistics
+let totalConnections = 0;
+let totalDisconnections = 0;
+const connectionStartTime = Date.now();
+
 /**
  * Set latency monitor instance (called from server.ts)
  */
 export function setLatencyMonitor(monitor: EventLatencyMonitor): void {
   latencyMonitor = monitor;
+}
+
+/**
+ * Get active connections count
+ */
+export function getActiveConnections(): number {
+  return activeConnections.size;
+}
+
+/**
+ * Get WebSocket health metrics
+ */
+export function getWebSocketHealth() {
+  const now = Date.now();
+  const uptime = now - connectionStartTime;
+  
+  return {
+    activeConnections: activeConnections.size,
+    totalConnections,
+    totalDisconnections,
+    uptimeMs: uptime,
+    uptimeSeconds: Math.floor(uptime / 1000),
+    timestamp: now,
+  };
 }
 
 /**
@@ -81,6 +110,7 @@ export default async function websocketRoutes(
 
     // Add connection to active set
     activeConnections.add(socket);
+    totalConnections++;
 
     // Send welcome message
     socket.send(JSON.stringify({
@@ -111,12 +141,14 @@ export default async function websocketRoutes(
     socket.on('close', () => {
       logger.info(`[WebSocket Route] Client disconnected: ${clientId}`);
       activeConnections.delete(socket);
+      totalDisconnections++;
     });
 
     // Handle connection error
     socket.on('error', (error: Error) => {
       logger.error(`[WebSocket Route] Connection error for client ${clientId}:`, error);
       activeConnections.delete(socket);
+      totalDisconnections++;
     });
   });
 

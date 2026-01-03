@@ -119,20 +119,28 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
               return status === MatchState.NOT_STARTED;
             });
           }
+          // CRITICAL FIX: Only update matches if we have valid data
+          // Don't clear matches on polling refresh if response is empty (preserve existing data)
           setMatches(filteredResults);
+          setLastUpdate(new Date());
+          setError(null);
         } else {
-          setMatches([]);
+          // Invalid response structure - keep existing matches, just log warning
+          console.warn('[MatchList] Invalid response.results structure, keeping existing matches');
+          setLastUpdate(new Date());
         }
       } else {
-        setMatches([]);
+        // Invalid response - keep existing matches, just log warning
+        console.warn('[MatchList] Invalid response structure, keeping existing matches');
+        setLastUpdate(new Date());
       }
-      setLastUpdate(new Date());
-      setError(null);
     } catch (err: any) {
       console.error('Error fetching matches:', err);
       const errorMessage = err?.message || 'Maçlar yüklenirken bir hata oluştu';
+      // CRITICAL FIX: Don't clear matches on error - preserve existing data
+      // Only set error state so user knows something went wrong, but don't lose data
       setError(errorMessage);
-      setMatches([]);
+      // Don't call setMatches([]) - keep existing matches visible
     } finally {
       // Mark as loaded and turn off spinner
       hasLoadedRef.current = true;

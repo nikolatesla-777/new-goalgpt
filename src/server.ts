@@ -22,6 +22,7 @@ import { healthRoutes } from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
 import websocketRoutes from './routes/websocket.routes';
+import metricsRoutes from './routes/metrics.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -68,6 +69,7 @@ fastify.register(predictionRoutes);
 fastify.register(dashboardRoutes);
 fastify.register(healthRoutes, { prefix: '/api' });
 fastify.register(websocketRoutes); // WebSocket route: /ws
+fastify.register(metricsRoutes, { prefix: '/api/metrics' }); // Metrics routes
 
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
@@ -131,11 +133,19 @@ const start = async () => {
       // CRITICAL: Connect WebSocketService events to Fastify WebSocket broadcasting
       // This ensures real-time events reach frontend clients
       const { broadcastEvent, setLatencyMonitor } = await import('./routes/websocket.routes');
+      const { setLatencyMonitor: setMetricsLatencyMonitor, setWriteQueue } = await import('./controllers/metrics.controller');
       
       // LATENCY MONITORING: Share latency monitor instance
       const latencyMonitor = (websocketService as any).latencyMonitor;
+      const writeQueue = (websocketService as any).writeQueue;
+      
       if (latencyMonitor) {
         setLatencyMonitor(latencyMonitor);
+        setMetricsLatencyMonitor(latencyMonitor);
+      }
+      
+      if (writeQueue) {
+        setWriteQueue(writeQueue);
       }
       
       websocketService.onEvent((event: any, mqttReceivedTs?: number) => {

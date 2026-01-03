@@ -334,40 +334,42 @@ export const getMatchById = async (
             // Match should be live or finished, not NOT_STARTED
             logger.warn(
               `[getMatchById] Match ${match_id} has status=1 but match_time passed ${ageMinutes} minutes ago. ` +
-              `This is inconsistent. Attempting to get correct status from live matches...`
+              `This is inconsistent. Attempting to reconcile with API...`
             );
             
-            // Try to get correct status from live matches
+            // CRITICAL FIX: Reconcile with API to get correct status
+            // This ensures we get the REAL status from provider, not stale database data
             try {
-              const { MatchDatabaseService } = await import('../services/thesports/match/matchDatabase.service');
+              const { MatchDetailLiveService } = await import('../services/thesports/match/matchDetailLive.service');
               const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
-              const matchDatabaseService = new MatchDatabaseService(new TheSportsClient());
-              const liveMatches = await matchDatabaseService.getLiveMatches();
-              const found = liveMatches.results.find((m: any) => m.id === match_id);
+              const matchDetailLiveService = new MatchDetailLiveService(new TheSportsClient());
               
-              if (found && found.status_id) {
-                validatedStatus = found.status_id;
+              // AWAIT reconcile to get correct status BEFORE responding
+              const reconcileResult = await matchDetailLiveService.reconcileMatchToDatabase(match_id);
+              
+              if (reconcileResult.updated && reconcileResult.statusId !== null) {
+                validatedStatus = reconcileResult.statusId;
                 logger.info(
                   `[getMatchById] ✅ Corrected status for ${match_id}: 1 → ${validatedStatus} ` +
-                  `(from live matches)`
+                  `(via reconcileMatchToDatabase)`
                 );
               } else {
-                // Not in live matches, check if match is finished
-                const finishedCheck = await client.query(
-                  'SELECT status_id FROM ts_matches WHERE external_id = $1 AND status_id = 8',
+                // Reconcile didn't update (might be finished or API error)
+                // Check database again after reconcile attempt
+                const statusCheck = await client.query(
+                  'SELECT status_id FROM ts_matches WHERE external_id = $1',
                   [match_id]
                 );
                 
-                if (finishedCheck.rows.length > 0) {
-                  validatedStatus = 8;
+                if (statusCheck.rows.length > 0 && statusCheck.rows[0].status_id !== 1) {
+                  validatedStatus = statusCheck.rows[0].status_id;
                   logger.info(
-                    `[getMatchById] ✅ Corrected status for ${match_id}: 1 → 8 (match is finished)`
+                    `[getMatchById] ✅ Status updated after reconcile: 1 → ${validatedStatus}`
                   );
                 } else {
-                  // Unknown state, keep original but log error
-                  logger.error(
-                    `[getMatchById] ❌ Cannot determine correct status for ${match_id}. ` +
-                    `Keeping status=1 but this is likely wrong. Match age: ${ageMinutes} minutes.`
+                  logger.warn(
+                    `[getMatchById] ⚠️ Reconcile completed but status still 1 for ${match_id}. ` +
+                    `Match age: ${ageMinutes} minutes. Returning status=1 but this may be incorrect.`
                   );
                 }
               }
@@ -375,6 +377,7 @@ export const getMatchById = async (
               logger.error(
                 `[getMatchById] Failed to reconcile status for ${match_id}: ${reconcileError.message}`
               );
+              // On error, keep original status=1 (better than crashing)
             }
           }
         }
