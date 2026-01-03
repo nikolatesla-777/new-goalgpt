@@ -234,7 +234,43 @@ export class TeamNameMatcherService {
     }
 
     /**
+     * Find team by alias table first, then fall back to fuzzy matching
+     */
+    async findTeamByAlias(teamName: string): Promise<TeamMatchResult | null> {
+        const client = await pool.connect();
+        try {
+            // First, check alias table for exact match
+            const aliasQuery = `
+                SELECT t.external_id, t.name, t.short_name 
+                FROM ts_team_aliases a
+                JOIN ts_teams t ON t.external_id = a.team_external_id
+                WHERE LOWER(a.alias) = LOWER($1)
+                LIMIT 1
+            `;
+            const aliasResult = await client.query(aliasQuery, [teamName.trim()]);
+
+            if (aliasResult.rows.length > 0) {
+                const team = aliasResult.rows[0];
+                logger.info(`[TeamMatcher] Found team via alias: "${teamName}" -> "${team.name}"`);
+                return {
+                    teamId: team.external_id,
+                    teamName: team.name,
+                    shortName: team.short_name,
+                    confidence: 1.0,
+                    matchMethod: 'exact'
+                };
+            }
+        } finally {
+            client.release();
+        }
+
+        // Fall back to fuzzy matching
+        return this.findBestMatch(teamName);
+    }
+
+    /**
      * Find active match with matching teams
+     * NEW LOGIC: Single team match is enough (home OR away)
      */
     async findMatchByTeams(
         homeTeamName: string,
@@ -242,74 +278,193 @@ export class TeamNameMatcherService {
         minuteHint?: number,
         scoreHint?: string
     ): Promise<MatchLookupResult | null> {
-        // Match both teams
+        // Try to match both teams using alias + fuzzy
         const [homeMatch, awayMatch] = await Promise.all([
-            this.findBestMatch(homeTeamName),
-            this.findBestMatch(awayTeamName)
+            this.findTeamByAlias(homeTeamName),
+            this.findTeamByAlias(awayTeamName)
         ]);
 
-        if (!homeMatch || !awayMatch) {
-            logger.warn(`[TeamMatcher] Could not match teams: "${homeTeamName}" vs "${awayTeamName}"`);
-            return null;
-        }
-
-        // Find match in database with these teams
         const client = await pool.connect();
         try {
-            // Look for matches with these team IDs (recent matches - last 24 hours)
-            const matchQuery = `
-        SELECT 
-          m.id as match_uuid,
-          m.external_id,
-          m.home_team_id,
-          m.away_team_id,
-          m.match_time,
-          m.status_id,
-          m.home_score_display,
-          m.away_score_display
-        FROM ts_matches m
-        WHERE 
-          m.home_team_id = $1 
-          AND m.away_team_id = $2
-          AND m.match_time >= EXTRACT(EPOCH FROM NOW() - INTERVAL '24 hours')
-          AND m.match_time <= EXTRACT(EPOCH FROM NOW() + INTERVAL '12 hours')
-        ORDER BY m.match_time DESC
-        LIMIT 1
-      `;
+            // Strategy 1: Both teams matched - search with both
+            if (homeMatch && awayMatch) {
+                const matchQuery = `
+                    SELECT 
+                        m.id as match_uuid,
+                        m.external_id,
+                        m.home_team_id,
+                        m.away_team_id,
+                        m.match_time,
+                        m.status_id
+                    FROM ts_matches m
+                    WHERE 
+                        m.home_team_id = $1 AND m.away_team_id = $2
+                        AND m.status_id IN (2, 3, 4, 5, 7) -- Only LIVE matches
+                    ORDER BY 
+                        CASE WHEN m.status_id IN (2, 3, 4) THEN 0 ELSE 1 END, -- Prioritize active play
+                        m.match_time DESC
+                    LIMIT 1
+                `;
 
-            const matchResult = await client.query(matchQuery, [homeMatch.teamId, awayMatch.teamId]);
+                let matchResult = await client.query(matchQuery, [homeMatch.teamId, awayMatch.teamId]);
 
-            if (matchResult.rows.length === 0) {
-                // Try reverse order (away at home)
-                const reverseResult = await client.query(matchQuery, [awayMatch.teamId, homeMatch.teamId]);
-                if (reverseResult.rows.length > 0) {
-                    logger.info(`[TeamMatcher] Found match with reversed teams`);
-                    const m = reverseResult.rows[0];
+                // Try reverse if not found
+                if (matchResult.rows.length === 0) {
+                    matchResult = await client.query(matchQuery, [awayMatch.teamId, homeMatch.teamId]);
+                }
+
+                if (matchResult.rows.length > 0) {
+                    const m = matchResult.rows[0];
                     return {
                         matchExternalId: m.external_id,
                         matchUuid: m.match_uuid,
-                        homeTeam: awayMatch,
-                        awayTeam: homeMatch,
+                        homeTeam: homeMatch,
+                        awayTeam: awayMatch,
                         overallConfidence: (homeMatch.confidence + awayMatch.confidence) / 2,
                         matchTime: m.match_time,
                         statusId: m.status_id
                     };
                 }
-
-                logger.warn(`[TeamMatcher] No match found for teams: ${homeMatch.teamId} vs ${awayMatch.teamId}`);
-                return null;
             }
 
-            const m = matchResult.rows[0];
-            return {
-                matchExternalId: m.external_id,
-                matchUuid: m.match_uuid,
-                homeTeam: homeMatch,
-                awayTeam: awayMatch,
-                overallConfidence: (homeMatch.confidence + awayMatch.confidence) / 2,
-                matchTime: m.match_time,
-                statusId: m.status_id
-            };
+            // Strategy 2: SINGLE TEAM MATCH - search with just one team
+            const singleTeamMatch = homeMatch || awayMatch;
+            const matchedTeamName = homeMatch ? homeTeamName : awayTeamName;
+            const unmatchedTeamName = homeMatch ? awayTeamName : homeTeamName;
+
+            if (singleTeamMatch) {
+                logger.info(`[TeamMatcher] Trying single-team match with: "${matchedTeamName}"`);
+
+                // Find any LIVE match where this team is playing (home or away)
+                const singleQuery = `
+                    SELECT 
+                        m.id as match_uuid,
+                        m.external_id,
+                        m.home_team_id,
+                        m.away_team_id,
+                        th.name as home_team_name,
+                        ta.name as away_team_name,
+                        th.short_name as home_short_name,
+                        ta.short_name as away_short_name,
+                        m.match_time,
+                        m.status_id
+                    FROM ts_matches m
+                    JOIN ts_teams th ON th.external_id = m.home_team_id
+                    JOIN ts_teams ta ON ta.external_id = m.away_team_id
+                    WHERE 
+                        (m.home_team_id = $1 OR m.away_team_id = $1)
+                        AND m.status_id IN (2, 3, 4, 5, 7) -- Only LIVE matches
+                    ORDER BY 
+                        CASE WHEN m.status_id IN (2, 3, 4) THEN 0 ELSE 1 END, -- Prioritize active play
+                        m.match_time DESC
+                    LIMIT 5
+                `;
+
+                const singleResult = await client.query(singleQuery, [singleTeamMatch.teamId]);
+
+                if (singleResult.rows.length > 0) {
+                    // If only one match found, use it directly
+                    if (singleResult.rows.length === 1) {
+                        const m = singleResult.rows[0];
+                        const isHome = m.home_team_id === singleTeamMatch.teamId;
+
+                        logger.info(`[TeamMatcher] Single-team match found: ${m.home_team_name} vs ${m.away_team_name}`);
+
+                        return {
+                            matchExternalId: m.external_id,
+                            matchUuid: m.match_uuid,
+                            homeTeam: isHome ? singleTeamMatch : {
+                                teamId: m.home_team_id,
+                                teamName: m.home_team_name,
+                                shortName: m.home_short_name,
+                                confidence: 0.5,
+                                matchMethod: 'partial'
+                            },
+                            awayTeam: !isHome ? singleTeamMatch : {
+                                teamId: m.away_team_id,
+                                teamName: m.away_team_name,
+                                shortName: m.away_short_name,
+                                confidence: 0.5,
+                                matchMethod: 'partial'
+                            },
+                            overallConfidence: singleTeamMatch.confidence * 0.8, // Slightly lower confidence for single-team
+                            matchTime: m.match_time,
+                            statusId: m.status_id
+                        };
+                    }
+
+                    // Multiple matches found - try to find one where opponent name partially matches
+                    for (const m of singleResult.rows) {
+                        const isHome = m.home_team_id === singleTeamMatch.teamId;
+                        const opponentName = isHome ? m.away_team_name : m.home_team_name;
+                        const opponentShort = isHome ? m.away_short_name : m.home_short_name;
+
+                        // Check if unmatched team name has any similarity to opponent
+                        const similarity = Math.max(
+                            this.calculateSimilarity(this.normalizeTeamName(unmatchedTeamName), this.normalizeTeamName(opponentName)),
+                            opponentShort ? this.calculateSimilarity(this.normalizeTeamName(unmatchedTeamName), this.normalizeTeamName(opponentShort)) : 0,
+                            this.partialMatch(unmatchedTeamName, opponentName)
+                        );
+
+                        if (similarity > 0.3) { // Even low similarity is acceptable for the unmatched team
+                            logger.info(`[TeamMatcher] Found match via single-team + partial opponent: ${m.home_team_name} vs ${m.away_team_name}`);
+
+                            return {
+                                matchExternalId: m.external_id,
+                                matchUuid: m.match_uuid,
+                                homeTeam: isHome ? singleTeamMatch : {
+                                    teamId: m.home_team_id,
+                                    teamName: m.home_team_name,
+                                    shortName: m.home_short_name,
+                                    confidence: similarity,
+                                    matchMethod: 'partial'
+                                },
+                                awayTeam: !isHome ? singleTeamMatch : {
+                                    teamId: m.away_team_id,
+                                    teamName: m.away_team_name,
+                                    shortName: m.away_short_name,
+                                    confidence: similarity,
+                                    matchMethod: 'partial'
+                                },
+                                overallConfidence: (singleTeamMatch.confidence + similarity) / 2,
+                                matchTime: m.match_time,
+                                statusId: m.status_id
+                            };
+                        }
+                    }
+
+                    // If no partial match found, return first match anyway (single team was matched)
+                    const m = singleResult.rows[0];
+                    const isHome = m.home_team_id === singleTeamMatch.teamId;
+
+                    logger.info(`[TeamMatcher] Using first single-team match: ${m.home_team_name} vs ${m.away_team_name}`);
+
+                    return {
+                        matchExternalId: m.external_id,
+                        matchUuid: m.match_uuid,
+                        homeTeam: isHome ? singleTeamMatch : {
+                            teamId: m.home_team_id,
+                            teamName: m.home_team_name,
+                            shortName: m.home_short_name,
+                            confidence: 0.4,
+                            matchMethod: 'partial'
+                        },
+                        awayTeam: !isHome ? singleTeamMatch : {
+                            teamId: m.away_team_id,
+                            teamName: m.away_team_name,
+                            shortName: m.away_short_name,
+                            confidence: 0.4,
+                            matchMethod: 'partial'
+                        },
+                        overallConfidence: singleTeamMatch.confidence * 0.7,
+                        matchTime: m.match_time,
+                        statusId: m.status_id
+                    };
+                }
+            }
+
+            logger.warn(`[TeamMatcher] No match found for: "${homeTeamName}" vs "${awayTeamName}"`);
+            return null;
 
         } finally {
             client.release();
