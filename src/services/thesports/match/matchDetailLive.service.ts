@@ -532,6 +532,9 @@ export class MatchDetailLiveService {
     providerUpdateTime?: number | null; // Phase 5-S: For watchdog proof logs
   }> {
     const t0 = Date.now();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDetailLive.service.ts:524',message:'reconcileMatchToDatabase start',data:{match_id,providerUpdateTimeOverride},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     logEvent('info', 'detail_live.reconcile.start', {
       match_id,
       provider_update_time: providerUpdateTimeOverride !== null ? providerUpdateTimeOverride : undefined,
@@ -654,6 +657,9 @@ export class MatchDetailLiveService {
             );
 
             if (updateResult.rowCount && updateResult.rowCount > 0) {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDetailLive.service.ts:648',message:'status update to END',data:{match_id,oldStatus:existingStatusId,newStatus:8,rowCount:updateResult.rowCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+              // #endregion
               logEvent('info', 'detail_live.reconcile.done', {
                 match_id,
                 duration_ms: Date.now() - t0,

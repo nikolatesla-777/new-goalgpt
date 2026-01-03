@@ -28,15 +28,15 @@ export class WebSocketService {
   private writeQueue: MatchWriteQueue;
   private latencyMonitor: EventLatencyMonitor;
   private mqttReceivedTimestamps: Map<string, number> = new Map(); // Key: matchId:eventType, Value: mqttReceivedTs
-  
+
   // Track match states for "false end" detection
   // Map: matchId -> { status: MatchState, lastStatus8Time: number | null }
   private matchStates = new Map<string, { status: MatchState; lastStatus8Time: number | null }>();
-  
+
   // Keepalive timers for matches that hit status 8 (potential false end)
   // Map: matchId -> NodeJS.Timeout
   private matchKeepaliveTimers = new Map<string, NodeJS.Timeout>();
-  
+
   // Keepalive duration: 20 minutes after status 8
   private readonly KEEPALIVE_DURATION_MS = 20 * 60 * 1000; // 20 minutes
 
@@ -106,7 +106,7 @@ export class WebSocketService {
     try {
       // LATENCY MONITORING: Record MQTT message received timestamp
       const mqttReceivedTs = Date.now();
-      
+
       // Extract provider update_time from message if available (for optimistic locking)
       const providerUpdateTime = this.extractProviderUpdateTimeFromMessage(message);
 
@@ -115,8 +115,8 @@ export class WebSocketService {
         const scoreMessages = Array.isArray((message as any).score) ? (message as any).score : [];
         for (const scoreMsg of scoreMessages) {
           try {
-        const parsedScore = this.parser.parseScoreToStructured(scoreMsg);
-        
+            const parsedScore = this.parser.parseScoreToStructured(scoreMsg);
+
             // Detect status change BEFORE updating local map
             const previousState = this.matchStates.get(parsedScore.matchId)?.status ?? null;
             const nextState = parsedScore.statusId as MatchState;
@@ -128,11 +128,11 @@ export class WebSocketService {
             // If status changed (and we had a previous state), persist to DB + notify frontend
             if (statusChanged) {
               await this.updateMatchStatusInDatabase(parsedScore.matchId, parsedScore.statusId, providerUpdateTime);
-              
+
               // LATENCY MONITORING: Store mqttReceivedTs for this event
               const eventKey = `${parsedScore.matchId}:MATCH_STATE_CHANGE`;
               this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
-              
+
               this.emitEvent({
                 type: 'MATCH_STATE_CHANGE',
                 matchId: parsedScore.matchId,
@@ -152,8 +152,9 @@ export class WebSocketService {
             // CRITICAL: Check for score rollback (Goal Cancellation)
             await this.detectScoreRollback(parsedScore);
 
-            // OPTIMIZATION: Queue update for batching (reduces database load)
-            // This batches multiple rapid updates for the same match
+            // CRITICAL FIX: Use ONLY queue-based writes to prevent race conditions
+            // Queue flushes every 100ms which is fast enough for real-time updates
+            // Removed immediate write that was causing duplicate writes and status flicker
             const ingestionTs = Math.floor(Date.now() / 1000);
             this.writeQueue.enqueue(parsedScore.matchId, {
               type: 'score',
@@ -162,32 +163,23 @@ export class WebSocketService {
               ingestionTs,
             });
 
-            // Still do immediate write for real-time updates (critical for frontend)
-            // Queue helps batch non-critical updates
-            const dbUpdated = await this.updateMatchInDatabase(parsedScore, providerUpdateTime);
+            // CRITICAL FIX: Emit SCORE_CHANGE immediately for frontend real-time updates
+            // The actual DB write will happen via queue (100ms), but frontend gets notified now
+            // LATENCY MONITORING: Store mqttReceivedTs for this event
+            const eventKey = `${parsedScore.matchId}:SCORE_CHANGE`;
+            this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
 
-            // Only emit SCORE_CHANGE if we actually updated a DB row
-            if (dbUpdated) {
-              // LATENCY MONITORING: Store mqttReceivedTs for this event
-              const eventKey = `${parsedScore.matchId}:SCORE_CHANGE`;
-              this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
-              
-              this.emitEvent({
-                type: 'SCORE_CHANGE',
-                matchId: parsedScore.matchId,
-                homeScore: parsedScore.home.score,
-                awayScore: parsedScore.away.score,
-                timestamp: Date.now(),
-              }, mqttReceivedTs);
+            this.emitEvent({
+              type: 'SCORE_CHANGE',
+              matchId: parsedScore.matchId,
+              homeScore: parsedScore.home.score,
+              awayScore: parsedScore.away.score,
+              timestamp: Date.now(),
+            }, mqttReceivedTs);
 
-              // Update cache
-              const scoreCacheKey = `${CacheKeyPrefix.TheSports}:ws:score:${parsedScore.matchId}`;
-              await cacheService.set(scoreCacheKey, parsedScore, CacheTTL.Minute);
-            } else {
-              // Still cache the parsedScore for troubleshooting, but shorter TTL
-              const scoreCacheKey = `${CacheKeyPrefix.TheSports}:ws:score:${parsedScore.matchId}`;
-              await cacheService.set(scoreCacheKey, parsedScore, CacheTTL.Minute);
-            }
+            // Update cache (for fast reads before queue flushes)
+            const scoreCacheKey = `${CacheKeyPrefix.TheSports}:ws:score:${parsedScore.matchId}`;
+            await cacheService.set(scoreCacheKey, parsedScore, CacheTTL.Minute);
           } catch (e: any) {
             logger.error('Error processing score message item:', e);
           }
@@ -214,10 +206,10 @@ export class WebSocketService {
           await cacheService.set(incidentsCacheKey, incidentsMsg, CacheTTL.Minute);
 
           for (const incident of incidentsArr) {
-          const parsedIncident = this.parser.parseIncidentToStructured(
+            const parsedIncident = this.parser.parseIncidentToStructured(
               matchId,
-            incident
-          );
+              incident
+            );
 
             // Log VAR incidents (especially goal cancellations)
             if (parsedIncident.isVAR) {
@@ -229,35 +221,35 @@ export class WebSocketService {
 
             // LATENCY MONITORING: Use message timestamp for incidents
             const incidentsMqttTs = mqttReceivedTs; // Use same mqttReceivedTs from handleMessage
-            
+
             // Detect goal (but don't rely on VAR incidents for score updates - use score field)
-          const goalEvent = this.eventDetector.detectGoalFromIncident(
-            parsedIncident.matchId,
-            parsedIncident
-          );
-          if (goalEvent) {
+            const goalEvent = this.eventDetector.detectGoalFromIncident(
+              parsedIncident.matchId,
+              parsedIncident
+            );
+            if (goalEvent) {
               const eventKey = `${parsedIncident.matchId}:GOAL`;
               this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
               this.emitEvent(goalEvent, incidentsMqttTs);
-          }
+            }
 
-          // Detect card
-          const cardEvent = this.eventDetector.detectCardFromIncident(
-            parsedIncident.matchId,
-            parsedIncident
-          );
-          if (cardEvent) {
+            // Detect card
+            const cardEvent = this.eventDetector.detectCardFromIncident(
+              parsedIncident.matchId,
+              parsedIncident
+            );
+            if (cardEvent) {
               const eventKey = `${parsedIncident.matchId}:CARD`;
               this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
               this.emitEvent(cardEvent, incidentsMqttTs);
-          }
+            }
 
-          // Detect substitution
-          const substitutionEvent = this.eventDetector.detectSubstitutionFromIncident(
-            parsedIncident.matchId,
-            parsedIncident
-          );
-          if (substitutionEvent) {
+            // Detect substitution
+            const substitutionEvent = this.eventDetector.detectSubstitutionFromIncident(
+              parsedIncident.matchId,
+              parsedIncident
+            );
+            if (substitutionEvent) {
               const eventKey = `${parsedIncident.matchId}:SUBSTITUTION`;
               this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
               this.emitEvent(substitutionEvent, incidentsMqttTs);
@@ -379,7 +371,23 @@ export class WebSocketService {
 
     if (recent.some((e) => {
       const dataStr = getDataStr(e);
-      return dataStr.includes('full time') || dataStr.includes('ft') || dataStr.includes('match end') || dataStr.includes('end') || dataStr.includes('bitti') || dataStr.includes('maç bitti') || dataStr.includes('mac bitti');
+      // CRITICAL FIX: Use SPECIFIC keywords only to prevent false positives
+      // Removed generic 'end' (matches 'defending end', 'weekend', 'extend')
+      // Removed generic 'bitti' (too short, might match partial words)
+      // Only match explicit full-time indicators
+      return dataStr.includes('full time') ||
+        dataStr.includes('fulltime') ||
+        dataStr.includes('final whistle') ||
+        dataStr.includes('match ended') ||
+        dataStr.includes('game over') ||
+        dataStr.includes('maç bitti') ||
+        dataStr.includes('mac bitti') ||
+        dataStr.includes('maç sona erdi') ||
+        // FT only if standalone (not part of other words)
+        dataStr === 'ft' ||
+        dataStr.startsWith('ft ') ||
+        dataStr.endsWith(' ft') ||
+        dataStr.includes(' ft ');
     })) {
       return MatchState.END as unknown as number;
     }
@@ -412,21 +420,21 @@ export class WebSocketService {
 
     // Only check the most recent entries (last 3)
     const recentEntries = tlive.slice(-3);
-    
+
     for (const entry of recentEntries) {
       const dataStr = String(entry?.data ?? '').toLowerCase();
       const time = String(entry?.time ?? '').replace(/[^0-9+]/g, '');
       const position = entry?.position ?? 0; // 1=home, 2=away
-      
+
       // Determine team
       const team = position === 1 ? 'home' : position === 2 ? 'away' : 'unknown';
-      
+
       // Priority order: Most dangerous first
-      
+
       // 1. HIT POST - Very close to goal!
-      if (dataStr.includes('hit post') || dataStr.includes('post') || 
-          dataStr.includes('direkten') || dataStr.includes('woodwork') ||
-          dataStr.includes('crossbar') || dataStr.includes('üst direk')) {
+      if (dataStr.includes('hit post') || dataStr.includes('post') ||
+        dataStr.includes('direkten') || dataStr.includes('woodwork') ||
+        dataStr.includes('crossbar') || dataStr.includes('üst direk')) {
         return {
           type: 'DANGER_ALERT',
           matchId,
@@ -437,10 +445,10 @@ export class WebSocketService {
           timestamp: Date.now(),
         } as any;
       }
-      
+
       // 2. PENALTY - Could be a goal!
       if ((dataStr.includes('penalty') || dataStr.includes('penaltı')) &&
-          !dataStr.includes('missed') && !dataStr.includes('saved') && !dataStr.includes('kaçırdı')) {
+        !dataStr.includes('missed') && !dataStr.includes('saved') && !dataStr.includes('kaçırdı')) {
         return {
           type: 'DANGER_ALERT',
           matchId,
@@ -451,10 +459,10 @@ export class WebSocketService {
           timestamp: Date.now(),
         } as any;
       }
-      
+
       // 3. SHOT SAVED - Good save, was close!
-      if (dataStr.includes('saved') || dataStr.includes('kurtarış') || 
-          dataStr.includes('save') || dataStr.includes('kurtardı')) {
+      if (dataStr.includes('saved') || dataStr.includes('kurtarış') ||
+        dataStr.includes('save') || dataStr.includes('kurtardı')) {
         return {
           type: 'DANGER_ALERT',
           matchId,
@@ -465,11 +473,11 @@ export class WebSocketService {
           timestamp: Date.now(),
         } as any;
       }
-      
+
       // 4. SHOT ATTEMPT - Danger building
-      if (dataStr.includes('shot') || dataStr.includes('şut') || 
-          dataStr.includes('shoot') || dataStr.includes('attempt') ||
-          dataStr.includes('vuruş')) {
+      if (dataStr.includes('shot') || dataStr.includes('şut') ||
+        dataStr.includes('shoot') || dataStr.includes('attempt') ||
+        dataStr.includes('vuruş')) {
         return {
           type: 'DANGER_ALERT',
           matchId,
@@ -480,11 +488,11 @@ export class WebSocketService {
           timestamp: Date.now(),
         } as any;
       }
-      
+
       // 5. DANGEROUS ATTACK - Initial danger
       if (dataStr.includes('dangerous') || dataStr.includes('tehlikeli') ||
-          dataStr.includes('chance') || dataStr.includes('opportunity') ||
-          dataStr.includes('pozisyon') || dataStr.includes('fırsat')) {
+        dataStr.includes('chance') || dataStr.includes('opportunity') ||
+        dataStr.includes('pozisyon') || dataStr.includes('fırsat')) {
         return {
           type: 'DANGER_ALERT',
           matchId,
@@ -598,6 +606,9 @@ export class WebSocketService {
           return; // Stale update, skip
         }
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'websocket.service.ts:617', message: 'WebSocket status update start', data: { matchId, statusId, providerUpdateTime }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
+        // #endregion
         const res = await client.query(
           `UPDATE ts_matches 
            SET status_id = $1, 
@@ -617,6 +628,9 @@ export class WebSocketService {
             `Match not found in DB or external_id mismatch.`
           );
         } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'websocket.service.ts:620', message: 'WebSocket status update done', data: { matchId, statusId, rowCount: res.rowCount }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
+          // #endregion
           logger.info(`[WebSocket/STATUS] Successfully updated status_id=${statusId} for matchId=${matchId}, rowCount=${res.rowCount}`);
         }
       } finally {
@@ -687,7 +701,7 @@ export class WebSocketService {
 
     for (const c of candidates) {
       if (c == null) continue;
-      
+
       let num: number;
       if (typeof c === 'string') {
         num = parseInt(c, 10);
@@ -746,7 +760,7 @@ export class WebSocketService {
   private handleMatchStateTransition(matchId: string, statusId: number): void {
     const currentState = statusId as MatchState;
     const previousState = this.matchStates.get(matchId)?.status;
-    
+
     // Track current state
     if (currentState === MatchState.END) {
       // Status 8 (END) - might be false end, track timestamp
@@ -754,31 +768,31 @@ export class WebSocketService {
         status: currentState,
         lastStatus8Time: Date.now(),
       });
-      
+
       // Start keepalive timer (20 minutes) to keep listening for potential resurrection
       this.startMatchKeepalive(matchId);
-      
+
       logger.info(`Match ${matchId} reached Status 8 (END). Keeping connection alive for potential Overtime/Penalty...`);
     } else if (currentState === MatchState.OVERTIME || currentState === MatchState.PENALTY_SHOOTOUT) {
       // Status 5 (Overtime) or 7 (Penalty) - RESURRECTION detected!
       if (previousState === MatchState.END) {
         logger.warn(`🔄 MATCH RESURRECTION: Match ${matchId} transitioned from END (8) to ${currentState === MatchState.OVERTIME ? 'OVERTIME (5)' : 'PENALTY (7)'}`);
-        
+
         // Clear keepalive timer since match is live again
         this.clearMatchKeepalive(matchId);
       }
-      
+
       // Update state (match is LIVE again)
       this.matchStates.set(matchId, {
         status: currentState,
         lastStatus8Time: null, // Reset since match is live
       });
-      
+
       logger.info(`Match ${matchId} is LIVE: ${currentState === MatchState.OVERTIME ? 'Overtime' : 'Penalty Shootout'}`);
     } else if (isLiveMatchState(currentState)) {
       // Other live states (2, 4) - clear any keepalive timers
       this.clearMatchKeepalive(matchId);
-      
+
       this.matchStates.set(matchId, {
         status: currentState,
         lastStatus8Time: null,
@@ -799,7 +813,7 @@ export class WebSocketService {
   private startMatchKeepalive(matchId: string): void {
     // Clear existing timer if any
     this.clearMatchKeepalive(matchId);
-    
+
     // Set new timer
     const timer = setTimeout(() => {
       const matchState = this.matchStates.get(matchId);
@@ -810,7 +824,7 @@ export class WebSocketService {
       }
       this.matchKeepaliveTimers.delete(matchId);
     }, this.KEEPALIVE_DURATION_MS);
-    
+
     this.matchKeepaliveTimers.set(matchId, timer);
   }
 
@@ -863,7 +877,7 @@ export class WebSocketService {
             `⚠️ GOAL CANCELLED detected for match ${parsedScore.matchId}: ` +
             `${currentHomeScore}-${currentAwayScore} → ${newHomeScore}-${newAwayScore}`
           );
-          
+
           // Emit goal cancelled event
           // Note: mqttReceivedTs not available here, use current timestamp
           const goalCancelledTs = Date.now();
@@ -986,18 +1000,18 @@ export class WebSocketService {
         const kickoffSeconds = this.hasLiveKickoffTimeColumn
           ? this.extractLiveKickoffTimeSeconds(parsedScore as any)
           : null;
-        
+
         // Determine kickoff time to use (provider kickoff or ingestion time as fallback)
         const kickoffTimeToUse = kickoffSeconds !== null ? kickoffSeconds : freshnessCheck.ingestionTs;
 
         if (hasNewColumns) {
           const withKickoff = this.hasLiveKickoffTimeColumn && kickoffSeconds !== null;
-          
+
           // Build kickoff_ts write-once clauses based on status transition
           const kickoffClauses: string[] = [];
           const kickoffValues: number[] = [];
           let kickoffParamIndex = withKickoff ? 14 : 11; // Start after existing params
-          
+
           // Status 2 (FIRST_HALF): Set first_half_kickoff_ts if transitioning from non-live or null
           if (parsedScore.statusId === 2 && (existingStatusId === null || existingStatusId === 1)) {
             if (existingStatus?.first_half_kickoff_ts === null) {
@@ -1009,7 +1023,7 @@ export class WebSocketService {
               logger.debug(`[KickoffTS] skip (already set) first_half_kickoff_ts match_id=${parsedScore.matchId}`);
             }
           }
-          
+
           // Status 4 (SECOND_HALF): Set second_half_kickoff_ts if transitioning from HT
           if (parsedScore.statusId === 4 && existingStatusId === 3) {
             if (existingStatus?.second_half_kickoff_ts === null) {
@@ -1021,7 +1035,7 @@ export class WebSocketService {
               logger.debug(`[KickoffTS] skip (already set) second_half_kickoff_ts match_id=${parsedScore.matchId}`);
             }
           }
-          
+
           // Status 5 (OVERTIME): Set overtime_kickoff_ts if transitioning from SECOND_HALF
           if (parsedScore.statusId === 5 && existingStatusId === 4) {
             if (existingStatus?.overtime_kickoff_ts === null) {
@@ -1037,17 +1051,17 @@ export class WebSocketService {
           // Build SET clauses dynamically
           const setClauses: string[] = [];
           const queryValues: any[] = [];
-          
+
           // Status
           setClauses.push(`status_id = $${queryValues.length + 1}`);
           queryValues.push(parsedScore.statusId);
-          
+
           // Legacy live_kickoff_time (if applicable)
           if (withKickoff) {
             setClauses.push(`live_kickoff_time = COALESCE(live_kickoff_time, $${queryValues.length + 1})`);
             queryValues.push(kickoffSeconds);
           }
-          
+
           // Scores (new columns)
           setClauses.push(`home_score_regular = $${queryValues.length + 1}`);
           queryValues.push(parsedScore.home.regularScore);
@@ -1065,11 +1079,11 @@ export class WebSocketService {
           queryValues.push(parsedScore.away.penaltyScore);
           setClauses.push(`away_score_display = $${queryValues.length + 1}`);
           queryValues.push(parsedScore.away.score);
-          
+
           // Legacy arrays
           setClauses.push(`home_scores = ARRAY[$${queryValues.length - 7}]`);
           setClauses.push(`away_scores = ARRAY[$${queryValues.length - 3}]`);
-          
+
           // Kickoff timestamps (write-once)
           if (kickoffClauses.length > 0) {
             kickoffClauses.forEach((clause, idx) => {
@@ -1077,7 +1091,7 @@ export class WebSocketService {
               queryValues.push(kickoffValues[idx]);
             });
           }
-          
+
           // Provider update time
           const providerTimeParam = queryValues.length + 1;
           setClauses.push(`provider_update_time = CASE 
@@ -1085,18 +1099,18 @@ export class WebSocketService {
             ELSE provider_update_time
           END`);
           queryValues.push(freshnessCheck.providerTimeToWrite);
-          
+
           // Last event ts
           setClauses.push(`last_event_ts = $${queryValues.length + 1}`);
           queryValues.push(freshnessCheck.ingestionTs);
-          
+
           // Updated at
           setClauses.push(`updated_at = NOW()`);
-          
+
           // Match ID for WHERE clause
           const matchIdParam = queryValues.length + 1;
           queryValues.push(parsedScore.matchId);
-          
+
           const query = `
             UPDATE ts_matches
             SET ${setClauses.join(', ')}
@@ -1126,11 +1140,11 @@ export class WebSocketService {
         } else {
           // Legacy path (no new score columns) - same kickoff_ts write-once logic
           const withKickoff = this.hasLiveKickoffTimeColumn && kickoffSeconds !== null;
-          
+
           // Build kickoff_ts write-once clauses (same logic as new columns path)
           const kickoffClauses: string[] = [];
           const kickoffValues: number[] = [];
-          
+
           if (parsedScore.statusId === 2 && (existingStatusId === null || existingStatusId === 1)) {
             if (existingStatus?.first_half_kickoff_ts === null) {
               kickoffClauses.push(`first_half_kickoff_ts = $${withKickoff ? 4 : 3}`);
@@ -1161,24 +1175,24 @@ export class WebSocketService {
               logger.debug(`[KickoffTS] skip (already set) overtime_kickoff_ts match_id=${parsedScore.matchId} (legacy)`);
             }
           }
-          
+
           // Build query dynamically (legacy path)
           const setClauses: string[] = [];
           const queryValues: any[] = [];
-          
+
           setClauses.push(`status_id = $${queryValues.length + 1}`);
           queryValues.push(parsedScore.statusId);
-          
+
           if (withKickoff) {
             setClauses.push(`live_kickoff_time = COALESCE(live_kickoff_time, $${queryValues.length + 1})`);
             queryValues.push(kickoffSeconds);
           }
-          
+
           setClauses.push(`home_scores = ARRAY[$${queryValues.length + 1}]`);
           queryValues.push(parsedScore.home.score);
           setClauses.push(`away_scores = ARRAY[$${queryValues.length + 1}]`);
           queryValues.push(parsedScore.away.score);
-          
+
           // Add kickoff timestamps
           if (kickoffClauses.length > 0) {
             kickoffClauses.forEach((clause, idx) => {
@@ -1188,21 +1202,21 @@ export class WebSocketService {
               queryValues.push(kickoffValues[idx]);
             });
           }
-          
+
           const providerTimeParam = queryValues.length + 1;
           setClauses.push(`provider_update_time = CASE 
             WHEN $${providerTimeParam} IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $${providerTimeParam})
             ELSE provider_update_time
           END`);
           queryValues.push(freshnessCheck.providerTimeToWrite);
-          
+
           setClauses.push(`last_event_ts = $${queryValues.length + 1}`);
           queryValues.push(freshnessCheck.ingestionTs);
           setClauses.push(`updated_at = NOW()`);
-          
+
           const matchIdParam = queryValues.length + 1;
           queryValues.push(parsedScore.matchId);
-          
+
           const query = `
             UPDATE ts_matches
             SET ${setClauses.join(', ')}
@@ -1269,7 +1283,7 @@ export class WebSocketService {
 
     // Status mapping (based on MatchState enum)
     // 1 = Not Started, 2 = First Half, 3 = Half Time, 4 = Second Half, 5 = Full Time
-    
+
     if (statusId === 2) {
       // First Half
       if (elapsedMinutes <= 45) {
@@ -1407,7 +1421,7 @@ export class WebSocketService {
         // Check if incidents column exists, if not we'll need a migration
         // For now, store in a JSONB column or separate table
         // Using a JSONB column in ts_matches for simplicity
-        
+
         // First, check if column exists
         const columnCheck = await client.query(`
           SELECT column_name 
@@ -1475,18 +1489,18 @@ export class WebSocketService {
    */
   private emitEvent(event: MatchEvent, mqttReceivedTs?: number): void {
     logger.info(`Event detected: ${event.type} for match ${event.matchId}`);
-    
+
     // LATENCY MONITORING: Record event emitted timestamp
     // If mqttReceivedTs not provided, try to get from stored timestamps
     const eventKey = `${event.matchId}:${event.type}`;
     const storedMqttTs = mqttReceivedTs || this.mqttReceivedTimestamps.get(eventKey);
-    
+
     if (storedMqttTs) {
       this.latencyMonitor.recordEventEmitted(event.type, event.matchId, storedMqttTs);
       // Clean up stored timestamp after use
       this.mqttReceivedTimestamps.delete(eventKey);
     }
-    
+
     this.eventHandlers.forEach(handler => {
       try {
         handler(event, storedMqttTs); // Pass mqttReceivedTs to handler
@@ -1532,12 +1546,12 @@ export class WebSocketService {
     }
     this.matchKeepaliveTimers.clear();
     this.matchStates.clear();
-    
+
     // Stop write queue and flush remaining items
     if (this.writeQueue) {
       this.writeQueue.stop();
     }
-    
+
     this.client.disconnect();
   }
 
@@ -1558,10 +1572,10 @@ export class WebSocketService {
       // Import PostMatchProcessor dynamically to avoid circular dependencies
       const { PostMatchProcessor } = await import('../../services/liveData/postMatchProcessor');
       const { TheSportsClient } = await import('../thesports/client/thesports-client');
-      
+
       const client = new TheSportsClient();
       const processor = new PostMatchProcessor(client);
-      
+
       // Trigger post-match processing
       await processor.onMatchEnded(matchId);
       logger.info(`[WebSocket] ✅ Post-match persistence completed for ${matchId}`);

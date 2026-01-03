@@ -122,26 +122,29 @@ export function MatchDetailPage() {
     }, [matchId]);
 
     // Fetch tab data
-    // CRITICAL FIX: Use match?.season_id in dependency array instead of match to prevent unnecessary refetches
-    // This ensures we only refetch when season_id actually changes (e.g., match loaded for first time)
-    // But NOT when match object reference changes (e.g., score update from WebSocket)
-    const matchSeasonId = match?.season_id;
+    // CRITICAL FIX: Only fetch when tab or matchId changes, NOT when match object updates
     useEffect(() => {
         const fetchTabData = async () => {
-            if (!matchId || !match) return;
+            if (!matchId) return;
 
             // CRITICAL FIX: Check if this exact tab+matchId combination has already been loaded
             // This prevents unnecessary refetches when match object reference changes (e.g., WebSocket updates)
-            const cacheKey = `${activeTab}-${matchId}`;
             if (tabDataLoadedRef.current?.tab === activeTab && tabDataLoadedRef.current?.matchId === matchId) {
                 // This tab data is already loaded for this match, skip refetch
+                // CRITICAL: Don't set loading state or clear data - just return silently
                 return;
             }
 
-            // CRITICAL FIX: Always set loading state when fetching new tab data
-            // Clear previous data to prevent showing stale empty states
+            // CRITICAL FIX: For standings tab, we need match.season_id, so wait for match to load
+            if (activeTab === 'standings' && !match?.season_id) {
+                // Don't fetch yet, wait for match to load
+                return;
+            }
+
+            // CRITICAL FIX: Only set loading state when actually fetching NEW data
+            // Don't clear existing data until we have new data (prevents flickering)
             setTabLoading(true);
-            setTabData(null); // Clear data to prevent empty state flash
+            // DON'T clear tabData here - keep existing data visible while loading new data
             setError(null); // Clear previous errors
 
             try {
@@ -181,8 +184,11 @@ export function MatchDetailPage() {
                         result = await getMatchH2H(matchId);
                         break;
                     case 'standings':
-                        if (match.season_id) {
-                            result = await getSeasonStandings(match.season_id);
+                        // CRITICAL FIX: Get season_id from match if available, otherwise skip
+                        // Don't fail if match is not loaded yet - just return null
+                        const seasonId = match?.season_id;
+                        if (seasonId) {
+                            result = await getSeasonStandings(seasonId);
                         } else {
                             result = null; // No season_id, result stays null
                         }
@@ -217,22 +223,36 @@ export function MatchDetailPage() {
                         result = { incidents };
                         break;
                 }
-                setTabData(result);
-                // Mark this tab+matchId as loaded
-                tabDataLoadedRef.current = { tab: activeTab, matchId: matchId };
+                // CRITICAL FIX: Only update data if we got a result
+                // This prevents clearing existing data if fetch fails
+                if (result !== undefined) {
+                    setTabData(result);
+                    // Mark this tab+matchId as loaded ONLY after successful fetch
+                    tabDataLoadedRef.current = { tab: activeTab, matchId: matchId };
+                }
             } catch (err: any) {
                 console.error('Tab data fetch error:', err);
                 setError(err.message || 'Veri yüklenirken hata oluştu');
-                setTabData(null); // Ensure data is null on error
+                // CRITICAL: Don't clear existing data on error - keep showing old data
+                // Only clear if this is the first load (tabData is null)
+                if (tabData === null) {
+                    setTabData(null);
+                }
             } finally {
                 setTabLoading(false);
             }
         };
 
-        fetchTabData();
+        // CRITICAL FIX: Only fetch if match is available OR if we're fetching data that doesn't need match
+        // For events/trend/h2h/lineup, we don't need match object
+        // For standings, we need match.season_id, but we handle that gracefully
+        if (matchId) {
+            fetchTabData();
+        }
         // CRITICAL FIX: Only refetch when activeTab or matchId changes
         // match object updates (e.g., WebSocket score changes) should NOT trigger refetch
         // We use tabDataLoadedRef to track what's already loaded and prevent unnecessary refetches
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab, matchId]);
 
 

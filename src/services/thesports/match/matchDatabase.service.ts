@@ -207,6 +207,10 @@ export class MatchDatabaseService {
       // Live matches change frequently, cache is not appropriate
       // Removed cache check - always fetch from DB
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDatabase.service.ts:203',message:'getLiveMatches query start',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+
       logger.info(`🔍 [MatchDatabase] Querying live matches from DATABASE...`);
 
       // Phase 5-S Fix: Removed "should be live" reconciliation from /live endpoint
@@ -273,6 +277,10 @@ export class MatchDatabaseService {
 
       const result = await pool.query(query);
       const matches = result.rows || [];
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDatabase.service.ts:274',message:'getLiveMatches query result',data:{matchCount:matches.length,queryDuration:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       logger.info(`✅ [MatchDatabase] Found ${matches.length} strictly live matches in database (status_id IN 2,3,4,5,7 only)`);
 
@@ -349,6 +357,10 @@ export class MatchDatabaseService {
       const response: MatchDiaryResponse = {
         results: transformedMatches as any,
       };
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDatabase.service.ts:349',message:'getLiveMatches return',data:{finalCount:transformedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       // CRITICAL FIX: Cache disabled for live matches (was causing stale data)
       // Live matches change frequently, cache is not appropriate
