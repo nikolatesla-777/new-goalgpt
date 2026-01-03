@@ -81,9 +81,10 @@ export class MatchWatchdogWorker {
         // Continue processing, but reconciliation will fall back to detail_live only
       }
 
-      // CRITICAL FIX: Disable stale match detection - /data/update handles live match updates
-      // Only process "should-be-live" matches (status=1 but match_time passed)
-      const stales: any[] = []; // Disabled - /data/update handles stale matches
+      // CRITICAL FIX: Re-enable stale match detection for HALF_TIME matches stuck in status 3
+      // /data/update handles live match updates but doesn't handle HALF_TIME -> END transitions
+      // We need to find stale matches (especially HALF_TIME) that should be END
+      const stales = await this.matchWatchdogService.findStaleLiveMatches(nowTs, 120, 900, 100);
 
       // CRITICAL FIX: Also find matches that should be live (match_time passed but status still NOT_STARTED)
       // This ensures matches transition from NOT_STARTED to LIVE when they actually start
