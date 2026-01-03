@@ -396,6 +396,43 @@ export const getMatchById = async (
       const minute = row.minute !== null && row.minute !== undefined ? Number(row.minute) : null;
       const minuteText = generateMinuteText(minute, validatedStatus);
 
+      // CRITICAL FIX: Extract final score from incidents if score columns are 0-0 but incidents have goals
+      // This fixes the issue where header shows 0-0 but Events tab shows correct score from incidents
+      let finalHomeScore = row.home_score ?? null;
+      let finalAwayScore = row.away_score ?? null;
+      
+      // If score is 0-0 or null, try to extract from incidents JSONB
+      if ((finalHomeScore === null || finalHomeScore === 0) && (finalAwayScore === null || finalAwayScore === 0)) {
+        try {
+          const incidentsQuery = await client.query(
+            'SELECT incidents FROM ts_matches WHERE external_id = $1',
+            [match_id]
+          );
+          
+          if (incidentsQuery.rows.length > 0 && incidentsQuery.rows[0].incidents) {
+            const incidents = incidentsQuery.rows[0].incidents;
+            if (Array.isArray(incidents) && incidents.length > 0) {
+              // Find the last incident with score information
+              for (let i = incidents.length - 1; i >= 0; i--) {
+                const incident = incidents[i];
+                if (incident && typeof incident === 'object' && 
+                    (incident.home_score !== undefined || incident.away_score !== undefined)) {
+                  finalHomeScore = incident.home_score ?? finalHomeScore;
+                  finalAwayScore = incident.away_score ?? finalAwayScore;
+                  logger.info(
+                    `[getMatchById] Extracted score from incidents for ${match_id}: ${finalHomeScore}-${finalAwayScore}`
+                  );
+                  break; // Use the last (most recent) incident with score
+                }
+              }
+            }
+          }
+        } catch (incidentsError: any) {
+          // If incidents extraction fails, use original score
+          logger.debug(`[getMatchById] Failed to extract score from incidents for ${match_id}: ${incidentsError.message}`);
+        }
+      }
+
       const match = {
         id: row.id,
         competition_id: row.competition_id,
@@ -405,8 +442,8 @@ export const getMatchById = async (
         status: validatedStatus,
         home_team_id: row.home_team_id,
         away_team_id: row.away_team_id,
-        home_score: (row.home_score ?? null),
-        away_score: (row.away_score ?? null),
+        home_score: finalHomeScore,
+        away_score: finalAwayScore,
         home_score_overtime: (row.home_score_overtime ?? null),
         away_score_overtime: (row.away_score_overtime ?? null),
         home_score_penalties: (row.home_score_penalties ?? null),
