@@ -835,6 +835,71 @@ export class AIPredictionService {
 
         return null;
     }
+
+    /**
+     * Update display_prediction text for a prediction
+     * This is the admin-editable text shown to users
+     */
+    async updateDisplayPrediction(predictionId: string, displayText: string): Promise<boolean> {
+        try {
+            const result = await pool.query(
+                `UPDATE ai_predictions 
+                 SET display_prediction = $1, updated_at = NOW() 
+                 WHERE id = $2
+                 RETURNING id`,
+                [displayText.trim() || null, predictionId]
+            );
+
+            if (result.rowCount && result.rowCount > 0) {
+                logger.info(`[AIPrediction] Updated display_prediction for ${predictionId}: "${displayText}"`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            logger.error('[AIPrediction] Failed to update display_prediction:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Bulk update display_prediction for multiple predictions
+     */
+    async bulkUpdateDisplayPrediction(updates: { id: string; displayText: string }[]): Promise<number> {
+        let updatedCount = 0;
+        for (const update of updates) {
+            const success = await this.updateDisplayPrediction(update.id, update.displayText);
+            if (success) updatedCount++;
+        }
+        return updatedCount;
+    }
+
+    /**
+     * Get predictions with display_prediction set (for user-facing components)
+     * Only returns predictions that have admin-defined display text
+     */
+    async getDisplayablePredictions(limit: number = 50): Promise<any[]> {
+        const query = `
+            SELECT 
+                p.id,
+                p.external_id,
+                p.bot_name,
+                p.display_prediction,
+                p.minute_at_prediction,
+                p.created_at,
+                pm.match_external_id,
+                pm.overall_confidence,
+                pm.prediction_result
+            FROM ai_predictions p
+            LEFT JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
+            WHERE p.display_prediction IS NOT NULL 
+              AND p.display_prediction != ''
+              AND pm.match_external_id IS NOT NULL
+            ORDER BY p.created_at DESC
+            LIMIT $1
+        `;
+        const result = await pool.query(query, [limit]);
+        return result.rows;
+    }
 }
 
 export const aiPredictionService = new AIPredictionService();

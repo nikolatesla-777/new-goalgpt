@@ -22,7 +22,6 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   const isFetchingRef = useRef(false);
   const fetchRef = useRef<() => Promise<void>>(async () => { });
   const debounceTimerRef = useRef<number | null>(null); // Debounce timer for WebSocket + polling coordination
-  const wsConnectedRef = useRef(false); // CRITICAL FIX: Track WebSocket connection state
 
   // CRITICAL FIX: Ensure matches is always an array (never null/undefined)
   const safeMatches = Array.isArray(matches) ? matches : [];
@@ -33,7 +32,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'MatchList.tsx:30', message: 'fetchMatches start', data: { view, currentCount: safeMatches.length }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
+    fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatchList.tsx:30',message:'fetchMatches start',data:{view,currentCount:safeMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
     // #endregion
     try {
       setError(null);
@@ -41,7 +40,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       // CRITICAL FIX: Silent Refresh
       // Use Ref instead of 'matches.length' to avoid stale closure flickering
       if (!hasLoadedRef.current) {
-        setLoading(true);
+      setLoading(true);
       }
 
       let response;
@@ -95,7 +94,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         const dateStr = date || getTodayInTurkey();
         response = await getMatchDiary(dateStr);
       }
-
+      
       // Check for error in response even if API call succeeded
       if (response && (response as any).err) {
         throw new Error((response as any).err);
@@ -127,7 +126,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
           // CRITICAL FIX: Only update matches if we have valid data
           // Don't clear matches on polling refresh if response is empty (preserve existing data)
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'MatchList.tsx:125', message: 'fetchMatches result', data: { view, rawCount: results.length, filteredCount: filteredResults.length, previousCount: safeMatches.length }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
+          fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatchList.tsx:125',message:'fetchMatches result',data:{view,rawCount:results.length,filteredCount:filteredResults.length,previousCount:safeMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
           // #endregion
           setMatches(filteredResults);
           setLastUpdate(new Date());
@@ -140,7 +139,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       } else {
         // Invalid response - keep existing matches, just log warning
         console.warn('[MatchList] Invalid response structure, keeping existing matches');
-        setLastUpdate(new Date());
+      setLastUpdate(new Date());
       }
     } catch (err: any) {
       console.error('Error fetching matches:', err);
@@ -170,7 +169,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       return [];
     }
 
-    // Debug logging removed for production performance
+    console.log('🔄 [MatchList] Grouping matches - total:', safeMatches.length, 'sortBy:', sortBy);
 
     // If sorting by time, don't group by competition
     if (sortBy === 'time') {
@@ -181,18 +180,18 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         const statusB = (b as any).status_id ?? (b as any).status ?? 0;
         const isLiveA = [2, 3, 4, 5, 7].includes(statusA);
         const isLiveB = [2, 3, 4, 5, 7].includes(statusB);
-
+        
         // For live matches, sort by minute (descending - highest minute first)
         if (isLiveA && isLiveB) {
           const minuteA = a.minute ?? 0;
           const minuteB = b.minute ?? 0;
           return minuteB - minuteA; // Descending: 80' before 73'
         }
-
+        
         // If only one is live, live matches come first
         if (isLiveA && !isLiveB) return -1;
         if (!isLiveA && isLiveB) return 1;
-
+        
         // For non-live matches, sort by match_time (ascending - earliest first)
         const timeA = a.match_time || 0;
         const timeB = b.match_time || 0;
@@ -232,7 +231,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         const statusB = (b as any).status_id ?? (b as any).status ?? 0;
         const isLiveA = [2, 3, 4, 5, 7].includes(statusA);
         const isLiveB = [2, 3, 4, 5, 7].includes(statusB);
-
+        
         // For live matches, sort by minute (descending - highest minute first)
         if (isLiveA && isLiveB) {
           const minuteA = a.minute ?? 0;
@@ -243,11 +242,11 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
           // CRITICAL: Secondary sort by ID for stability (same minute matches stay in same order)
           return a.id.localeCompare(b.id);
         }
-
+        
         // If only one is live, live matches come first
         if (isLiveA && !isLiveB) return -1;
         if (!isLiveA && isLiveB) return 1;
-
+        
         // For non-live matches, sort by match_time (ascending - earliest first)
         const timeA = a.match_time || 0;
         const timeB = b.match_time || 0;
@@ -266,7 +265,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       return nameA.localeCompare(nameB, 'tr');
     });
 
-    // Debug logging removed for production performance
+    console.log('✅ [MatchList] Grouped into', sorted.length, 'competitions');
     return sorted;
   }, [safeMatches, sortBy]);
 
@@ -283,32 +282,46 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       ws = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
 
       ws.onopen = () => {
-        wsConnectedRef.current = true; // CRITICAL FIX: Mark WS as connected
-        // Debug log removed for production performance
+        console.log('✅ WebSocket connected for real-time updates');
       };
 
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          console.log('📨 WebSocket event received:', message);
+
           // CRITICAL FIX: Listen to all critical events for real-time updates
+          // GOAL: Goal scored
+          // SCORE_CHANGE: Score updated (includes goal cancellations)
+          // MATCH_STATE_CHANGE: Status changed (NOT_STARTED → FIRST_HALF, HALF_TIME → SECOND_HALF, etc.)
           if (
             message.type === 'GOAL' ||
             message.type === 'SCORE_CHANGE' ||
             message.type === 'MATCH_STATE_CHANGE'
           ) {
+            console.log(
+              `⚡ Real-time update (${message.type}) for match ${message.matchId} - debounced refresh...`
+            );
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatchList.tsx:291',message:'WebSocket event received',data:{type:message.type,matchId:message.matchId,debounceActive:debounceTimerRef.current!==null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             // CRITICAL FIX: Debounce WebSocket events to prevent race condition with polling
+            // Clear existing debounce timer
             if (debounceTimerRef.current !== null) {
               window.clearTimeout(debounceTimerRef.current);
             }
-
+            
             // Set new debounce timer (500ms delay)
             debounceTimerRef.current = window.setTimeout(() => {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatchList.tsx:307',message:'WebSocket debounce trigger fetchMatches',data:{type:message.type,matchId:message.matchId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+              // #endregion
               fetchRef.current(); // Always call latest fetch
               debounceTimerRef.current = null;
             }, 500); // 500ms debounce to batch rapid WebSocket events
           }
         } catch (error) {
-          // Silent fail for parse errors
+          console.error('Failed to parse WebSocket message:', error);
         }
       };
 
@@ -317,7 +330,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       };
 
       ws.onclose = () => {
-        wsConnectedRef.current = false; // CRITICAL FIX: Mark WS as disconnected
+        console.log('WebSocket disconnected, will reconnect...');
         if (reconnectTimer) window.clearTimeout(reconnectTimer);
 
         // Reconnect after 5 seconds
@@ -339,26 +352,20 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   useEffect(() => {
     fetchMatches();
 
-    // CRITICAL FIX: Smart polling based on WebSocket connection state
-    // - WebSocket connected: Poll every 60 seconds (backup only)
-    // - WebSocket disconnected: Poll every 15 seconds (primary data source)
-    // - 502 error: Poll every 5 seconds (catch backend recovery)
-    const getPollInterval = () => {
-      if (error && (error.includes('502') || error.includes('503') || error.includes('504'))) {
-        return 5000; // Fast polling during backend issues
-      }
-      if (wsConnectedRef.current) {
-        return 60000; // Slow polling when WS is connected (backup only)
-      }
-      return 15000; // Normal polling when WS is disconnected
-    };
-
+    // CRITICAL FIX: Poll every 15 seconds for real-time score updates (increased from 10s to reduce race condition)
+    // If 502 error, retry more frequently (every 5 seconds) to catch backend when it comes back
+    // Normal polling: 15 seconds (reduced load on backend and less conflict with WebSocket)
+    // WebSocket handles most real-time updates, polling is fallback
+    const pollInterval = error && error.includes('502') ? 5000 : 15000;
     const interval = setInterval(() => {
-      // CRITICAL FIX: Skip polling if WebSocket debounce is active
+      // CRITICAL FIX: Check if WebSocket debounce is active, if so skip this polling cycle
+      // This prevents polling and WebSocket from conflicting
       if (debounceTimerRef.current === null) {
         fetchMatches();
+      } else {
+        console.log('[MatchList] Skipping polling cycle - WebSocket debounce active');
       }
-    }, getPollInterval());
+    }, pollInterval);
 
     return () => {
       clearInterval(interval);
@@ -368,7 +375,14 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   // ============================================
   // STEP 2: DEBUG LOGS (after hooks)
   // ============================================
-  // Debug logging removed for production performance
+  console.log('🎯 [MatchList] Render - View:', view, 'Date:', date, 'Matches count:', safeMatches.length);
+  console.log('🎯 [MatchList] First match sample:', safeMatches[0] ? {
+    id: safeMatches[0].id,
+    hasHomeTeam: !!safeMatches[0].home_team,
+    hasAwayTeam: !!safeMatches[0].away_team,
+    homeTeamName: safeMatches[0].home_team?.name,
+  } : 'No matches');
+  console.log('🎨 [MatchList] Rendering - matchesByCompetition:', matchesByCompetition.length);
 
   // ============================================
   // STEP 3: GUARD CLAUSES (early returns AFTER all hooks)
@@ -629,11 +643,11 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
               return null;
             }
             return (
-              <LeagueSection
-                key={compId || 'unknown'}
-                competition={competition}
-                matches={compMatches}
-              />
+          <LeagueSection
+            key={compId || 'unknown'}
+            competition={competition}
+            matches={compMatches}
+          />
             );
           })
         ) : (

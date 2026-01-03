@@ -418,5 +418,106 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         }
     });
 
+    /**
+     * PUT /api/predictions/:id/display
+     * Update display_prediction text for a prediction (admin only)
+     * This is what users will see in the TAHMİN column
+     */
+    fastify.put('/api/predictions/:id/display', async (request: FastifyRequest<{ Params: { id: string }; Body: { display_prediction: string } }>, reply: FastifyReply) => {
+        try {
+            const { id } = request.params;
+            const { display_prediction } = request.body;
+
+            if (!id) {
+                return reply.status(400).send({
+                    success: false,
+                    error: 'Prediction ID required'
+                });
+            }
+
+            const success = await aiPredictionService.updateDisplayPrediction(id, display_prediction || '');
+
+            if (success) {
+                return reply.status(200).send({
+                    success: true,
+                    message: 'Display prediction updated',
+                    prediction_id: id,
+                    display_prediction: display_prediction
+                });
+            } else {
+                return reply.status(404).send({
+                    success: false,
+                    error: 'Prediction not found'
+                });
+            }
+        } catch (error) {
+            logger.error('[Predictions] Update display error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
+     * PUT /api/predictions/bulk-display
+     * Bulk update display_prediction for multiple predictions
+     */
+    fastify.put('/api/predictions/bulk-display', async (request: FastifyRequest<{ Body: { updates: { id: string; display_prediction: string }[] } }>, reply: FastifyReply) => {
+        try {
+            const { updates } = request.body;
+
+            if (!Array.isArray(updates) || updates.length === 0) {
+                return reply.status(400).send({
+                    success: false,
+                    error: 'Updates array required'
+                });
+            }
+
+            const mappedUpdates = updates.map(u => ({
+                id: u.id,
+                displayText: u.display_prediction
+            }));
+
+            const updatedCount = await aiPredictionService.bulkUpdateDisplayPrediction(mappedUpdates);
+
+            return reply.status(200).send({
+                success: true,
+                updated_count: updatedCount,
+                message: `Updated ${updatedCount} predictions`
+            });
+        } catch (error) {
+            logger.error('[Predictions] Bulk display update error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
+     * GET /api/predictions/displayable
+     * Get predictions with display_prediction set (for user-facing components)
+     * Only returns predictions that have admin-defined display text
+     */
+    fastify.get('/api/predictions/displayable', async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+        try {
+            const limit = parseInt(request.query.limit || '50', 10);
+            const predictions = await aiPredictionService.getDisplayablePredictions(limit);
+
+            return reply.status(200).send({
+                success: true,
+                count: predictions.length,
+                predictions
+            });
+        } catch (error) {
+            logger.error('[Predictions] Get displayable error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
     logger.info('[Routes] AI Prediction routes registered');
 }

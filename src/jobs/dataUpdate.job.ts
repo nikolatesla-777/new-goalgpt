@@ -215,12 +215,18 @@ export class DataUpdateWorker {
               run_id: runId,
             });
 
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'dataUpdate.job.ts:218',message:'DataUpdateWorker reconcile start',data:{matchId:matchIdStr,updateTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
             const result = await this.matchDetailLiveService.reconcileMatchToDatabase(
               matchIdStr,
               updateTime !== null ? updateTime : null
             );
 
             const duration = Date.now() - t0;
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'dataUpdate.job.ts:224',message:'DataUpdateWorker reconcile done',data:{matchId:matchIdStr,updated:result.updated,rowCount:result.rowCount,statusId:result.statusId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
             logEvent('info', 'dataupdate.reconcile.done', {
               match_id: matchIdStr,
               duration_ms: duration,

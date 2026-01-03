@@ -17,6 +17,7 @@ interface Prediction {
     minute_at_prediction: number;
     prediction_type: string;
     prediction_value: string;
+    display_prediction?: string; // Admin-editable display text for users
     processed: boolean;
     created_at: string;
     // From joined match data
@@ -44,6 +45,9 @@ export function AdminPredictions() {
     const [filter, setFilter] = useState<FilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [stats, setStats] = useState<Stats | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editValue, setEditValue] = useState('');
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         fetchStats();
@@ -143,6 +147,41 @@ export function AdminPredictions() {
             day: '2-digit',
             month: '2-digit',
         });
+    };
+
+    const handleEditClick = (pred: Prediction) => {
+        setEditingId(pred.id);
+        setEditValue(pred.display_prediction || '');
+    };
+
+    const handleSaveDisplay = async (predId: string) => {
+        setSaving(true);
+        try {
+            const res = await fetch(`${API_BASE}/predictions/${predId}/display`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ display_prediction: editValue })
+            });
+            if (res.ok) {
+                // Update local state
+                setPredictions(prev => prev.map(p =>
+                    p.id === predId ? { ...p, display_prediction: editValue } : p
+                ));
+                setEditingId(null);
+            } else {
+                alert('Kayıt başarısız');
+            }
+        } catch (err) {
+            console.error('Save display error:', err);
+            alert('Kayıt hatası');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingId(null);
+        setEditValue('');
     };
 
     const getResultBadge = (prediction: Prediction) => {
@@ -330,9 +369,82 @@ export function AdminPredictions() {
                                         <td style={{ fontWeight: 600 }}>{pred.score_at_prediction}</td>
                                         <td>{pred.minute_at_prediction}'</td>
                                         <td>
-                                            <span style={{ color: 'var(--admin-accent)', fontWeight: 600 }}>
-                                                {pred.prediction_type} {pred.prediction_value}
-                                            </span>
+                                            {editingId === pred.id ? (
+                                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                                    <input
+                                                        type="text"
+                                                        value={editValue}
+                                                        onChange={(e) => setEditValue(e.target.value)}
+                                                        placeholder="Kullanıcıya gösterilecek metin..."
+                                                        style={{
+                                                            padding: '4px 8px',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid var(--admin-border)',
+                                                            fontSize: '13px',
+                                                            width: '180px'
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') handleSaveDisplay(pred.id);
+                                                            if (e.key === 'Escape') handleCancelEdit();
+                                                        }}
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        onClick={() => handleSaveDisplay(pred.id)}
+                                                        disabled={saving}
+                                                        style={{
+                                                            padding: '4px 8px',
+                                                            borderRadius: '4px',
+                                                            background: 'var(--admin-accent)',
+                                                            color: 'white',
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            fontSize: '12px'
+                                                        }}
+                                                    >
+                                                        {saving ? '...' : '✓'}
+                                                    </button>
+                                                    <button
+                                                        onClick={handleCancelEdit}
+                                                        style={{
+                                                            padding: '4px 8px',
+                                                            borderRadius: '4px',
+                                                            background: 'var(--admin-bg-tertiary)',
+                                                            color: 'var(--admin-text-secondary)',
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            fontSize: '12px'
+                                                        }}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    onClick={() => handleEditClick(pred)}
+                                                    style={{
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px'
+                                                    }}
+                                                    title="Düzenlemek için tıklayın"
+                                                >
+                                                    {pred.display_prediction ? (
+                                                        <span style={{ color: 'var(--admin-accent)', fontWeight: 600 }}>
+                                                            {pred.display_prediction}
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{ color: 'var(--admin-text-muted)', fontStyle: 'italic' }}>
+                                                            (Girilmedi)
+                                                        </span>
+                                                    )}
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5 }}>
+                                                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                                                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                                    </svg>
+                                                </div>
+                                            )}
                                         </td>
                                         <td>
                                             {pred.overall_confidence

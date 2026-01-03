@@ -1041,6 +1041,13 @@ export class MatchDetailLiveService {
 
       const affected = res.rowCount ?? 0;
 
+      // #region agent log
+      const statusUpdated = setParts.some(p => p.includes('status_id'));
+      if (statusUpdated && affected > 0) {
+        fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDetailLive.service.ts:1040',message:'reconcileMatchToDatabase status update done',data:{match_id,oldStatus:existingStatusId,newStatus:live.statusId,rowCount:affected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      }
+      // #endregion
+
       if (affected === 0) {
         logger.warn(
           `⚠️ [DetailLive] UPDATE affected 0 rows: matchId=${match_id}, ` +
