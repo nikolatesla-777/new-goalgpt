@@ -554,5 +554,61 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         }
     });
 
+    /**
+     * GET /api/predictions/manual
+     * List manual predictions
+     */
+    fastify.get('/api/predictions/manual', async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+        try {
+            const limit = parseInt(request.query.limit || '100', 10);
+            const predictions = await aiPredictionService.getManualPredictions(limit);
+
+            return reply.status(200).send({
+                success: true,
+                predictions
+            });
+        } catch (error) {
+            logger.error('[Predictions] Get manual predictions error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
+     * POST /api/predictions/manual
+     * Create a new manual prediction
+     */
+    interface ManualPredictionBody {
+        match_external_id: string;
+        home_team: string;
+        away_team: string;
+        league: string;
+        score: string;
+        minute: number;
+        prediction_type: string;
+        prediction_value: string;
+        access_type: 'VIP' | 'FREE';
+        bot_name: string;
+    }
+
+    fastify.post('/api/predictions/manual', async (request: FastifyRequest<{ Body: ManualPredictionBody }>, reply: FastifyReply) => {
+        try {
+            const result = await aiPredictionService.createManualPrediction(request.body);
+            if (result) {
+                return reply.status(200).send({ success: true, message: 'Prediction created' });
+            } else {
+                return reply.status(500).send({ success: false, error: 'Failed to create prediction' });
+            }
+        } catch (error) {
+            logger.error('[Predictions] Create manual prediction error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
     logger.info('[Routes] AI Prediction routes registered');
 }

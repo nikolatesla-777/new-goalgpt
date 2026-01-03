@@ -1277,6 +1277,98 @@ export class AIPredictionService {
             client.release();
         }
     }
+    async getManualPredictions(limit = 100): Promise<any[]> {
+        const query = `
+            SELECT 
+                p.id,
+                p.external_id,
+                p.bot_name,
+                p.league_name,
+                p.home_team_name,
+                p.away_team_name,
+                p.score_at_prediction,
+                p.minute_at_prediction,
+                p.prediction_type,
+                p.prediction_value,
+                p.processed,
+                p.created_at,
+                p.access_type,
+                pm.overall_confidence,
+                pm.prediction_result,
+                pm.match_external_id
+            FROM ai_predictions p
+            LEFT JOIN ai_prediction_matches pm ON p.id = pm.prediction_id
+            WHERE p.bot_name = 'Manual'
+            ORDER BY p.created_at DESC
+            LIMIT $1
+        `;
+        const res = await pool.query(query, [limit]);
+        return res.rows;
+    }
+
+    async createManualPrediction(data: {
+        match_external_id: string;
+        home_team: string;
+        away_team: string;
+        league: string;
+        score: string;
+        minute: number;
+        prediction_type: string;
+        prediction_value: string;
+        access_type: 'VIP' | 'FREE';
+        bot_name: string;
+    }): Promise<boolean> {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const predictionId = crypto.randomUUID();
+            const externalId = `manual_${Date.now()}`;
+
+            // 1. Insert into ai_predictions
+            await client.query(`
+                INSERT INTO ai_predictions (
+                    id, external_id, bot_name, league_name, 
+                    home_team_name, away_team_name, score_at_prediction, 
+                    minute_at_prediction, prediction_type, prediction_value, 
+                    processed, created_at, access_type
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12)
+            `, [
+                predictionId,
+                externalId,
+                data.bot_name || 'Manual',
+                data.league,
+                data.home_team,
+                data.away_team,
+                data.score,
+                data.minute,
+                data.prediction_type,
+                data.prediction_value,
+                true, // Processed = true because we manually link it
+                data.access_type
+            ]);
+
+            // 2. Insert into ai_prediction_matches (Explicit Link)
+            await client.query(`
+                INSERT INTO ai_prediction_matches (
+                    prediction_id, match_external_id, match_status, 
+                    overall_confidence, created_at
+                ) VALUES ($1, $2, 'matched', 1.0, NOW())
+            `, [
+                predictionId,
+                data.match_external_id
+            ]);
+
+            await client.query('COMMIT');
+            return true;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            logger.error('[AIPredictions] Create Manual Prediction Error:', error);
+            return false;
+        } finally {
+            client.release();
+        }
+    }
 }
 
 export const aiPredictionService = new AIPredictionService();

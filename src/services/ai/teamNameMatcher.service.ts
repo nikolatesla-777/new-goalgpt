@@ -38,6 +38,10 @@ export class TeamNameMatcherService {
 
         return name
             .toLowerCase()
+            // Remove reserve/youth/women suffixes FIRST (before other processing)
+            .replace(/\s*\((w|women|reserve|reserves|youth|u\d+|u19|u21|u23|u17)\)/gi, '')
+            .replace(/\s+(w|women|reserve|reserves|youth|u\d+|u19|u21|u23|u17)\s*$/gi, '')
+            // Remove common suffixes
             .replace(/\s?(fc|sc|cf|afc|bc|ac|fk|sk|as|ss|us|bk|if|ssk|spor|kulübü|club|team|united|city)\.?$/gi, '')
             .replace(/[^\w\s]/g, '') // Remove punctuation
             .replace(/\s+/g, ' ')    // Normalize whitespace
@@ -78,11 +82,100 @@ export class TeamNameMatcherService {
 
     /**
      * Calculate similarity score (0-1) between two strings
+     * OPTIMIZED: For multi-word team names, use word-based matching
      */
     calculateSimilarity(str1: string, str2: string): number {
         if (!str1 || !str2) return 0;
         if (str1 === str2) return 1;
 
+        // For multi-word names, use word-based similarity (more accurate)
+        const words1 = str1.split(/\s+/).filter(w => w.length > 0);
+        const words2 = str2.split(/\s+/).filter(w => w.length > 0);
+        
+        // If both have 2+ words, use word-based matching
+        if (words1.length >= 2 && words2.length >= 2) {
+            return this.calculateWordBasedSimilarity(words1, words2, str1, str2);
+        }
+
+        // For single-word or mixed, use standard Levenshtein
+        const maxLen = Math.max(str1.length, str2.length);
+        if (maxLen === 0) return 1;
+
+        const distance = this.levenshteinDistance(str1, str2);
+        return 1 - (distance / maxLen);
+    }
+
+    /**
+     * Calculate similarity for multi-word team names
+     * Example: "Al Ittihad Jeddah" vs "Al Ittihad Club"
+     * - "Al" matches "Al" → 100%
+     * - "Ittihad" matches "Ittihad" → 100%
+     * - "Jeddah" vs "Club" → lower similarity
+     * - Weighted average with bonus for matching words
+     */
+    calculateWordBasedSimilarity(
+        words1: string[],
+        words2: string[],
+        fullStr1: string,
+        fullStr2: string
+    ): number {
+        // Find matching words (exact or high similarity)
+        let totalSimilarity = 0;
+        let matchedWords = 0;
+        const wordSimilarities: number[] = [];
+
+        for (const word1 of words1) {
+            let bestMatch = 0;
+            for (const word2 of words2) {
+                // Check exact match first
+                if (word1 === word2) {
+                    bestMatch = 1.0;
+                    break;
+                }
+                // Check similarity
+                const wordSim = this.calculateWordSimilarity(word1, word2);
+                if (wordSim > bestMatch) {
+                    bestMatch = wordSim;
+                }
+            }
+            wordSimilarities.push(bestMatch);
+            totalSimilarity += bestMatch;
+            if (bestMatch >= 0.8) matchedWords++;
+        }
+
+        // Calculate base similarity (average of word similarities)
+        const baseSimilarity = totalSimilarity / words1.length;
+
+        // Bonus for matching words (if most words match, boost similarity)
+        const matchRatio = matchedWords / words1.length;
+        const bonus = matchRatio * 0.15; // Up to 15% bonus
+
+        // Also consider full string similarity (for cases like "Jeddah" vs "Club")
+        const fullStrSim = this.calculateFullStringSimilarity(fullStr1, fullStr2);
+
+        // Weighted combination: 60% word-based, 40% full string, plus bonus
+        const finalSimilarity = (baseSimilarity * 0.6) + (fullStrSim * 0.4) + bonus;
+
+        return Math.min(1.0, finalSimilarity);
+    }
+
+    /**
+     * Calculate similarity between two words
+     */
+    calculateWordSimilarity(word1: string, word2: string): number {
+        if (word1 === word2) return 1.0;
+        
+        const maxLen = Math.max(word1.length, word2.length);
+        if (maxLen === 0) return 1.0;
+
+        const distance = this.levenshteinDistance(word1, word2);
+        return 1 - (distance / maxLen);
+    }
+
+    /**
+     * Calculate full string similarity (standard Levenshtein)
+     */
+    calculateFullStringSimilarity(str1: string, str2: string): number {
         const maxLen = Math.max(str1.length, str2.length);
         if (maxLen === 0) return 1;
 
@@ -140,57 +233,148 @@ export class TeamNameMatcherService {
                 };
             }
 
-            // Try normalized match
-            const normalizedQuery = `
-        SELECT external_id, name, short_name 
-        FROM ts_teams 
-        WHERE LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9\\s]', '', 'g')) ILIKE $1
-        LIMIT 1
-      `;
-            const normalizedResult = await client.query(normalizedQuery, [`%${normalizedSearch}%`]);
+            // Try normalized match - IMPROVED: Use word-based search for better matching
+            // For multi-word names, search for teams that contain the key words
+            const words = normalizedSearch.split(/\s+/).filter(w => w.length > 1); // Filter single chars
+            
+            let normalizedQuery = '';
+            let normalizedParams: string[] = [];
+            
+            if (words.length >= 2) {
+                // Multi-word: Search for teams that contain at least 2 key words
+                // Example: "al ittihad jeddah" → search for teams with ("al" AND "ittihad") OR ("ittihad" AND "jeddah")
+                // This allows "Al Ittihad Club" to match (has "al" and "ittihad")
+                const firstTwoWords = words.slice(0, 2);
+                const wordConditions = firstTwoWords.map((_, i) => 
+                    `LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9\\s]', '', 'g')) ILIKE $${i + 1}`
+                ).join(' AND ');
+                
+                normalizedQuery = `
+                    SELECT external_id, name, short_name 
+                    FROM ts_teams 
+                    WHERE ${wordConditions}
+                    ORDER BY 
+                        CASE WHEN LOWER(name) LIKE $${firstTwoWords.length + 1} THEN 0 ELSE 1 END,
+                        LENGTH(name)
+                    LIMIT 20
+                `;
+                normalizedParams = [
+                    ...firstTwoWords.map(w => `%${w}%`),
+                    `%${normalizedSearch}%` // Full match bonus
+                ];
+            } else {
+                // Single word: Use simple ILIKE
+                normalizedQuery = `
+                    SELECT external_id, name, short_name 
+                    FROM ts_teams 
+                    WHERE LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9\\s]', '', 'g')) ILIKE $1
+                    LIMIT 20
+                `;
+                normalizedParams = [`%${normalizedSearch}%`];
+            }
+            
+            const normalizedResult = await client.query(normalizedQuery, normalizedParams);
 
             if (normalizedResult.rows.length > 0) {
-                const team = normalizedResult.rows[0];
-                const similarity = this.calculateSimilarity(
-                    normalizedSearch,
-                    this.normalizeTeamName(team.name)
-                );
-                return {
-                    teamId: team.external_id,
-                    teamName: team.name,
-                    shortName: team.short_name,
-                    confidence: Math.max(0.8, similarity),
-                    matchMethod: 'normalized'
-                };
+                // Score ALL candidates using word-based similarity and pick the best
+                let bestTeam = null;
+                let bestScore = 0;
+                
+                for (const team of normalizedResult.rows) {
+                    const teamNormalized = this.normalizeTeamName(team.name);
+                    let similarity = this.calculateSimilarity(normalizedSearch, teamNormalized);
+                    
+                    // BONUS: If search name has location word (e.g., "Jeddah") and team name doesn't have it,
+                    // but team name has other location (e.g., "Club"), give bonus for main team
+                    // Example: "Al Ittihad Jeddah" vs "Al Ittihad Club" → prefer "Club" if it's the main team
+                    const searchWords = normalizedSearch.split(/\s+/);
+                    const teamWords = teamNormalized.split(/\s+/);
+                    
+                    // Check if search has location word that team doesn't have
+                    const searchHasLocation = searchWords.some(w => 
+                        w.length > 3 && !['al', 'the', 'fc', 'sc', 'cf'].includes(w)
+                    );
+                    const teamHasLocation = teamWords.some(w => 
+                        w.length > 3 && !['al', 'the', 'fc', 'sc', 'cf'].includes(w)
+                    );
+                    
+                    // If both have location words but different, prefer team without reserve suffix
+                    const teamNameLower = team.name.toLowerCase();
+                    const hasReserve = /reserve|youth|u\d+|u19|u21|u23|u17|women|\(w\)|w\)/i.test(teamNameLower);
+                    
+                    if (searchHasLocation && teamHasLocation && !hasReserve && similarity >= 0.75) {
+                        // Small bonus for main teams when location differs
+                        similarity = Math.min(1.0, similarity * 1.05);
+                    }
+                    
+                    // PENALTY: Reduce similarity for reserve/youth/women teams
+                    if (hasReserve && similarity < 0.95) {
+                        // Penalty: Reduce similarity by 15% for reserve/youth teams
+                        similarity = similarity * 0.85;
+                    }
+                    
+                    if (similarity > bestScore) {
+                        bestScore = similarity;
+                        bestTeam = team;
+                    }
+                }
+                
+                // Only return if similarity >= 60% (threshold)
+                if (bestTeam && bestScore >= 0.6) {
+                    return {
+                        teamId: bestTeam.external_id,
+                        teamName: bestTeam.name,
+                        shortName: bestTeam.short_name,
+                        confidence: bestScore,
+                        matchMethod: 'normalized'
+                    };
+                }
             }
 
-            // Fuzzy search - get potential candidates and score them
+            // OPTIMIZED: Full name similarity search - check ALL teams with full name comparison
+            // This ensures we find matches like "Muembe" vs "Mwembe" (94.74% similarity)
             const fuzzyQuery = `
         SELECT external_id, name, short_name 
         FROM ts_teams 
-        WHERE name ILIKE $1 OR short_name ILIKE $1
+        WHERE 
+          -- Try multiple prefix patterns for better coverage
+          name ILIKE $1 OR name ILIKE $2 OR name ILIKE $3
+          OR short_name ILIKE $1 OR short_name ILIKE $2 OR short_name ILIKE $3
         ORDER BY 
-          CASE WHEN LOWER(name) LIKE $2 THEN 0 ELSE 1 END,
+          CASE 
+            WHEN LOWER(name) LIKE $4 THEN 0 
+            WHEN LOWER(name) LIKE $5 THEN 1
+            ELSE 2 
+          END,
           LENGTH(name)
-        LIMIT 20
+        LIMIT 50
       `;
+            
+            // Generate multiple prefix patterns for better matching
+            const prefix2 = searchName.substring(0, 2); // First 2 chars
+            const prefix3 = searchName.substring(0, 3); // First 3 chars
+            const prefix4 = searchName.substring(0, 4); // First 4 chars
+            
             const fuzzyResult = await client.query(fuzzyQuery, [
-                `%${searchName.substring(0, 4)}%`,
-                `%${normalizedSearch}%`
+                `%${prefix2}%`,  // Pattern 1: First 2 chars
+                `%${prefix3}%`,  // Pattern 2: First 3 chars
+                `%${prefix4}%`,  // Pattern 3: First 4 chars
+                `%${normalizedSearch}%`,  // Full normalized name
+                `%${normalizedSearch.substring(0, Math.min(10, normalizedSearch.length))}%`  // First 10 chars
             ]);
 
             if (fuzzyResult.rows.length === 0) {
-                // Broader search if no results
+                // Broader search if no results - check all teams
                 const broadQuery = `
           SELECT external_id, name, short_name 
           FROM ts_teams 
-          LIMIT 500
+          LIMIT 1000
         `;
                 const broadResult = await client.query(broadQuery);
                 fuzzyResult.rows.push(...broadResult.rows);
             }
 
-            // Score all candidates
+            // Score all candidates using FULL NAME similarity
             let bestMatch: TeamMatchResult | null = null;
             let bestScore = 0;
 
@@ -198,7 +382,7 @@ export class TeamNameMatcherService {
                 const teamNormalized = this.normalizeTeamName(team.name);
                 const shortNormalized = team.short_name ? this.normalizeTeamName(team.short_name) : '';
 
-                // Calculate similarity scores
+                // CRITICAL: Calculate similarity on FULL normalized names
                 const nameSimilarity = this.calculateSimilarity(normalizedSearch, teamNormalized);
                 const shortSimilarity = shortNormalized ? this.calculateSimilarity(normalizedSearch, shortNormalized) : 0;
                 const partialScore = Math.max(
@@ -206,6 +390,7 @@ export class TeamNameMatcherService {
                     shortNormalized ? this.partialMatch(normalizedSearch, shortNormalized) : 0
                 );
 
+                // Use the best similarity score
                 const score = Math.max(nameSimilarity, shortSimilarity, partialScore * 0.9);
 
                 if (score > bestScore) {
@@ -278,16 +463,18 @@ export class TeamNameMatcherService {
         minuteHint?: number,
         scoreHint?: string
     ): Promise<MatchLookupResult | null> {
-        // Try to match both teams using alias + fuzzy
-        const [homeMatch, awayMatch] = await Promise.all([
-            this.findTeamByAlias(homeTeamName),
-            this.findTeamByAlias(awayTeamName)
-        ]);
-
+        // OPTIMIZED: Try to match teams sequentially (faster - stop at first match)
+        // First try home team, if matched, find match immediately
+        let homeMatch = await this.findTeamByAlias(homeTeamName);
+        
         const client = await pool.connect();
         try {
-            // Strategy 1: Both teams matched - search with both
-            if (homeMatch && awayMatch) {
+            // OPTIMIZED STRATEGY: Single team match is faster - use first matched team
+            // If home team matches, find its match immediately (no need to check away team)
+            if (homeMatch && homeMatch.confidence >= 0.6) {
+                logger.info(`[TeamMatcher] Home team matched (${homeMatch.confidence * 100}%): "${homeTeamName}" → "${homeMatch.teamName}"`);
+                
+                // Find LIVE match where this team is playing
                 const matchQuery = `
                     SELECT 
                         m.id as match_uuid,
@@ -295,59 +482,11 @@ export class TeamNameMatcherService {
                         m.home_team_id,
                         m.away_team_id,
                         m.match_time,
-                        m.status_id
-                    FROM ts_matches m
-                    WHERE 
-                        m.home_team_id = $1 AND m.away_team_id = $2
-                        AND m.status_id IN (2, 3, 4, 5, 7) -- Only LIVE matches
-                    ORDER BY 
-                        CASE WHEN m.status_id IN (2, 3, 4) THEN 0 ELSE 1 END, -- Prioritize active play
-                        m.match_time DESC
-                    LIMIT 1
-                `;
-
-                let matchResult = await client.query(matchQuery, [homeMatch.teamId, awayMatch.teamId]);
-
-                // Try reverse if not found
-                if (matchResult.rows.length === 0) {
-                    matchResult = await client.query(matchQuery, [awayMatch.teamId, homeMatch.teamId]);
-                }
-
-                if (matchResult.rows.length > 0) {
-                    const m = matchResult.rows[0];
-                    return {
-                        matchExternalId: m.external_id,
-                        matchUuid: m.match_uuid,
-                        homeTeam: homeMatch,
-                        awayTeam: awayMatch,
-                        overallConfidence: (homeMatch.confidence + awayMatch.confidence) / 2,
-                        matchTime: m.match_time,
-                        statusId: m.status_id
-                    };
-                }
-            }
-
-            // Strategy 2: SINGLE TEAM MATCH - search with just one team
-            const singleTeamMatch = homeMatch || awayMatch;
-            const matchedTeamName = homeMatch ? homeTeamName : awayTeamName;
-            const unmatchedTeamName = homeMatch ? awayTeamName : homeTeamName;
-
-            if (singleTeamMatch) {
-                logger.info(`[TeamMatcher] Trying single-team match with: "${matchedTeamName}"`);
-
-                // Find any LIVE match where this team is playing (home or away)
-                const singleQuery = `
-                    SELECT 
-                        m.id as match_uuid,
-                        m.external_id,
-                        m.home_team_id,
-                        m.away_team_id,
+                        m.status_id,
                         th.name as home_team_name,
                         ta.name as away_team_name,
                         th.short_name as home_short_name,
-                        ta.short_name as away_short_name,
-                        m.match_time,
-                        m.status_id
+                        ta.short_name as away_short_name
                     FROM ts_matches m
                     JOIN ts_teams th ON th.external_id = m.home_team_id
                     JOIN ts_teams ta ON ta.external_id = m.away_team_id
@@ -360,108 +499,242 @@ export class TeamNameMatcherService {
                     LIMIT 5
                 `;
 
-                const singleResult = await client.query(singleQuery, [singleTeamMatch.teamId]);
+                const matchResult = await client.query(matchQuery, [homeMatch.teamId]);
 
-                if (singleResult.rows.length > 0) {
-                    // If only one match found, use it directly
-                    if (singleResult.rows.length === 1) {
-                        const m = singleResult.rows[0];
-                        const isHome = m.home_team_id === singleTeamMatch.teamId;
-
-                        logger.info(`[TeamMatcher] Single-team match found: ${m.home_team_name} vs ${m.away_team_name}`);
+                if (matchResult.rows.length > 0) {
+                    // If only one match, use it directly
+                    if (matchResult.rows.length === 1) {
+                        const m = matchResult.rows[0];
+                        const isHome = m.home_team_id === homeMatch.teamId;
+                        
+                        // Check if away team name matches (for confidence calculation)
+                        const awayTeamMatch = await this.findTeamByAlias(awayTeamName);
+                        const awayConfidence = awayTeamMatch ? awayTeamMatch.confidence : 0.5;
+                        
+                        logger.info(`[TeamMatcher] Match found via home team: ${m.home_team_name} vs ${m.away_team_name}`);
 
                         return {
                             matchExternalId: m.external_id,
                             matchUuid: m.match_uuid,
-                            homeTeam: isHome ? singleTeamMatch : {
+                            homeTeam: isHome ? homeMatch : {
+                                teamId: m.home_team_id,
+                                teamName: m.home_team_name,
+                                shortName: m.home_short_name,
+                                confidence: awayConfidence,
+                                matchMethod: 'partial'
+                            },
+                            awayTeam: !isHome ? homeMatch : {
+                                teamId: m.away_team_id,
+                                teamName: m.away_team_name,
+                                shortName: m.away_short_name,
+                                confidence: awayConfidence,
+                                matchMethod: 'partial'
+                            },
+                            overallConfidence: (homeMatch.confidence + awayConfidence) / 2,
+                            matchTime: m.match_time,
+                            statusId: m.status_id
+                        };
+                    }
+
+                    // Multiple matches - check away team name similarity
+                    for (const m of matchResult.rows) {
+                        const isHome = m.home_team_id === homeMatch.teamId;
+                        const opponentName = isHome ? m.away_team_name : m.home_team_name;
+                        
+                        // Check if away team name matches opponent
+                        const similarity = this.calculateSimilarity(
+                            this.normalizeTeamName(awayTeamName),
+                            this.normalizeTeamName(opponentName)
+                        );
+                        
+                        if (similarity >= 0.6) {
+                            logger.info(`[TeamMatcher] Match found with away team similarity (${similarity * 100}%): ${m.home_team_name} vs ${m.away_team_name}`);
+                            
+                            return {
+                                matchExternalId: m.external_id,
+                                matchUuid: m.match_uuid,
+                                homeTeam: isHome ? homeMatch : {
+                                    teamId: m.home_team_id,
+                                    teamName: m.home_team_name,
+                                    shortName: m.home_short_name,
+                                    confidence: similarity,
+                                    matchMethod: 'fuzzy'
+                                },
+                                awayTeam: !isHome ? homeMatch : {
+                                    teamId: m.away_team_id,
+                                    teamName: m.away_team_name,
+                                    shortName: m.away_short_name,
+                                    confidence: similarity,
+                                    matchMethod: 'fuzzy'
+                                },
+                                overallConfidence: (homeMatch.confidence + similarity) / 2,
+                                matchTime: m.match_time,
+                                statusId: m.status_id
+                            };
+                        }
+                    }
+                    
+                    // No away team match, use first match anyway
+                    const m = matchResult.rows[0];
+                    const isHome = m.home_team_id === homeMatch.teamId;
+                    
+                    logger.info(`[TeamMatcher] Using first match (away team not matched): ${m.home_team_name} vs ${m.away_team_name}`);
+                    
+                    return {
+                        matchExternalId: m.external_id,
+                        matchUuid: m.match_uuid,
+                        homeTeam: isHome ? homeMatch : {
+                            teamId: m.home_team_id,
+                            teamName: m.home_team_name,
+                            shortName: m.home_short_name,
+                            confidence: 0.5,
+                            matchMethod: 'partial'
+                        },
+                        awayTeam: !isHome ? homeMatch : {
+                            teamId: m.away_team_id,
+                            teamName: m.away_team_name,
+                            shortName: m.away_short_name,
+                            confidence: 0.5,
+                            matchMethod: 'partial'
+                        },
+                        overallConfidence: homeMatch.confidence * 0.8,
+                        matchTime: m.match_time,
+                        statusId: m.status_id
+                    };
+                }
+            }
+
+            // If home team didn't match, try away team
+            const awayMatch = await this.findTeamByAlias(awayTeamName);
+            
+            if (awayMatch && awayMatch.confidence >= 0.6) {
+                logger.info(`[TeamMatcher] Away team matched (${awayMatch.confidence * 100}%): "${awayTeamName}" → "${awayMatch.teamName}"`);
+
+                // Find LIVE match where this team is playing
+                const matchQuery = `
+                    SELECT 
+                        m.id as match_uuid,
+                        m.external_id,
+                        m.home_team_id,
+                        m.away_team_id,
+                        m.match_time,
+                        m.status_id,
+                        th.name as home_team_name,
+                        ta.name as away_team_name,
+                        th.short_name as home_short_name,
+                        ta.short_name as away_short_name
+                    FROM ts_matches m
+                    JOIN ts_teams th ON th.external_id = m.home_team_id
+                    JOIN ts_teams ta ON ta.external_id = m.away_team_id
+                    WHERE 
+                        (m.home_team_id = $1 OR m.away_team_id = $1)
+                        AND m.status_id IN (2, 3, 4, 5, 7) -- Only LIVE matches
+                    ORDER BY 
+                        CASE WHEN m.status_id IN (2, 3, 4) THEN 0 ELSE 1 END,
+                        m.match_time DESC
+                    LIMIT 5
+                `;
+
+                const matchResult = await client.query(matchQuery, [awayMatch.teamId]);
+
+                if (matchResult.rows.length > 0) {
+                    // If only one match, use it directly
+                    if (matchResult.rows.length === 1) {
+                        const m = matchResult.rows[0];
+                        const isAway = m.away_team_id === awayMatch.teamId;
+                        
+                        logger.info(`[TeamMatcher] Match found via away team: ${m.home_team_name} vs ${m.away_team_name}`);
+
+                        return {
+                            matchExternalId: m.external_id,
+                            matchUuid: m.match_uuid,
+                            homeTeam: isAway ? {
                                 teamId: m.home_team_id,
                                 teamName: m.home_team_name,
                                 shortName: m.home_short_name,
                                 confidence: 0.5,
                                 matchMethod: 'partial'
-                            },
-                            awayTeam: !isHome ? singleTeamMatch : {
+                            } : awayMatch,
+                            awayTeam: isAway ? awayMatch : {
                                 teamId: m.away_team_id,
                                 teamName: m.away_team_name,
                                 shortName: m.away_short_name,
                                 confidence: 0.5,
                                 matchMethod: 'partial'
                             },
-                            overallConfidence: singleTeamMatch.confidence * 0.8, // Slightly lower confidence for single-team
+                            overallConfidence: awayMatch.confidence * 0.8,
                             matchTime: m.match_time,
                             statusId: m.status_id
                         };
                     }
 
-                    // Multiple matches found - try to find one where opponent name partially matches
-                    for (const m of singleResult.rows) {
-                        const isHome = m.home_team_id === singleTeamMatch.teamId;
-                        const opponentName = isHome ? m.away_team_name : m.home_team_name;
-                        const opponentShort = isHome ? m.away_short_name : m.home_short_name;
-
-                        // Check if unmatched team name has any similarity to opponent
-                        const similarity = Math.max(
-                            this.calculateSimilarity(this.normalizeTeamName(unmatchedTeamName), this.normalizeTeamName(opponentName)),
-                            opponentShort ? this.calculateSimilarity(this.normalizeTeamName(unmatchedTeamName), this.normalizeTeamName(opponentShort)) : 0,
-                            this.partialMatch(unmatchedTeamName, opponentName)
+                    // Multiple matches - check home team name similarity
+                    for (const m of matchResult.rows) {
+                        const isAway = m.away_team_id === awayMatch.teamId;
+                        const opponentName = isAway ? m.home_team_name : m.away_team_name;
+                        
+                        const similarity = this.calculateSimilarity(
+                            this.normalizeTeamName(homeTeamName),
+                            this.normalizeTeamName(opponentName)
                         );
-
-                        if (similarity > 0.3) { // Even low similarity is acceptable for the unmatched team
-                            logger.info(`[TeamMatcher] Found match via single-team + partial opponent: ${m.home_team_name} vs ${m.away_team_name}`);
-
+                        
+                        if (similarity >= 0.6) {
+                            logger.info(`[TeamMatcher] Match found with home team similarity (${similarity * 100}%): ${m.home_team_name} vs ${m.away_team_name}`);
+                            
                             return {
                                 matchExternalId: m.external_id,
                                 matchUuid: m.match_uuid,
-                                homeTeam: isHome ? singleTeamMatch : {
+                                homeTeam: isAway ? {
                                     teamId: m.home_team_id,
                                     teamName: m.home_team_name,
                                     shortName: m.home_short_name,
                                     confidence: similarity,
-                                    matchMethod: 'partial'
-                                },
-                                awayTeam: !isHome ? singleTeamMatch : {
+                                    matchMethod: 'fuzzy'
+                                } : awayMatch,
+                                awayTeam: isAway ? awayMatch : {
                                     teamId: m.away_team_id,
                                     teamName: m.away_team_name,
                                     shortName: m.away_short_name,
                                     confidence: similarity,
-                                    matchMethod: 'partial'
+                                    matchMethod: 'fuzzy'
                                 },
-                                overallConfidence: (singleTeamMatch.confidence + similarity) / 2,
+                                overallConfidence: (awayMatch.confidence + similarity) / 2,
                                 matchTime: m.match_time,
                                 statusId: m.status_id
                             };
                         }
                     }
-
-                    // If no partial match found, return first match anyway (single team was matched)
-                    const m = singleResult.rows[0];
-                    const isHome = m.home_team_id === singleTeamMatch.teamId;
-
-                    logger.info(`[TeamMatcher] Using first single-team match: ${m.home_team_name} vs ${m.away_team_name}`);
-
+                    
+                    // No home team match, use first match anyway
+                    const m = matchResult.rows[0];
+                    const isAway = m.away_team_id === awayMatch.teamId;
+                    
+                    logger.info(`[TeamMatcher] Using first match (home team not matched): ${m.home_team_name} vs ${m.away_team_name}`);
+                    
                     return {
                         matchExternalId: m.external_id,
                         matchUuid: m.match_uuid,
-                        homeTeam: isHome ? singleTeamMatch : {
+                        homeTeam: isAway ? {
                             teamId: m.home_team_id,
                             teamName: m.home_team_name,
                             shortName: m.home_short_name,
-                            confidence: 0.4,
+                            confidence: 0.5,
                             matchMethod: 'partial'
-                        },
-                        awayTeam: !isHome ? singleTeamMatch : {
+                        } : awayMatch,
+                        awayTeam: isAway ? awayMatch : {
                             teamId: m.away_team_id,
                             teamName: m.away_team_name,
                             shortName: m.away_short_name,
-                            confidence: 0.4,
+                            confidence: 0.5,
                             matchMethod: 'partial'
                         },
-                        overallConfidence: singleTeamMatch.confidence * 0.7,
+                        overallConfidence: awayMatch.confidence * 0.8,
                         matchTime: m.match_time,
                         statusId: m.status_id
                     };
                 }
             }
+
 
             logger.warn(`[TeamMatcher] No match found for: "${homeTeamName}" vs "${awayTeamName}"`);
             return null;

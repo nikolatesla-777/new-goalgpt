@@ -13,7 +13,8 @@ import {
   AdminLogs,
   AdminBots,
   AdminBotDetail,
-  AdminLivescore
+  AdminLivescore,
+  AdminManualPredictions
 } from './components/admin';
 import { AIPredictionsProvider } from './context/AIPredictionsContext';
 
@@ -35,6 +36,7 @@ function App() {
             <Route path="/admin/logs" element={<AdminLogs />} />
             <Route path="/admin/bots" element={<AdminBots />} />
             <Route path="/admin/bots/:botName" element={<AdminBotDetail />} />
+            <Route path="/admin/manual-predictions" element={<AdminManualPredictions />} />
 
             {/* New Integrated Detail Pages */}
             <Route path="/match/:matchId" element={
