@@ -55,6 +55,8 @@ interface BotRule {
     minute_to: number | null;
     priority: number;
     display_template: string | null;
+    prediction_period: 'IY' | 'MS' | 'AUTO' | null;
+    base_prediction_type: string | null;
 }
 
 export class AIPredictionService {
@@ -83,10 +85,16 @@ export class AIPredictionService {
      * Get bot group for a prediction based on minute
      * Uses rules from ai_bot_rules table, sorted by priority (higher = more specific)
      */
-    async getBotGroupForMinute(minute: number): Promise<{ botGroupId: string | null; botDisplayName: string; displayTemplate: string | null }> {
+    async getBotGroupForMinute(minute: number): Promise<{
+        botGroupId: string | null;
+        botDisplayName: string;
+        displayTemplate: string | null;
+        predictionPeriod: 'IY' | 'MS' | 'AUTO' | null;
+        basePredictionType: string | null;
+    }> {
         try {
             const result = await pool.query(`
-                SELECT id, bot_group_id, bot_display_name, minute_from, minute_to, priority, display_template
+                SELECT id, bot_group_id, bot_display_name, minute_from, minute_to, priority, display_template, prediction_period, base_prediction_type
                 FROM ai_bot_rules
                 WHERE is_active = true
                 ORDER BY priority DESC
@@ -100,28 +108,126 @@ export class AIPredictionService {
                     return {
                         botGroupId: rule.bot_group_id || null,
                         botDisplayName: rule.bot_display_name,
-                        displayTemplate: rule.display_template
+                        displayTemplate: rule.display_template,
+                        predictionPeriod: rule.prediction_period,
+                        basePredictionType: rule.base_prediction_type
                     };
                 }
             }
 
             // Default fallback
-            return { botGroupId: null, botDisplayName: 'BOT 007', displayTemplate: null };
+            return {
+                botGroupId: null,
+                botDisplayName: 'BOT 007',
+                displayTemplate: null,
+                predictionPeriod: 'AUTO',
+                basePredictionType: 'ÜST'
+            };
         } catch (error) {
             logger.warn('[AIPrediction] Failed to get bot group, using default:', error);
-            return { botGroupId: null, botDisplayName: 'BOT 007', displayTemplate: null };
+            return {
+                botGroupId: null,
+                botDisplayName: 'BOT 007',
+                displayTemplate: null,
+                predictionPeriod: 'AUTO',
+                basePredictionType: 'ÜST'
+            };
         }
     }
 
     /**
-     * Generate display prediction text from bot rule template
-     * Replaces {minute} placeholder with actual minute value
+     * Calculate prediction value based on current total goals
+     * For ÜST (OVER) predictions:
+     * - 0 goals → 0.5 ÜST
+     * - 1 goal → 1.5 ÜST
+     * - 2 goals → 2.5 ÜST
+     * - etc.
      */
-    generateDisplayPrediction(template: string | null, minute: number): string {
-        if (!template) {
-            return `🤖 AI Tahmini (${minute}' dk)`;
+    calculatePredictionValue(totalGoals: number): string {
+        return `${totalGoals + 0.5}`;
+    }
+
+    /**
+     * Determine period based on minute or bot rule
+     * 1-45' → IY (first half)
+     * 46-90' → MS (full match)
+     */
+    determinePeriod(minute: number, botPeriod: 'IY' | 'MS' | 'AUTO' | null): 'IY' | 'MS' {
+        if (botPeriod === 'IY') return 'IY';
+        if (botPeriod === 'MS') return 'MS';
+        // AUTO: determine based on minute
+        return minute <= 45 ? 'IY' : 'MS';
+    }
+
+    /**
+     * Generate prediction details from current score
+     * Returns prediction_type, prediction_value, and display_prediction
+     */
+    generatePredictionFromScore(
+        score: string, // e.g., "0-0", "1-0"
+        minute: number,
+        botRule: { displayTemplate: string | null; predictionPeriod: 'IY' | 'MS' | 'AUTO' | null; basePredictionType: string | null }
+    ): { predictionType: string; predictionValue: string; displayPrediction: string } {
+        // Parse score
+        const [homeStr, awayStr] = score.split('-').map(s => s.trim());
+        const homeGoals = parseInt(homeStr) || 0;
+        const awayGoals = parseInt(awayStr) || 0;
+        const totalGoals = homeGoals + awayGoals;
+
+        // Determine period and prediction value
+        const period = this.determinePeriod(minute, botRule.predictionPeriod);
+        const predictionValue = this.calculatePredictionValue(totalGoals);
+        const predictionType = botRule.basePredictionType || 'ÜST';
+
+        // Build display text from template or default
+        let displayPrediction: string;
+        if (botRule.displayTemplate) {
+            displayPrediction = botRule.displayTemplate
+                .replace('{period}', period)
+                .replace('{value}', predictionValue)
+                .replace('{minute}', minute.toString());
+        } else {
+            displayPrediction = `🤖 ${period} ${predictionValue} ${predictionType} (${minute}' dk)`;
         }
-        return template.replace('{minute}', minute.toString());
+
+        return {
+            predictionType: `${period} ${predictionType}`,
+            predictionValue: predictionValue,
+            displayPrediction
+        };
+    }
+
+    /**
+     * Check if a goal event triggers instant win for a prediction
+     * Returns true if prediction is instantly won
+     */
+    checkInstantWin(
+        predictionType: string,
+        predictionValue: string,
+        newTotalGoals: number,
+        minute: number
+    ): { isInstantWin: boolean; reason: string } {
+        const value = parseFloat(predictionValue);
+        const isOver = predictionType.toUpperCase().includes('ÜST');
+        const isUnder = predictionType.toUpperCase().includes('ALT');
+        const isIY = predictionType.toUpperCase().includes('IY');
+
+        // For IY predictions, only check if still in first half
+        if (isIY && minute > 45) {
+            return { isInstantWin: false, reason: 'IY period ended' };
+        }
+
+        // OVER (ÜST) - instant win when total goals exceed value
+        if (isOver && newTotalGoals > value) {
+            return { isInstantWin: true, reason: `Gol! Toplam ${newTotalGoals} > ${value}` };
+        }
+
+        // UNDER (ALT) - instant lose when total goals exceed value
+        if (isUnder && newTotalGoals > value) {
+            return { isInstantWin: false, reason: `Gol! Toplam ${newTotalGoals} > ${value} - Kaybetti` };
+        }
+
+        return { isInstantWin: false, reason: 'Henüz sonuçlanmadı' };
     }
 
     /**
@@ -382,15 +488,51 @@ export class AIPredictionService {
                 };
             }
 
+            // Try to match with TheSports data FIRST
+            let matchResult: MatchLookupResult | null = null;
+            try {
+                matchResult = await teamNameMatcherService.findMatchByTeams(
+                    parsed.homeTeamName,
+                    parsed.awayTeamName,
+                    parsed.minuteAtPrediction,
+                    parsed.scoreAtPrediction
+                );
+            } catch (matchError) {
+                logger.warn('[AIPrediction] Team matching failed:', matchError);
+            }
+
             // Determine bot group based on minute
             const botGroup = await this.getBotGroupForMinute(parsed.minuteAtPrediction);
+
+            // Override period based on match status if matched
+            let effectivePeriod = botGroup.predictionPeriod;
+            if (matchResult && matchResult.statusId) {
+                // If match is in 1st Half (2), force IY
+                if (matchResult.statusId === 2) effectivePeriod = 'IY';
+                // If match is in 2nd Half (4), force MS
+                else if (matchResult.statusId === 4) effectivePeriod = 'MS';
+            }
+            // If explicit "First Half" bots, ensure IY
+            if (botGroup.botDisplayName === 'ALERT: D' || botGroup.botDisplayName === 'BOT 007') {
+                // But respect live status if available (e.g. if BOT 007 comes in 2nd half)
+                // User said "ALERT: D and BOT 007 are IY bots", but also "period depends on match part"
+                // So we trust the statusId logic above primarily.
+            }
+
+            // Generate prediction details based on SCORE + 0.5 logic
+            const generatedDetails = this.generatePredictionFromScore(
+                parsed.scoreAtPrediction,
+                parsed.minuteAtPrediction,
+                {
+                    ...botGroup,
+                    predictionPeriod: effectivePeriod
+                }
+            );
+
             logger.info(`[AIPrediction] Assigned to bot: ${botGroup.botDisplayName} (minute: ${parsed.minuteAtPrediction})`);
+            logger.info(`[AIPrediction] Generated details: ${JSON.stringify(generatedDetails)}`);
 
-            // Auto-generate display prediction from template
-            const displayPrediction = this.generateDisplayPrediction(botGroup.displayTemplate, parsed.minuteAtPrediction);
-            logger.info(`[AIPrediction] Generated display: "${displayPrediction}"`);
-
-            // Insert into ai_predictions
+            // Insert into ai_predictions with GENERATED details (overriding payload type/value)
             const insertQuery = `
         INSERT INTO ai_predictions (
           external_id, bot_group_id, bot_name, league_name, home_team_name, away_team_name,
@@ -409,28 +551,16 @@ export class AIPredictionService {
                 parsed.awayTeamName,
                 parsed.scoreAtPrediction,
                 parsed.minuteAtPrediction,
-                parsed.predictionType,
-                parsed.predictionValue,
+                generatedDetails.predictionType,   // Generated IY/MS ÜST
+                generatedDetails.predictionValue,  // Generated Score + 0.5
                 parsed.rawPayload,
-                displayPrediction
+                generatedDetails.displayPrediction // Generated Text
             ]);
 
             const predictionId = insertResult.rows[0].id;
             logger.info(`[AIPrediction] Inserted prediction ${predictionId}: ${parsed.homeTeamName} vs ${parsed.awayTeamName}`);
 
-            // Try to match with TheSports data
-            let matchResult: MatchLookupResult | null = null;
-            try {
-                matchResult = await teamNameMatcherService.findMatchByTeams(
-                    parsed.homeTeamName,
-                    parsed.awayTeamName,
-                    parsed.minuteAtPrediction,
-                    parsed.scoreAtPrediction
-                );
-            } catch (matchError) {
-                logger.warn('[AIPrediction] Team matching failed:', matchError);
-            }
-
+            // If matched, link it immediately
             if (matchResult && matchResult.overallConfidence >= 0.6) {
                 // Insert match link
                 const matchLinkQuery = `
@@ -1005,6 +1135,78 @@ export class AIPredictionService {
             logger.info(`[AIPrediction] Settlement complete for ${matchExternalId}: ${settled} settled, ${winners} winners, ${losers} losers`);
             return { settled, winners, losers };
 
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Check for INSTANT WIN when a goal is scored
+     * Called by WebSocketService on GOAL event
+     */
+    async settleInstantWin(matchExternalId: string, homeScore: number, awayScore: number, minute: number): Promise<void> {
+        const client = await pool.connect();
+        try {
+            // Find pending predictions for this match
+            const query = `
+                SELECT 
+                    p.id as prediction_id, 
+                    p.prediction_type, 
+                    p.prediction_value,
+                    pm.id as match_link_id
+                FROM ai_predictions p
+                JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
+                WHERE pm.match_external_id = $1
+                  AND pm.prediction_result = 'pending'
+            `;
+
+            const result = await client.query(query, [matchExternalId]);
+
+            if (result.rows.length === 0) return;
+
+            const totalGoals = homeScore + awayScore;
+            logger.info(`[AIPrediction] Checking instant win for match ${matchExternalId} (Score: ${homeScore}-${awayScore}, Minute: ${minute})`);
+
+            for (const row of result.rows) {
+                const check = this.checkInstantWin(
+                    row.prediction_type,
+                    row.prediction_value,
+                    totalGoals,
+                    minute
+                );
+
+                if (check.isInstantWin) {
+                    logger.info(`[AIPrediction] INSTANT WIN! Prediction ${row.prediction_id} won. Reason: ${check.reason}`);
+
+                    // Settle as Winner immediately
+                    await client.query(`
+                        UPDATE ai_prediction_matches 
+                        SET prediction_result = 'winner', 
+                            result_reason = $1,
+                            final_home_score = $2,
+                            final_away_score = $3,
+                            resulted_at = NOW(),
+                            updated_at = NOW()
+                        WHERE id = $4
+                    `, [check.reason, homeScore, awayScore, row.match_link_id]);
+                } else if (check.reason && check.reason.includes('Kaybetti')) {
+                    // Instant Lose (e.g. Under bet exceeded)
+                    logger.info(`[AIPrediction] INSTANT LOSS! Prediction ${row.prediction_id} lost. Reason: ${check.reason}`);
+
+                    await client.query(`
+                        UPDATE ai_prediction_matches 
+                        SET prediction_result = 'loser', 
+                            result_reason = $1,
+                            final_home_score = $2,
+                            final_away_score = $3,
+                            resulted_at = NOW(),
+                            updated_at = NOW()
+                        WHERE id = $4
+                    `, [check.reason, homeScore, awayScore, row.match_link_id]);
+                }
+            }
+        } catch (error) {
+            logger.error(`[AIPrediction] Error in settleInstantWin for match ${matchExternalId}:`, error);
         } finally {
             client.release();
         }

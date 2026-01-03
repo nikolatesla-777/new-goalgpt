@@ -178,6 +178,17 @@ export class WebSocketService {
               timestamp: Date.now(),
             }, mqttReceivedTs);
 
+            // AUTO SETTLEMENT: Trigger instant settlement on score change
+            // We use statusId to derive a proxy minute for IY/MS checks
+            // Status 2 (1H) -> 1, Status 4 (2H) -> 46
+            const proxyMinute = parsedScore.statusId === 2 ? 1 : 46;
+            aiPredictionService.settleInstantWin(
+              parsedScore.matchId,
+              parsedScore.home.score,
+              parsedScore.away.score,
+              proxyMinute
+            ).catch(err => logger.error(`[AutoSettlement] Error in score change handler: ${err.message}`));
+
             // Update cache (for fast reads before queue flushes)
             const scoreCacheKey = `${CacheKeyPrefix.TheSports}:ws:score:${parsedScore.matchId}`;
             await cacheService.set(scoreCacheKey, parsedScore, CacheTTL.Minute);
@@ -232,6 +243,14 @@ export class WebSocketService {
               const eventKey = `${parsedIncident.matchId}:GOAL`;
               this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
               this.emitEvent(goalEvent, incidentsMqttTs);
+
+              // AUTO SETTLEMENT: Trigger instant settlement on verified GOAL event
+              aiPredictionService.settleInstantWin(
+                parsedIncident.matchId,
+                goalEvent.homeScore,
+                goalEvent.awayScore,
+                goalEvent.time
+              ).catch(err => logger.error(`[AutoSettlement] Error in goal handler: ${err.message}`));
             }
 
             // Detect card
