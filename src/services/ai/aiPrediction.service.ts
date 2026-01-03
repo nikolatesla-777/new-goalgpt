@@ -206,7 +206,9 @@ export class AIPredictionService {
         predictionValue: string,
         newTotalGoals: number,
         minute: number,
-        statusId?: number
+        statusId?: number,
+        htHome?: number, // Optional HT scores for retroactive IY settlement
+        htAway?: number
     ): { isInstantWin: boolean; reason: string } {
         const value = parseFloat(predictionValue);
         const isOver = predictionType.toUpperCase().includes('ÜST');
@@ -220,11 +222,32 @@ export class AIPredictionService {
             let isIYValid = true;
             if (statusId !== undefined) {
                 // Status 2 (1H) or 3 (HT) -> Valid IY
-                // Status 4+ -> Invalid IY
+                // Status 4+ -> Invalid IY (normally), BUT check if we have HT score
                 const isFirstHalf = statusId === 2 || statusId === 3;
-                if (!isFirstHalf) isIYValid = false;
+
+                if (!isFirstHalf) {
+                    // CRITICAL FIX: If period ended (Status 4+), allow settlement IF we verify the win using HT score
+                    logger.info(`[AIPrediction] IY Check - Post HT. Status: ${statusId}, HT: ${htHome}-${htAway}, Over: ${isOver}, Val: ${value}`);
+                    if (htHome !== undefined && htAway !== undefined) {
+                        const htTotal = htHome + htAway;
+
+                        // If OVER bet and HT Total > Line -> It's a WIN (Retroactive)
+                        if (isOver && htTotal > value) {
+                            logger.info(`[AIPrediction] IY Retroactive WIN logic met: ${htTotal} > ${value}`);
+                            return { isInstantWin: true, reason: `Retroactive HT Win: ${htTotal} > ${value}` };
+                        }
+
+                        // If UNDER bet? Usually dealt with at end, but if we are at Status 4+, IY is definitely over.
+                        // If HT Total <= Line -> It's a WIN
+                        if (isUnder && htTotal <= value) {
+                            return { isInstantWin: true, reason: `Retroactive HT Win: ${htTotal} <= ${value}` };
+                        }
+                    }
+
+                    isIYValid = false;
+                }
             } else {
-                // Fallback: If minute > 60, surely IY ended.
+                // Fallback
                 if (minute > 60) isIYValid = false;
             }
 
@@ -1172,7 +1195,9 @@ export class AIPredictionService {
                     p.prediction_type, 
                     p.prediction_value,
                     pm.id as match_link_id,
-                    m.status_id
+                    m.status_id,
+                    m.home_scores,
+                    m.away_scores
                 FROM ai_predictions p
                 JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
                 JOIN ts_matches m ON m.external_id = pm.match_external_id
@@ -1188,12 +1213,24 @@ export class AIPredictionService {
             logger.info(`[AIPrediction] Checking instant win for match ${matchExternalId} (Score: ${homeScore}-${awayScore}, Minute: ${minute})`);
 
             for (const row of result.rows) {
+                // Extract HT scores if available
+                let htHome: number | undefined;
+                let htAway: number | undefined;
+                try {
+                    const hScores = Array.isArray(row.home_scores) ? row.home_scores : JSON.parse(row.home_scores || '[]');
+                    const aScores = Array.isArray(row.away_scores) ? row.away_scores : JSON.parse(row.away_scores || '[]');
+                    if (hScores[1] !== undefined) htHome = parseInt(hScores[1]);
+                    if (aScores[1] !== undefined) htAway = parseInt(aScores[1]);
+                } catch (e) { /* ignore */ }
+
                 const check = this.checkInstantWin(
                     row.prediction_type,
                     row.prediction_value,
                     totalGoals,
                     minute,
-                    row.status_id // Pass status ID
+                    row.status_id,
+                    htHome,
+                    htAway
                 );
 
                 if (check.isInstantWin) {
