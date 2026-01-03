@@ -217,6 +217,14 @@ export class MatchDatabaseService {
       // "Should be live" matches are now handled by watchdog and exposed via /api/matches/should-be-live
       // This keeps /live endpoint strict, fast, and contract-compliant
 
+      // CRITICAL FIX: Add time filter to exclude old matches (bug prevention)
+      // Matches that started more than 4 hours ago should not be in live matches
+      // This prevents stale matches (bug where status wasn't updated) from appearing
+      // Normal match duration: ~90 min + 15 min HT = ~105 min, with overtime: ~120 min
+      // Safety margin: 4 hours ensures all matches are finished
+      const nowTs = Math.floor(Date.now() / 1000);
+      const fourHoursAgo = nowTs - (4 * 3600); // 4 hours ago in seconds
+
       // Phase 5-S Fix: Query database for STRICTLY live matches only
       // CRITICAL: Return ONLY matches with status_id IN (2,3,4,5,7)
       // "Should be live" matches (status=1 but match_time passed) are handled by watchdog
@@ -268,6 +276,8 @@ export class MatchDatabaseService {
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
         WHERE m.status_id IN (2, 3, 4, 5, 7)  -- CRITICAL FIX: ONLY strictly live matches (no finished/interrupted)
+          AND m.match_time >= $1  -- CRITICAL FIX: Only matches that started within last 4 hours
+          AND m.match_time <= $2  -- CRITICAL FIX: Exclude future matches
         ORDER BY 
           -- Live matches first (by minute descending), then by competition name
           CASE WHEN m.status_id IN (2, 3, 4, 5, 7) THEN COALESCE(m.minute, 0) ELSE 0 END DESC,
@@ -275,14 +285,14 @@ export class MatchDatabaseService {
           m.match_time DESC
       `;
 
-      const result = await pool.query(query);
+      const result = await pool.query(query, [fourHoursAgo, nowTs]);
       const matches = result.rows || [];
 
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDatabase.service.ts:274',message:'getLiveMatches query result',data:{matchCount:matches.length,queryDuration:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
 
-      logger.info(`✅ [MatchDatabase] Found ${matches.length} strictly live matches in database (status_id IN 2,3,4,5,7 only)`);
+      logger.info(`✅ [MatchDatabase] Found ${matches.length} strictly live matches in database (status_id IN 2,3,4,5,7, time window: last 4 hours)`);
 
       // CRITICAL FIX: Removed API fallback - DB is authoritative
       // API fallback was causing issues and returning 0 matches

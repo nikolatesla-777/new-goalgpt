@@ -308,9 +308,27 @@ export class TeamNameMatcherService {
                     }
                     
                     // PENALTY: Reduce similarity for reserve/youth/women teams
-                    if (hasReserve && similarity < 0.95) {
-                        // Penalty: Reduce similarity by 15% for reserve/youth teams
-                        similarity = similarity * 0.85;
+                    // CRITICAL: If prediction doesn't specify gender/type, heavily penalize women/reserve teams
+                    // to avoid matching "Al Ittihad Jeddah" (men) with "Al Ittihad Jeddah (W)" (women)
+                    const searchNameLower = searchName.toLowerCase();
+                    const searchHasGender = /\(w\)|women|reserve|youth|u\d+/i.test(searchNameLower);
+                    
+                    if (hasReserve) {
+                        const isWomenTeam = /\(w\)|women/i.test(teamNameLower);
+                        
+                        if (isWomenTeam) {
+                            // Women teams: Heavy penalty (40%) if search doesn't specify women
+                            // This prevents matching "Al Ittihad Jeddah" (men) with "Al Ittihad Jeddah (W)" (women)
+                            if (!searchHasGender) {
+                                similarity = similarity * 0.6; // 40% penalty for women teams when search has no gender
+                            } else {
+                                similarity = similarity * 0.85; // 15% penalty if search also has gender
+                            }
+                        } else {
+                            // Reserve/Youth teams: Standard penalty (15%)
+                            // Apply penalty even for high similarity to prefer main teams
+                            similarity = similarity * 0.85;
+                        }
                     }
                     
                     if (similarity > bestScore) {
