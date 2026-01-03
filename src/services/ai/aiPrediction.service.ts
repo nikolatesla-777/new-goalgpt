@@ -54,6 +54,7 @@ interface BotRule {
     minute_from: number | null;
     minute_to: number | null;
     priority: number;
+    display_template: string | null;
 }
 
 export class AIPredictionService {
@@ -82,10 +83,10 @@ export class AIPredictionService {
      * Get bot group for a prediction based on minute
      * Uses rules from ai_bot_rules table, sorted by priority (higher = more specific)
      */
-    async getBotGroupForMinute(minute: number): Promise<{ botGroupId: string | null; botDisplayName: string }> {
+    async getBotGroupForMinute(minute: number): Promise<{ botGroupId: string | null; botDisplayName: string; displayTemplate: string | null }> {
         try {
             const result = await pool.query(`
-                SELECT id, bot_group_id, bot_display_name, minute_from, minute_to, priority
+                SELECT id, bot_group_id, bot_display_name, minute_from, minute_to, priority, display_template
                 FROM ai_bot_rules
                 WHERE is_active = true
                 ORDER BY priority DESC
@@ -98,17 +99,29 @@ export class AIPredictionService {
                 if (minute >= minFrom && minute <= minTo) {
                     return {
                         botGroupId: rule.bot_group_id || null,
-                        botDisplayName: rule.bot_display_name
+                        botDisplayName: rule.bot_display_name,
+                        displayTemplate: rule.display_template
                     };
                 }
             }
 
             // Default fallback
-            return { botGroupId: null, botDisplayName: 'BOT 007' };
+            return { botGroupId: null, botDisplayName: 'BOT 007', displayTemplate: null };
         } catch (error) {
             logger.warn('[AIPrediction] Failed to get bot group, using default:', error);
-            return { botGroupId: null, botDisplayName: 'BOT 007' };
+            return { botGroupId: null, botDisplayName: 'BOT 007', displayTemplate: null };
         }
+    }
+
+    /**
+     * Generate display prediction text from bot rule template
+     * Replaces {minute} placeholder with actual minute value
+     */
+    generateDisplayPrediction(template: string | null, minute: number): string {
+        if (!template) {
+            return `🤖 AI Tahmini (${minute}' dk)`;
+        }
+        return template.replace('{minute}', minute.toString());
     }
 
     /**
@@ -373,13 +386,17 @@ export class AIPredictionService {
             const botGroup = await this.getBotGroupForMinute(parsed.minuteAtPrediction);
             logger.info(`[AIPrediction] Assigned to bot: ${botGroup.botDisplayName} (minute: ${parsed.minuteAtPrediction})`);
 
+            // Auto-generate display prediction from template
+            const displayPrediction = this.generateDisplayPrediction(botGroup.displayTemplate, parsed.minuteAtPrediction);
+            logger.info(`[AIPrediction] Generated display: "${displayPrediction}"`);
+
             // Insert into ai_predictions
             const insertQuery = `
         INSERT INTO ai_predictions (
           external_id, bot_group_id, bot_name, league_name, home_team_name, away_team_name,
           score_at_prediction, minute_at_prediction, prediction_type, prediction_value,
-          raw_payload, processed
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false)
+          raw_payload, processed, display_prediction
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, $12)
         RETURNING id
       `;
 
@@ -394,7 +411,8 @@ export class AIPredictionService {
                 parsed.minuteAtPrediction,
                 parsed.predictionType,
                 parsed.predictionValue,
-                parsed.rawPayload
+                parsed.rawPayload,
+                displayPrediction
             ]);
 
             const predictionId = insertResult.rows[0].id;
@@ -899,6 +917,97 @@ export class AIPredictionService {
         `;
         const result = await pool.query(query, [limit]);
         return result.rows;
+    }
+
+    /**
+     * Settle predictions for a specific match (auto settlement)
+     * Called when match ends (status_id >= 8)
+     */
+    async settleMatchPredictions(matchExternalId: string): Promise<{ settled: number; winners: number; losers: number }> {
+        logger.info(`[AIPrediction] Auto-settling predictions for match: ${matchExternalId}`);
+
+        let settled = 0;
+        let winners = 0;
+        let losers = 0;
+
+        const client = await pool.connect();
+        try {
+            // Get pending predictions for this match with match data
+            const query = `
+                SELECT 
+                    p.id as prediction_id,
+                    p.prediction_type,
+                    p.prediction_value,
+                    p.score_at_prediction,
+                    pm.id as match_link_id,
+                    pm.prediction_result,
+                    m.home_score_display,
+                    m.away_score_display,
+                    m.home_score_ht,
+                    m.away_score_ht,
+                    m.status_id
+                FROM ai_predictions p
+                JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
+                JOIN ts_matches m ON m.external_id = pm.match_external_id
+                WHERE pm.match_external_id = $1
+                  AND pm.prediction_result = 'pending'
+            `;
+
+            const result = await client.query(query, [matchExternalId]);
+
+            if (result.rows.length === 0) {
+                logger.info(`[AIPrediction] No pending predictions for match: ${matchExternalId}`);
+                return { settled: 0, winners: 0, losers: 0 };
+            }
+
+            for (const row of result.rows) {
+                const homeScore = parseInt(row.home_score_display) || 0;
+                const awayScore = parseInt(row.away_score_display) || 0;
+                const htHome = parseInt(row.home_score_ht) || 0;
+                const htAway = parseInt(row.away_score_ht) || 0;
+
+                // Determine period from prediction type
+                const period = row.prediction_type?.toUpperCase().includes('IY') ? 'IY' : 'MS';
+
+                const calcResult = this.calculatePredictionResult(
+                    row.prediction_type,
+                    row.prediction_value,
+                    row.score_at_prediction,
+                    homeScore,
+                    awayScore,
+                    htHome,
+                    htAway,
+                    period as 'IY' | 'MS',
+                    row.status_id
+                );
+
+                if (calcResult) {
+                    // Update prediction result
+                    await client.query(`
+                        UPDATE ai_prediction_matches 
+                        SET prediction_result = $1, 
+                            result_reason = $2,
+                            final_home_score = $3,
+                            final_away_score = $4,
+                            resulted_at = NOW(),
+                            updated_at = NOW()
+                        WHERE id = $5
+                    `, [calcResult.outcome, calcResult.reason, homeScore, awayScore, row.match_link_id]);
+
+                    settled++;
+                    if (calcResult.outcome === 'winner') winners++;
+                    if (calcResult.outcome === 'loser') losers++;
+
+                    logger.info(`[AIPrediction] Settled: ${row.prediction_id} -> ${calcResult.outcome} (${calcResult.reason})`);
+                }
+            }
+
+            logger.info(`[AIPrediction] Settlement complete for ${matchExternalId}: ${settled} settled, ${winners} winners, ${losers} losers`);
+            return { settled, winners, losers };
+
+        } finally {
+            client.release();
+        }
     }
 }
 

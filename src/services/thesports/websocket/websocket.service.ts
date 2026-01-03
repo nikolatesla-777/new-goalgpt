@@ -18,6 +18,7 @@ import { ParsedScore, WebSocketTliveMessage } from '../../../types/thesports/web
 import { VARResult, MatchState, isLiveMatchState, canResurrectFromEnd } from '../../../types/thesports/enums';
 import { MatchWriteQueue } from './matchWriteQueue';
 import { EventLatencyMonitor } from './eventLatencyMonitor';
+import { aiPredictionService } from '../../ai/aiPrediction.service';
 
 export class WebSocketService {
   private client: WebSocketClient;
@@ -820,7 +821,17 @@ export class WebSocketService {
       if (matchState?.status === MatchState.END) {
         // Status 8 has been stable for 20 minutes - consider it final
         logger.info(`Match ${matchId} Status 8 (END) stable for 20 minutes. Marking as definitely finished.`);
-        // Timer will auto-clear, connection can be closed by higher-level logic if needed
+
+        // Auto-settle any pending AI predictions for this match
+        aiPredictionService.settleMatchPredictions(matchId)
+          .then(result => {
+            if (result.settled > 0) {
+              logger.info(`[AutoSettlement] Match ${matchId}: ${result.settled} predictions settled (${result.winners} wins, ${result.losers} losses)`);
+            }
+          })
+          .catch(err => {
+            logger.error(`[AutoSettlement] Failed for match ${matchId}:`, err);
+          });
       }
       this.matchKeepaliveTimers.delete(matchId);
     }, this.KEEPALIVE_DURATION_MS);
