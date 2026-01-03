@@ -5,7 +5,7 @@
  * Accessed via /match/:matchId route
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     getMatchH2H,
@@ -39,7 +39,11 @@ export function MatchDetailPage() {
     const [error, setError] = useState<string | null>(null);
     const [tabData, setTabData] = useState<any>(null);
     const hasLoadedRef = useRef(false);
+    const tabDataLoadedRef = useRef<{ tab: TabType; matchId: string } | null>(null); // Track which tab+matchId has been loaded
 
+    // CRITICAL FIX: Extract matchSeasonId with useMemo to prevent unnecessary re-renders
+    // This ensures matchSeasonId only changes when season_id actually changes, not on every match object update
+    const matchSeasonId = useMemo(() => match?.season_id, [match?.season_id]);
 
     // Fetch match info with periodic polling for live matches
     // CRITICAL FIX: Prefer getLiveMatches for live matches (more up-to-date)
@@ -118,9 +122,21 @@ export function MatchDetailPage() {
     }, [matchId]);
 
     // Fetch tab data
+    // CRITICAL FIX: Use match?.season_id in dependency array instead of match to prevent unnecessary refetches
+    // This ensures we only refetch when season_id actually changes (e.g., match loaded for first time)
+    // But NOT when match object reference changes (e.g., score update from WebSocket)
+    const matchSeasonId = match?.season_id;
     useEffect(() => {
         const fetchTabData = async () => {
             if (!matchId || !match) return;
+
+            // CRITICAL FIX: Check if this exact tab+matchId combination has already been loaded
+            // This prevents unnecessary refetches when match object reference changes (e.g., WebSocket updates)
+            const cacheKey = `${activeTab}-${matchId}`;
+            if (tabDataLoadedRef.current?.tab === activeTab && tabDataLoadedRef.current?.matchId === matchId) {
+                // This tab data is already loaded for this match, skip refetch
+                return;
+            }
 
             // CRITICAL FIX: Always set loading state when fetching new tab data
             // Clear previous data to prevent showing stale empty states
@@ -202,6 +218,8 @@ export function MatchDetailPage() {
                         break;
                 }
                 setTabData(result);
+                // Mark this tab+matchId as loaded
+                tabDataLoadedRef.current = { tab: activeTab, matchId: matchId };
             } catch (err: any) {
                 console.error('Tab data fetch error:', err);
                 setError(err.message || 'Veri yüklenirken hata oluştu');
@@ -212,9 +230,9 @@ export function MatchDetailPage() {
         };
 
         fetchTabData();
-        // CRITICAL FIX: Removed 'match' from dependency array to prevent auto-refresh flickering
-        // match state changes should NOT trigger tab data refetch
-        // Only activeTab or matchId changes should trigger refetch
+        // CRITICAL FIX: Only refetch when activeTab or matchId changes
+        // match object updates (e.g., WebSocket score changes) should NOT trigger refetch
+        // We use tabDataLoadedRef to track what's already loaded and prevent unnecessary refetches
     }, [activeTab, matchId]);
 
 

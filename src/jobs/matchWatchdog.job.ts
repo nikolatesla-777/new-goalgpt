@@ -90,8 +90,8 @@ export class MatchWatchdogWorker {
       // This ensures matches transition from NOT_STARTED to LIVE when they actually start
       // maxMinutesAgo = 1440 (24 saat) to catch ALL today's matches, even if they started many hours ago
       // Previous limit of 120 minutes was too restrictive and missed matches that started 3+ hours ago
-      // CRITICAL: Increase limit to 100 to process more matches per tick
-      const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 100);
+      // CRITICAL: Increase limit to 500 to process more matches per tick (was 100, too low)
+      const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 500);
 
       const candidatesCount = stales.length + shouldBeLive.length;
 
@@ -759,10 +759,11 @@ export class MatchWatchdogWorker {
     logger.info('[Watchdog] Starting MatchWatchdogWorker for should-be-live matches');
     // Run immediately on start
     void this.tick();
-    // CRITICAL FIX: Run every 30 seconds to catch should-be-live matches
+    // CRITICAL FIX: Run every 15 seconds to catch should-be-live matches faster (was 30 seconds)
+    // This reduces delay from match_time passing to status update (max 15s delay instead of 30s)
     this.intervalId = setInterval(() => {
       void this.tick();
-    }, 30000); // 30 seconds
+    }, 15000); // 15 seconds
     logEvent('info', 'worker.started', {
       worker: 'MatchWatchdogWorker',
       interval_sec: 30,

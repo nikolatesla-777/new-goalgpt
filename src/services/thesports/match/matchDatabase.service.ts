@@ -264,7 +264,11 @@ export class MatchDatabaseService {
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
         WHERE m.status_id IN (2, 3, 4, 5, 7)  -- CRITICAL FIX: ONLY strictly live matches (no finished/interrupted)
-        ORDER BY m.match_time DESC, c.name ASC
+        ORDER BY 
+          -- Live matches first (by minute descending), then by competition name
+          CASE WHEN m.status_id IN (2, 3, 4, 5, 7) THEN COALESCE(m.minute, 0) ELSE 0 END DESC,
+          c.name ASC,
+          m.match_time DESC
       `;
 
       const result = await pool.query(query);
