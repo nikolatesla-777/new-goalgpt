@@ -53,9 +53,19 @@ async function main() {
             const check = await checkInstantWin(row.prediction_type, row.prediction_value, 1, 23); // Force inputs: 1 goal, 23 min
 
             if (check.isInstantWin) {
-                console.log('WOULD SETTLE AS WINNER!');
-                // Uncomment to apply fix if needed
-                // await client.query(`UPDATE ai_prediction_matches SET prediction_result = 'winner', result_reason = $1 WHERE id = $2`, [check.reason, row.match_link_id]);
+                console.log('WOULD SETTLE AS WINNER! Executing update...');
+                // Apply fix
+                await client.query(`
+                    UPDATE ai_prediction_matches 
+                    SET prediction_result = 'winner', 
+                        result_reason = $1,
+                        final_home_score = $2,
+                        final_away_score = $3,
+                        resulted_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = $4
+                `, [check.reason, 0, 1, row.match_link_id]);
+                console.log('✅ Updated database.');
             } else {
                 console.log('WOULD NOT SETTLE.');
             }
