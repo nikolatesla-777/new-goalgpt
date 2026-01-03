@@ -8,6 +8,7 @@
  */
 
 import { pool } from '../connection';
+import { randomUUID } from 'crypto';
 
 export async function up(): Promise<void> {
     const client = await pool.connect();
@@ -15,15 +16,14 @@ export async function up(): Promise<void> {
         await client.query('BEGIN');
 
         // 1. ALERT: D (Update existing or insert)
-        // First, delete old range to be clean
         await client.query(`DELETE FROM ai_bot_rules WHERE bot_display_name = 'ALERT: D'`);
 
         await client.query(`
       INSERT INTO ai_bot_rules 
       (bot_group_id, bot_display_name, minute_from, minute_to, priority, is_active, display_template, prediction_period, base_prediction_type)
       VALUES 
-      ('alert_d', 'ALERT: D', 10, 14, 100, true, '⚡ {period} {value} ÜST ({minute}'' dk)', 'IY', 'ÜST')
-    `);
+      ($1, 'ALERT: D', 10, 14, 100, true, '⚡ {period} {value} ÜST ({minute}'' dk)', 'IY', 'ÜST')
+    `, [randomUUID()]);
         console.log('✅ Configured ALERT: D (10-14)');
 
         // 2. CODE: 35
@@ -33,8 +33,8 @@ export async function up(): Promise<void> {
       INSERT INTO ai_bot_rules 
       (bot_group_id, bot_display_name, minute_from, minute_to, priority, is_active, display_template, prediction_period, base_prediction_type)
       VALUES 
-      ('code_35', 'CODE: 35', 15, 19, 100, true, '🤖 CODE:35 {period} {value} ÜST ({minute}'' dk)', 'IY', 'ÜST')
-    `);
+      ($1, 'CODE: 35', 15, 19, 100, true, '🤖 CODE:35 {period} {value} ÜST ({minute}'' dk)', 'IY', 'ÜST')
+    `, [randomUUID()]);
         console.log('✅ Configured CODE: 35 (15-19)');
 
         // 3. Code Zero
@@ -44,8 +44,8 @@ export async function up(): Promise<void> {
       INSERT INTO ai_bot_rules 
       (bot_group_id, bot_display_name, minute_from, minute_to, priority, is_active, display_template, prediction_period, base_prediction_type)
       VALUES 
-      ('code_zero', 'Code Zero', 20, 20, 100, true, '🎱 Code Zero {period} {value} ÜST ({minute}'' dk)', 'IY', 'ÜST')
-    `);
+      ($1, 'Code Zero', 20, 20, 100, true, '🎱 Code Zero {period} {value} ÜST ({minute}'' dk)', 'IY', 'ÜST')
+    `, [randomUUID()]);
         console.log('✅ Configured Code Zero (20)');
 
         await client.query('COMMIT');
