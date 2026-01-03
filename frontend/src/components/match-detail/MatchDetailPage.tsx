@@ -5,7 +5,7 @@
  * Accessed via /match/:matchId route
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     getMatchH2H,
@@ -23,6 +23,7 @@ import type { Match } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 import { MatchEventsTimeline } from './MatchEventsTimeline';
 import { ChartBar, ListBullets, Sword, Trophy, Users, TrendUp, Robot, CaretLeft, WarningCircle } from '@phosphor-icons/react';
+import { useMatchSocket } from '../../hooks/useSocket';
 
 import { useAIPredictions } from '../../context/AIPredictionsContext';
 
@@ -40,6 +41,8 @@ export function MatchDetailPage() {
     const [tabData, setTabData] = useState<any>(null);
     const hasLoadedRef = useRef(false);
     const tabDataLoadedRef = useRef<{ tab: TabType; matchId: string } | null>(null); // Track which tab+matchId has been loaded
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // For WebSocket event debouncing
+    const isFetchingRef = useRef(false); // Prevent overlapping requests
 
 
 
@@ -119,139 +122,253 @@ export function MatchDetailPage() {
         // No polling interval - WebSocket handles real-time updates
     }, [matchId]);
 
-    // Fetch tab data
-    // CRITICAL FIX: Only fetch when tab or matchId changes, NOT when match object updates
+    // Fetch tab data function - extracted to be reusable from WebSocket handlers
+    const fetchTabData = useCallback(async (forceRefresh: boolean = false) => {
+        if (!matchId) return;
+
+        // CRITICAL FIX: Check if this exact tab+matchId combination has already been loaded
+        // This prevents unnecessary refetches when match object reference changes (e.g., WebSocket updates)
+        // But allow force refresh from WebSocket events
+        if (!forceRefresh && tabDataLoadedRef.current?.tab === activeTab && tabDataLoadedRef.current?.matchId === matchId) {
+            // This tab data is already loaded for this match, skip refetch
+            // CRITICAL: Don't set loading state or clear data - just return silently
+            return;
+        }
+
+        // CRITICAL FIX: For standings tab, we need match.season_id, so wait for match to load
+        if (activeTab === 'standings' && !match?.season_id) {
+            // Don't fetch yet, wait for match to load
+            return;
+        }
+
+        // Prevent overlapping requests
+        if (isFetchingRef.current) return;
+        isFetchingRef.current = true;
+
+        // CRITICAL FIX: Only set loading state when actually fetching NEW data
+        // Don't clear existing data until we have new data (prevents flickering)
+        setTabLoading(true);
+        // DON'T clear tabData here - keep existing data visible while loading new data
+        setError(null); // Clear previous errors
+
+        try {
+            let result;
+            switch (activeTab) {
+                case 'stats':
+                    // Fetch combined stats (live-stats endpoint includes both basic and detailed stats)
+                    // Also fetch half time stats for period selection
+                    const [liveStats, halfStats] = await Promise.allSettled([
+                        getMatchLiveStats(matchId).catch(() => null), // Fail gracefully, fallback to teamStats
+                        getMatchHalfStats(matchId).catch(() => null) // Fail gracefully
+                    ]);
+
+                    // If liveStats failed, fallback to teamStats
+                    let fullTimeData = null;
+                    if (liveStats.status === 'fulfilled' && liveStats.value) {
+                        fullTimeData = {
+                            stats: liveStats.value.stats || [],
+                            incidents: liveStats.value.incidents || [],
+                        };
+                    } else {
+                        // Fallback to getMatchTeamStats
+                        try {
+                            const teamStats = await getMatchTeamStats(matchId);
+                            fullTimeData = teamStats;
+                        } catch {
+                            fullTimeData = null;
+                        }
+                    }
+
+                    result = {
+                        fullTime: fullTimeData,
+                        halfTime: halfStats.status === 'fulfilled' ? halfStats.value : null,
+                    };
+                    break;
+                case 'h2h':
+                    result = await getMatchH2H(matchId);
+                    break;
+                case 'standings':
+                    // CRITICAL FIX: Get season_id from match if available, otherwise skip
+                    // Don't fail if match is not loaded yet - just return null
+                    const seasonId = match?.season_id;
+                    if (seasonId) {
+                        result = await getSeasonStandings(seasonId);
+                    } else {
+                        result = null; // No season_id, result stays null
+                    }
+                    break;
+                case 'lineup':
+                    result = await getMatchLineup(matchId);
+                    break;
+                case 'trend':
+                    // Fetch both trend and live detail (for incidents/events)
+                    // If match is finished, getMatchDetailLive might still return events if available
+                    const [trendData, detailLive] = await Promise.all([
+                        getMatchTrend(matchId),
+                        getMatchDetailLive(matchId).catch(() => ({})) // Fail gracefully
+                    ]);
+                    result = {
+                        trend: trendData,
+                        incidents: detailLive?.incidents || []
+                    };
+                    break;
+                case 'events':
+                    // Fetch incidents for events timeline
+                    // Try detail-live first (for live matches), then fallback to stats (for finished matches)
+                    let eventsData = await getMatchDetailLive(matchId).catch(() => ({}));
+                    let incidents = eventsData?.incidents || [];
+
+                    // If no incidents from detail-live, try stats endpoint (has historical data)
+                    if (incidents.length === 0) {
+                        const statsData = await getMatchTeamStats(matchId).catch(() => ({}));
+                        incidents = statsData?.incidents || [];
+                    }
+
+                    result = { incidents };
+                    break;
+            }
+            // CRITICAL FIX: Only update data if we got a result
+            // This prevents clearing existing data if fetch fails
+            if (result !== undefined) {
+                setTabData(result);
+                // Mark this tab+matchId as loaded ONLY after successful fetch
+                tabDataLoadedRef.current = { tab: activeTab, matchId: matchId };
+            }
+        } catch (err: any) {
+            console.error('Tab data fetch error:', err);
+            setError(err.message || 'Veri yüklenirken hata oluştu');
+            // CRITICAL: Don't clear existing data on error - keep showing old data
+            // Only clear if this is the first load (tabData is null)
+            if (tabData === null) {
+                setTabData(null);
+            }
+        } finally {
+            setTabLoading(false);
+            isFetchingRef.current = false;
+        }
+    }, [matchId, activeTab, match?.season_id]);
+
+    // Fetch tab data when tab or matchId changes
     useEffect(() => {
-        const fetchTabData = async () => {
-            if (!matchId) return;
-
-            // CRITICAL FIX: Check if this exact tab+matchId combination has already been loaded
-            // This prevents unnecessary refetches when match object reference changes (e.g., WebSocket updates)
-            if (tabDataLoadedRef.current?.tab === activeTab && tabDataLoadedRef.current?.matchId === matchId) {
-                // This tab data is already loaded for this match, skip refetch
-                // CRITICAL: Don't set loading state or clear data - just return silently
-                return;
-            }
-
-            // CRITICAL FIX: For standings tab, we need match.season_id, so wait for match to load
-            if (activeTab === 'standings' && !match?.season_id) {
-                // Don't fetch yet, wait for match to load
-                return;
-            }
-
-            // CRITICAL FIX: Only set loading state when actually fetching NEW data
-            // Don't clear existing data until we have new data (prevents flickering)
-            setTabLoading(true);
-            // DON'T clear tabData here - keep existing data visible while loading new data
-            setError(null); // Clear previous errors
-
-            try {
-                let result;
-                switch (activeTab) {
-                    case 'stats':
-                        // Fetch combined stats (live-stats endpoint includes both basic and detailed stats)
-                        // Also fetch half time stats for period selection
-                        const [liveStats, halfStats] = await Promise.allSettled([
-                            getMatchLiveStats(matchId).catch(() => null), // Fail gracefully, fallback to teamStats
-                            getMatchHalfStats(matchId).catch(() => null) // Fail gracefully
-                        ]);
-
-                        // If liveStats failed, fallback to teamStats
-                        let fullTimeData = null;
-                        if (liveStats.status === 'fulfilled' && liveStats.value) {
-                            fullTimeData = {
-                                stats: liveStats.value.stats || [],
-                                incidents: liveStats.value.incidents || [],
-                            };
-                        } else {
-                            // Fallback to getMatchTeamStats
-                            try {
-                                const teamStats = await getMatchTeamStats(matchId);
-                                fullTimeData = teamStats;
-                            } catch {
-                                fullTimeData = null;
-                            }
-                        }
-
-                        result = {
-                            fullTime: fullTimeData,
-                            halfTime: halfStats.status === 'fulfilled' ? halfStats.value : null,
-                        };
-                        break;
-                    case 'h2h':
-                        result = await getMatchH2H(matchId);
-                        break;
-                    case 'standings':
-                        // CRITICAL FIX: Get season_id from match if available, otherwise skip
-                        // Don't fail if match is not loaded yet - just return null
-                        const seasonId = match?.season_id;
-                        if (seasonId) {
-                            result = await getSeasonStandings(seasonId);
-                        } else {
-                            result = null; // No season_id, result stays null
-                        }
-                        break;
-                    case 'lineup':
-                        result = await getMatchLineup(matchId);
-                        break;
-                    case 'trend':
-                        // Fetch both trend and live detail (for incidents/events)
-                        // If match is finished, getMatchDetailLive might still return events if available
-                        const [trendData, detailLive] = await Promise.all([
-                            getMatchTrend(matchId),
-                            getMatchDetailLive(matchId).catch(() => ({})) // Fail gracefully
-                        ]);
-                        result = {
-                            trend: trendData,
-                            incidents: detailLive?.incidents || []
-                        };
-                        break;
-                    case 'events':
-                        // Fetch incidents for events timeline
-                        // Try detail-live first (for live matches), then fallback to stats (for finished matches)
-                        let eventsData = await getMatchDetailLive(matchId).catch(() => ({}));
-                        let incidents = eventsData?.incidents || [];
-
-                        // If no incidents from detail-live, try stats endpoint (has historical data)
-                        if (incidents.length === 0) {
-                            const statsData = await getMatchTeamStats(matchId).catch(() => ({}));
-                            incidents = statsData?.incidents || [];
-                        }
-
-                        result = { incidents };
-                        break;
-                }
-                // CRITICAL FIX: Only update data if we got a result
-                // This prevents clearing existing data if fetch fails
-                if (result !== undefined) {
-                    setTabData(result);
-                    // Mark this tab+matchId as loaded ONLY after successful fetch
-                    tabDataLoadedRef.current = { tab: activeTab, matchId: matchId };
-                }
-            } catch (err: any) {
-                console.error('Tab data fetch error:', err);
-                setError(err.message || 'Veri yüklenirken hata oluştu');
-                // CRITICAL: Don't clear existing data on error - keep showing old data
-                // Only clear if this is the first load (tabData is null)
-                if (tabData === null) {
-                    setTabData(null);
-                }
-            } finally {
-                setTabLoading(false);
-            }
-        };
-
         // CRITICAL FIX: Only fetch if match is available OR if we're fetching data that doesn't need match
         // For events/trend/h2h/lineup, we don't need match object
         // For standings, we need match.season_id, but we handle that gracefully
         if (matchId) {
-            fetchTabData();
+            fetchTabData(false);
         }
         // CRITICAL FIX: Only refetch when activeTab or matchId changes
         // match object updates (e.g., WebSocket score changes) should NOT trigger refetch
         // We use tabDataLoadedRef to track what's already loaded and prevent unnecessary refetches
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeTab, matchId]);
+    }, [activeTab, matchId, match?.season_id]);
+
+    // WebSocket integration for real-time updates
+    // Only connect for live matches (status 2,3,4,5,7)
+    const _isLiveMatch = match && [2, 3, 4, 5, 7].includes((match as any).status_id ?? 0);
+
+    // Debounced refresh function for tab data
+    const refreshTabData = useCallback(() => {
+        if (!matchId || isFetchingRef.current) return;
+
+        // Clear existing debounce timer
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        // Debounce tab data refresh (500ms)
+        debounceTimerRef.current = setTimeout(() => {
+            // Invalidate tabDataLoadedRef to force refresh
+            tabDataLoadedRef.current = null;
+            fetchTabData(true); // Force refresh from WebSocket
+        }, 500);
+    }, [matchId, activeTab, fetchTabData]);
+
+    // Debounced refresh function for match info
+    const refreshMatchInfo = useCallback(() => {
+        if (!matchId) return;
+
+        // Clear existing debounce timer
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        // Debounce match info refresh (500ms)
+        debounceTimerRef.current = setTimeout(async () => {
+            try {
+                // Try to get updated match info from live matches
+                const liveResponse = await getLiveMatches();
+                const updatedMatch = liveResponse.results?.find((m: Match) => m.id === matchId);
+                if (updatedMatch) {
+                    setMatch(updatedMatch);
+                }
+            } catch (error) {
+                console.error('[MatchDetailPage] Failed to refresh match info:', error);
+            }
+        }, 500);
+    }, [matchId]);
+
+    // WebSocket event handlers
+    useMatchSocket(matchId || '', {
+        onScoreChange: (event) => {
+            if (!matchId || event.matchId !== matchId) return;
+
+            console.log('[MatchDetailPage] WebSocket score change:', event);
+
+            // Optimistic update: Update match info immediately
+            setMatch(prevMatch => {
+                if (!prevMatch) return prevMatch;
+                return {
+                    ...prevMatch,
+                    home_score: event.homeScore ?? (prevMatch as any).home_score,
+                    away_score: event.awayScore ?? (prevMatch as any).away_score,
+                };
+            });
+
+            // Refresh match info (debounced)
+            refreshMatchInfo();
+
+            // Refresh tab data if events/stats/trend tab is active
+            if (['events', 'stats', 'trend'].includes(activeTab)) {
+                refreshTabData();
+            }
+        },
+        onMatchStateChange: (event) => {
+            if (!matchId || event.matchId !== matchId) return;
+
+            console.log('[MatchDetailPage] WebSocket match state change:', event);
+
+            // Update match status
+            setMatch(prevMatch => {
+                if (!prevMatch) return prevMatch;
+                return {
+                    ...prevMatch,
+                    status: event.statusId ?? (prevMatch as any).status,
+                    status_id: event.statusId ?? (prevMatch as any).status_id,
+                };
+            });
+
+            // Refresh match info (debounced)
+            refreshMatchInfo();
+
+            // Refresh all tab data (status change affects all tabs)
+            refreshTabData();
+        },
+        onAnyEvent: (event) => {
+            if (!matchId || event.matchId !== matchId) return;
+
+            console.log('[MatchDetailPage] WebSocket any event:', event);
+
+            // For events tab, refresh immediately
+            if (activeTab === 'events') {
+                refreshTabData();
+            }
+
+            // For stats/trend tabs, refresh if relevant
+            if (['stats', 'trend'].includes(activeTab)) {
+                refreshTabData();
+            }
+        },
+    });
 
 
 

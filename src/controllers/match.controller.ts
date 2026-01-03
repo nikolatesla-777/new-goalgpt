@@ -914,22 +914,42 @@ export const getMatchTrend = async (
 };
 
 // Helper function to get trend from database
+// CRITICAL FIX: Read from trend_data column (not statistics->'trend')
+// PostMatchProcessor writes to trend_data column
 async function getTrendFromDatabase(matchId: string): Promise<any | null> {
   const { pool } = await import('../database/connection');
   const client = await pool.connect();
   try {
     const result = await client.query(`
-      SELECT statistics->'trend' as trend
+      SELECT trend_data
       FROM ts_matches
       WHERE external_id = $1
-        AND statistics->'trend' IS NOT NULL
+        AND trend_data IS NOT NULL
     `, [matchId]);
 
-    if (result.rows.length === 0 || !result.rows[0].trend) {
+    if (result.rows.length === 0 || !result.rows[0].trend_data) {
       return null;
     }
 
-    return result.rows[0].trend;
+    // trend_data formatını MatchTrendResponse formatına çevir
+    // trend_data is already an array or object, wrap it in results format
+    const trendData = result.rows[0].trend_data;
+    
+    // If it's already in the correct format, return it
+    if (trendData && typeof trendData === 'object') {
+      // Check if it's already wrapped in results
+      if (Array.isArray(trendData)) {
+        return { results: trendData };
+      }
+      // If it's an object with first_half/second_half, wrap it
+      if (trendData.first_half || trendData.second_half) {
+        return { results: [trendData] };
+      }
+      // Otherwise wrap in results array
+      return { results: [trendData] };
+    }
+
+    return { results: trendData };
   } catch (error: any) {
     logger.error(`[MatchController] Error reading trend from database for ${matchId}:`, error);
     return null;
