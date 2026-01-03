@@ -263,8 +263,6 @@ export function MatchDetailPage() {
     }, [activeTab, matchId, match?.season_id]);
 
     // WebSocket integration for real-time updates
-    // Only connect for live matches (status 2,3,4,5,7)
-    const _isLiveMatch = match && [2, 3, 4, 5, 7].includes((match as any).status_id ?? 0);
 
     // Debounced refresh function for tab data
     const refreshTabData = useCallback(() => {
