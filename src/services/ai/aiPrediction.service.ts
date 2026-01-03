@@ -1090,10 +1090,15 @@ export class AIPredictionService {
 
     /**
      * Settle predictions for a specific match (auto settlement)
-     * Called when match ends (status_id >= 8)
+     * Called when match ends (status_id >= 8) OR transitions to HT (status_id = 3)
      */
-    async settleMatchPredictions(matchExternalId: string): Promise<{ settled: number; winners: number; losers: number }> {
-        logger.info(`[AIPrediction] Auto-settling predictions for match: ${matchExternalId}`);
+    async settleMatchPredictions(
+        matchExternalId: string,
+        overridingStatusId?: number,
+        overridingHomeScore?: number,
+        overridingAwayScore?: number
+    ): Promise<{ settled: number; winners: number; losers: number }> {
+        logger.info(`[AIPrediction] Auto-settling predictions for match: ${matchExternalId} (Status: ${overridingStatusId ?? 'DB'})`);
 
         let settled = 0;
         let winners = 0;
@@ -1130,10 +1135,21 @@ export class AIPredictionService {
             }
 
             for (const row of result.rows) {
-                const homeScore = parseInt(row.home_score_display) || 0;
-                const awayScore = parseInt(row.away_score_display) || 0;
-                const htHome = parseInt(row.home_score_ht) || 0;
-                const htAway = parseInt(row.away_score_ht) || 0;
+                // Use overrides if provided, else DB values
+                const statusId = overridingStatusId !== undefined ? overridingStatusId : row.status_id;
+
+                const homeScore = overridingHomeScore !== undefined ? overridingHomeScore : (parseInt(row.home_score_display) || 0);
+                const awayScore = overridingAwayScore !== undefined ? overridingAwayScore : (parseInt(row.away_score_display) || 0);
+
+                // If we are overriding with Live HT scores (Status 3), use them for HT scores too
+                // (At Status 3, Current Score == HT Score)
+                let htHome = parseInt(row.home_score_ht) || 0;
+                let htAway = parseInt(row.away_score_ht) || 0;
+
+                if (overridingStatusId === 3 && overridingHomeScore !== undefined && overridingAwayScore !== undefined) {
+                    htHome = overridingHomeScore;
+                    htAway = overridingAwayScore;
+                }
 
                 // Determine period from prediction type
                 const period = row.prediction_type?.toUpperCase().includes('IY') ? 'IY' : 'MS';
@@ -1147,7 +1163,7 @@ export class AIPredictionService {
                     htHome,
                     htAway,
                     period as 'IY' | 'MS',
-                    row.status_id
+                    statusId
                 );
 
                 if (calcResult) {
@@ -1185,7 +1201,7 @@ export class AIPredictionService {
      * Check for INSTANT WIN when a goal is scored
      * Called by WebSocketService on GOAL event
      */
-    async settleInstantWin(matchExternalId: string, homeScore: number, awayScore: number, minute: number): Promise<void> {
+    async settleInstantWin(matchExternalId: string, homeScore: number, awayScore: number, minute: number, overridingStatusId?: number): Promise<void> {
         const client = await pool.connect();
         try {
             // Find pending predictions for this match AND fetch match status
@@ -1223,12 +1239,15 @@ export class AIPredictionService {
                     if (aScores[1] !== undefined) htAway = parseInt(aScores[1]);
                 } catch (e) { /* ignore */ }
 
+                // Use overriding status if available (from live WS event), otherwise DB status
+                const effectiveStatusId = overridingStatusId !== undefined ? overridingStatusId : row.status_id;
+
                 const check = this.checkInstantWin(
                     row.prediction_type,
                     row.prediction_value,
                     totalGoals,
                     minute,
-                    row.status_id,
+                    effectiveStatusId,
                     htHome,
                     htAway
                 );

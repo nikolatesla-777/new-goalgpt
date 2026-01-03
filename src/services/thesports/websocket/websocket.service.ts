@@ -124,7 +124,12 @@ export class WebSocketService {
             const statusChanged = previousState !== null && previousState !== nextState;
 
             // CRITICAL: Handle match state transitions (including resurrection)
-            this.handleMatchStateTransition(parsedScore.matchId, parsedScore.statusId);
+            this.handleMatchStateTransition(
+              parsedScore.matchId,
+              parsedScore.statusId,
+              parsedScore.home.score,
+              parsedScore.away.score
+            );
 
             // If status changed (and we had a previous state), persist to DB + notify frontend
             if (statusChanged) {
@@ -338,7 +343,7 @@ export class WebSocketService {
           if (inferredStatus !== null) {
             logger.info(`[WebSocket/TLIVE] Inferred status ${inferredStatus} from tlive for match ${matchId}, updating database`);
             // Update local transition map (resurrection-safe)
-            this.handleMatchStateTransition(matchId, inferredStatus);
+            this.handleMatchStateTransition(matchId, inferredStatus); // Score unavailable in status-only update, will default to DB scores if needed
 
             // Update DB status_id immediately (source of truth for UI)
             await this.updateMatchStatusInDatabase(matchId, inferredStatus, providerUpdateTime);
@@ -778,7 +783,10 @@ export class WebSocketService {
    * - Standard: 4 (2nd Half) -> 8 (End)
    * - Cup: 4 -> 8 (End of Reg) -> 5 (Overtime) -> 8 (End of OT) -> 7 (Penalty) -> 8 (Final)
    */
-  private handleMatchStateTransition(matchId: string, statusId: number): void {
+  /*
+   * Handle match state transition
+   */
+  private handleMatchStateTransition(matchId: string, statusId: number, homeScore?: number, awayScore?: number): void {
     const currentState = statusId as MatchState;
     const previousState = this.matchStates.get(matchId)?.status;
 
@@ -818,6 +826,17 @@ export class WebSocketService {
         status: currentState,
         lastStatus8Time: null,
       });
+
+      // CRITICAL FIX: Trigger Halftime Settlement immediately
+      if (statusId === 3) { // 3 = Halftime
+        logger.info(`[WebSocket] Match ${matchId} reached Halftime (Status 3). Triggering AI Settlement...`);
+        // Pass live scores as HT scores
+        aiPredictionService.settleMatchPredictions(matchId, statusId, homeScore, awayScore)
+          .then(res => {
+            if (res.settled > 0) logger.info(`[AutoSettlement] HT Settlement for ${matchId}: ${res.settled} settled`);
+          })
+          .catch(err => logger.error(`[AutoSettlement] HT Settlement failed for ${matchId}:`, err));
+      }
     } else {
       // Other states - just track
       this.matchStates.set(matchId, {
