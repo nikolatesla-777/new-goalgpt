@@ -166,8 +166,26 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
 
     // If sorting by time, don't group by competition
     if (sortBy === 'time') {
-      // Sort all matches by match_time
+      // CRITICAL FIX: Sort by minute (descending) for live matches, match_time for others
+      // Live matches should show highest minute first (80' before 73')
       const sortedByTime = [...safeMatches].sort((a, b) => {
+        const statusA = (a as any).status_id ?? (a as any).status ?? 0;
+        const statusB = (b as any).status_id ?? (b as any).status ?? 0;
+        const isLiveA = [2, 3, 4, 5, 7].includes(statusA);
+        const isLiveB = [2, 3, 4, 5, 7].includes(statusB);
+        
+        // For live matches, sort by minute (descending - highest minute first)
+        if (isLiveA && isLiveB) {
+          const minuteA = a.minute ?? 0;
+          const minuteB = b.minute ?? 0;
+          return minuteB - minuteA; // Descending: 80' before 73'
+        }
+        
+        // If only one is live, live matches come first
+        if (isLiveA && !isLiveB) return -1;
+        if (!isLiveA && isLiveB) return 1;
+        
+        // For non-live matches, sort by match_time (ascending - earliest first)
         const timeA = a.match_time || 0;
         const timeB = b.match_time || 0;
         return timeA - timeB;
