@@ -4,15 +4,13 @@ import { pool } from '../database/connection';
 async function checkInstantWin(predictionType: string, predictionValue: string, newTotalGoals: number, minute: number) {
     const value = parseFloat(predictionValue);
     const isOver = predictionType.toUpperCase().includes('ÜST');
-    const isUnder = predictionType.toUpperCase().includes('ALT');
     const isIY = predictionType.toUpperCase().includes('IY');
-    const isMS = predictionType.toUpperCase().includes('MS');
 
     console.log(`Checking: Type=${predictionType}, Val=${value}, Goals=${newTotalGoals}, Min=${minute}`);
-    console.log(`Parsed: isOver=${isOver}, isUnder=${isUnder}, isIY=${isIY}, isMS=${isMS}`);
 
-    if (isIY && minute > 45) {
-        console.log('Reason: IY period ended');
+    // Adjusted logic: allow IY up to 55 for injury time
+    if (isIY && minute > 55) {
+        console.log('Reason: IY period ended (> 55)');
         return { isInstantWin: false, reason: 'IY period ended' };
     }
 
@@ -25,14 +23,23 @@ async function checkInstantWin(predictionType: string, predictionValue: string, 
         }
     }
 
-    // ... (rest of logic not needed for this Over case)
     return { isInstantWin: false, reason: null };
 }
 
 async function main() {
-    const matchId = process.argv[2] || 'dn1m1ghl3wopmoe';
+    const matchId = process.argv[2];
+    const homeScore = parseInt(process.argv[3] || '0', 10);
+    const awayScore = parseInt(process.argv[4] || '0', 10);
+    const minute = parseInt(process.argv[5] || '46', 10);
+
+    if (!matchId) {
+        console.error('Usage: <matchId> <homeScore> <awayScore> <minute>');
+        process.exit(1);
+    }
+
     const client = await pool.connect();
     try {
+        // Query pending predictions
         const query = `
             SELECT 
                 p.id as prediction_id, 
@@ -43,14 +50,17 @@ async function main() {
             FROM ai_predictions p
             JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
             WHERE pm.match_external_id = $1
+              AND pm.prediction_result = 'pending'
         `;
 
         const result = await client.query(query, [matchId]);
-        console.log(`Found ${result.rows.length} predictions for match ${matchId}`);
+        console.log(`Found ${result.rows.length} pending predictions for match ${matchId}`);
 
         for (const row of result.rows) {
             console.log(`--- Checking Prediction ${row.prediction_id} ---`);
-            const check = await checkInstantWin(row.prediction_type, row.prediction_value, 1, 23); // Force inputs: 1 goal, 23 min
+            const totalGoals = homeScore + awayScore;
+
+            const check = await checkInstantWin(row.prediction_type, row.prediction_value, totalGoals, minute);
 
             if (check.isInstantWin) {
                 console.log('WOULD SETTLE AS WINNER! Executing update...');
@@ -64,10 +74,10 @@ async function main() {
                         resulted_at = NOW(),
                         updated_at = NOW()
                     WHERE id = $4
-                `, [check.reason, 0, 1, row.match_link_id]);
+                `, [check.reason, homeScore, awayScore, row.match_link_id]);
                 console.log('✅ Updated database.');
             } else {
-                console.log('WOULD NOT SETTLE.');
+                console.log('WOULD NOT SETTLE. Reason:', check.reason);
             }
         }
 
