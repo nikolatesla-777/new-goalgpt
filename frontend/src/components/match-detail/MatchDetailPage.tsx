@@ -5,7 +5,7 @@
  * Accessed via /match/:matchId route
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     getMatchH2H,
