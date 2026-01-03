@@ -209,8 +209,6 @@ export class MatchDatabaseService {
 
       logger.info(`🔍 [MatchDatabase] Querying live matches from DATABASE...`);
 
-      const now = Math.floor(Date.now() / 1000);
-
       // Phase 5-S Fix: Removed "should be live" reconciliation from /live endpoint
       // "Should be live" matches are now handled by watchdog and exposed via /api/matches/should-be-live
       // This keeps /live endpoint strict, fast, and contract-compliant
@@ -265,8 +263,7 @@ export class MatchDatabaseService {
         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-        WHERE m.status_id IN (2, 3, 4, 5, 7)  -- Strictly playing
-           OR (m.status_id IN (9, 10, 13) AND m.match_time >= ${now - 24 * 3600}) -- Recently finished/interrupted (last 24h)
+        WHERE m.status_id IN (2, 3, 4, 5, 7)  -- CRITICAL FIX: ONLY strictly live matches (no finished/interrupted)
         ORDER BY m.match_time DESC, c.name ASC
       `;
 
