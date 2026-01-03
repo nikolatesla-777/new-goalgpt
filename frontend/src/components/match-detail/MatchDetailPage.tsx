@@ -109,11 +109,19 @@ export function MatchDetailPage() {
 
         fetchMatch();
 
-        // Poll every 10 seconds for live match updates (reduced from 3s to reduce load)
-        const pollInterval = setInterval(fetchMatch, 10000);
+        // CRITICAL FIX: Only poll for LIVE matches (status 2,3,4,5,7)
+        // Finished matches (status 8) don't need polling - causes screen flickering
+        const pollInterval = setInterval(() => {
+            // Only poll if match is live (check current match state)
+            const currentStatus = match?.status_id ?? match?.status ?? 0;
+            const isLive = [2, 3, 4, 5, 7].includes(currentStatus);
+            if (isLive) {
+                fetchMatch();
+            }
+        }, 10000);
 
         return () => clearInterval(pollInterval);
-    }, [matchId]);
+    }, [matchId, match]);
 
     // Fetch tab data
     useEffect(() => {

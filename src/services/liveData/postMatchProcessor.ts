@@ -144,9 +144,16 @@ export class PostMatchProcessor {
         [matchId]
       );
 
-      if (existing.rows[0]?.statistics && Object.keys(existing.rows[0].statistics).length > 0) {
-        logger.debug(`[PostMatch] Stats already exist for ${matchId}, skipping`);
-        return;
+      // CRITICAL FIX: Statistics can be array or object - check both cases
+      const existingStats = existing.rows[0]?.statistics;
+      if (existingStats) {
+        const hasStats = Array.isArray(existingStats) 
+          ? existingStats.length > 0 
+          : Object.keys(existingStats).length > 0;
+        if (hasStats) {
+          logger.debug(`[PostMatch] Stats already exist for ${matchId}, skipping`);
+          return;
+        }
       }
 
       // Fetch from API and save

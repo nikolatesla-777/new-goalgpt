@@ -235,6 +235,19 @@ export class MatchWatchdogWorker {
                       match_time: matchTime,
                       elapsed_minutes: Math.floor((nowTs - matchTime) / 60),
                     });
+
+                    // CRITICAL FIX: Trigger post-match persistence when HALF_TIME match transitions to END
+                    logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} transitioned to END (8), triggering post-match persistence...`);
+                    try {
+                      const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
+                      const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
+                      const processor = new PostMatchProcessor(new TheSportsClient());
+                      await processor.onMatchEnded(stale.matchId);
+                      logger.info(`[Watchdog] ✅ Post-match persistence completed for ${stale.matchId}`);
+                    } catch (postMatchErr: any) {
+                      logger.warn(`[Watchdog] Failed to trigger post-match persistence for ${stale.matchId}:`, postMatchErr.message);
+                    }
+
                     continue; // Skip further processing
                   }
                 }
