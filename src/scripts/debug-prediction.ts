@@ -13,7 +13,7 @@ async function main() {
         console.log(`Analyzing match: ${matchId}`);
 
         // 1. Get Match Info
-        const matchRes = await client.query(`SELECT id, home_team, away_team, home_score, away_score, status_id, status FROM ts_matches WHERE id = $1`, [matchId]);
+        const matchRes = await client.query(`SELECT * FROM ts_matches WHERE id = $1`, [matchId]);
         console.log('--- Match Info ---');
         if (matchRes.rows.length === 0) {
             console.log('Match custom ID not found in ts_matches. Trying external ID lookup...');
