@@ -21,6 +21,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   const hasLoadedRef = useRef(false);
   const isFetchingRef = useRef(false);
   const fetchRef = useRef<() => Promise<void>>(async () => { });
+  const debounceTimerRef = useRef<number | null>(null); // Debounce timer for WebSocket + polling coordination
 
   // CRITICAL FIX: Ensure matches is always an array (never null/undefined)
   const safeMatches = Array.isArray(matches) ? matches : [];
@@ -36,7 +37,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       // CRITICAL FIX: Silent Refresh
       // Use Ref instead of 'matches.length' to avoid stale closure flickering
       if (!hasLoadedRef.current) {
-        setLoading(true);
+      setLoading(true);
       }
 
       let response;
@@ -90,7 +91,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         const dateStr = date || getTodayInTurkey();
         response = await getMatchDiary(dateStr);
       }
-
+      
       // Check for error in response even if API call succeeded
       if (response && (response as any).err) {
         throw new Error((response as any).err);
@@ -132,7 +133,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       } else {
         // Invalid response - keep existing matches, just log warning
         console.warn('[MatchList] Invalid response structure, keeping existing matches');
-        setLastUpdate(new Date());
+      setLastUpdate(new Date());
       }
     } catch (err: any) {
       console.error('Error fetching matches:', err);
@@ -214,8 +215,10 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       grouped.get(compId)!.matches.push(match);
     });
 
-    // CRITICAL FIX: Sort matches within each competition
+    // CRITICAL FIX: Sort matches within each competition with stable secondary sort
     // This prevents matches from constantly changing positions during polling
+    // Primary sort: status (live first), then minute/match_time
+    // Secondary sort: match ID (stable, prevents reordering of same-time matches)
     grouped.forEach((group) => {
       group.matches.sort((a, b) => {
         const statusA = (a as any).status_id ?? (a as any).status ?? 0;
@@ -227,7 +230,11 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         if (isLiveA && isLiveB) {
           const minuteA = a.minute ?? 0;
           const minuteB = b.minute ?? 0;
-          return minuteB - minuteA; // Descending: 80' before 73'
+          if (minuteA !== minuteB) {
+            return minuteB - minuteA; // Descending: 80' before 73'
+          }
+          // CRITICAL: Secondary sort by ID for stability (same minute matches stay in same order)
+          return a.id.localeCompare(b.id);
         }
         
         // If only one is live, live matches come first
@@ -237,7 +244,11 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         // For non-live matches, sort by match_time (ascending - earliest first)
         const timeA = a.match_time || 0;
         const timeB = b.match_time || 0;
-        return timeA - timeB;
+        if (timeA !== timeB) {
+          return timeA - timeB;
+        }
+        // CRITICAL: Secondary sort by ID for stability (same time matches stay in same order)
+        return a.id.localeCompare(b.id);
       });
     });
 
@@ -283,9 +294,20 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
             message.type === 'MATCH_STATE_CHANGE'
           ) {
             console.log(
-              `⚡ Real-time update (${message.type}) for match ${message.matchId} - refreshing matches...`
+              `⚡ Real-time update (${message.type}) for match ${message.matchId} - debounced refresh...`
             );
-            fetchRef.current(); // Always call latest fetch
+            
+            // CRITICAL FIX: Debounce WebSocket events to prevent race condition with polling
+            // Clear existing debounce timer
+            if (debounceTimerRef.current !== null) {
+              window.clearTimeout(debounceTimerRef.current);
+            }
+            
+            // Set new debounce timer (500ms delay)
+            debounceTimerRef.current = window.setTimeout(() => {
+              fetchRef.current(); // Always call latest fetch
+              debounceTimerRef.current = null;
+            }, 500); // 500ms debounce to batch rapid WebSocket events
           }
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error);
@@ -311,6 +333,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
 
     return () => {
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
       if (ws) ws.close();
     };
   }, []);
@@ -318,12 +341,19 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   useEffect(() => {
     fetchMatches();
 
-    // CRITICAL FIX: Poll every 10 seconds for real-time score updates
-    // If 502 error, retry more frequently (every 3 seconds) to catch backend when it comes back
-    // Normal polling: 10 seconds (reduced load on backend)
-    const pollInterval = error && error.includes('502') ? 3000 : 10000;
+    // CRITICAL FIX: Poll every 15 seconds for real-time score updates (increased from 10s to reduce race condition)
+    // If 502 error, retry more frequently (every 5 seconds) to catch backend when it comes back
+    // Normal polling: 15 seconds (reduced load on backend and less conflict with WebSocket)
+    // WebSocket handles most real-time updates, polling is fallback
+    const pollInterval = error && error.includes('502') ? 5000 : 15000;
     const interval = setInterval(() => {
-      fetchMatches();
+      // CRITICAL FIX: Check if WebSocket debounce is active, if so skip this polling cycle
+      // This prevents polling and WebSocket from conflicting
+      if (debounceTimerRef.current === null) {
+        fetchMatches();
+      } else {
+        console.log('[MatchList] Skipping polling cycle - WebSocket debounce active');
+      }
     }, pollInterval);
 
     return () => {
@@ -602,11 +632,11 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
               return null;
             }
             return (
-              <LeagueSection
-                key={compId || 'unknown'}
-                competition={competition}
-                matches={compMatches}
-              />
+          <LeagueSection
+            key={compId || 'unknown'}
+            competition={competition}
+            matches={compMatches}
+          />
             );
           })
         ) : (

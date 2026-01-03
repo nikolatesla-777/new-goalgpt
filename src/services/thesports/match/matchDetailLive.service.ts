@@ -633,14 +633,15 @@ export class MatchDetailLiveService {
           // CRITICAL FIX: Match is LIVE in DB but provider didn't return it
           // This likely means match has finished. Check if enough time has passed (150 minutes)
           // Standard match: 90 minutes + 15 min HT = 105 minutes, with overtime: up to 120 minutes
-          // Safety margin: 150 minutes (2.5 hours) from match_time
-          const minTimeForEnd = (matchTime || 0) + (150 * 60); // 150 minutes in seconds
+          // CRITICAL FIX: Reduced safety margin from 150 to 120 minutes (2 hours) for faster match ending
+          // This ensures matches end faster when they should be finished
+          const minTimeForEnd = (matchTime || 0) + (120 * 60); // 120 minutes in seconds (was 150)
 
           if (nowTs >= minTimeForEnd) {
-            // Match time is old enough (>150 min), safe to transition to END
+            // Match time is old enough (>120 min), safe to transition to END
             logger.info(
               `[DetailLive] Match ${match_id} not found in provider response and match_time (${matchTime}) ` +
-              `is ${Math.floor((nowTs - matchTime) / 60)} minutes ago (>150 min). ` +
+              `is ${Math.floor((nowTs - matchTime) / 60)} minutes ago (>120 min). ` +
               `Transitioning from status ${existingStatusId} to END (8).`
             );
 

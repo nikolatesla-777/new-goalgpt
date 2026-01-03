@@ -81,7 +81,7 @@ export class ProactiveMatchStatusCheckWorker {
               (status_id = 8 AND match_time >= $4)
             )
           ORDER BY match_time ASC
-          LIMIT 100
+          LIMIT 200
         `;
 
         const result = await client.query(query, [todayStartTSI, todayEndTSI, nowTs, minTimeForEnd]);
@@ -195,12 +195,13 @@ export class ProactiveMatchStatusCheckWorker {
       return;
     }
 
-    // CRITICAL FIX: Run every 20 seconds (more aggressive for real-time updates)
+    // CRITICAL FIX: Run every 10 seconds (very aggressive for real-time updates)
+    // This ensures matches start and end as quickly as possible
     this.intervalId = setInterval(() => {
       this.checkTodayMatches().catch(err => {
         logger.error('[ProactiveCheck] Interval error:', err);
       });
-    }, 20000); // 20 seconds (was 30)
+    }, 10000); // 10 seconds (was 20, more aggressive)
 
     // Run immediately on start
     setTimeout(() => {
