@@ -186,7 +186,8 @@ export class WebSocketService {
               parsedScore.matchId,
               parsedScore.home.score,
               parsedScore.away.score,
-              proxyMinute
+              proxyMinute,
+              parsedScore.statusId
             ).catch(err => logger.error(`[AutoSettlement] Error in score change handler: ${err.message}`));
 
             // Update cache (for fast reads before queue flushes)
