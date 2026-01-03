@@ -14,7 +14,7 @@ async function main() {
         // Or AI predictions table has `home_team_name`.
 
         const res = await client.query(`
-            SELECT p.id as pred_id, p.match_external_id, p.home_team_name, p.away_team_name, p.score_at_prediction, p.minute_at_prediction, p.created_at, pm.prediction_result
+            SELECT p.id as pred_id, pm.match_external_id, p.home_team_name, p.away_team_name, p.score_at_prediction, p.minute_at_prediction, p.created_at, pm.prediction_result
             FROM ai_predictions p
             LEFT JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
             WHERE p.home_team_name ILIKE $1 AND p.away_team_name ILIKE $2
