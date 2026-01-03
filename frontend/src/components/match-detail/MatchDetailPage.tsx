@@ -212,7 +212,10 @@ export function MatchDetailPage() {
         };
 
         fetchTabData();
-    }, [activeTab, matchId, match]);
+        // CRITICAL FIX: Removed 'match' from dependency array to prevent auto-refresh flickering
+        // match state changes should NOT trigger tab data refetch
+        // Only activeTab or matchId changes should trigger refetch
+    }, [activeTab, matchId]);
 
 
 
