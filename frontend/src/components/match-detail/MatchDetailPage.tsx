@@ -450,8 +450,8 @@ export function MatchDetailPage() {
                 ) : (
                     <>
                         {activeTab === 'ai' && <AIContent matchId={matchId || ''} />}
-                        {activeTab === 'stats' && <StatsContent data={tabData} match={match} isLoading={false} />}
-                        {activeTab === 'events' && <EventsContent data={tabData} match={match} isLoading={false} />}
+                        {activeTab === 'stats' && <StatsContent data={tabData} match={match} />}
+                        {activeTab === 'events' && <EventsContent data={tabData} match={match} />}
                         {activeTab === 'h2h' && <H2HContent data={tabData} />}
                         {activeTab === 'standings' && <StandingsContent data={tabData} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
                         {activeTab === 'lineup' && <LineupContent data={tabData} match={match} navigate={navigate} />}
