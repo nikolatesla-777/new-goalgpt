@@ -311,6 +311,41 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         }
     });
 
+
+
+    /**
+     * GET /api/predictions/bot-history
+     * List predictions for a specific bot via query param (safe for special chars)
+     */
+    fastify.get('/api/predictions/bot-history', async (request: FastifyRequest<{ Querystring: { botName: string; limit?: string } }>, reply: FastifyReply) => {
+        try {
+            const { botName, limit } = request.query;
+
+            if (!botName) {
+                return reply.status(400).send({
+                    success: false,
+                    error: 'botName query parameter is required'
+                });
+            }
+
+            const limitVal = parseInt(limit || '50', 10);
+            const predictions = await aiPredictionService.getPredictionsByBotName(botName, limitVal);
+
+            return reply.status(200).send({
+                success: true,
+                bot_name: botName,
+                count: predictions.length,
+                predictions
+            });
+        } catch (error) {
+            logger.error('[Predictions] Get bot history error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
     /**
      * GET /api/predictions/by-bot/:botName
      * List predictions for a specific bot

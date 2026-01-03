@@ -47,7 +47,7 @@ export function AdminBotDetail() {
 
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/predictions/by-bot/${encodeURIComponent(botName)}?limit=100`);
+            const res = await fetch(`${API_BASE}/predictions/bot-history?botName=${encodeURIComponent(botName)}&limit=100`);
             if (res.ok) {
                 const data = await res.json();
                 const preds = data.predictions || [];
