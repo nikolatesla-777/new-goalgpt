@@ -153,7 +153,7 @@ export const getMatchRecentList = async (
  * API calls should only happen in sync workers (DailyMatchSyncWorker, etc.)
  */
 export const getMatchDiary = async (
-  request: FastifyRequest<{ Querystring: MatchDiaryParams }>,
+  request: FastifyRequest<{ Querystring: MatchDiaryParams & { status?: string } }>,
   reply: FastifyReply
 ): Promise<void> => {
   try {
@@ -169,6 +169,20 @@ export const getMatchDiary = async (
     }
 
     const { dbDate, apiDate } = normalizedDate;
+    
+    // CRITICAL FIX: Parse status filter from query parameter
+    // status can be a single number or comma-separated list (e.g., "8" or "1,2,3")
+    let statusFilter: number[] | undefined;
+    if (query.status) {
+      try {
+        statusFilter = query.status.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+        if (statusFilter.length === 0) {
+          statusFilter = undefined;
+        }
+      } catch (error) {
+        logger.warn(`[MatchController] Invalid status filter: ${query.status}`);
+      }
+    }
 
     const normalizeDbMatch = (row: any) => {
       const externalId = row.external_id ?? row.match_id ?? row.id;
@@ -212,7 +226,8 @@ export const getMatchDiary = async (
 
     // Step 1: Query from database ONLY (DB-only mode)
     // CRITICAL: No API fallback - if DB is empty, return empty results
-    const dbResult = await matchDatabaseService.getMatchesByDate(dbDate);
+    // CRITICAL FIX: Pass status filter to backend query
+    const dbResult = await matchDatabaseService.getMatchesByDate(dbDate, statusFilter);
 
     // Step 2: Return database results (even if empty)
     const normalized = (dbResult.results || []).map(normalizeDbMatch);

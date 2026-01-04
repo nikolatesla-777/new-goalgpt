@@ -26,8 +26,9 @@ export class MatchDatabaseService {
   /**
    * Get matches from database for a specific date
    * Date format: YYYY-MM-DD or YYYYMMDD
+   * @param statusFilter Optional array of status IDs to filter (e.g., [8] for finished, [1] for not started)
    */
-  async getMatchesByDate(date: string): Promise<MatchDiaryResponse> {
+  async getMatchesByDate(date: string, statusFilter?: number[]): Promise<MatchDiaryResponse> {
     try {
       // Convert date format to YYYYMMDD if needed
       let dateStr = date.replace(/-/g, '');
@@ -106,10 +107,20 @@ export class MatchDatabaseService {
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
         WHERE m.match_time >= $1 AND m.match_time <= $2
-        ORDER BY m.match_time ASC, c.name ASC
       `;
 
-      const result = await pool.query(query, [startUnix, endUnix]);
+      const params: any[] = [startUnix, endUnix];
+      
+      // CRITICAL FIX: Add status filter if provided
+      if (statusFilter && statusFilter.length > 0) {
+        query += ` AND m.status_id = ANY($${params.length + 1})`;
+        params.push(statusFilter);
+        logger.info(`🔍 [MatchDatabase] Filtering by status: ${statusFilter.join(', ')}`);
+      }
+      
+      query += ` ORDER BY m.match_time ASC, c.name ASC`;
+
+      const result = await pool.query(query, params);
       const matches = result.rows || [];
 
       logger.info(`✅ [MatchDatabase] Found ${matches.length} matches in database for date ${dateStr}`);

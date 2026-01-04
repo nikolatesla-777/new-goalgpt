@@ -92,7 +92,18 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         // For diary, finished, not_started views - use diary endpoint with date
         const { getTodayInTurkey } = await import('../utils/dateUtils');
         const dateStr = date || getTodayInTurkey();
-        response = await getMatchDiary(dateStr);
+        
+        // CRITICAL FIX: Pass status filter to backend for finished/not_started views
+        // This reduces data transfer and ensures correct counts
+        let statusParam: string | undefined;
+        if (view === 'finished') {
+          statusParam = '8'; // END status
+        } else if (view === 'not_started') {
+          statusParam = '1'; // NOT_STARTED status
+        }
+        // For 'diary' view, don't pass status (get all matches)
+        
+        response = await getMatchDiary(dateStr, statusParam);
       }
       
       // Check for error in response even if API call succeeded
@@ -107,17 +118,22 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
           // Filter matches based on view type
           let filteredResults = results;
 
+          // CRITICAL FIX: Backend now filters by status, so frontend filtering is redundant
+          // But keep it as a safety check in case backend filter fails
           if (view === 'live') {
+            // Live matches already filtered by backend (getLiveMatches endpoint)
             filteredResults = results.filter((match: Match) => {
               const status = match.status ?? 0;
               return isLiveMatch(status);
             });
           } else if (view === 'finished') {
+            // Backend filters by status=8, but keep frontend filter as safety check
             filteredResults = results.filter((match: Match) => {
               const status = match.status ?? 0;
               return isFinishedMatch(status);
             });
           } else if (view === 'not_started') {
+            // Backend filters by status=1, but keep frontend filter as safety check
             filteredResults = results.filter((match: Match) => {
               const status = match.status ?? 0;
               return status === MatchState.NOT_STARTED;
@@ -601,7 +617,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
     }}>
       <div>
         <span style={{ fontWeight: '600', color: '#1e40af', fontSize: '1rem' }}>
-          TOTAL MATCHES IN DB: {safeMatches.length}
+          {view === 'live' ? 'CANLI MAÇLAR' : view === 'finished' ? 'BİTEN MAÇLAR' : view === 'not_started' ? 'BAŞLAMAYAN MAÇLAR' : 'TOPLAM MAÇ'}: {safeMatches.length}
         </span>
         {safeMatches.length > 0 && (
           <span style={{ marginLeft: '12px', fontSize: '0.875rem', color: '#64748b' }}>

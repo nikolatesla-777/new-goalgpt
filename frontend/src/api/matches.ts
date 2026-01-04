@@ -237,12 +237,18 @@ export async function getLiveMatches(): Promise<MatchDiaryResponse> {
 
 /**
  * Get match diary for a specific date
+ * @param date Date in YYYY-MM-DD format
+ * @param status Optional status filter (e.g., '8' for finished, '1' for not started)
  */
-export async function getMatchDiary(date?: string): Promise<MatchDiaryResponse> {
+export async function getMatchDiary(date?: string, status?: string): Promise<MatchDiaryResponse> {
   const queryParams = new URLSearchParams();
   if (date) {
     // Backend expects YYYY-MM-DD format, it will convert to YYYYMMDD internally
     queryParams.append('date', date);
+  }
+  // CRITICAL FIX: Add status filter if provided
+  if (status) {
+    queryParams.append('status', status);
   }
 
   const fullUrl = `${API_BASE_URL}/matches/diary?${queryParams}`;
