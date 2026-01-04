@@ -1322,17 +1322,41 @@ export const getMatchH2H = async (
     let h2hData = await preSyncService.getH2HFromDb(match_id);
     logger.info(`[getMatchH2H] Database query result for ${match_id}: ${h2hData ? 'FOUND' : 'NOT FOUND'}`);
 
-    // If not in DB, try API and save
+    // If not in DB, try API and save (ONLY for NOT_STARTED matches)
+    // CRITICAL: /match/analysis endpoint only works for matches that haven't started yet
+    // According to API docs: "Matches within 30 days before today" (future matches)
     if (!h2hData) {
-      logger.info(`[getMatchH2H] H2H not in DB for ${match_id}, fetching from API`);
+      // Check match status first
+      const { pool } = await import('../database/connection');
+      const client = await pool.connect();
+      let matchStatus: number | null = null;
       try {
-        const syncResult = await preSyncService.syncH2HToDb(match_id);
-        logger.info(`[getMatchH2H] syncH2HToDb result for ${match_id}: ${syncResult}`);
-        h2hData = await preSyncService.getH2HFromDb(match_id);
-        logger.info(`[getMatchH2H] After sync, h2hData from DB: ${h2hData ? 'found' : 'not found'}`);
-      } catch (syncError: any) {
-        logger.error(`[getMatchH2H] Failed to sync H2H for ${match_id}: ${syncError.message}`, syncError);
-        // Continue - h2hData will be null and we'll return "No H2H data available"
+        const statusResult = await client.query(
+          'SELECT status_id FROM ts_matches WHERE external_id = $1',
+          [match_id]
+        );
+        if (statusResult.rows.length > 0) {
+          matchStatus = statusResult.rows[0].status_id;
+        }
+      } finally {
+        client.release();
+      }
+
+      // Only sync from API if match is NOT_STARTED (status = 1)
+      // For started/finished matches, API returns empty results
+      if (matchStatus === 1) {
+        logger.info(`[getMatchH2H] H2H not in DB for ${match_id} (status=NOT_STARTED), fetching from API`);
+        try {
+          const syncResult = await preSyncService.syncH2HToDb(match_id);
+          logger.info(`[getMatchH2H] syncH2HToDb result for ${match_id}: ${syncResult}`);
+          h2hData = await preSyncService.getH2HFromDb(match_id);
+          logger.info(`[getMatchH2H] After sync, h2hData from DB: ${h2hData ? 'found' : 'not found'}`);
+        } catch (syncError: any) {
+          logger.error(`[getMatchH2H] Failed to sync H2H for ${match_id}: ${syncError.message}`, syncError);
+          // Continue - h2hData will be null and we'll return "No H2H data available"
+        }
+      } else {
+        logger.info(`[getMatchH2H] Match ${match_id} has status ${matchStatus} (not NOT_STARTED). API /match/analysis only works for NOT_STARTED matches. Skipping API call.`);
       }
     }
 
