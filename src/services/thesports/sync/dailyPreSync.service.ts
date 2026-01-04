@@ -139,36 +139,160 @@ export class DailyPreSyncService {
 
     /**
      * Sync H2H data to database
+     * CRITICAL: Uses /compensation/list endpoint which contains H2H data
+     * This endpoint returns historical confrontation, recent record, and historical compensation
      * @returns true if data was synced, false if no data available
      */
     async syncH2HToDb(matchId: string): Promise<boolean> {
         try {
             logger.info(`[syncH2HToDb] Starting sync for match ${matchId}`);
             
-            // CRITICAL: Delete cache to force fresh API call (cache might have empty data)
-            const cacheKey = `${CacheKeyPrefix.TheSports}:match:analysis:${matchId}`;
-            await cacheService.del(cacheKey);
-            logger.info(`[syncH2HToDb] Cache deleted for ${matchId}, will fetch fresh from API`);
+            // CRITICAL FIX: Use /compensation/list endpoint instead of /match/analysis
+            // /match/analysis returns empty results, but /compensation/list contains H2H data
+            // Try to find match in compensation list (paginated)
+            let foundMatch = null;
+            let page = 1;
+            const maxPages = 10; // Limit search to first 10 pages (1000 matches)
             
-            const response = await this.matchAnalysisService.getMatchAnalysis({ match_id: matchId });
-            logger.info(`[syncH2HToDb] API response received for ${matchId}, response keys: ${Object.keys(response || {}).join(', ')}`);
-            
-            const results = (response as any).results || {};
-            logger.info(`[syncH2HToDb] Parsed results for ${matchId}, keys: ${Object.keys(results).join(', ')}, hasData: ${Object.keys(results).length > 0}`);
-
-            // Skip if no data
-            if (!results || Object.keys(results).length === 0) {
-                logger.warn(`[syncH2HToDb] No H2H data for match ${matchId} - API returned empty results`);
-                return false;
+            while (page <= maxPages && !foundMatch) {
+                const compensationResponse = await this.compensationService.getCompensationList(page);
+                
+                if (!compensationResponse.results || compensationResponse.results.length === 0) {
+                    break; // No more results
+                }
+                
+                foundMatch = compensationResponse.results.find((m: any) => m.id === matchId);
+                
+                if (foundMatch) {
+                    logger.info(`[syncH2HToDb] Found match ${matchId} in compensation/list page ${page}`);
+                    break;
+                }
+                
+                // If less than 100 results, we've reached the end
+                if (compensationResponse.results.length < 100) {
+                    break;
+                }
+                
+                page++;
             }
-
-            // Parse H2H data
-            const h2hMatches = results.history || results.h2h || [];
-            const homeRecentForm = results.home_last || results.home_recent || [];
-            const awayRecentForm = results.away_last || results.away_recent || [];
-            const goalDistribution = results.goal_distribution || null;
             
-            logger.info(`[syncH2HToDb] Parsed data for ${matchId}: h2hMatches=${h2hMatches.length}, homeRecentForm=${homeRecentForm.length}, awayRecentForm=${awayRecentForm.length}`);
+            // If not found in compensation list, try /match/analysis as fallback
+            if (!foundMatch) {
+                logger.info(`[syncH2HToDb] Match ${matchId} not found in compensation/list, trying /match/analysis as fallback`);
+                
+                // CRITICAL: Delete cache to force fresh API call
+                const cacheKey = `${CacheKeyPrefix.TheSports}:match:analysis:${matchId}`;
+                await cacheService.del(cacheKey);
+                
+                const response = await this.matchAnalysisService.getMatchAnalysis({ match_id: matchId });
+                const results = (response as any).results || {};
+                
+                if (!results || Object.keys(results).length === 0) {
+                    logger.warn(`[syncH2HToDb] No H2H data for match ${matchId} - both endpoints returned empty`);
+                    return false;
+                }
+                
+                // Parse from /match/analysis format
+                const h2hMatches = results.history || results.h2h || [];
+                const homeRecentForm = results.home_last || results.home_recent || [];
+                const awayRecentForm = results.away_last || results.away_recent || [];
+                const goalDistribution = results.goal_distribution || null;
+                
+                return await this.saveH2HToDatabase(matchId, h2hMatches, homeRecentForm, awayRecentForm, goalDistribution, response);
+            }
+            
+            // Parse from /compensation/list format
+            const history = foundMatch.history || {};
+            const recent = foundMatch.recent || {};
+            const similar = foundMatch.similar || {};
+            
+            // Extract H2H data from history object
+            // history contains: { home: { won_count, drawn_count, lost_count, rate }, away: { ... } }
+            // We need to convert this to h2h_matches array format
+            const h2hMatches: any[] = []; // Compensation endpoint doesn't provide individual match list
+            const homeRecentForm = recent.home ? [recent.home] : [];
+            const awayRecentForm = recent.away ? [recent.away] : [];
+            const goalDistribution = null; // Not available in compensation endpoint
+            
+            logger.info(`[syncH2HToDb] Parsed data from compensation/list for ${matchId}: history=${Object.keys(history).length > 0 ? 'yes' : 'no'}, recent=${Object.keys(recent).length > 0 ? 'yes' : 'no'}`);
+            
+            return await this.saveH2HToDatabase(matchId, h2hMatches, homeRecentForm, awayRecentForm, goalDistribution, foundMatch, history);
+        } catch (error: any) {
+            logger.error(`❌ Failed to sync H2H for match ${matchId}: ${error.message}`, error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Save H2H data to database (helper method)
+     */
+    private async saveH2HToDatabase(
+        matchId: string,
+        h2hMatches: any[],
+        homeRecentForm: any[],
+        awayRecentForm: any[],
+        goalDistribution: any,
+        rawResponse: any,
+        history?: any
+    ): Promise<boolean> {
+        // Calculate summary from h2hMatches or history object
+        let totalMatches = 0, homeWins = 0, draws = 0, awayWins = 0;
+        
+        if (Array.isArray(h2hMatches) && h2hMatches.length > 0) {
+            // Calculate from individual matches
+            totalMatches = h2hMatches.length;
+            for (const match of h2hMatches) {
+                const homeScore = match.home_score ?? match.home ?? 0;
+                const awayScore = match.away_score ?? match.away ?? 0;
+                if (homeScore > awayScore) homeWins++;
+                else if (homeScore < awayScore) awayWins++;
+                else draws++;
+            }
+        } else if (history && history.home && history.away) {
+            // Calculate from compensation/list history object
+            homeWins = history.home.won_count || 0;
+            draws = history.home.drawn_count || 0;
+            awayWins = history.away.won_count || 0;
+            totalMatches = homeWins + draws + awayWins;
+        }
+        
+        if (totalMatches === 0) {
+            logger.warn(`[syncH2HToDb] No H2H matches found for ${matchId}`);
+            return false;
+        }
+        
+        const client = await pool.connect();
+        try {
+            await client.query(`
+          INSERT INTO ts_match_h2h (
+            match_id, total_matches, home_wins, draws, away_wins,
+            h2h_matches, home_recent_form, away_recent_form, goal_distribution, raw_response, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+          ON CONFLICT (match_id) DO UPDATE SET
+            total_matches = EXCLUDED.total_matches,
+            home_wins = EXCLUDED.home_wins,
+            draws = EXCLUDED.draws,
+            away_wins = EXCLUDED.away_wins,
+            h2h_matches = EXCLUDED.h2h_matches,
+            home_recent_form = EXCLUDED.home_recent_form,
+            away_recent_form = EXCLUDED.away_recent_form,
+            goal_distribution = EXCLUDED.goal_distribution,
+            raw_response = EXCLUDED.raw_response,
+            updated_at = NOW()
+        `, [
+                    matchId, totalMatches, homeWins, draws, awayWins,
+                    JSON.stringify(h2hMatches),
+                    JSON.stringify(homeRecentForm),
+                    JSON.stringify(awayRecentForm),
+                    JSON.stringify(goalDistribution),
+                    JSON.stringify(rawResponse)
+                ]);
+
+            logger.info(`✅ Synced H2H for match ${matchId}: ${totalMatches} matches (${homeWins}H-${draws}D-${awayWins}A)`);
+            return true;
+        } finally {
+            client.release();
+        }
 
             // Calculate summary
             let totalMatches = 0, homeWins = 0, draws = 0, awayWins = 0;
