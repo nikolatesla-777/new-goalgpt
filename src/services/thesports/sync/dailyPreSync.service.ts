@@ -147,7 +147,7 @@ export class DailyPreSyncService {
             
             // CRITICAL: Delete cache to force fresh API call (cache might have empty data)
             const cacheKey = `${CacheKeyPrefix.TheSports}:match:analysis:${matchId}`;
-            await cacheService.delete(cacheKey);
+            await cacheService.del(cacheKey);
             logger.info(`[syncH2HToDb] Cache deleted for ${matchId}, will fetch fresh from API`);
             
             const response = await this.matchAnalysisService.getMatchAnalysis({ match_id: matchId });
