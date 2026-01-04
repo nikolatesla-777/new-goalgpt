@@ -44,6 +44,7 @@ export class DailyPreSyncService {
 
     /**
      * Run full pre-sync for today's matches
+     * CRITICAL: Uses /compensation/list endpoint for H2H data (optimized batch processing)
      */
     async runPreSync(matchIds: string[], seasonIds: string[]): Promise<PreSyncResult> {
         const result: PreSyncResult = {
@@ -58,25 +59,88 @@ export class DailyPreSyncService {
 
         const BATCH_SIZE = 50;
 
-        // 1. Sync H2H for each match (in batches of 50)
-        for (let i = 0; i < matchIds.length; i += BATCH_SIZE) {
-            const batch = matchIds.slice(i, i + BATCH_SIZE);
-            logger.info(`🔄 Syncing H2H batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(matchIds.length / BATCH_SIZE)} (${batch.length} matches)`);
+        // 1. Sync H2H using compensation/list endpoint (OPTIMIZED: fetch once, match many)
+        logger.info(`🔄 [H2H] Fetching compensation/list data for H2H sync...`);
+        const compensationMap = new Map<string, any>();
+        
+        try {
+            // Fetch all compensation data once (paginated)
+            let page = 1;
+            let hasMore = true;
+            const maxPages = 100; // Limit to prevent infinite loops
             
-            for (const matchId of batch) {
+            while (hasMore && page <= maxPages) {
+                const compensationResponse = await this.compensationService.getCompensationList(page);
+                const results = compensationResponse.results || [];
+                
+                if (results.length === 0) {
+                    hasMore = false;
+                    break;
+                }
+                
+                // Add all matches to map
+                for (const match of results) {
+                    if (match.id) {
+                        compensationMap.set(match.id, match);
+                    }
+                }
+                
+                logger.info(`🔄 [H2H] Fetched compensation page ${page}: ${results.length} matches (total: ${compensationMap.size})`);
+                
+                // If less than 100 results, we've reached the end
+                if (results.length < 100) {
+                    hasMore = false;
+                } else {
+                    page++;
+                    // Small delay between pages to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+            
+            logger.info(`✅ [H2H] Fetched ${compensationMap.size} matches from compensation/list`);
+            
+            // Now sync H2H for each match using the map
+            for (let i = 0; i < matchIds.length; i += BATCH_SIZE) {
+                const batch = matchIds.slice(i, i + BATCH_SIZE);
+                logger.info(`🔄 [H2H] Syncing H2H batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(matchIds.length / BATCH_SIZE)} (${batch.length} matches)`);
+                
+                for (const matchId of batch) {
+                    try {
+                        const foundMatch = compensationMap.get(matchId);
+                        
+                        if (foundMatch) {
+                            // Use optimized sync method with pre-fetched data
+                            const synced = await this.syncH2HFromCompensationData(matchId, foundMatch);
+                            if (synced) {
+                                result.h2hSynced++;
+                            }
+                        } else {
+                            // Not found in compensation/list, try /match/analysis as fallback
+                            logger.debug(`[H2H] Match ${matchId} not found in compensation/list, trying /match/analysis`);
+                            const synced = await this.syncH2HToDb(matchId);
+                            if (synced) {
+                                result.h2hSynced++;
+                            }
+                        }
+                    } catch (error: any) {
+                        result.errors.push(`H2H ${matchId}: ${error.message}`);
+                    }
+                }
+            }
+        } catch (error: any) {
+            logger.error(`❌ [H2H] Failed to fetch compensation/list: ${error.message}`);
+            result.errors.push(`H2H compensation/list fetch: ${error.message}`);
+            // Fallback: Try individual sync for each match
+            logger.info(`🔄 [H2H] Falling back to individual match sync...`);
+            for (const matchId of matchIds) {
                 try {
                     const synced = await this.syncH2HToDb(matchId);
                     if (synced) {
                         result.h2hSynced++;
                     }
-                } catch (error: any) {
-                    result.errors.push(`H2H ${matchId}: ${error.message}`);
+                } catch (err: any) {
+                    result.errors.push(`H2H ${matchId}: ${err.message}`);
                 }
-            }
-            
-            // Small delay between batches to avoid rate limiting
-            if (i + BATCH_SIZE < matchIds.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
@@ -223,6 +287,32 @@ export class DailyPreSyncService {
         }
     }
     
+    /**
+     * Sync H2H from compensation data (optimized - no API call needed)
+     */
+    private async syncH2HFromCompensationData(matchId: string, foundMatch: any): Promise<boolean> {
+        try {
+            const history = foundMatch.history || {};
+            const recent = foundMatch.recent || {};
+            
+            if (!history.home || !history.away) {
+                logger.debug(`[syncH2HFromCompensationData] No history data for ${matchId}`);
+                return false;
+            }
+            
+            // Extract H2H data
+            const h2hMatches: any[] = []; // Compensation doesn't provide individual match list
+            const homeRecentForm = recent.home ? [recent.home] : [];
+            const awayRecentForm = recent.away ? [recent.away] : [];
+            const goalDistribution = null;
+            
+            return await this.saveH2HToDatabase(matchId, h2hMatches, homeRecentForm, awayRecentForm, goalDistribution, foundMatch, history);
+        } catch (error: any) {
+            logger.error(`❌ Failed to sync H2H from compensation data for ${matchId}: ${error.message}`);
+            return false;
+        }
+    }
+
     /**
      * Save H2H data to database (helper method)
      */
