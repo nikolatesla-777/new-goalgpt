@@ -16,6 +16,8 @@ import { CompensationService } from '../match/compensation.service';
 import { TableLiveService } from '../season/tableLive.service';
 import { logger } from '../../../utils/logger';
 import { pool } from '../../../database/connection';
+import { cacheService } from '../../../utils/cache/cache.service';
+import { CacheKeyPrefix } from '../../../utils/cache/types';
 
 export interface PreSyncResult {
     h2hSynced: number;
@@ -142,6 +144,12 @@ export class DailyPreSyncService {
     async syncH2HToDb(matchId: string): Promise<boolean> {
         try {
             logger.info(`[syncH2HToDb] Starting sync for match ${matchId}`);
+            
+            // CRITICAL: Delete cache to force fresh API call (cache might have empty data)
+            const cacheKey = `${CacheKeyPrefix.TheSports}:match:analysis:${matchId}`;
+            await cacheService.delete(cacheKey);
+            logger.info(`[syncH2HToDb] Cache deleted for ${matchId}, will fetch fresh from API`);
+            
             const response = await this.matchAnalysisService.getMatchAnalysis({ match_id: matchId });
             logger.info(`[syncH2HToDb] API response received for ${matchId}, response keys: ${Object.keys(response || {}).join(', ')}`);
             
