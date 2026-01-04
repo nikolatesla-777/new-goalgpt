@@ -90,8 +90,8 @@ export class MatchWatchdogWorker {
       // This ensures matches transition from NOT_STARTED to LIVE when they actually start
       // maxMinutesAgo = 1440 (24 saat) to catch ALL today's matches, even if they started many hours ago
       // Previous limit of 120 minutes was too restrictive and missed matches that started 3+ hours ago
-      // CRITICAL: Increase limit to 2000 to process MORE matches per tick (was 1000, still too low for busy days)
-      const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 2000);
+      // CRITICAL: Increase limit to 1000 to process more matches per tick (was 500, still too low for busy days)
+      const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 1000);
 
       const candidatesCount = stales.length + shouldBeLive.length;
 
@@ -475,47 +475,23 @@ export class MatchWatchdogWorker {
               source: 'detail_live_fallback',
             });
 
-            // CRITICAL FIX: Retry logic for should-be-live matches (3 attempts)
-            let reconcileResult = null;
-            let retryCount = 0;
-            const maxRetries = 3;
-            let lastError: any = null;
+            try {
+              const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(match.matchId, null);
+              const duration = Date.now() - reconcileStartTime;
 
-            while (retryCount < maxRetries) {
-              try {
-                reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(match.matchId, null);
-                if (reconcileResult.updated && reconcileResult.rowCount > 0) {
-                  break; // Success - exit retry loop
-                }
-                // If no update, retry once more
-                if (retryCount < maxRetries - 1) {
-                  await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay between retries
-                }
-              } catch (error: any) {
-                lastError = error;
-                if (retryCount < maxRetries - 1) {
-                  await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay between retries
-                }
+              if (reconcileResult.updated && reconcileResult.rowCount > 0) {
+                successCount++;
+                reasons['should_be_live_detail_live_success'] = (reasons['should_be_live_detail_live_success'] || 0) + 1;
+                logEvent('info', 'watchdog.reconcile.done', {
+                  match_id: match.matchId,
+                  result: 'success',
+                  reason: 'should_be_live_detail_live_success',
+                  duration_ms: duration,
+                  row_count: reconcileResult.rowCount,
+                  source: 'detail_live_fallback',
+                });
+                continue;
               }
-              retryCount++;
-            }
-
-            const duration = Date.now() - reconcileStartTime;
-
-            if (reconcileResult && reconcileResult.updated && reconcileResult.rowCount > 0) {
-              successCount++;
-              reasons['should_be_live_detail_live_success'] = (reasons['should_be_live_detail_live_success'] || 0) + 1;
-              logEvent('info', 'watchdog.reconcile.done', {
-                match_id: match.matchId,
-                result: 'success',
-                reason: 'should_be_live_detail_live_success',
-                duration_ms: duration,
-                row_count: reconcileResult.rowCount,
-                source: 'detail_live_fallback',
-                retry_count: retryCount,
-              });
-              continue;
-            }
 
               // detail_live failed - DO NOT use diary as fallback
               // According to TheSports docs: "Real-time data is obtained through the real-time data interface"
@@ -784,12 +760,12 @@ export class MatchWatchdogWorker {
     logger.info('[Watchdog] Starting MatchWatchdogWorker for should-be-live matches');
     // Run immediately on start
     void this.tick();
-    // CRITICAL FIX: Run every 5 seconds to catch should-be-live matches MUCH faster
-    // This reduces delay from match_time passing to status update (max 5s delay instead of 10s)
-    // Very aggressive for critical "matches not starting" issue
+    // CRITICAL FIX: Run every 10 seconds to catch should-be-live matches faster (was 15 seconds)
+    // This reduces delay from match_time passing to status update (max 10s delay instead of 15s)
+    // More aggressive for critical "matches not starting" issue
     this.intervalId = setInterval(() => {
       void this.tick();
-    }, 5000); // 5 seconds (very aggressive)
+    }, 10000); // 10 seconds (more aggressive)
     logEvent('info', 'worker.started', {
       worker: 'MatchWatchdogWorker',
       interval_sec: 30,

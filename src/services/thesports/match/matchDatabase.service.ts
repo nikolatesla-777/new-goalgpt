@@ -230,12 +230,12 @@ export class MatchDatabaseService {
       // This keeps /live endpoint strict, fast, and contract-compliant
 
       // CRITICAL FIX: Add time filter to exclude old matches (bug prevention)
-      // Matches that started more than 6 hours ago should not be in live matches
+      // Matches that started more than 4 hours ago should not be in live matches
       // This prevents stale matches (bug where status wasn't updated) from appearing
       // Normal match duration: ~90 min + 15 min HT = ~105 min, with overtime: ~120 min
-      // Safety margin: 6 hours ensures all matches are finished (increased from 4h for safety)
+      // Safety margin: 4 hours ensures all matches are finished
       const nowTs = Math.floor(Date.now() / 1000);
-      const sixHoursAgo = nowTs - (6 * 3600); // 6 hours ago in seconds
+      const fourHoursAgo = nowTs - (4 * 3600); // 4 hours ago in seconds
 
       // Phase 5-S Fix: Query database for STRICTLY live matches only
       // CRITICAL: Return ONLY matches with status_id IN (2,3,4,5,7)
@@ -297,14 +297,14 @@ export class MatchDatabaseService {
           m.match_time DESC
       `;
 
-      const result = await pool.query(query, [sixHoursAgo, nowTs]);
+      const result = await pool.query(query, [fourHoursAgo, nowTs]);
       const matches = result.rows || [];
 
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDatabase.service.ts:274',message:'getLiveMatches query result',data:{matchCount:matches.length,queryDuration:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
 
-      logger.info(`✅ [MatchDatabase] Found ${matches.length} strictly live matches in database (status_id IN 2,3,4,5,7, time window: last 6 hours)`);
+      logger.info(`✅ [MatchDatabase] Found ${matches.length} strictly live matches in database (status_id IN 2,3,4,5,7, time window: last 4 hours)`);
 
       // CRITICAL FIX: Removed API fallback - DB is authoritative
       // API fallback was causing issues and returning 0 matches
