@@ -294,7 +294,6 @@ export class DailyPreSyncService {
             client.release();
         }
     }
-    }
 
     /**
      * Sync Lineup data to database
