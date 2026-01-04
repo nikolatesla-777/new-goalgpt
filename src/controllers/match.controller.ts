@@ -1313,12 +1313,14 @@ export const getMatchH2H = async (
 ): Promise<void> => {
   try {
     const { match_id } = request.params;
+    logger.info(`[getMatchH2H] ⚡ ENDPOINT CALLED for match ${match_id}`);
 
     // Try database first
     const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
     const preSyncService = new DailyPreSyncService(theSportsClient);
 
     let h2hData = await preSyncService.getH2HFromDb(match_id);
+    logger.info(`[getMatchH2H] Database query result for ${match_id}: ${h2hData ? 'FOUND' : 'NOT FOUND'}`);
 
     // If not in DB, try API and save
     if (!h2hData) {
