@@ -1322,12 +1322,14 @@ export const getMatchH2H = async (
 
     // If not in DB, try API and save
     if (!h2hData) {
-      logger.info(`H2H not in DB for ${match_id}, fetching from API`);
+      logger.info(`[getMatchH2H] H2H not in DB for ${match_id}, fetching from API`);
       try {
-        await preSyncService.syncH2HToDb(match_id);
+        const syncResult = await preSyncService.syncH2HToDb(match_id);
+        logger.info(`[getMatchH2H] syncH2HToDb result for ${match_id}: ${syncResult}`);
         h2hData = await preSyncService.getH2HFromDb(match_id);
+        logger.info(`[getMatchH2H] After sync, h2hData from DB: ${h2hData ? 'found' : 'not found'}`);
       } catch (syncError: any) {
-        logger.warn(`Failed to sync H2H for ${match_id}: ${syncError.message}`);
+        logger.error(`[getMatchH2H] Failed to sync H2H for ${match_id}: ${syncError.message}`, syncError);
         // Continue - h2hData will be null and we'll return "No H2H data available"
       }
     }

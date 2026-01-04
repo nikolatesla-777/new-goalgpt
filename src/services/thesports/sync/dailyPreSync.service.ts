@@ -141,12 +141,16 @@ export class DailyPreSyncService {
      */
     async syncH2HToDb(matchId: string): Promise<boolean> {
         try {
+            logger.info(`[syncH2HToDb] Starting sync for match ${matchId}`);
             const response = await this.matchAnalysisService.getMatchAnalysis({ match_id: matchId });
+            logger.info(`[syncH2HToDb] API response received for ${matchId}, response keys: ${Object.keys(response || {}).join(', ')}`);
+            
             const results = (response as any).results || {};
+            logger.info(`[syncH2HToDb] Parsed results for ${matchId}, keys: ${Object.keys(results).join(', ')}, hasData: ${Object.keys(results).length > 0}`);
 
             // Skip if no data
             if (!results || Object.keys(results).length === 0) {
-                logger.debug(`No H2H data for match ${matchId}`);
+                logger.warn(`[syncH2HToDb] No H2H data for match ${matchId} - API returned empty results`);
                 return false;
             }
 
@@ -155,6 +159,8 @@ export class DailyPreSyncService {
             const homeRecentForm = results.home_last || results.home_recent || [];
             const awayRecentForm = results.away_last || results.away_recent || [];
             const goalDistribution = results.goal_distribution || null;
+            
+            logger.info(`[syncH2HToDb] Parsed data for ${matchId}: h2hMatches=${h2hMatches.length}, homeRecentForm=${homeRecentForm.length}, awayRecentForm=${awayRecentForm.length}`);
 
             // Calculate summary
             let totalMatches = 0, homeWins = 0, draws = 0, awayWins = 0;
@@ -196,13 +202,13 @@ export class DailyPreSyncService {
                     JSON.stringify(response)
                 ]);
 
-                logger.debug(`✅ Synced H2H for match ${matchId}: ${totalMatches} matches`);
+                logger.info(`✅ Synced H2H for match ${matchId}: ${totalMatches} matches`);
                 return true;
             } finally {
                 client.release();
             }
         } catch (error: any) {
-            logger.warn(`Failed to sync H2H for match ${matchId}: ${error.message}`);
+            logger.error(`❌ Failed to sync H2H for match ${matchId}: ${error.message}`, error);
             throw error; // Re-throw to be caught by caller
         }
     }
