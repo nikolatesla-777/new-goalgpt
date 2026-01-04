@@ -293,56 +293,7 @@ export class DailyPreSyncService {
         } finally {
             client.release();
         }
-
-            // Calculate summary
-            let totalMatches = 0, homeWins = 0, draws = 0, awayWins = 0;
-            if (Array.isArray(h2hMatches)) {
-                totalMatches = h2hMatches.length;
-                for (const match of h2hMatches) {
-                    const homeScore = match.home_score ?? match.home ?? 0;
-                    const awayScore = match.away_score ?? match.away ?? 0;
-                    if (homeScore > awayScore) homeWins++;
-                    else if (homeScore < awayScore) awayWins++;
-                    else draws++;
-                }
-            }
-
-            const client = await pool.connect();
-            try {
-                await client.query(`
-          INSERT INTO ts_match_h2h (
-            match_id, total_matches, home_wins, draws, away_wins,
-            h2h_matches, home_recent_form, away_recent_form, goal_distribution, raw_response, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-          ON CONFLICT (match_id) DO UPDATE SET
-            total_matches = EXCLUDED.total_matches,
-            home_wins = EXCLUDED.home_wins,
-            draws = EXCLUDED.draws,
-            away_wins = EXCLUDED.away_wins,
-            h2h_matches = EXCLUDED.h2h_matches,
-            home_recent_form = EXCLUDED.home_recent_form,
-            away_recent_form = EXCLUDED.away_recent_form,
-            goal_distribution = EXCLUDED.goal_distribution,
-            raw_response = EXCLUDED.raw_response,
-            updated_at = NOW()
-        `, [
-                    matchId, totalMatches, homeWins, draws, awayWins,
-                    JSON.stringify(h2hMatches),
-                    JSON.stringify(homeRecentForm),
-                    JSON.stringify(awayRecentForm),
-                    JSON.stringify(goalDistribution),
-                    JSON.stringify(response)
-                ]);
-
-                logger.info(`✅ Synced H2H for match ${matchId}: ${totalMatches} matches`);
-                return true;
-            } finally {
-                client.release();
-            }
-        } catch (error: any) {
-            logger.error(`❌ Failed to sync H2H for match ${matchId}: ${error.message}`, error);
-            throw error; // Re-throw to be caught by caller
-        }
+    }
     }
 
     /**
