@@ -567,7 +567,7 @@ export const getMatchSeasonRecent = async (
 };
 
 /**
- * Get match lineup
+ * Get match lineup (reads from database first, then API fallback)
  * GET /api/matches/:match_id/lineup
  */
 export const getMatchLineup = async (
@@ -576,15 +576,63 @@ export const getMatchLineup = async (
 ): Promise<void> => {
   try {
     const { match_id } = request.params;
-    const params: MatchLineupParams = { match_id };
 
-    const result = await matchLineupService.getMatchLineup(params);
+    // Try database first
+    const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
+    const preSyncService = new DailyPreSyncService(theSportsClient);
+
+    let lineupData = await preSyncService.getLineupFromDb(match_id);
+
+    // If not in DB, try API and save
+    if (!lineupData) {
+      logger.info(`Lineup not in DB for ${match_id}, fetching from API`);
+      try {
+        await preSyncService.syncLineupToDb(match_id);
+        lineupData = await preSyncService.getLineupFromDb(match_id);
+      } catch (syncError: any) {
+        logger.warn(`Failed to sync lineup for ${match_id}: ${syncError.message}`);
+        // Continue to API fallback even if sync fails
+      }
+    }
+
+    // If still no data in DB, try API directly (fallback)
+    if (!lineupData) {
+      logger.info(`Lineup still not in DB for ${match_id}, trying API directly`);
+      const params: MatchLineupParams = { match_id };
+      const apiResult = await matchLineupService.getMatchLineup(params);
+      
+      reply.send({
+        success: true,
+        data: apiResult,
+      });
+      return;
+    }
+
+    // Return data from database
+    const homeLineup = lineupData.home_lineup || [];
+    const awayLineup = lineupData.away_lineup || [];
+    const homeSubs = lineupData.home_subs || [];
+    const awaySubs = lineupData.away_subs || [];
 
     reply.send({
       success: true,
-      data: result,
+      data: {
+        code: 0,
+        results: {
+          home_formation: lineupData.home_formation,
+          away_formation: lineupData.away_formation,
+          home_lineup: homeLineup,
+          away_lineup: awayLineup,
+          home_subs: homeSubs,
+          away_subs: awaySubs,
+          home: homeLineup,
+          away: awayLineup,
+        },
+        source: 'database',
+      },
     });
   } catch (error: any) {
+    logger.error('[MatchController] Error in getMatchLineup:', error);
     reply.status(500).send({
       success: false,
       message: error.message || 'Internal server error',
@@ -1275,8 +1323,13 @@ export const getMatchH2H = async (
     // If not in DB, try API and save
     if (!h2hData) {
       logger.info(`H2H not in DB for ${match_id}, fetching from API`);
-      await preSyncService.syncH2HToDb(match_id);
-      h2hData = await preSyncService.getH2HFromDb(match_id);
+      try {
+        await preSyncService.syncH2HToDb(match_id);
+        h2hData = await preSyncService.getH2HFromDb(match_id);
+      } catch (syncError: any) {
+        logger.warn(`Failed to sync H2H for ${match_id}: ${syncError.message}`);
+        // Continue - h2hData will be null and we'll return "No H2H data available"
+      }
     }
 
     if (h2hData) {
