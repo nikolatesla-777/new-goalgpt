@@ -54,7 +54,8 @@ export class MatchDatabaseService {
       logger.info(`🔍 [MatchDatabase] Querying matches for date ${dateStr} (${startUnix} - ${endUnix})`);
 
       // Query matches with JOINs for teams and competitions
-      const query = `
+      // CRITICAL FIX: Use 'let' instead of 'const' because we modify query string
+      let query = `
         SELECT 
           m.external_id as id,
           m.competition_id,
