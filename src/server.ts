@@ -42,6 +42,7 @@ import { LineupRefreshJob } from './jobs/lineupRefresh.job';
 import { PostMatchProcessorJob } from './jobs/postMatchProcessor.job';
 import { DataUpdateWorker } from './jobs/dataUpdate.job';
 import { MatchMinuteWorker } from './jobs/matchMinute.job';
+import { MatchDataSyncWorker } from './jobs/matchDataSync.job';
 
 dotenv.config();
 
@@ -81,6 +82,7 @@ let postMatchProcessorJob: PostMatchProcessorJob | null = null;
 let dataUpdateWorker: DataUpdateWorker | null = null;
 let matchMinuteWorker: MatchMinuteWorker | null = null;
 let matchWatchdogWorker: MatchWatchdogWorker | null = null;
+let matchDataSyncWorker: MatchDataSyncWorker | null = null;
 let websocketService: WebSocketService | null = null;
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -117,6 +119,10 @@ const start = async () => {
 
     matchMinuteWorker = new MatchMinuteWorker();
     matchMinuteWorker.start();
+
+    // Match Data Sync Worker (automatically saves statistics, incidents, trend for live matches)
+    matchDataSyncWorker = new MatchDataSyncWorker(theSportsClient);
+    matchDataSyncWorker.start();
 
     // Match Watchdog Worker (for should-be-live matches)
     const matchDetailLiveService = new MatchDetailLiveService(theSportsClient);
@@ -176,6 +182,7 @@ const shutdown = async () => {
   if (postMatchProcessorJob) postMatchProcessorJob.stop();
   if (dataUpdateWorker) dataUpdateWorker.stop();
   if (matchMinuteWorker) matchMinuteWorker.stop();
+  if (matchDataSyncWorker) matchDataSyncWorker.stop();
 
   if (websocketService) await websocketService.disconnect();
 

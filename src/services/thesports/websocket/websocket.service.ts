@@ -146,6 +146,15 @@ export class WebSocketService {
                 timestamp: Date.now(),
               } as any, mqttReceivedTs);
 
+              // CRITICAL FIX: Save trend data when match state changes (for live matches)
+              // This ensures trend data is persisted even if user doesn't visit match detail page
+              if (parsedScore.statusId && [2, 3, 4, 5, 7].includes(parsedScore.statusId)) {
+                // Only for live matches
+                this.saveMatchTrendFromWebSocket(parsedScore.matchId).catch(err => {
+                  logger.warn(`[WebSocket] Failed to save trend for ${parsedScore.matchId}: ${err.message}`);
+                });
+              }
+
               // CRITICAL FIX: Trigger post-match persistence when match ends (status 8)
               if (parsedScore.statusId === 8) {
                 logger.info(`[WebSocket] Match ${parsedScore.matchId} ended (status=8), triggering post-match persistence...`);
@@ -195,6 +204,15 @@ export class WebSocketService {
               parsedScore.statusId
             ).catch(err => logger.error(`[AutoSettlement] Error in score change handler: ${err.message}`));
 
+            // CRITICAL FIX: Save statistics to database when score changes
+            // This ensures data is persisted even if user doesn't visit match detail page
+            if (parsedScore.statusId && [2, 3, 4, 5, 7].includes(parsedScore.statusId)) {
+              // Only for live matches
+              this.saveMatchStatisticsFromWebSocket(parsedScore.matchId).catch(err => {
+                logger.warn(`[WebSocket] Failed to save statistics for ${parsedScore.matchId}: ${err.message}`);
+              });
+            }
+
             // Update cache (for fast reads before queue flushes)
             const scoreCacheKey = `${CacheKeyPrefix.TheSports}:ws:score:${parsedScore.matchId}`;
             await cacheService.set(scoreCacheKey, parsedScore, CacheTTL.Minute);
@@ -218,6 +236,22 @@ export class WebSocketService {
 
           // Update database with incidents array
           await this.updateMatchIncidentsInDatabase(matchId, incidentsArr, providerUpdateTime);
+
+          // CRITICAL FIX: Also save incidents to CombinedStatsService format
+          // This ensures incidents are in statistics JSONB column as well
+          if (incidentsArr.length > 0) {
+            this.saveMatchIncidentsToCombinedStats(matchId, incidentsArr).catch(err => {
+              logger.warn(`[WebSocket] Failed to save incidents to combined stats for ${matchId}: ${err.message}`);
+            });
+          }
+
+          // CRITICAL FIX: Also save incidents to CombinedStatsService format
+          // This ensures incidents are in statistics JSONB column as well
+          if (incidentsArr.length > 0) {
+            this.saveMatchIncidentsToCombinedStats(matchId, incidentsArr).catch(err => {
+              logger.warn(`[WebSocket] Failed to save incidents to combined stats for ${matchId}: ${err.message}`);
+            });
+          }
 
           // Update cache
           const incidentsCacheKey = `${CacheKeyPrefix.TheSports}:ws:incidents:${matchId}`;
@@ -1640,6 +1674,109 @@ export class WebSocketService {
    */
   isMatchInKeepalive(matchId: string): boolean {
     return this.matchKeepaliveTimers.has(matchId);
+  }
+
+  /**
+   * Save match statistics from WebSocket event
+   * Called when score changes to ensure statistics are persisted
+   */
+  private async saveMatchStatisticsFromWebSocket(matchId: string): Promise<void> {
+    try {
+      // Import CombinedStatsService dynamically to avoid circular dependencies
+      const { CombinedStatsService } = await import('../match/combinedStats.service');
+      const combinedStatsService = new CombinedStatsService(this.client);
+      
+      const stats = await combinedStatsService.getCombinedMatchStats(matchId);
+      if (stats && stats.allStats.length > 0) {
+        await combinedStatsService.saveCombinedStatsToDatabase(matchId, stats);
+        logger.debug(`[WebSocket] Saved statistics for ${matchId} from WebSocket event`);
+      }
+    } catch (error: any) {
+      // Don't throw - this is a background operation
+      logger.warn(`[WebSocket] Error saving statistics for ${matchId}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Save match trend from WebSocket event
+   * Called when match state changes to ensure trend data is persisted
+   */
+  private async saveMatchTrendFromWebSocket(matchId: string): Promise<void> {
+    const client = await pool.connect();
+    try {
+      // Get match status
+      const statusResult = await client.query(`
+        SELECT status_id FROM ts_matches WHERE external_id = $1
+      `, [matchId]);
+      
+      const matchStatus = statusResult.rows[0]?.status_id || 0;
+      
+      // Import MatchTrendService dynamically
+      const { MatchTrendService } = await import('../match/matchTrend.service');
+      const matchTrendService = new MatchTrendService(this.client);
+      
+      // Get trend data
+      const trendData = await matchTrendService.getMatchTrend({ match_id: matchId }, matchStatus);
+      
+      if (trendData?.results) {
+        // Check if results has actual data
+        const results = Array.isArray(trendData.results) ? trendData.results[0] : trendData.results;
+        if (results && typeof results === 'object' && !Array.isArray(results)) {
+          if ((results.first_half?.length ?? 0) > 0 || (results.second_half?.length ?? 0) > 0 || (results.overtime?.length ?? 0) > 0) {
+            // Save to trend_data column
+            await client.query(`
+              UPDATE ts_matches
+              SET trend_data = $1::jsonb,
+                  updated_at = NOW()
+              WHERE external_id = $2
+            `, [JSON.stringify(trendData.results), matchId]);
+            
+            logger.debug(`[WebSocket] Saved trend data for ${matchId} from WebSocket event`);
+          }
+        }
+      }
+    } catch (error: any) {
+      // Don't throw - this is a background operation
+      logger.warn(`[WebSocket] Error saving trend for ${matchId}: ${error.message}`);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Save incidents to CombinedStatsService format
+   * This ensures incidents are in statistics JSONB column as well as incidents column
+   */
+  private async saveMatchIncidentsToCombinedStats(matchId: string, incidents: any[]): Promise<void> {
+    try {
+      // Import CombinedStatsService dynamically
+      const { CombinedStatsService } = await import('../match/combinedStats.service');
+      const combinedStatsService = new CombinedStatsService(this.client);
+      
+      // Get existing stats and merge with incidents
+      const existingStats = await combinedStatsService.getCombinedStatsFromDatabase(matchId);
+      if (existingStats) {
+        existingStats.incidents = incidents;
+        await combinedStatsService.saveCombinedStatsToDatabase(matchId, existingStats);
+        logger.debug(`[WebSocket] Saved incidents to combined stats for ${matchId}`);
+      } else {
+        // Create new entry with incidents
+        const newStats = {
+          matchId: matchId,
+          basicStats: [],
+          detailedStats: [],
+          allStats: [],
+          incidents: incidents,
+          score: null,
+          lastUpdated: Date.now(),
+        };
+        await combinedStatsService.saveCombinedStatsToDatabase(matchId, newStats);
+        logger.debug(`[WebSocket] Saved incidents to combined stats (new entry) for ${matchId}`);
+      }
+    } catch (error: any) {
+      // Don't throw - this is a background operation
+      logger.warn(`[WebSocket] Error saving incidents to combined stats for ${matchId}: ${error.message}`);
+    }
   }
 }
 

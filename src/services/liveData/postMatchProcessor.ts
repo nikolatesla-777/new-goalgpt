@@ -134,6 +134,7 @@ export class PostMatchProcessor {
 
   /**
    * Save final statistics to database
+   * CRITICAL FIX: First check database for existing data, only fetch from API if not found
    */
   private async saveFinalStats(matchId: string): Promise<void> {
     const client = await pool.connect();
@@ -151,18 +152,28 @@ export class PostMatchProcessor {
           ? existingStats.length > 0 
           : Object.keys(existingStats).length > 0;
         if (hasStats) {
-          logger.debug(`[PostMatch] Stats already exist for ${matchId}, skipping`);
+          logger.debug(`[PostMatch] Stats already exist in database for ${matchId}, skipping API fetch`);
           return;
         }
       }
 
-      // Fetch from API and save
+      // CRITICAL FIX: Check if we have stats from CombinedStatsService (from database)
+      // This uses data that was saved during live match by MatchDataSyncWorker
+      const dbStats = await this.combinedStatsService.getCombinedStatsFromDatabase(matchId);
+      if (dbStats && dbStats.allStats && dbStats.allStats.length > 0) {
+        logger.info(`[PostMatch] Found existing stats in database for ${matchId}, using them instead of API`);
+        // Stats are already in database via CombinedStatsService, no need to save again
+        return;
+      }
+
+      // If no database data, try to fetch from API (last resort)
+      logger.info(`[PostMatch] No stats in database for ${matchId}, trying API...`);
       const stats = await this.combinedStatsService.getCombinedMatchStats(matchId);
       if (stats && Object.keys(stats).length > 0) {
-        await client.query(
-          `UPDATE ts_matches SET statistics = $1, updated_at = NOW() WHERE external_id = $2`,
-          [JSON.stringify(stats), matchId]
-        );
+        await this.combinedStatsService.saveCombinedStatsToDatabase(matchId, stats);
+        logger.info(`[PostMatch] Saved stats from API for ${matchId}`);
+      } else {
+        logger.warn(`[PostMatch] No stats available from API for ${matchId}`);
       }
     } finally {
       client.release();
@@ -171,28 +182,46 @@ export class PostMatchProcessor {
 
   /**
    * Save final incidents to database
+   * CRITICAL FIX: First check database for existing data, only fetch from API if not found
    */
   private async saveFinalIncidents(matchId: string): Promise<void> {
     const client = await pool.connect();
     try {
-      // Check if incidents already saved
+      // Check if incidents already saved in incidents column
       const existing = await client.query(
         'SELECT incidents FROM ts_matches WHERE external_id = $1',
         [matchId]
       );
 
       if (existing.rows[0]?.incidents && Array.isArray(existing.rows[0].incidents) && existing.rows[0].incidents.length > 0) {
-        logger.debug(`[PostMatch] Incidents already exist for ${matchId}, skipping`);
+        logger.debug(`[PostMatch] Incidents already exist in incidents column for ${matchId}, skipping`);
         return;
       }
 
-      // Fetch from matchDetailLive and save
+      // CRITICAL FIX: Check if we have incidents from CombinedStatsService (from database)
+      // This uses data that was saved during live match by MatchDataSyncWorker
+      const dbStats = await this.combinedStatsService.getCombinedStatsFromDatabase(matchId);
+      if (dbStats && dbStats.incidents && Array.isArray(dbStats.incidents) && dbStats.incidents.length > 0) {
+        logger.info(`[PostMatch] Found existing incidents in database for ${matchId}, using them instead of API`);
+        // Save incidents to incidents column from database data
+        await client.query(
+          `UPDATE ts_matches SET incidents = $1, updated_at = NOW() WHERE external_id = $2`,
+          [JSON.stringify(dbStats.incidents), matchId]
+        );
+        return;
+      }
+
+      // If no database data, try to fetch from API (last resort)
+      logger.info(`[PostMatch] No incidents in database for ${matchId}, trying API...`);
       const matchData = await this.matchDetailLiveService.getMatchDetailLive({ match_id: matchId });
       if (matchData && Array.isArray((matchData as any).incidents) && (matchData as any).incidents.length > 0) {
         await client.query(
           `UPDATE ts_matches SET incidents = $1, updated_at = NOW() WHERE external_id = $2`,
           [JSON.stringify((matchData as any).incidents), matchId]
         );
+        logger.info(`[PostMatch] Saved incidents from API for ${matchId}`);
+      } else {
+        logger.warn(`[PostMatch] No incidents available from API for ${matchId}`);
       }
     } finally {
       client.release();
@@ -201,28 +230,51 @@ export class PostMatchProcessor {
 
   /**
    * Save final trend data to database
+   * CRITICAL FIX: First check database for existing data, only fetch from API if not found
    */
   private async saveFinalTrend(matchId: string): Promise<void> {
     const client = await pool.connect();
     try {
-      // Check if trend already saved
+      // Check if trend already saved in trend_data column
       const existing = await client.query(
         'SELECT trend_data FROM ts_matches WHERE external_id = $1',
         [matchId]
       );
 
-      if (existing.rows[0]?.trend_data && Array.isArray(existing.rows[0].trend_data) && existing.rows[0].trend_data.length > 0) {
-        logger.debug(`[PostMatch] Trend already exists for ${matchId}, skipping`);
-        return;
+      const existingTrend = existing.rows[0]?.trend_data;
+      if (existingTrend) {
+        // Check if trend_data has actual data
+        const hasTrend = Array.isArray(existingTrend) 
+          ? existingTrend.length > 0
+          : (typeof existingTrend === 'object' && Object.keys(existingTrend).length > 0);
+        
+        if (hasTrend) {
+          logger.debug(`[PostMatch] Trend already exists in trend_data column for ${matchId}, skipping`);
+          return;
+        }
       }
 
-      // Fetch trend from historical endpoint
+      // CRITICAL FIX: If no trend_data, try to fetch from API (last resort)
+      // Note: Trend data is saved by MatchDataSyncWorker during live match
+      // If it wasn't saved, API might not have it after match ends
+      logger.info(`[PostMatch] No trend in database for ${matchId}, trying API...`);
       const trendData = await this.matchTrendService.getMatchTrendDetail({ match_id: matchId });
-      if (trendData && Array.isArray((trendData as any).results) && (trendData as any).results.length > 0) {
-        await client.query(
-          `UPDATE ts_matches SET trend_data = $1, updated_at = NOW() WHERE external_id = $2`,
-          [JSON.stringify((trendData as any).results), matchId]
-        );
+      if (trendData && trendData.results) {
+        // Check if results has actual data
+        const results = Array.isArray(trendData.results) ? trendData.results[0] : trendData.results;
+        if (results && typeof results === 'object' && !Array.isArray(results)) {
+          if ((results.first_half?.length ?? 0) > 0 || (results.second_half?.length ?? 0) > 0 || (results.overtime?.length ?? 0) > 0) {
+            await client.query(
+              `UPDATE ts_matches SET trend_data = $1, updated_at = NOW() WHERE external_id = $2`,
+              [JSON.stringify(trendData.results), matchId]
+            );
+            logger.info(`[PostMatch] Saved trend from API for ${matchId}`);
+          } else {
+            logger.warn(`[PostMatch] Trend data from API is empty for ${matchId}`);
+          }
+        }
+      } else {
+        logger.warn(`[PostMatch] No trend data available from API for ${matchId}`);
       }
     } finally {
       client.release();
