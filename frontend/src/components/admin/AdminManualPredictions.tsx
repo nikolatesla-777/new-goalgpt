@@ -32,6 +32,11 @@ interface LiveMatch {
     away_team_name: string;
     league_name?: string;
     competition_name?: string;
+    competition?: {
+        id: string;
+        name: string;
+        logo_url?: string;
+    };
     home_score: number;
     away_score: number;
     minute: number;
@@ -114,14 +119,14 @@ export function AdminManualPredictions() {
                 match_external_id: selectedMatch.external_id,
                 home_team: selectedMatch.home_team_name,
                 away_team: selectedMatch.away_team_name,
-                league: selectedMatch.league_name || selectedMatch.competition_name || '',
+                league: selectedMatch.league_name || selectedMatch.competition?.name || selectedMatch.competition_name || '',
                 score: `${selectedMatch.home_score}-${selectedMatch.away_score}`,
                 minute: minute,
                 prediction: finalPrediction, // For display
                 prediction_type: finalPrediction,
                 prediction_value: finalPrediction, // Simplified
                 access_type: accessType,
-                bot_name: 'Manual'
+                bot_name: 'Alert System'
             };
 
             const res = await fetch(`${API_BASE}/predictions/manual`, {

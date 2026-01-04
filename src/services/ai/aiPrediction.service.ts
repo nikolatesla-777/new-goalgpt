@@ -1298,7 +1298,7 @@ export class AIPredictionService {
                 pm.match_external_id
             FROM ai_predictions p
             LEFT JOIN ai_prediction_matches pm ON p.id = pm.prediction_id
-            WHERE p.bot_name = 'Manual'
+            WHERE p.bot_name = 'Alert System'
             ORDER BY p.created_at DESC
             LIMIT $1
         `;
@@ -1331,12 +1331,12 @@ export class AIPredictionService {
                     id, external_id, bot_name, league_name, 
                     home_team_name, away_team_name, score_at_prediction, 
                     minute_at_prediction, prediction_type, prediction_value, 
-                    processed, created_at, access_type
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12)
+                    processed, created_at, access_type, display_prediction
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13)
             `, [
                 predictionId,
                 externalId,
-                data.bot_name || 'Manual',
+                'Alert System', // Always use Alert System for manual predictions
                 data.league,
                 data.home_team,
                 data.away_team,
@@ -1345,7 +1345,8 @@ export class AIPredictionService {
                 data.prediction_type,
                 data.prediction_value,
                 true, // Processed = true because we manually link it
-                data.access_type
+                data.access_type,
+                data.prediction_type // Also set display_prediction for admin UI
             ]);
 
             // 2. Insert into ai_prediction_matches (Explicit Link)
@@ -1372,3 +1373,4 @@ export class AIPredictionService {
 }
 
 export const aiPredictionService = new AIPredictionService();
+

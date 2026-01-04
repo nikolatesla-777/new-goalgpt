@@ -434,6 +434,10 @@ export function AdminPredictions() {
                                                         <span style={{ color: 'var(--admin-accent)', fontWeight: 600 }}>
                                                             {pred.display_prediction}
                                                         </span>
+                                                    ) : pred.prediction_type ? (
+                                                        <span style={{ fontWeight: 500 }}>
+                                                            {pred.prediction_type}
+                                                        </span>
                                                     ) : (
                                                         <span style={{ color: 'var(--admin-text-muted)', fontStyle: 'italic' }}>
                                                             (Girilmedi)

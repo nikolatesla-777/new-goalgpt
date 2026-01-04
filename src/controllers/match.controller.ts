@@ -338,65 +338,10 @@ export const getMatchById = async (
       const now = Math.floor(Date.now() / 1000);
       const matchTime = row.match_time;
 
-      // CRITICAL FIX: Prevent status regression
-      // If match_time has passed, status cannot be NOT_STARTED (1)
-      if (matchTime && matchTime <= now) {
-        if (validatedStatus === 1) {
-          // Match time passed but status is NOT_STARTED - this is inconsistent
-          const ageMinutes = Math.floor((now - matchTime) / 60);
-          
-          if (ageMinutes < 150) {  // Within 150 minutes (match duration)
-            // Match should be live or finished, not NOT_STARTED
-            logger.warn(
-              `[getMatchById] Match ${match_id} has status=1 but match_time passed ${ageMinutes} minutes ago. ` +
-              `This is inconsistent. Attempting to reconcile with API...`
-            );
-            
-            // CRITICAL FIX: Reconcile with API to get correct status
-            // This ensures we get the REAL status from provider, not stale database data
-            try {
-              const { MatchDetailLiveService } = await import('../services/thesports/match/matchDetailLive.service');
-              const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
-              const matchDetailLiveService = new MatchDetailLiveService(new TheSportsClient());
-              
-              // AWAIT reconcile to get correct status BEFORE responding
-              const reconcileResult = await matchDetailLiveService.reconcileMatchToDatabase(match_id);
-              
-              if (reconcileResult.updated && reconcileResult.statusId !== null) {
-                validatedStatus = reconcileResult.statusId;
-                logger.info(
-                  `[getMatchById] ✅ Corrected status for ${match_id}: 1 → ${validatedStatus} ` +
-                  `(via reconcileMatchToDatabase)`
-                );
-              } else {
-                // Reconcile didn't update (might be finished or API error)
-                // Check database again after reconcile attempt
-                const statusCheck = await client.query(
-                  'SELECT status_id FROM ts_matches WHERE external_id = $1',
-                  [match_id]
-                );
-                
-                if (statusCheck.rows.length > 0 && statusCheck.rows[0].status_id !== 1) {
-                  validatedStatus = statusCheck.rows[0].status_id;
-                  logger.info(
-                    `[getMatchById] ✅ Status updated after reconcile: 1 → ${validatedStatus}`
-                  );
-                } else {
-                  logger.warn(
-                    `[getMatchById] ⚠️ Reconcile completed but status still 1 for ${match_id}. ` +
-                    `Match age: ${ageMinutes} minutes. Returning status=1 but this may be incorrect.`
-                  );
-                }
-              }
-            } catch (reconcileError: any) {
-              logger.error(
-                `[getMatchById] Failed to reconcile status for ${match_id}: ${reconcileError.message}`
-              );
-              // On error, keep original status=1 (better than crashing)
-            }
-          }
-        }
-      }
+      // CRITICAL FIX: Status güncellemesi sadece background worker'lar tarafından yapılmalı
+      // getMatchById endpoint'i sadece database'den okur, reconcile yapmaz
+      // Bu tutarlılık sağlar: Ana sayfa ve detay sayfası aynı veriyi gösterir
+      // Status güncellemesi MatchWatchdogWorker ve DataUpdateWorker tarafından yapılır
 
       // CRITICAL FIX: Future matches cannot have END status
       if (matchTime && matchTime > now) {
