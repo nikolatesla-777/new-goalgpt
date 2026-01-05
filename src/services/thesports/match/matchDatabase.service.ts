@@ -435,6 +435,10 @@ export class MatchDatabaseService {
       const day = nowDate.getUTCDate();
       // TSİ midnight = UTC midnight - 3 hours
       const todayStart = Math.floor((Date.UTC(year, month, day, 0, 0, 0) - TSI_OFFSET_SECONDS * 1000) / 1000);
+      
+      // CRITICAL FIX: Use max of todayStart and minTime to ensure we catch all today's matches
+      // This matches the logic in findShouldBeLiveMatches
+      const effectiveMinTime = Math.max(minTime, todayStart);
 
       const query = `
         SELECT
@@ -484,13 +488,12 @@ export class MatchDatabaseService {
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
         WHERE m.status_id = 1  -- NOT_STARTED
           AND m.match_time <= $1  -- match_time has passed
-          AND m.match_time >= $2  -- Today's matches
-          AND m.match_time >= $3  -- Within maxMinutesAgo window
+          AND m.match_time >= $2  -- Today's matches (TSİ-based) or maxMinutesAgo window
         ORDER BY m.match_time DESC
-        LIMIT $4
+        LIMIT $3
       `;
 
-      const result = await pool.query(query, [now, todayStart, minTime, safeLimit]);
+      const result = await pool.query(query, [now, effectiveMinTime, safeLimit]);
       const matches = result.rows || [];
 
       logger.info(`🔍 [MatchDatabase] Found ${matches.length} should-be-live matches (status=1, match_time passed, window=${safeMaxMinutesAgo}m)`);
