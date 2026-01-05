@@ -419,8 +419,9 @@ export class MatchDatabaseService {
     limit: number = 200
   ): Promise<MatchDiaryResponse> {
     try {
-      // Defensive limits
-      const safeMaxMinutesAgo = Math.min(Math.max(1, maxMinutesAgo), 240);
+      // CRITICAL FIX: Increase maxMinutesAgo limit to 1440 (24 hours) to match findShouldBeLiveMatches
+      // Previous limit of 240 (4 hours) was too restrictive and missed matches that started many hours ago
+      const safeMaxMinutesAgo = Math.min(Math.max(1, maxMinutesAgo), 1440);
       const safeLimit = Math.min(Math.max(1, limit), 500);
 
       const now = Math.floor(Date.now() / 1000);
