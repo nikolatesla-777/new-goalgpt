@@ -12,6 +12,7 @@ import { CombinedStatsService } from '../services/thesports/match/combinedStats.
 import { MatchDetailLiveService } from '../services/thesports/match/matchDetailLive.service';
 import { MatchTrendService } from '../services/thesports/match/matchTrend.service';
 import { MatchDatabaseService } from '../services/thesports/match/matchDatabase.service';
+import { AIPredictionService } from '../services/ai/aiPrediction.service';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
@@ -22,6 +23,7 @@ export class MatchDataSyncWorker {
   private matchDetailLiveService: MatchDetailLiveService;
   private matchTrendService: MatchTrendService;
   private matchDatabaseService: MatchDatabaseService;
+  private aiPredictionService: AIPredictionService;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -31,6 +33,7 @@ export class MatchDataSyncWorker {
     this.matchDetailLiveService = new MatchDetailLiveService(apiClient);
     this.matchTrendService = new MatchTrendService(apiClient);
     this.matchDatabaseService = new MatchDatabaseService();
+    this.aiPredictionService = new AIPredictionService();
   }
 
   /**
@@ -173,11 +176,13 @@ export class MatchDataSyncWorker {
     stats: boolean;
     incidents: boolean;
     trend: boolean;
+    settlement: boolean;
   }> {
     const result = {
       stats: false,
       incidents: false,
       trend: false,
+      settlement: false,
     };
 
     try {
@@ -189,6 +194,43 @@ export class MatchDataSyncWorker {
 
       // Save trend
       result.trend = await this.saveMatchTrend(matchId);
+
+      // CRITICAL: Check and settle pending predictions for this match
+      // This ensures predictions are settled even if WebSocket events are missed
+      try {
+        const client = await pool.connect();
+        try {
+          const matchQuery = await client.query(`
+            SELECT status_id, home_score_display, away_score_display, minute
+            FROM ts_matches
+            WHERE external_id = $1
+          `, [matchId]);
+
+          if (matchQuery.rows.length > 0) {
+            const match = matchQuery.rows[0];
+            const homeScore = parseInt(match.home_score_display) || 0;
+            const awayScore = parseInt(match.away_score_display) || 0;
+            const minute = match.minute || 0;
+            const statusId = match.status_id;
+
+            // Trigger settlement check
+            await this.aiPredictionService.settleInstantWin(
+              matchId,
+              homeScore,
+              awayScore,
+              minute,
+              statusId
+            );
+            result.settlement = true;
+            logger.debug(`[MatchDataSync] Settlement check completed for ${matchId}`);
+          }
+        } finally {
+          client.release();
+        }
+      } catch (settlementError: any) {
+        // Don't fail the entire sync if settlement fails
+        logger.warn(`[MatchDataSync] Settlement check failed for ${matchId}: ${settlementError.message}`);
+      }
 
       return result;
     } catch (error: any) {
@@ -223,6 +265,7 @@ export class MatchDataSyncWorker {
       let statsCount = 0;
       let incidentsCount = 0;
       let trendCount = 0;
+      let settlementCount = 0;
       let errorCount = 0;
 
       // Process matches sequentially to avoid overwhelming the API
@@ -233,6 +276,7 @@ export class MatchDataSyncWorker {
           if (result.stats) statsCount++;
           if (result.incidents) incidentsCount++;
           if (result.trend) trendCount++;
+          if (result.settlement) settlementCount++;
 
           // Small delay between matches to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 200));
@@ -245,7 +289,7 @@ export class MatchDataSyncWorker {
       const duration = Date.now() - startTime;
       logger.info(
         `[MatchDataSync] ✅ Sync completed in ${duration}ms: ` +
-        `stats=${statsCount}, incidents=${incidentsCount}, trend=${trendCount}, errors=${errorCount}`
+        `stats=${statsCount}, incidents=${incidentsCount}, trend=${trendCount}, settlement=${settlementCount}, errors=${errorCount}`
       );
 
       logEvent('info', 'match_data_sync.completed', {
@@ -253,6 +297,7 @@ export class MatchDataSyncWorker {
         stats_saved: statsCount,
         incidents_saved: incidentsCount,
         trend_saved: trendCount,
+        settlement_checked: settlementCount,
         errors: errorCount,
         duration_ms: duration,
       });
