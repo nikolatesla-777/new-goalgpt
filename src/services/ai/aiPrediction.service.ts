@@ -97,6 +97,7 @@ export class AIPredictionService {
                 SELECT id, bot_group_id, bot_display_name, minute_from, minute_to, priority, display_template, prediction_period, base_prediction_type
                 FROM ai_bot_rules
                 WHERE is_active = true
+                  AND bot_display_name != 'Alert System'  -- CRITICAL FIX: Alert System is only for manual predictions, not external ones
                 ORDER BY priority DESC
             `);
 
@@ -552,9 +553,11 @@ export class AIPredictionService {
                 else if (matchResult.statusId === 4) effectivePeriod = 'MS';
             }
             // If explicit "First Half" bots, ensure IY
-            if (botGroup.botDisplayName === 'ALERT: D' || botGroup.botDisplayName === 'BOT 007') {
-                // But respect live status if available (e.g. if BOT 007 comes in 2nd half)
-                // User said "ALERT: D and BOT 007 are IY bots", but also "period depends on match part"
+            // Note: Bot rules now have prediction_period set, so we trust that primarily
+            // ALERT D, CODE: 35, Code Zero are IY bots (10-24 minutes)
+            // BOT 007 and Algoritma: 01 can be MS (65-75 minutes)
+            if (botGroup.botDisplayName === 'ALERT D' || botGroup.botDisplayName === 'CODE: 35' || botGroup.botDisplayName === 'Code Zero') {
+                // These are IY bots, but respect live status if available
                 // So we trust the statusId logic above primarily.
             }
 
