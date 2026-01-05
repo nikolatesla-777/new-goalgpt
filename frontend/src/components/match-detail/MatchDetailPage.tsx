@@ -1043,15 +1043,8 @@ function AIContent({ matchId }: { matchId: string }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // First try to get from context
-        const contextPred = predictions.get(matchId);
-        if (contextPred) {
-            setPrediction(contextPred);
-            setLoading(false);
-            return;
-        }
-
-        // If not in context, fetch directly from API
+        // Always fetch from API for match detail page (to get the latest prediction)
+        // Context might have old data or limit=100 might exclude this match
         const fetchPrediction = async () => {
             try {
                 const API_BASE = import.meta.env.VITE_API_URL || '/api';
