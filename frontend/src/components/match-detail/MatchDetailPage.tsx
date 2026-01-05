@@ -1171,21 +1171,27 @@ function AIContent({ matchId }: { matchId: string }) {
                                         </div>
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-sm font-bold text-gray-900 truncate">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-bold text-gray-900">
                                                 {prediction.bot_name || 'GoalGPT AI'}
                                             </span>
                                             {prediction.minute_at_prediction && (
-                                                <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
-                                                    • {prediction.minute_at_prediction}. dk
-                                                </span>
+                                                <>
+                                                    <span className="text-gray-300">-</span>
+                                                    <span className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                                                        {prediction.minute_at_prediction}. Dakika
+                                                    </span>
+                                                </>
+                                            )}
+                                            {scoreAtPrediction && (
+                                                <>
+                                                    <span className="text-gray-300">Skor</span>
+                                                    <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                                                        {scoreAtPrediction}
+                                                    </span>
+                                                </>
                                             )}
                                         </div>
-                                        {scoreAtPrediction && (
-                                            <div className="text-xs text-gray-500">
-                                                Skor: <span className="font-semibold text-gray-700">{scoreAtPrediction}</span>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
 
