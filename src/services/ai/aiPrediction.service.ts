@@ -1210,6 +1210,7 @@ export class AIPredictionService {
         const client = await pool.connect();
         try {
             // Find pending predictions for this match AND fetch match status
+            // CRITICAL: Also fetch minute from database if minute parameter is 0 or invalid
             const query = `
                 SELECT 
                     p.id as prediction_id, 
@@ -1217,6 +1218,7 @@ export class AIPredictionService {
                     p.prediction_value,
                     pm.id as match_link_id,
                     m.status_id,
+                    m.minute,
                     m.home_scores,
                     m.away_scores
                 FROM ai_predictions p
@@ -1228,10 +1230,15 @@ export class AIPredictionService {
 
             const result = await client.query(query, [matchExternalId]);
 
-            if (result.rows.length === 0) return;
+            if (result.rows.length === 0) {
+                logger.debug(`[AIPrediction] No pending predictions for match ${matchExternalId}`);
+                return;
+            }
 
+            // CRITICAL: Use database minute if provided minute is 0 or invalid
+            const effectiveMinute = (minute && minute > 0) ? minute : (result.rows[0]?.minute || 0);
             const totalGoals = homeScore + awayScore;
-            logger.info(`[AIPrediction] Checking instant win for match ${matchExternalId} (Score: ${homeScore}-${awayScore}, Minute: ${minute})`);
+            logger.info(`[AIPrediction] Checking instant win for match ${matchExternalId} (Score: ${homeScore}-${awayScore}, Minute: ${effectiveMinute}${minute !== effectiveMinute ? ' [from DB]' : ''})`);
 
             for (const row of result.rows) {
                 // Extract HT scores if available
@@ -1247,11 +1254,14 @@ export class AIPredictionService {
                 // Use overriding status if available (from live WS event), otherwise DB status
                 const effectiveStatusId = overridingStatusId !== undefined ? overridingStatusId : row.status_id;
 
+                // Use effective minute (from parameter or database)
+                const effectiveMinuteForCheck = (minute && minute > 0) ? minute : (row.minute || 0);
+                
                 const check = this.checkInstantWin(
                     row.prediction_type,
                     row.prediction_value,
                     totalGoals,
-                    minute,
+                    effectiveMinuteForCheck,
                     effectiveStatusId,
                     htHome,
                     htAway
