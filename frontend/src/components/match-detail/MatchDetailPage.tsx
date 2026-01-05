@@ -418,8 +418,8 @@ export function MatchDetailPage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 pb-safe">
             {/* Premium Header */}
-            <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-3 md:p-4 sticky top-0 z-30 shadow-xl border-b border-slate-700/50 backdrop-blur-sm">
-                <div className="max-w-5xl mx-auto flex items-center gap-2 md:gap-4">
+            <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-3 md:p-4 sticky top-0 z-30 shadow-xl border-b border-slate-700/50 backdrop-blur-sm h-[52px] md:h-[60px] flex items-center">
+                <div className="max-w-5xl mx-auto w-full flex items-center gap-2 md:gap-4">
                     <button
                         onClick={() => navigate('/')}
                         className="p-2 md:p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 bg-white/5 backdrop-blur-sm border border-white/10 flex-shrink-0"
@@ -469,7 +469,7 @@ export function MatchDetailPage() {
                     </div>
 
                     {/* Score & Live Status */}
-                    <div className="flex flex-col items-center shrink-0 w-[80px] sm:w-[100px] md:w-[140px]">
+                    <div className="flex flex-col items-center shrink-0 w-[80px] sm:w-[100px] md:w-[160px] lg:w-[180px]">
                         {(() => {
                             const status = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
                             const isLive = status >= 2 && status <= 7;
@@ -481,23 +481,23 @@ export function MatchDetailPage() {
                                     {isLive && (
                                         <>
                                             {status === 3 ? (
-                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full whitespace-nowrap shadow-lg shadow-amber-500/50 border border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full whitespace-nowrap shadow-lg shadow-amber-500/50 border md:border-2 border-white/20">
                                                     İY
                                                 </span>
                                             ) : (
-                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-red-500 to-rose-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full animate-pulse whitespace-nowrap shadow-lg shadow-red-500/50 border border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full animate-pulse whitespace-nowrap shadow-lg shadow-red-500/50 border md:border-2 border-white/20">
                                                     CANLI
                                                 </span>
                                             )}
                                             {minuteText && minuteText !== '—' && (
-                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full whitespace-nowrap min-w-[28px] md:min-w-[32px] text-center shadow-lg shadow-indigo-500/50 border border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full whitespace-nowrap min-w-[28px] md:min-w-[36px] lg:min-w-[40px] text-center shadow-lg shadow-indigo-500/50 border md:border-2 border-white/20">
                                                     {minuteText}
                                                 </span>
                                             )}
                                         </>
                                     )}
                                     {isFinished && (
-                                        <span className="px-2 py-1 md:px-4 md:py-1.5 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full shadow-lg border border-white/20">
+                                        <span className="px-2 py-1 md:px-4 md:py-1.5 lg:px-5 lg:py-2 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full shadow-lg border md:border-2 border-white/20">
                                             MS
                                         </span>
                                     )}
@@ -505,14 +505,14 @@ export function MatchDetailPage() {
                             );
                         })()}
 
-                        <div className="relative bg-gradient-to-br from-white/15 via-white/10 to-white/5 rounded-xl md:rounded-2xl px-3 py-2 md:px-5 md:py-3 lg:px-8 lg:py-4 backdrop-blur-md border border-white/20 md:border-2 shadow-2xl w-full">
+                        <div className="relative bg-gradient-to-br from-white/15 via-white/10 to-white/5 rounded-xl md:rounded-2xl px-3 py-2 md:px-6 md:py-3 lg:px-10 lg:py-5 backdrop-blur-md border md:border-2 border-white/20 shadow-2xl w-full">
                             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-xl md:rounded-2xl"></div>
-                            <div className="relative text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-black tracking-widest leading-none font-mono text-white drop-shadow-lg">
-                                {match.home_score ?? 0}<span className="text-white/60 mx-1 md:mx-2">-</span>{match.away_score ?? 0}
+                            <div className="relative text-2xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-black tracking-widest leading-none font-mono text-white drop-shadow-lg">
+                                {match.home_score ?? 0}<span className="text-white/60 mx-1 md:mx-2 lg:mx-3">-</span>{match.away_score ?? 0}
                             </div>
                         </div>
 
-                        <p className="text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2 font-medium text-center">
+                        <p className="text-[10px] md:text-xs lg:text-sm text-gray-400 mt-1 md:mt-2 lg:mt-3 font-medium text-center">
                             {(() => {
                                 const status = (match as any).status ?? (match as any).status_id ?? 0;
                                 switch (status) {
@@ -566,7 +566,7 @@ export function MatchDetailPage() {
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`
-                                        flex-shrink-0 min-w-[70px] sm:min-w-[80px] md:min-w-[100px] py-2.5 md:py-4 px-1.5 md:px-2 
+                                        flex-shrink-0 min-w-[70px] sm:min-w-[80px] md:min-w-[110px] lg:min-w-[120px] py-2.5 md:py-4 lg:py-5 px-1.5 md:px-3 lg:px-4 
                                         flex flex-col items-center justify-center gap-1 md:gap-2 
                                         transition-all duration-300 relative group
                                         ${isActive 
@@ -579,19 +579,19 @@ export function MatchDetailPage() {
                                         <tab.Icon
                                             size={20}
                                             weight={isActive ? "fill" : "regular"}
-                                            className={`transition-all duration-300 md:w-6 md:h-6 ${isActive ? 'drop-shadow-lg' : ''}`}
+                                            className={`transition-all duration-300 md:w-6 md:h-6 lg:w-7 lg:h-7 ${isActive ? 'drop-shadow-lg' : ''}`}
                                         />
                                         {isActive && (
                                             <div className="absolute inset-0 bg-indigo-200/30 rounded-full blur-md -z-10"></div>
                                         )}
                                     </div>
-                                    <span className={`text-[9px] sm:text-[10px] md:text-[11px] font-bold tracking-wide transition-colors duration-300 leading-tight text-center ${isActive ? 'text-indigo-600' : 'text-gray-500 group-hover:text-indigo-500'}`}>
+                                    <span className={`text-[9px] sm:text-[10px] md:text-xs lg:text-sm font-bold tracking-wide transition-colors duration-300 leading-tight text-center ${isActive ? 'text-indigo-600' : 'text-gray-500 group-hover:text-indigo-500'}`}>
                                         {tab.label}
                                     </span>
 
                                     {/* Premium Active Indicator */}
                                     {isActive && (
-                                        <div className="absolute bottom-0 left-0 right-0 h-0.5 md:h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-t-full mx-1 md:mx-2 shadow-lg shadow-indigo-500/50" />
+                                        <div className="absolute bottom-0 left-0 right-0 h-0.5 md:h-1 lg:h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-t-full mx-1 md:mx-2 lg:mx-3 shadow-lg shadow-indigo-500/50" />
                                     )}
                                 </button>
                             );
