@@ -1185,7 +1185,10 @@ function AIContent({ matchId }: { matchId: string }) {
                                             )}
                                             {scoreAtPrediction && (
                                                 <>
-                                                    <span className="text-gray-300">Skor</span>
+                                                    <span className="text-gray-300">-</span>
+                                                    <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+                                                        Skor
+                                                    </span>
                                                     <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
                                                         {scoreAtPrediction}
                                                     </span>
@@ -1197,18 +1200,10 @@ function AIContent({ matchId }: { matchId: string }) {
 
                                 {/* Center: Prediction Detail */}
                                 <div className="flex items-center gap-3 flex-shrink-0">
-                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
+                                    <div className="px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
                                         <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
                                             {prediction.prediction_type}
                                         </span>
-                                        {numericValue && (
-                                            <>
-                                                <span className="text-gray-300">•</span>
-                                                <span className="text-sm font-black text-indigo-700 whitespace-nowrap">
-                                                    {numericValue}
-                                                </span>
-                                            </>
-                                        )}
                                     </div>
                                 </div>
 
