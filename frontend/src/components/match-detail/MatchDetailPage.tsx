@@ -418,16 +418,16 @@ export function MatchDetailPage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 pb-safe">
             {/* Premium Header */}
-            <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sticky top-0 z-30 shadow-xl border-b border-slate-700/50 backdrop-blur-sm">
-                <div className="max-w-5xl mx-auto flex items-center gap-4">
+            <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-3 md:p-4 sticky top-0 z-30 shadow-xl border-b border-slate-700/50 backdrop-blur-sm">
+                <div className="max-w-5xl mx-auto flex items-center gap-2 md:gap-4">
                     <button
                         onClick={() => navigate('/')}
-                        className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 bg-white/5 backdrop-blur-sm border border-white/10"
+                        className="p-2 md:p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 bg-white/5 backdrop-blur-sm border border-white/10 flex-shrink-0"
                     >
-                        <CaretLeft size={22} weight="bold" />
+                        <CaretLeft size={20} weight="bold" className="md:w-[22px] md:h-[22px]" />
                     </button>
-                    <div className="flex-1">
-                        <p className="text-sm text-gray-300 font-semibold tracking-wide uppercase">
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs md:text-sm text-gray-300 font-semibold tracking-wide uppercase truncate">
                             {match.competition?.name || 'Lig'}
                         </p>
                     </div>
@@ -435,14 +435,14 @@ export function MatchDetailPage() {
             </header>
 
             {/* Premium Match Info Area */}
-            <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-gray-900 text-white pt-8 pb-10 px-4 overflow-hidden">
+            <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-gray-900 text-white pt-4 md:pt-8 pb-6 md:pb-10 px-3 md:px-4 overflow-hidden">
                 {/* Animated Background Elements */}
                 <div className="absolute inset-0 opacity-10">
                     <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500 rounded-full blur-3xl"></div>
                     <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500 rounded-full blur-3xl"></div>
                 </div>
                 
-                <div className="max-w-3xl mx-auto flex items-start justify-between gap-2 md:gap-8 relative z-10">
+                <div className="max-w-3xl mx-auto flex items-start justify-between gap-1 md:gap-2 lg:gap-8 relative z-10">
 
                     {/* Premium Home Team */}
                     <div
@@ -450,26 +450,26 @@ export function MatchDetailPage() {
                         onClick={() => navigate(`/team/${match.home_team_id}`)}
                     >
                         {match.home_team?.logo_url ? (
-                            <div className="relative mb-4 transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+                            <div className="relative mb-2 md:mb-4 transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
                                 <div className="absolute inset-0 bg-white/20 rounded-full blur-xl group-hover:blur-2xl transition-all duration-300"></div>
                                 <img
                                     src={match.home_team.logo_url}
                                     alt=""
-                                    className="relative w-20 h-20 md:w-24 md:h-24 object-contain drop-shadow-2xl filter group-hover:brightness-110 transition-all duration-300"
+                                    className="relative w-14 h-14 sm:w-16 sm:h-16 md:w-24 md:h-24 object-contain drop-shadow-2xl filter group-hover:brightness-110 transition-all duration-300"
                                 />
                             </div>
                         ) : (
-                            <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl mb-4 flex items-center justify-center shadow-xl border border-white/10 group-hover:scale-110 transition-all duration-300">
-                                <Users size={28} className="text-gray-400" />
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 md:w-24 md:h-24 bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl mb-2 md:mb-4 flex items-center justify-center shadow-xl border border-white/10 group-hover:scale-110 transition-all duration-300">
+                                <Users size={20} className="text-gray-400 md:w-[28px] md:h-[28px]" />
                             </div>
                         )}
-                        <p className="font-black text-sm md:text-lg leading-tight w-full break-words px-1 text-white drop-shadow-lg group-hover:text-white/90 transition-colors">
+                        <p className="font-black text-xs sm:text-sm md:text-lg leading-tight w-full break-words px-1 text-white drop-shadow-lg group-hover:text-white/90 transition-colors">
                             {match.home_team?.name || 'Ev Sahibi'}
                         </p>
                     </div>
 
                     {/* Score & Live Status */}
-                    <div className="flex flex-col items-center shrink-0 w-[100px] md:w-[140px]">
+                    <div className="flex flex-col items-center shrink-0 w-[80px] sm:w-[100px] md:w-[140px]">
                         {(() => {
                             const status = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
                             const isLive = status >= 2 && status <= 7;
@@ -477,27 +477,27 @@ export function MatchDetailPage() {
                             const minuteText = match.minute_text || '—';
 
                             return (
-                                <div className="flex items-center justify-center gap-2 mb-3 w-full">
+                                <div className="flex items-center justify-center gap-1 md:gap-2 mb-2 md:mb-3 w-full flex-wrap">
                                     {isLive && (
                                         <>
                                             {status === 3 ? (
-                                                <span className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs md:text-sm font-black rounded-full whitespace-nowrap shadow-lg shadow-amber-500/50 border-2 border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full whitespace-nowrap shadow-lg shadow-amber-500/50 border border-white/20">
                                                     İY
                                                 </span>
                                             ) : (
-                                                <span className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-rose-500 text-white text-xs md:text-sm font-black rounded-full animate-pulse whitespace-nowrap shadow-lg shadow-red-500/50 border-2 border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-red-500 to-rose-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full animate-pulse whitespace-nowrap shadow-lg shadow-red-500/50 border border-white/20">
                                                     CANLI
                                                 </span>
                                             )}
                                             {minuteText && minuteText !== '—' && (
-                                                <span className="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs md:text-sm font-black rounded-full whitespace-nowrap min-w-[32px] text-center shadow-lg shadow-indigo-500/50 border-2 border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full whitespace-nowrap min-w-[28px] md:min-w-[32px] text-center shadow-lg shadow-indigo-500/50 border border-white/20">
                                                     {minuteText}
                                                 </span>
                                             )}
                                         </>
                                     )}
                                     {isFinished && (
-                                        <span className="px-4 py-1.5 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-xs md:text-sm font-black rounded-full shadow-lg border-2 border-white/20">
+                                        <span className="px-2 py-1 md:px-4 md:py-1.5 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full shadow-lg border border-white/20">
                                             MS
                                         </span>
                                     )}
@@ -505,14 +505,14 @@ export function MatchDetailPage() {
                             );
                         })()}
 
-                        <div className="relative bg-gradient-to-br from-white/15 via-white/10 to-white/5 rounded-2xl px-5 py-3 md:px-8 md:py-4 backdrop-blur-md border-2 border-white/20 shadow-2xl">
-                            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-2xl"></div>
-                            <div className="relative text-4xl md:text-6xl font-black tracking-widest leading-none font-mono text-white drop-shadow-lg">
-                                {match.home_score ?? 0}<span className="text-white/60 mx-2">-</span>{match.away_score ?? 0}
+                        <div className="relative bg-gradient-to-br from-white/15 via-white/10 to-white/5 rounded-xl md:rounded-2xl px-3 py-2 md:px-5 md:py-3 lg:px-8 lg:py-4 backdrop-blur-md border border-white/20 md:border-2 shadow-2xl w-full">
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-xl md:rounded-2xl"></div>
+                            <div className="relative text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-black tracking-widest leading-none font-mono text-white drop-shadow-lg">
+                                {match.home_score ?? 0}<span className="text-white/60 mx-1 md:mx-2">-</span>{match.away_score ?? 0}
                             </div>
                         </div>
 
-                        <p className="text-xs text-gray-400 mt-2 font-medium">
+                        <p className="text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2 font-medium text-center">
                             {(() => {
                                 const status = (match as any).status ?? (match as any).status_id ?? 0;
                                 switch (status) {
@@ -535,20 +535,20 @@ export function MatchDetailPage() {
                         onClick={() => navigate(`/team/${match.away_team_id}`)}
                     >
                         {match.away_team?.logo_url ? (
-                            <div className="relative mb-4 transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+                            <div className="relative mb-2 md:mb-4 transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
                                 <div className="absolute inset-0 bg-white/20 rounded-full blur-xl group-hover:blur-2xl transition-all duration-300"></div>
                                 <img
                                     src={match.away_team.logo_url}
                                     alt=""
-                                    className="relative w-20 h-20 md:w-24 md:h-24 object-contain drop-shadow-2xl filter group-hover:brightness-110 transition-all duration-300"
+                                    className="relative w-14 h-14 sm:w-16 sm:h-16 md:w-24 md:h-24 object-contain drop-shadow-2xl filter group-hover:brightness-110 transition-all duration-300"
                                 />
                             </div>
                         ) : (
-                            <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl mb-4 flex items-center justify-center shadow-xl border border-white/10 group-hover:scale-110 transition-all duration-300">
-                                <Users size={28} className="text-gray-400" />
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 md:w-24 md:h-24 bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl mb-2 md:mb-4 flex items-center justify-center shadow-xl border border-white/10 group-hover:scale-110 transition-all duration-300">
+                                <Users size={20} className="text-gray-400 md:w-[28px] md:h-[28px]" />
                             </div>
                         )}
-                        <p className="font-black text-sm md:text-lg leading-tight w-full break-words px-1 text-white drop-shadow-lg group-hover:text-white/90 transition-colors">
+                        <p className="font-black text-xs sm:text-sm md:text-lg leading-tight w-full break-words px-1 text-white drop-shadow-lg group-hover:text-white/90 transition-colors">
                             {match.away_team?.name || 'Deplasman'}
                         </p>
                     </div>
@@ -556,7 +556,7 @@ export function MatchDetailPage() {
             </div>
 
             {/* Premium Tabs */}
-            <div className="bg-gradient-to-b from-white to-gray-50/50 sticky top-[60px] z-20 shadow-lg border-b border-gray-200/50 backdrop-blur-sm">
+            <div className="bg-gradient-to-b from-white to-gray-50/50 sticky top-[52px] md:top-[60px] z-20 shadow-lg border-b border-gray-200/50 backdrop-blur-sm">
                 <div className="max-w-5xl mx-auto">
                     <div className="flex overflow-x-auto no-scrollbar scroll-smooth">
                         {allTabs.map((tab) => {
@@ -566,8 +566,8 @@ export function MatchDetailPage() {
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`
-                                        flex-1 min-w-[85px] sm:min-w-[100px] py-4 px-2 
-                                        flex flex-col items-center justify-center gap-2 
+                                        flex-shrink-0 min-w-[70px] sm:min-w-[80px] md:min-w-[100px] py-2.5 md:py-4 px-1.5 md:px-2 
+                                        flex flex-col items-center justify-center gap-1 md:gap-2 
                                         transition-all duration-300 relative group
                                         ${isActive 
                                             ? 'text-indigo-600 bg-gradient-to-b from-indigo-50/50 to-transparent' 
@@ -577,21 +577,21 @@ export function MatchDetailPage() {
                                 >
                                     <div className={`relative transition-all duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}>
                                         <tab.Icon
-                                            size={24}
+                                            size={20}
                                             weight={isActive ? "fill" : "regular"}
-                                            className={`transition-all duration-300 ${isActive ? 'drop-shadow-lg' : ''}`}
+                                            className={`transition-all duration-300 md:w-6 md:h-6 ${isActive ? 'drop-shadow-lg' : ''}`}
                                         />
                                         {isActive && (
                                             <div className="absolute inset-0 bg-indigo-200/30 rounded-full blur-md -z-10"></div>
                                         )}
                                     </div>
-                                    <span className={`text-[11px] font-bold tracking-wide transition-colors duration-300 ${isActive ? 'text-indigo-600' : 'text-gray-500 group-hover:text-indigo-500'}`}>
+                                    <span className={`text-[9px] sm:text-[10px] md:text-[11px] font-bold tracking-wide transition-colors duration-300 leading-tight text-center ${isActive ? 'text-indigo-600' : 'text-gray-500 group-hover:text-indigo-500'}`}>
                                         {tab.label}
                                     </span>
 
                                     {/* Premium Active Indicator */}
                                     {isActive && (
-                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-t-full mx-2 shadow-lg shadow-indigo-500/50" />
+                                        <div className="absolute bottom-0 left-0 right-0 h-0.5 md:h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-t-full mx-1 md:mx-2 shadow-lg shadow-indigo-500/50" />
                                     )}
                                 </button>
                             );
@@ -602,7 +602,7 @@ export function MatchDetailPage() {
 
 
             {/* Premium Tab Content */}
-            <div className="max-w-5xl mx-auto px-4 py-6">
+            <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-6">
                 {tabLoading ? (
                     <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl p-12 text-center border border-gray-200/50 shadow-lg">
                         <div className="flex flex-col items-center justify-center gap-4">
@@ -802,39 +802,24 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
 
     // Render period tabs component
     const PeriodTabs = () => (
-        <div style={{
-            display: 'flex',
-            gap: '8px',
-            borderBottom: '2px solid #e5e7eb',
-            paddingBottom: '8px'
-        }}>
+        <div className="flex gap-2 md:gap-2 border-b-2 border-gray-200 pb-2 md:pb-2 overflow-x-auto">
             <button
                 onClick={() => setActivePeriod('full')}
-                style={{
-                    padding: '8px 16px',
-                    border: 'none',
-                    background: activePeriod === 'full' ? '#3b82f6' : 'transparent',
-                    color: activePeriod === 'full' ? 'white' : '#6b7280',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: activePeriod === 'full' ? '600' : '400',
-                    transition: 'all 0.2s',
-                }}
+                className={`px-3 py-1.5 md:px-4 md:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs md:text-sm whitespace-nowrap ${
+                    activePeriod === 'full' 
+                        ? 'bg-blue-600 text-white font-semibold' 
+                        : 'bg-transparent text-gray-600'
+                }`}
             >
                 TÜMÜ
             </button>
             <button
                 onClick={() => setActivePeriod('first')}
-                style={{
-                    padding: '8px 16px',
-                    border: 'none',
-                    background: activePeriod === 'first' ? '#3b82f6' : 'transparent',
-                    color: activePeriod === 'first' ? 'white' : '#6b7280',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: activePeriod === 'first' ? '600' : '400',
-                    transition: 'all 0.2s',
-                }}
+                className={`px-3 py-1.5 md:px-4 md:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs md:text-sm whitespace-nowrap ${
+                    activePeriod === 'first' 
+                        ? 'bg-blue-600 text-white font-semibold' 
+                        : 'bg-transparent text-gray-600'
+                }`}
             >
                 1. YARI
             </button>
@@ -842,16 +827,11 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
             {isSecondHalfOrLater && (
                 <button
                     onClick={() => setActivePeriod('second')}
-                    style={{
-                        padding: '8px 16px',
-                        border: 'none',
-                        background: activePeriod === 'second' ? '#3b82f6' : 'transparent',
-                        color: activePeriod === 'second' ? 'white' : '#6b7280',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: activePeriod === 'second' ? '600' : '400',
-                        transition: 'all 0.2s',
-                    }}
+                    className={`px-3 py-1.5 md:px-4 md:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs md:text-sm whitespace-nowrap ${
+                        activePeriod === 'second' 
+                            ? 'bg-blue-600 text-white font-semibold' 
+                            : 'bg-transparent text-gray-600'
+                    }`}
                 >
                     2. YARI
                 </button>
@@ -860,28 +840,21 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     );
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="flex flex-col gap-3 md:gap-4">
             {/* Period Tabs - Always show if we have any stats or match has started */}
             {(hasFullTimeStats || matchStatus >= 2) && <PeriodTabs />}
 
             {/* Stats List */}
             {stats.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="flex flex-col gap-2 md:gap-3">
                     {stats.map((stat: any, idx: number) => (
                         <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
                     ))}
                 </div>
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="flex flex-col gap-2 md:gap-3">
                     {/* Show message based on period */}
-                    <div style={{
-                        textAlign: 'center',
-                        padding: '20px',
-                        color: '#6b7280',
-                        backgroundColor: '#f9fafb',
-                        borderRadius: '8px',
-                        marginBottom: '16px'
-                    }}>
+                    <div className="text-center p-4 md:p-5 text-gray-600 bg-gray-50 rounded-lg mb-3 md:mb-4 text-sm md:text-base">
                         {activePeriod === 'first' && (isFirstHalf
                             ? 'Maç devam ediyor, detaylı istatistikler güncelleniyor...'
                             : '1. yarı detaylı istatistikleri mevcut değil.'
@@ -906,15 +879,15 @@ function StatRow({ label, home, away }: { label: string; home: any; away: any })
     const homePercent = (homeNum / total) * 100;
 
     return (
-        <div style={{ backgroundColor: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontWeight: '600', color: '#1f2937' }}>{home}</span>
-                <span style={{ color: '#6b7280', fontSize: '14px' }}>{label}</span>
-                <span style={{ fontWeight: '600', color: '#1f2937' }}>{away}</span>
+        <div className="bg-white p-3 md:p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex justify-between items-center mb-2 md:mb-3 gap-2">
+                <span className="font-semibold text-gray-900 text-sm md:text-base min-w-[30px] text-right">{home}</span>
+                <span className="text-gray-600 text-xs md:text-sm font-medium text-center flex-1">{label}</span>
+                <span className="font-semibold text-gray-900 text-sm md:text-base min-w-[30px] text-left">{away}</span>
             </div>
-            <div style={{ display: 'flex', gap: '4px', height: '6px' }}>
-                <div style={{ flex: homePercent, backgroundColor: '#3b82f6', borderRadius: '3px' }}></div>
-                <div style={{ flex: 100 - homePercent, backgroundColor: '#ef4444', borderRadius: '3px' }}></div>
+            <div className="flex gap-1 h-1.5 md:h-2">
+                <div className="bg-blue-600 rounded-full" style={{ flex: homePercent }}></div>
+                <div className="bg-red-500 rounded-full" style={{ flex: 100 - homePercent }}></div>
             </div>
         </div>
     );
@@ -924,7 +897,7 @@ function StatRow({ label, home, away }: { label: string; home: any; away: any })
 function H2HContent({ data }: { data: any }) {
     if (!data) {
         return (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280', backgroundColor: 'white', borderRadius: '12px' }}>
+            <div className="text-center p-8 md:p-10 text-gray-600 bg-white rounded-xl">
                 H2H verisi bulunamadı
             </div>
         );
@@ -934,26 +907,26 @@ function H2HContent({ data }: { data: any }) {
     const h2hMatches = data.h2hMatches || [];
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="flex flex-col gap-3 md:gap-4">
             {/* H2H Summary */}
             {summary && summary.total > 0 && (
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
-                    <h3 style={{ margin: '0 0 16px', fontWeight: '600' }}>Karşılıklı Maçlar Özeti</h3>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', fontSize: '18px' }}>
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontWeight: 'bold', color: '#3b82f6', fontSize: '24px' }}>{summary.homeWins}</div>
-                            <div style={{ color: '#6b7280', fontSize: '14px' }}>Ev Kazandı</div>
+                <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <h3 className="m-0 mb-3 md:mb-4 font-semibold text-sm md:text-base">Karşılıklı Maçlar Özeti</h3>
+                    <div className="flex justify-center gap-4 md:gap-6">
+                        <div className="text-center">
+                            <div className="font-bold text-blue-600 text-lg md:text-2xl">{summary.homeWins}</div>
+                            <div className="text-gray-600 text-xs md:text-sm mt-1">Ev Kazandı</div>
                         </div>
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontWeight: 'bold', color: '#9ca3af', fontSize: '24px' }}>{summary.draws}</div>
-                            <div style={{ color: '#6b7280', fontSize: '14px' }}>Berabere</div>
+                        <div className="text-center">
+                            <div className="font-bold text-gray-400 text-lg md:text-2xl">{summary.draws}</div>
+                            <div className="text-gray-600 text-xs md:text-sm mt-1">Berabere</div>
                         </div>
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontWeight: 'bold', color: '#ef4444', fontSize: '24px' }}>{summary.awayWins}</div>
-                            <div style={{ color: '#6b7280', fontSize: '14px' }}>Dep Kazandı</div>
+                        <div className="text-center">
+                            <div className="font-bold text-red-500 text-lg md:text-2xl">{summary.awayWins}</div>
+                            <div className="text-gray-600 text-xs md:text-sm mt-1">Dep Kazandı</div>
                         </div>
                     </div>
-                    <div style={{ marginTop: '12px', color: '#6b7280' }}>
+                    <div className="mt-3 text-gray-600 text-xs md:text-sm">
                         Toplam {summary.total} maç
                     </div>
                 </div>
@@ -961,13 +934,13 @@ function H2HContent({ data }: { data: any }) {
 
             {/* Previous H2H Matches */}
             {h2hMatches.length > 0 && (
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px' }}>
-                    <h4 style={{ margin: '0 0 12px', fontWeight: '600' }}>Son Karşılaşmalar</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100">
+                    <h4 className="m-0 mb-3 font-semibold text-sm md:text-base">Son Karşılaşmalar</h4>
+                    <div className="flex flex-col gap-2">
                         {h2hMatches.slice(0, 5).map((match: any, idx: number) => (
-                            <div key={idx} style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '14px', color: '#6b7280' }}>{match.date || match.match_time}</span>
-                                <span style={{ fontWeight: '600' }}>{match.home_score ?? '-'} - {match.away_score ?? '-'}</span>
+                            <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center gap-2">
+                                <span className="text-xs md:text-sm text-gray-600 truncate">{match.date || match.match_time}</span>
+                                <span className="font-semibold text-sm md:text-base whitespace-nowrap">{match.home_score ?? '-'} - {match.away_score ?? '-'}</span>
                             </div>
                         ))}
                     </div>
@@ -976,7 +949,7 @@ function H2HContent({ data }: { data: any }) {
 
             {/* If no data at all */}
             {!summary && h2hMatches.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280', backgroundColor: 'white', borderRadius: '12px' }}>
+                <div className="text-center p-8 md:p-10 text-gray-600 bg-white rounded-xl">
                     H2H verisi bulunamadı
                 </div>
             )}
@@ -991,66 +964,60 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
 
     if (!standings.length) {
         return (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280', backgroundColor: 'white', borderRadius: '12px' }}>
+            <div className="text-center p-8 md:p-10 text-gray-600 bg-white rounded-xl">
                 Puan durumu bulunamadı
             </div>
         );
     }
 
     return (
-        <div style={{ backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                <thead>
-                    <tr style={{ backgroundColor: '#f9fafb' }}>
-                        <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600' }}>#</th>
-                        <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600' }}>Takım</th>
-                        <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600' }}>O</th>
-                        <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600' }}>G</th>
-                        <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600' }}>B</th>
-                        <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600' }}>M</th>
-                        <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600' }}>P</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {standings.map((team: any, idx: number) => {
-                        const isHighlighted = team.team_id === homeTeamId || team.team_id === awayTeamId;
-                        return (
-                            <tr key={idx} style={{ backgroundColor: isHighlighted ? '#dbeafe' : 'transparent', borderBottom: '1px solid #e5e7eb' }}>
-                                <td style={{ padding: '12px 8px', fontWeight: '600' }}>{team.position || idx + 1}</td>
-                                <td style={{ padding: '12px 8px' }}>
-                                    <div
-                                        onClick={() => navigate(`/team/${team.team_id}`)}
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            cursor: 'pointer',
-                                            color: '#1e40af',
-                                            fontWeight: isHighlighted ? '600' : '400'
-                                        }}
-                                    >
-                                        {team.team_logo && (
-                                            <img
-                                                src={team.team_logo}
-                                                alt=""
-                                                style={{ width: '20px', height: '20px', objectFit: 'contain' }}
-                                            />
-                                        )}
-                                        <span style={{ textDecoration: 'none' }}>
-                                            {team.team_name || `Takım ${idx + 1}`}
-                                        </span>
-                                    </div>
-                                </td>
-                                <td style={{ padding: '12px 8px', textAlign: 'center' }}>{team.played}</td>
-                                <td style={{ padding: '12px 8px', textAlign: 'center' }}>{team.won}</td>
-                                <td style={{ padding: '12px 8px', textAlign: 'center' }}>{team.drawn}</td>
-                                <td style={{ padding: '12px 8px', textAlign: 'center' }}>{team.lost}</td>
-                                <td style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600' }}>{team.points}</td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+            <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs md:text-sm">
+                    <thead>
+                        <tr className="bg-gray-50">
+                            <th className="p-2 md:p-3 text-left font-semibold sticky left-0 bg-gray-50 z-10">#</th>
+                            <th className="p-2 md:p-3 text-left font-semibold min-w-[120px] md:min-w-[150px]">Takım</th>
+                            <th className="p-2 md:p-3 text-center font-semibold">O</th>
+                            <th className="p-2 md:p-3 text-center font-semibold">G</th>
+                            <th className="p-2 md:p-3 text-center font-semibold">B</th>
+                            <th className="p-2 md:p-3 text-center font-semibold">M</th>
+                            <th className="p-2 md:p-3 text-center font-semibold">P</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {standings.map((team: any, idx: number) => {
+                            const isHighlighted = team.team_id === homeTeamId || team.team_id === awayTeamId;
+                            return (
+                                <tr key={idx} className={`border-b border-gray-100 ${isHighlighted ? 'bg-blue-50' : 'bg-white'}`}>
+                                    <td className="p-2 md:p-3 font-semibold sticky left-0 bg-inherit z-10">{team.position || idx + 1}</td>
+                                    <td className="p-2 md:p-3">
+                                        <div
+                                            onClick={() => navigate(`/team/${team.team_id}`)}
+                                            className="flex items-center gap-2 cursor-pointer text-blue-700 hover:text-blue-900"
+                                            style={{ fontWeight: isHighlighted ? '600' : '400' }}
+                                        >
+                                            {team.team_logo && (
+                                                <img
+                                                    src={team.team_logo}
+                                                    alt=""
+                                                    className="w-4 h-4 md:w-5 md:h-5 object-contain flex-shrink-0"
+                                                />
+                                            )}
+                                            <span className="truncate">{team.team_name || `Takım ${idx + 1}`}</span>
+                                        </div>
+                                    </td>
+                                    <td className="p-2 md:p-3 text-center">{team.played}</td>
+                                    <td className="p-2 md:p-3 text-center">{team.won}</td>
+                                    <td className="p-2 md:p-3 text-center">{team.drawn}</td>
+                                    <td className="p-2 md:p-3 text-center">{team.lost}</td>
+                                    <td className="p-2 md:p-3 text-center font-semibold">{team.points}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 }
@@ -1144,7 +1111,7 @@ function AIContent({ matchId }: { matchId: string }) {
     return (
         <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
             <div className="divide-y divide-gray-100">
-                {predictions.map((prediction, index) => {
+                {predictions.map((prediction) => {
                     // Determine status colors
                     const isWinner = prediction.prediction_result === 'winner';
                     const isLoser = prediction.prediction_result === 'loser';
@@ -1156,25 +1123,25 @@ function AIContent({ matchId }: { matchId: string }) {
                     return (
                         <div 
                             key={prediction.id} 
-                            className={`p-4 hover:bg-gray-50 transition-colors duration-150 ${index === 0 ? '' : ''}`}
+                            className={`p-3 md:p-4 hover:bg-gray-50 transition-colors duration-150`}
                         >
-                            <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center justify-between gap-2 md:gap-4 flex-wrap sm:flex-nowrap">
                                 {/* Left Side: Bot Info */}
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 sm:flex-initial">
                                     <div className="flex-shrink-0">
-                                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                                            <Robot size={18} weight="fill" className="text-white" />
+                                        <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                            <Robot size={14} weight="fill" className="text-white md:w-[18px] md:h-[18px]" />
                                         </div>
                                     </div>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-bold text-gray-900">
+                                    <div className="min-w-0 flex-1 sm:flex-initial">
+                                        <div className="flex items-center gap-1 md:gap-2 flex-wrap text-xs md:text-sm">
+                                            <span className="font-bold text-gray-900 truncate">
                                                 {prediction.bot_name || 'GoalGPT AI'}
                                             </span>
                                             {prediction.minute_at_prediction && (
                                                 <>
                                                     <span className="text-gray-300">-</span>
-                                                    <span className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                                                    <span className="text-gray-600 font-medium whitespace-nowrap">
                                                         {prediction.minute_at_prediction}. Dakika
                                                     </span>
                                                 </>
@@ -1182,10 +1149,10 @@ function AIContent({ matchId }: { matchId: string }) {
                                             {scoreAtPrediction && (
                                                 <>
                                                     <span className="text-gray-300">-</span>
-                                                    <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+                                                    <span className="text-gray-500 font-medium whitespace-nowrap">
                                                         Skor
                                                     </span>
-                                                    <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                                                    <span className="font-semibold text-gray-700 whitespace-nowrap">
                                                         {scoreAtPrediction}
                                                     </span>
                                                 </>
@@ -1195,32 +1162,32 @@ function AIContent({ matchId }: { matchId: string }) {
                                 </div>
 
                                 {/* Center: Prediction Detail */}
-                                <div className="flex items-center gap-3 flex-shrink-0">
-                                    <div className="px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
-                                        <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
+                                <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 order-3 sm:order-2 w-full sm:w-auto justify-center sm:justify-start">
+                                    <div className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
+                                        <span className="text-xs md:text-sm font-bold text-gray-800 whitespace-nowrap">
                                             {prediction.prediction_type}
                                         </span>
                                     </div>
                                 </div>
 
                                 {/* Right Side: Status Badge */}
-                                <div className="flex-shrink-0">
+                                <div className="flex-shrink-0 order-2 sm:order-3">
                                     {isPending && (
-                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200">
+                                        <div className="flex items-center gap-1 md:gap-1.5 px-2 py-1 md:px-3 md:py-1.5 bg-amber-50 rounded-lg border border-amber-200">
                                             <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
-                                            <span className="text-xs font-bold text-amber-700 whitespace-nowrap">BEKLİYOR</span>
+                                            <span className="text-[10px] md:text-xs font-bold text-amber-700 whitespace-nowrap">BEKLİYOR</span>
                                         </div>
                                     )}
                                     {isWinner && (
-                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
-                                            <Trophy size={14} weight="fill" className="text-emerald-600" />
-                                            <span className="text-xs font-bold text-emerald-700 whitespace-nowrap">KAZANDI</span>
+                                        <div className="flex items-center gap-1 md:gap-1.5 px-2 py-1 md:px-3 md:py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+                                            <Trophy size={12} weight="fill" className="text-emerald-600 md:w-[14px] md:h-[14px]" />
+                                            <span className="text-[10px] md:text-xs font-bold text-emerald-700 whitespace-nowrap">KAZANDI</span>
                                         </div>
                                     )}
                                     {isLoser && (
-                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 rounded-lg border border-red-200">
-                                            <WarningCircle size={14} weight="fill" className="text-red-600" />
-                                            <span className="text-xs font-bold text-red-700 whitespace-nowrap">KAYBETTİ</span>
+                                        <div className="flex items-center gap-1 md:gap-1.5 px-2 py-1 md:px-3 md:py-1.5 bg-red-50 rounded-lg border border-red-200">
+                                            <WarningCircle size={12} weight="fill" className="text-red-600 md:w-[14px] md:h-[14px]" />
+                                            <span className="text-[10px] md:text-xs font-bold text-red-700 whitespace-nowrap">KAYBETTİ</span>
                                         </div>
                                     )}
                                 </div>
