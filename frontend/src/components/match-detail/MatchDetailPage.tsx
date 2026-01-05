@@ -1081,6 +1081,7 @@ function AIContent({ matchId }: { matchId: string }) {
                             overall_confidence: p.overall_confidence,
                             bot_name: p.bot_name,
                             minute_at_prediction: p.minute_at_prediction,
+                            score_at_prediction: p.score_at_prediction,
                             prediction_result: p.prediction_result,
                             created_at: p.created_at,
                         }));
@@ -1141,8 +1142,8 @@ function AIContent({ matchId }: { matchId: string }) {
     }
 
     return (
-        <div className="flex flex-col gap-6">
-            {predictions.map((prediction, index) => {
+        <div className="flex flex-col gap-3">
+            {predictions.map((prediction) => {
                 // Parse prediction value to extract numeric value
                 const numericMatch = prediction.prediction_value?.match(/([\d.]+)/);
                 const numericValue = numericMatch ? parseFloat(numericMatch[1]) : null;
@@ -1152,147 +1153,81 @@ function AIContent({ matchId }: { matchId: string }) {
                 const isLoser = prediction.prediction_result === 'loser';
                 const isPending = !prediction.prediction_result || prediction.prediction_result === 'pending';
                 
+                // Parse score at prediction
+                const scoreAtPrediction = prediction.score_at_prediction || '0-0';
+                
                 return (
                     <div 
                         key={prediction.id} 
-                        className="group relative bg-gradient-to-br from-white via-white to-gray-50 rounded-2xl overflow-hidden shadow-lg border border-gray-200/50 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
-                        style={{
-                            animationDelay: `${index * 100}ms`,
-                            animation: 'fadeInUp 0.5s ease-out forwards'
-                        }}
+                        className="group relative bg-white rounded-xl overflow-hidden shadow-md border border-gray-200 hover:shadow-lg transition-all duration-200"
                     >
-                        {/* Premium Gradient Header */}
-                        <div className="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-8 text-white overflow-hidden">
-                            {/* Animated Background Pattern */}
-                            <div className="absolute inset-0 opacity-20">
-                                <div className="absolute right-0 top-0 w-64 h-64 bg-white rounded-full blur-3xl transform translate-x-16 -translate-y-16"></div>
-                                <div className="absolute left-0 bottom-0 w-48 h-48 bg-blue-300 rounded-full blur-2xl transform -translate-x-12 translate-y-12"></div>
-                            </div>
-                            
-                            {/* Decorative Robot Icon */}
-                            <div className="absolute right-0 top-0 opacity-10 transform translate-x-8 -translate-y-8 transition-transform duration-500 group-hover:scale-110">
-                                <Robot size={140} weight="fill" />
-                            </div>
-
-                            <div className="relative z-10">
-                                {/* Bot Name and Minute Badge */}
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30">
-                                            <Robot size={20} weight="fill" className="text-white" />
-                                        </div>
-                                        <div>
-                                            <div className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-0.5">
-                                                AI Bot
-                                            </div>
-                                            <div className="text-lg font-bold text-white">
-                                                {prediction.bot_name || 'GoalGPT AI'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {prediction.minute_at_prediction && (
-                                        <div className="px-4 py-2 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 flex items-center gap-2">
-                                            <span className="text-sm">⏱</span>
-                                            <span className="text-sm font-bold">{prediction.minute_at_prediction}. dk</span>
-                                        </div>
-                                    )}
+                        {/* Compact Header */}
+                        <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-4 py-3 text-white">
+                            <div className="flex items-center justify-between">
+                                {/* Bot Name */}
+                                <div className="flex items-center gap-2">
+                                    <Robot size={16} weight="fill" className="text-white/90" />
+                                    <span className="text-sm font-bold">{prediction.bot_name || 'GoalGPT AI'}</span>
                                 </div>
                                 
-                                {/* Title */}
-                                <h2 className="text-3xl font-black tracking-tight">Maç Tahmini</h2>
+                                {/* Minute Badge */}
+                                {prediction.minute_at_prediction && (
+                                    <div className="px-2.5 py-1 bg-white/20 backdrop-blur-sm rounded-lg flex items-center gap-1.5">
+                                        <span className="text-xs">⏱</span>
+                                        <span className="text-xs font-semibold">{prediction.minute_at_prediction}. dk</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
-                        {/* Premium Content Card */}
-                        <div className="p-8 bg-white">
-                            {/* Prediction Type & Value */}
-                            <div className="text-center mb-8">
-                                <div className="inline-block px-4 py-1.5 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-full mb-4">
-                                    <span className="text-xs font-bold text-indigo-700 uppercase tracking-widest">
-                                        Önerilen Tercih
-                                    </span>
+                        {/* Compact Content */}
+                        <div className="p-4 bg-white">
+                            {/* Score at Prediction */}
+                            {scoreAtPrediction && (
+                                <div className="flex items-center justify-center gap-2 mb-3">
+                                    <span className="text-xs text-gray-500 font-medium">Tahmin Anındaki Skor:</span>
+                                    <span className="text-sm font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{scoreAtPrediction}</span>
                                 </div>
-                                
-                                <div className="mb-4">
-                                    <div className="text-5xl font-black bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-2 tracking-tight">
-                                        {prediction.prediction_type}
-                                    </div>
+                            )}
+                            
+                            {/* Prediction Detail */}
+                            <div className="text-center mb-3">
+                                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
+                                    <span className="text-base font-bold text-gray-800">{prediction.prediction_type}</span>
                                     {numericValue && (
-                                        <div className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border-2 border-indigo-200/50 shadow-sm">
-                                            <span className="text-2xl font-black text-indigo-700">
-                                                {numericValue}
-                                            </span>
-                                        </div>
+                                        <>
+                                            <span className="text-gray-400">•</span>
+                                            <span className="text-base font-black text-indigo-700">{numericValue}</span>
+                                        </>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Premium Status Badge */}
-                            <div className="mb-8">
+                            {/* Status Badge - Compact */}
+                            <div className="mt-3">
                                 {isPending && (
-                                    <div className="relative overflow-hidden bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 rounded-2xl p-6 border-2 border-amber-200/50 shadow-lg">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-amber-400/10 to-yellow-400/10"></div>
-                                        <div className="relative flex items-center justify-center gap-4">
-                                            <div className="relative">
-                                                <div className="w-4 h-4 bg-amber-500 rounded-full animate-pulse"></div>
-                                                <div className="absolute inset-0 w-4 h-4 bg-amber-500 rounded-full animate-ping opacity-75"></div>
-                                            </div>
-                                            <span className="text-xl font-black text-amber-700 tracking-wide">BEKLİYOR</span>
-                                        </div>
+                                    <div className="flex items-center justify-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200">
+                                        <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                                        <span className="text-sm font-bold text-amber-700">BEKLİYOR</span>
                                     </div>
                                 )}
                                 {isWinner && (
-                                    <div className="relative overflow-hidden bg-gradient-to-r from-emerald-50 via-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-emerald-200/50 shadow-lg">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/10 to-green-400/10"></div>
-                                        <div className="relative flex items-center justify-center gap-4">
-                                            <div className="p-3 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl shadow-lg transform rotate-12">
-                                                <Trophy size={28} weight="fill" className="text-white" />
-                                            </div>
-                                            <span className="text-xl font-black text-emerald-700 tracking-wide">KAZANDI</span>
-                                        </div>
+                                    <div className="flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-200">
+                                        <Trophy size={16} weight="fill" className="text-emerald-600" />
+                                        <span className="text-sm font-bold text-emerald-700">KAZANDI</span>
                                     </div>
                                 )}
                                 {isLoser && (
-                                    <div className="relative overflow-hidden bg-gradient-to-r from-red-50 via-rose-50 to-red-50 rounded-2xl p-6 border-2 border-red-200/50 shadow-lg">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-red-400/10 to-rose-400/10"></div>
-                                        <div className="relative flex items-center justify-center gap-4">
-                                            <div className="p-3 bg-gradient-to-br from-red-400 to-rose-500 rounded-2xl shadow-lg">
-                                                <WarningCircle size={28} weight="fill" className="text-white" />
-                                            </div>
-                                            <span className="text-xl font-black text-red-700 tracking-wide">KAYBETTİ</span>
-                                        </div>
+                                    <div className="flex items-center justify-center gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-200">
+                                        <WarningCircle size={16} weight="fill" className="text-red-600" />
+                                        <span className="text-sm font-bold text-red-700">KAYBETTİ</span>
                                     </div>
                                 )}
                             </div>
-
-                            {/* Premium Footer */}
-                            <div className="pt-6 border-t border-gray-100">
-                                <p className="text-xs text-center text-gray-500 leading-relaxed">
-                                    <span className="font-semibold">*</span> Bu tahmin yapay zeka modelleri tarafından istatistiksel veriler kullanılarak oluşturulmuştur. Kesinlik içermez.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Premium Glow Effect */}
-                        <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-pink-500/5 rounded-2xl"></div>
                         </div>
                     </div>
                 );
             })}
-            
-            <style>{`
-                @keyframes fadeInUp {
-                    from {
-                        opacity: 0;
-                        transform: translateY(20px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
-                }
-            `}</style>
         </div>
     );
 }
