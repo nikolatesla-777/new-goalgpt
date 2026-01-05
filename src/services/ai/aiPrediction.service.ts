@@ -153,14 +153,14 @@ export class AIPredictionService {
     }
 
     /**
-     * Determine period based on minute or bot rule
-     * 1-45' → IY (first half)
-     * 46-90' → MS (full match)
+     * Determine period based on minute (SABIT KURAL)
+     * 1-45' → IY (first half) - SABIT
+     * 46-90' → MS (full match) - SABIT
+     * Bot rule'daki period değeri IGNORE edilir, sadece dakikaya göre belirlenir
      */
     determinePeriod(minute: number, botPeriod: 'IY' | 'MS' | 'AUTO' | null): 'IY' | 'MS' {
-        if (botPeriod === 'IY') return 'IY';
-        if (botPeriod === 'MS') return 'MS';
-        // AUTO: determine based on minute
+        // KRITIK: Dakikaya göre SABIT belirleme
+        // Bot rule'daki period değeri kullanılmaz
         return minute <= 45 ? 'IY' : 'MS';
     }
 
@@ -548,22 +548,11 @@ export class AIPredictionService {
             // Determine bot group based on minute
             const botGroup = await this.getBotGroupForMinute(parsed.minuteAtPrediction);
 
-            // Override period based on match status if matched
-            let effectivePeriod = botGroup.predictionPeriod;
-            if (matchResult && matchResult.statusId) {
-                // If match is in 1st Half (2), force IY
-                if (matchResult.statusId === 2) effectivePeriod = 'IY';
-                // If match is in 2nd Half (4), force MS
-                else if (matchResult.statusId === 4) effectivePeriod = 'MS';
-            }
-            // If explicit "First Half" bots, ensure IY
-            // Note: Bot rules now have prediction_period set, so we trust that primarily
-            // ALERT D, CODE: 35, Code Zero are IY bots (10-24 minutes)
-            // BOT 007 and Algoritma: 01 can be MS (65-75 minutes)
-            if (botGroup.botDisplayName === 'ALERT D' || botGroup.botDisplayName === 'CODE: 35' || botGroup.botDisplayName === 'Code Zero') {
-                // These are IY bots, but respect live status if available
-                // So we trust the statusId logic above primarily.
-            }
+            // KRITIK: Period sadece dakikaya göre belirlenir (SABIT KURAL)
+            // 1-45. dakika → IY (İlk Yarı)
+            // 46-90. dakika → MS (Maç Sonu)
+            // Bot rule'daki period veya match status IGNORE edilir
+            const effectivePeriod = parsed.minuteAtPrediction <= 45 ? 'IY' : 'MS';
 
             // Generate prediction details based on SCORE + 0.5 logic
             const generatedDetails = this.generatePredictionFromScore(
@@ -571,7 +560,7 @@ export class AIPredictionService {
                 parsed.minuteAtPrediction,
                 {
                     ...botGroup,
-                    predictionPeriod: effectivePeriod
+                    predictionPeriod: effectivePeriod  // Dakikaya göre sabit belirlenen period
                 }
             );
 
