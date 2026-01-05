@@ -1145,10 +1145,6 @@ function AIContent({ matchId }: { matchId: string }) {
         <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
             <div className="divide-y divide-gray-100">
                 {predictions.map((prediction, index) => {
-                    // Parse prediction value to extract numeric value
-                    const numericMatch = prediction.prediction_value?.match(/([\d.]+)/);
-                    const numericValue = numericMatch ? parseFloat(numericMatch[1]) : null;
-                    
                     // Determine status colors
                     const isWinner = prediction.prediction_result === 'winner';
                     const isLoser = prediction.prediction_result === 'loser';
