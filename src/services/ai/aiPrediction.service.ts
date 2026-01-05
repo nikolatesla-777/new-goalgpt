@@ -707,9 +707,9 @@ export class AIPredictionService {
     }
 
     /**
-     * Get prediction for a specific match (for match detail page)
+     * Get all predictions for a specific match (for match detail page)
      */
-    async getPredictionByMatchId(matchExternalId: string): Promise<any | null> {
+    async getPredictionsByMatchId(matchExternalId: string): Promise<any[]> {
         const query = `
       SELECT 
         p.*,
@@ -724,10 +724,9 @@ export class AIPredictionService {
       JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
       WHERE pm.match_external_id = $1
       ORDER BY p.created_at DESC
-      LIMIT 1
     `;
         const result = await pool.query(query, [matchExternalId]);
-        return result.rows.length > 0 ? result.rows[0] : null;
+        return result.rows;
     }
 
     /**

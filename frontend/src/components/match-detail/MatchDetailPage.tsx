@@ -1038,55 +1038,52 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
 
 // AI Content
 function AIContent({ matchId }: { matchId: string }) {
-    const { predictions, loading: contextLoading } = useAIPredictions();
-    const [prediction, setPrediction] = useState<any>(null);
+    const [predictions, setPredictions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Always fetch from API for match detail page (to get the latest prediction)
-        // Context might have old data or limit=100 might exclude this match
-        const fetchPrediction = async () => {
+        // Fetch all predictions for this match
+        const fetchPredictions = async () => {
             try {
                 const API_BASE = import.meta.env.VITE_API_URL || '/api';
                 const url = `${API_BASE}/predictions/match/${matchId}`;
-                console.log('[AIContent] Fetching prediction from:', url);
+                console.log('[AIContent] Fetching predictions from:', url);
                 const res = await fetch(url);
                 console.log('[AIContent] Response status:', res.status);
                 if (res.ok) {
                     const data = await res.json();
                     console.log('[AIContent] Response data:', data);
-                    if (data.success && data.prediction) {
-                        const pred = {
-                            id: data.prediction.id,
-                            match_external_id: data.prediction.match_external_id,
-                            prediction_type: data.prediction.prediction_type,
-                            prediction_value: data.prediction.prediction_value,
-                            overall_confidence: data.prediction.overall_confidence,
-                            bot_name: data.prediction.bot_name,
-                            minute_at_prediction: data.prediction.minute_at_prediction,
-                            prediction_result: data.prediction.prediction_result,
-                        };
-                        console.log('[AIContent] Setting prediction:', pred);
-                        setPrediction(pred);
+                    if (data.success && data.predictions) {
+                        const preds = data.predictions.map((p: any) => ({
+                            id: p.id,
+                            match_external_id: p.match_external_id,
+                            prediction_type: p.prediction_type,
+                            prediction_value: p.prediction_value,
+                            overall_confidence: p.overall_confidence,
+                            bot_name: p.bot_name,
+                            minute_at_prediction: p.minute_at_prediction,
+                            prediction_result: p.prediction_result,
+                            created_at: p.created_at,
+                        }));
+                        console.log('[AIContent] Setting predictions:', preds);
+                        setPredictions(preds);
                     } else {
-                        console.log('[AIContent] No prediction in response');
+                        console.log('[AIContent] No predictions in response');
                     }
                 } else {
                     console.error('[AIContent] Response not OK:', res.status, res.statusText);
                 }
             } catch (error) {
-                console.error('[AIContent] Fetch prediction error:', error);
+                console.error('[AIContent] Fetch predictions error:', error);
             } finally {
                 setLoading(false);
             }
         };
 
-        if (!contextLoading) {
-            fetchPrediction();
-        }
-    }, [matchId, predictions, contextLoading]);
+        fetchPredictions();
+    }, [matchId]);
 
-    if (loading || contextLoading) {
+    if (loading) {
         return (
             <div className="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
                 <div className="flex flex-col items-center justify-center gap-4">
@@ -1097,7 +1094,7 @@ function AIContent({ matchId }: { matchId: string }) {
         );
     }
 
-    if (!prediction) {
+    if (predictions.length === 0) {
         return (
             <div className="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
                 <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1111,79 +1108,78 @@ function AIContent({ matchId }: { matchId: string }) {
         );
     }
 
-    // Determine confidence color
-
-
     return (
-        <div className="flex flex-col gap-6">
-            <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                {/* Header with Robot Icon */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative overflow-hidden">
-                    <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4">
-                        <Robot size={120} weight="fill" />
+        <div className="flex flex-col gap-4">
+            {predictions.map((prediction) => (
+                <div key={prediction.id} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+                    {/* Header with Robot Icon */}
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative overflow-hidden">
+                        <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4">
+                            <Robot size={120} weight="fill" />
+                        </div>
+
+                        <div className="relative z-10">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-3">
+                                    <Robot size={24} weight="fill" className="text-blue-200" />
+                                    <span className="text-blue-100 font-bold tracking-wider text-xs uppercase">
+                                        {prediction.bot_name || 'GoalGPT AI'}
+                                    </span>
+                                </div>
+                                {prediction.minute_at_prediction && (
+                                    <span className="text-blue-100 text-xs font-medium bg-blue-800/30 px-2 py-1 rounded">
+                                        ⏱ {prediction.minute_at_prediction}. dk
+                                    </span>
+                                )}
+                            </div>
+                            <h2 className="text-2xl font-bold">Maç Tahmini</h2>
+                        </div>
                     </div>
 
-                    <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-3">
-                                <Robot size={24} weight="fill" className="text-blue-200" />
-                                <span className="text-blue-100 font-bold tracking-wider text-xs uppercase">
-                                    {prediction.bot_name || 'GoalGPT AI'}
-                                </span>
+                    {/* Prediction Content */}
+                    <div className="p-6">
+                        <div className="flex flex-col items-center justify-center text-center mb-8">
+                            <span className="text-sm text-gray-400 font-medium mb-2 uppercase tracking-wide">Önerilen Tercih</span>
+                            <div className="text-4xl font-black text-gray-800 mb-2 tracking-tight">
+                                {prediction.prediction_type}
                             </div>
-                            {prediction.minute_at_prediction && (
-                                <span className="text-blue-100 text-xs font-medium bg-blue-800/30 px-2 py-1 rounded">
-                                    ⏱ {prediction.minute_at_prediction}. dk
-                                </span>
+                            <div className="bg-gray-100 px-4 py-1 rounded-full text-gray-600 font-bold text-sm">
+                                {prediction.prediction_value}
+                            </div>
+                        </div>
+
+                        {/* Status Badge (Replaces Confidence Meter) */}
+                        <div className="mb-6">
+                            {(!prediction.prediction_result || prediction.prediction_result === 'pending') && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-center gap-3 text-amber-700">
+                                    <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
+                                    <span className="font-bold text-lg">BEKLİYOR</span>
+                                </div>
+                            )}
+                            {prediction.prediction_result === 'winner' && (
+                                <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-center gap-3 text-green-700">
+                                    <div className="p-1 bg-green-100 rounded-full">
+                                        <Trophy size={20} weight="fill" className="text-green-600" />
+                                    </div>
+                                    <span className="font-bold text-lg">KAZANDI</span>
+                                </div>
+                            )}
+                            {prediction.prediction_result === 'loser' && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-center gap-3 text-red-700">
+                                    <div className="p-1 bg-red-100 rounded-full">
+                                        <WarningCircle size={20} weight="fill" className="text-red-600" />
+                                    </div>
+                                    <span className="font-bold text-lg">KAYBETTİ</span>
+                                </div>
                             )}
                         </div>
-                        <h2 className="text-2xl font-bold">Maç Tahmini</h2>
-                    </div>
-                </div>
 
-                {/* Prediction Content */}
-                <div className="p-6">
-                    <div className="flex flex-col items-center justify-center text-center mb-8">
-                        <span className="text-sm text-gray-400 font-medium mb-2 uppercase tracking-wide">Önerilen Tercih</span>
-                        <div className="text-4xl font-black text-gray-800 mb-2 tracking-tight">
-                            {prediction.prediction_type}
-                        </div>
-                        <div className="bg-gray-100 px-4 py-1 rounded-full text-gray-600 font-bold text-sm">
-                            {prediction.prediction_value}
+                        <div className="text-xs text-center text-gray-400">
+                            * Bu tahmin yapay zeka modelleri tarafından istatistiksel veriler kullanılarak oluşturulmuştur. Kesinlik içermez.
                         </div>
                     </div>
-
-                    {/* Status Badge (Replaces Confidence Meter) */}
-                    <div className="mb-6">
-                        {(!prediction.prediction_result || prediction.prediction_result === 'pending') && (
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-center gap-3 text-amber-700">
-                                <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
-                                <span className="font-bold text-lg">BEKLİYOR</span>
-                            </div>
-                        )}
-                        {prediction.prediction_result === 'winner' && (
-                            <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-center gap-3 text-green-700">
-                                <div className="p-1 bg-green-100 rounded-full">
-                                    <Trophy size={20} weight="fill" className="text-green-600" />
-                                </div>
-                                <span className="font-bold text-lg">KAZANDI</span>
-                            </div>
-                        )}
-                        {prediction.prediction_result === 'loser' && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-center gap-3 text-red-700">
-                                <div className="p-1 bg-red-100 rounded-full">
-                                    <WarningCircle size={20} weight="fill" className="text-red-600" />
-                                </div>
-                                <span className="font-bold text-lg">KAYBETTİ</span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="text-xs text-center text-gray-400">
-                        * Bu tahmin yapay zeka modelleri tarafından istatistiksel veriler kullanılarak oluşturulmuştur. Kesinlik içermez.
-                    </div>
                 </div>
-            </div>
+            ))}
         </div>
     );
 }
