@@ -193,16 +193,25 @@ export class WebSocketService {
             }, mqttReceivedTs);
 
             // AUTO SETTLEMENT: Trigger instant settlement on score change
-            // We use statusId to derive a proxy minute for IY/MS checks
+            // CRITICAL: Use actual minute from parsedScore if available, otherwise derive from status
             // Status 2 (1H) -> 1, Status 4 (2H) -> 46
-            const proxyMinute = parsedScore.statusId === 2 ? 1 : 46;
+            const proxyMinute = parsedScore.minute || (parsedScore.statusId === 2 ? 1 : parsedScore.statusId === 4 ? 46 : 0);
+            
+            // CRITICAL: Settlement MUST happen when score changes via WebSocket
+            // This is the primary mechanism - if WebSocket updates score, settlement should work
             aiPredictionService.settleInstantWin(
               parsedScore.matchId,
               parsedScore.home.score,
               parsedScore.away.score,
               proxyMinute,
               parsedScore.statusId
-            ).catch(err => logger.error(`[AutoSettlement] Error in score change handler: ${err.message}`));
+            ).then(() => {
+              logger.debug(`[AutoSettlement] Settlement check completed for ${parsedScore.matchId} (Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${proxyMinute})`);
+            }).catch(err => {
+              logger.error(`[AutoSettlement] CRITICAL ERROR in score change handler for ${parsedScore.matchId}: ${err.message}`);
+              logger.error(`[AutoSettlement] Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${proxyMinute}, Status: ${parsedScore.statusId}`);
+              logger.error(`[AutoSettlement] Stack: ${err.stack}`);
+            });
 
             // CRITICAL FIX: Save statistics to database when score changes
             // This ensures data is persisted even if user doesn't visit match detail page
