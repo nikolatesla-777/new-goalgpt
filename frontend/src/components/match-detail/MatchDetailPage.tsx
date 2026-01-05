@@ -1142,92 +1142,96 @@ function AIContent({ matchId }: { matchId: string }) {
     }
 
     return (
-        <div className="flex flex-col gap-3">
-            {predictions.map((prediction) => {
-                // Parse prediction value to extract numeric value
-                const numericMatch = prediction.prediction_value?.match(/([\d.]+)/);
-                const numericValue = numericMatch ? parseFloat(numericMatch[1]) : null;
-                
-                // Determine status colors
-                const isWinner = prediction.prediction_result === 'winner';
-                const isLoser = prediction.prediction_result === 'loser';
-                const isPending = !prediction.prediction_result || prediction.prediction_result === 'pending';
-                
-                // Parse score at prediction
-                const scoreAtPrediction = prediction.score_at_prediction || '0-0';
-                
-                return (
-                    <div 
-                        key={prediction.id} 
-                        className="group relative bg-white rounded-xl overflow-hidden shadow-md border border-gray-200 hover:shadow-lg transition-all duration-200"
-                    >
-                        {/* Compact Header */}
-                        <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-4 py-3 text-white">
-                            <div className="flex items-center justify-between">
-                                {/* Bot Name */}
-                                <div className="flex items-center gap-2">
-                                    <Robot size={16} weight="fill" className="text-white/90" />
-                                    <span className="text-sm font-bold">{prediction.bot_name || 'GoalGPT AI'}</span>
-                                </div>
-                                
-                                {/* Minute Badge */}
-                                {prediction.minute_at_prediction && (
-                                    <div className="px-2.5 py-1 bg-white/20 backdrop-blur-sm rounded-lg flex items-center gap-1.5">
-                                        <span className="text-xs">⏱</span>
-                                        <span className="text-xs font-semibold">{prediction.minute_at_prediction}. dk</span>
+        <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+            <div className="divide-y divide-gray-100">
+                {predictions.map((prediction, index) => {
+                    // Parse prediction value to extract numeric value
+                    const numericMatch = prediction.prediction_value?.match(/([\d.]+)/);
+                    const numericValue = numericMatch ? parseFloat(numericMatch[1]) : null;
+                    
+                    // Determine status colors
+                    const isWinner = prediction.prediction_result === 'winner';
+                    const isLoser = prediction.prediction_result === 'loser';
+                    const isPending = !prediction.prediction_result || prediction.prediction_result === 'pending';
+                    
+                    // Parse score at prediction
+                    const scoreAtPrediction = prediction.score_at_prediction || '0-0';
+                    
+                    return (
+                        <div 
+                            key={prediction.id} 
+                            className={`p-4 hover:bg-gray-50 transition-colors duration-150 ${index === 0 ? '' : ''}`}
+                        >
+                            <div className="flex items-center justify-between gap-4">
+                                {/* Left Side: Bot Info */}
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                    <div className="flex-shrink-0">
+                                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                            <Robot size={18} weight="fill" className="text-white" />
+                                        </div>
                                     </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Compact Content */}
-                        <div className="p-4 bg-white">
-                            {/* Score at Prediction */}
-                            {scoreAtPrediction && (
-                                <div className="flex items-center justify-center gap-2 mb-3">
-                                    <span className="text-xs text-gray-500 font-medium">Tahmin Anındaki Skor:</span>
-                                    <span className="text-sm font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded">{scoreAtPrediction}</span>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-sm font-bold text-gray-900 truncate">
+                                                {prediction.bot_name || 'GoalGPT AI'}
+                                            </span>
+                                            {prediction.minute_at_prediction && (
+                                                <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+                                                    • {prediction.minute_at_prediction}. dk
+                                                </span>
+                                            )}
+                                        </div>
+                                        {scoreAtPrediction && (
+                                            <div className="text-xs text-gray-500">
+                                                Skor: <span className="font-semibold text-gray-700">{scoreAtPrediction}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            )}
-                            
-                            {/* Prediction Detail */}
-                            <div className="text-center mb-3">
-                                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
-                                    <span className="text-base font-bold text-gray-800">{prediction.prediction_type}</span>
-                                    {numericValue && (
-                                        <>
-                                            <span className="text-gray-400">•</span>
-                                            <span className="text-base font-black text-indigo-700">{numericValue}</span>
-                                        </>
+
+                                {/* Center: Prediction Detail */}
+                                <div className="flex items-center gap-3 flex-shrink-0">
+                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
+                                        <span className="text-sm font-bold text-gray-800 whitespace-nowrap">
+                                            {prediction.prediction_type}
+                                        </span>
+                                        {numericValue && (
+                                            <>
+                                                <span className="text-gray-300">•</span>
+                                                <span className="text-sm font-black text-indigo-700 whitespace-nowrap">
+                                                    {numericValue}
+                                                </span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Right Side: Status Badge */}
+                                <div className="flex-shrink-0">
+                                    {isPending && (
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200">
+                                            <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
+                                            <span className="text-xs font-bold text-amber-700 whitespace-nowrap">BEKLİYOR</span>
+                                        </div>
+                                    )}
+                                    {isWinner && (
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+                                            <Trophy size={14} weight="fill" className="text-emerald-600" />
+                                            <span className="text-xs font-bold text-emerald-700 whitespace-nowrap">KAZANDI</span>
+                                        </div>
+                                    )}
+                                    {isLoser && (
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 rounded-lg border border-red-200">
+                                            <WarningCircle size={14} weight="fill" className="text-red-600" />
+                                            <span className="text-xs font-bold text-red-700 whitespace-nowrap">KAYBETTİ</span>
+                                        </div>
                                     )}
                                 </div>
                             </div>
-
-                            {/* Status Badge - Compact */}
-                            <div className="mt-3">
-                                {isPending && (
-                                    <div className="flex items-center justify-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200">
-                                        <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                                        <span className="text-sm font-bold text-amber-700">BEKLİYOR</span>
-                                    </div>
-                                )}
-                                {isWinner && (
-                                    <div className="flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-200">
-                                        <Trophy size={16} weight="fill" className="text-emerald-600" />
-                                        <span className="text-sm font-bold text-emerald-700">KAZANDI</span>
-                                    </div>
-                                )}
-                                {isLoser && (
-                                    <div className="flex items-center justify-center gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-200">
-                                        <WarningCircle size={16} weight="fill" className="text-red-600" />
-                                        <span className="text-sm font-bold text-red-700">KAYBETTİ</span>
-                                    </div>
-                                )}
-                            </div>
                         </div>
-                    </div>
-                );
-            })}
+                    );
+                })}
+            </div>
         </div>
     );
 }
