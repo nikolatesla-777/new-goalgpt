@@ -1318,6 +1318,22 @@ export class AIPredictionService {
         try {
             await client.query('BEGIN');
 
+            // KRITIK: Eğer league boşsa, maçın competition_name'ini al
+            let leagueName = data.league;
+            if (!leagueName || leagueName.trim() === '' || leagueName === '-') {
+                const matchQuery = await client.query(`
+                    SELECT c.name as competition_name
+                    FROM ts_matches m
+                    LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+                    WHERE m.external_id = $1
+                `, [data.match_external_id]);
+
+                if (matchQuery.rows.length > 0 && matchQuery.rows[0].competition_name) {
+                    leagueName = matchQuery.rows[0].competition_name;
+                    logger.info(`[AIPrediction] Manuel tahmin için lig bilgisi maçtan alındı: ${leagueName}`);
+                }
+            }
+
             const predictionId = crypto.randomUUID();
             const externalId = `manual_${Date.now()}`;
 
@@ -1333,7 +1349,7 @@ export class AIPredictionService {
                 predictionId,
                 externalId,
                 'Alert System', // Always use Alert System for manual predictions
-                data.league,
+                leagueName || '', // Güncellenmiş lig bilgisi
                 data.home_team,
                 data.away_team,
                 data.score,
