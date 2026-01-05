@@ -469,7 +469,7 @@ export function MatchDetailPage() {
                     </div>
 
                     {/* Score & Live Status */}
-                    <div className="flex flex-col items-center shrink-0 w-[80px] sm:w-[100px] md:w-[160px] lg:w-[180px]">
+                    <div className="flex flex-col items-center shrink-0 w-[80px] sm:w-[100px] md:w-[140px] lg:w-[160px]">
                         {(() => {
                             const status = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
                             const isLive = status >= 2 && status <= 7;
@@ -481,23 +481,23 @@ export function MatchDetailPage() {
                                     {isLive && (
                                         <>
                                             {status === 3 ? (
-                                                <span className="px-2 py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full whitespace-nowrap shadow-lg shadow-amber-500/50 border md:border-2 border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] md:text-xs font-black rounded-full whitespace-nowrap shadow-lg shadow-amber-500/50 border border-white/20">
                                                     İY
                                                 </span>
                                             ) : (
-                                                <span className="px-2 py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full animate-pulse whitespace-nowrap shadow-lg shadow-red-500/50 border md:border-2 border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-red-500 to-rose-500 text-white text-[10px] md:text-xs font-black rounded-full animate-pulse whitespace-nowrap shadow-lg shadow-red-500/50 border border-white/20">
                                                     CANLI
                                                 </span>
                                             )}
                                             {minuteText && minuteText !== '—' && (
-                                                <span className="px-2 py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full whitespace-nowrap min-w-[28px] md:min-w-[36px] lg:min-w-[40px] text-center shadow-lg shadow-indigo-500/50 border md:border-2 border-white/20">
+                                                <span className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] md:text-xs font-black rounded-full whitespace-nowrap min-w-[28px] md:min-w-[32px] text-center shadow-lg shadow-indigo-500/50 border border-white/20">
                                                     {minuteText}
                                                 </span>
                                             )}
                                         </>
                                     )}
                                     {isFinished && (
-                                        <span className="px-2 py-1 md:px-4 md:py-1.5 lg:px-5 lg:py-2 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-[10px] md:text-xs lg:text-sm font-black rounded-full shadow-lg border md:border-2 border-white/20">
+                                        <span className="px-2 py-1 md:px-4 md:py-1.5 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-[10px] md:text-xs font-black rounded-full shadow-lg border border-white/20">
                                             MS
                                         </span>
                                     )}
@@ -505,14 +505,14 @@ export function MatchDetailPage() {
                             );
                         })()}
 
-                        <div className="relative bg-gradient-to-br from-white/15 via-white/10 to-white/5 rounded-xl md:rounded-2xl px-3 py-2 md:px-6 md:py-3 lg:px-10 lg:py-5 backdrop-blur-md border md:border-2 border-white/20 shadow-2xl w-full">
+                        <div className="relative bg-gradient-to-br from-white/15 via-white/10 to-white/5 rounded-xl md:rounded-2xl px-3 py-2 md:px-5 md:py-3 lg:px-6 lg:py-4 backdrop-blur-md border border-white/20 md:border-2 shadow-2xl w-full max-w-full">
                             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-xl md:rounded-2xl"></div>
-                            <div className="relative text-2xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-black tracking-widest leading-none font-mono text-white drop-shadow-lg">
-                                {match.home_score ?? 0}<span className="text-white/60 mx-1 md:mx-2 lg:mx-3">-</span>{match.away_score ?? 0}
+                            <div className="relative text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-widest leading-none font-mono text-white drop-shadow-lg whitespace-nowrap">
+                                {match.home_score ?? 0}<span className="text-white/60 mx-1 md:mx-2">-</span>{match.away_score ?? 0}
                             </div>
                         </div>
 
-                        <p className="text-[10px] md:text-xs lg:text-sm text-gray-400 mt-1 md:mt-2 lg:mt-3 font-medium text-center">
+                        <p className="text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2 font-medium text-center">
                             {(() => {
                                 const status = (match as any).status ?? (match as any).status_id ?? 0;
                                 switch (status) {
