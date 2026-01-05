@@ -1055,11 +1055,15 @@ function AIContent({ matchId }: { matchId: string }) {
         const fetchPrediction = async () => {
             try {
                 const API_BASE = import.meta.env.VITE_API_URL || '/api';
-                const res = await fetch(`${API_BASE}/predictions/match/${matchId}`);
+                const url = `${API_BASE}/predictions/match/${matchId}`;
+                console.log('[AIContent] Fetching prediction from:', url);
+                const res = await fetch(url);
+                console.log('[AIContent] Response status:', res.status);
                 if (res.ok) {
                     const data = await res.json();
+                    console.log('[AIContent] Response data:', data);
                     if (data.success && data.prediction) {
-                        setPrediction({
+                        const pred = {
                             id: data.prediction.id,
                             match_external_id: data.prediction.match_external_id,
                             prediction_type: data.prediction.prediction_type,
@@ -1068,8 +1072,14 @@ function AIContent({ matchId }: { matchId: string }) {
                             bot_name: data.prediction.bot_name,
                             minute_at_prediction: data.prediction.minute_at_prediction,
                             prediction_result: data.prediction.prediction_result,
-                        });
+                        };
+                        console.log('[AIContent] Setting prediction:', pred);
+                        setPrediction(pred);
+                    } else {
+                        console.log('[AIContent] No prediction in response');
                     }
+                } else {
+                    console.error('[AIContent] Response not OK:', res.status, res.statusText);
                 }
             } catch (error) {
                 console.error('[AIContent] Fetch prediction error:', error);
