@@ -802,10 +802,10 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
 
     // Render period tabs component
     const PeriodTabs = () => (
-        <div className="flex gap-2 md:gap-2 border-b-2 border-gray-200 pb-2 md:pb-2 overflow-x-auto">
+        <div className="flex gap-2 border-b-2 border-gray-200 pb-2 overflow-x-auto">
             <button
                 onClick={() => setActivePeriod('full')}
-                className={`px-3 py-1.5 md:px-4 md:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs md:text-sm whitespace-nowrap ${
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs sm:text-sm whitespace-nowrap ${
                     activePeriod === 'full' 
                         ? 'bg-blue-600 text-white font-semibold' 
                         : 'bg-transparent text-gray-600'
@@ -815,7 +815,7 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
             </button>
             <button
                 onClick={() => setActivePeriod('first')}
-                className={`px-3 py-1.5 md:px-4 md:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs md:text-sm whitespace-nowrap ${
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs sm:text-sm whitespace-nowrap ${
                     activePeriod === 'first' 
                         ? 'bg-blue-600 text-white font-semibold' 
                         : 'bg-transparent text-gray-600'
@@ -827,7 +827,7 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
             {isSecondHalfOrLater && (
                 <button
                     onClick={() => setActivePeriod('second')}
-                    className={`px-3 py-1.5 md:px-4 md:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs md:text-sm whitespace-nowrap ${
+                    className={`px-3 py-1.5 sm:px-4 sm:py-2 border-none rounded-lg cursor-pointer font-medium transition-all duration-200 text-xs sm:text-sm whitespace-nowrap ${
                         activePeriod === 'second' 
                             ? 'bg-blue-600 text-white font-semibold' 
                             : 'bg-transparent text-gray-600'
@@ -840,21 +840,21 @@ function StatsContent({ data, match }: { data: any; match: Match }) {
     );
 
     return (
-        <div className="flex flex-col gap-3 md:gap-4">
+        <div className="flex flex-col gap-4">
             {/* Period Tabs - Always show if we have any stats or match has started */}
             {(hasFullTimeStats || matchStatus >= 2) && <PeriodTabs />}
 
             {/* Stats List */}
             {stats.length > 0 ? (
-                <div className="flex flex-col gap-2 md:gap-3">
+                <div className="flex flex-col gap-3">
                     {stats.map((stat: any, idx: number) => (
                         <StatRow key={idx} label={getStatName(stat.type)} home={stat.home ?? '-'} away={stat.away ?? '-'} />
                     ))}
                 </div>
             ) : (
-                <div className="flex flex-col gap-2 md:gap-3">
+                <div className="flex flex-col gap-3">
                     {/* Show message based on period */}
-                    <div className="text-center p-4 md:p-5 text-gray-600 bg-gray-50 rounded-lg mb-3 md:mb-4 text-sm md:text-base">
+                    <div className="text-center p-5 text-gray-600 bg-gray-50 rounded-lg mb-4 text-base">
                         {activePeriod === 'first' && (isFirstHalf
                             ? 'Maç devam ediyor, detaylı istatistikler güncelleniyor...'
                             : '1. yarı detaylı istatistikleri mevcut değil.'
@@ -879,13 +879,13 @@ function StatRow({ label, home, away }: { label: string; home: any; away: any })
     const homePercent = (homeNum / total) * 100;
 
     return (
-        <div className="bg-white p-3 md:p-4 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex justify-between items-center mb-2 md:mb-3 gap-2">
-                <span className="font-semibold text-gray-900 text-sm md:text-base min-w-[30px] text-right">{home}</span>
-                <span className="text-gray-600 text-xs md:text-sm font-medium text-center flex-1">{label}</span>
-                <span className="font-semibold text-gray-900 text-sm md:text-base min-w-[30px] text-left">{away}</span>
+        <div className="bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex justify-between items-center mb-2 sm:mb-3 gap-2">
+                <span className="font-semibold text-gray-900 text-sm sm:text-base min-w-[30px] text-right">{home}</span>
+                <span className="text-gray-600 text-xs sm:text-sm font-medium text-center flex-1">{label}</span>
+                <span className="font-semibold text-gray-900 text-sm sm:text-base min-w-[30px] text-left">{away}</span>
             </div>
-            <div className="flex gap-1 h-1.5 md:h-2">
+            <div className="flex gap-1 h-1.5 sm:h-2">
                 <div className="bg-blue-600 rounded-full" style={{ flex: homePercent }}></div>
                 <div className="bg-red-500 rounded-full" style={{ flex: 100 - homePercent }}></div>
             </div>
@@ -907,26 +907,26 @@ function H2HContent({ data }: { data: any }) {
     const h2hMatches = data.h2hMatches || [];
 
     return (
-        <div className="flex flex-col gap-3 md:gap-4">
+        <div className="flex flex-col gap-3 sm:gap-4">
             {/* H2H Summary */}
             {summary && summary.total > 0 && (
-                <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100 text-center">
-                    <h3 className="m-0 mb-3 md:mb-4 font-semibold text-sm md:text-base">Karşılıklı Maçlar Özeti</h3>
-                    <div className="flex justify-center gap-4 md:gap-6">
+                <div className="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <h3 className="m-0 mb-3 sm:mb-4 font-semibold text-sm sm:text-base">Karşılıklı Maçlar Özeti</h3>
+                    <div className="flex justify-center gap-4 sm:gap-6">
                         <div className="text-center">
-                            <div className="font-bold text-blue-600 text-lg md:text-2xl">{summary.homeWins}</div>
-                            <div className="text-gray-600 text-xs md:text-sm mt-1">Ev Kazandı</div>
+                            <div className="font-bold text-blue-600 text-lg sm:text-2xl">{summary.homeWins}</div>
+                            <div className="text-gray-600 text-xs sm:text-sm mt-1">Ev Kazandı</div>
                         </div>
                         <div className="text-center">
-                            <div className="font-bold text-gray-400 text-lg md:text-2xl">{summary.draws}</div>
-                            <div className="text-gray-600 text-xs md:text-sm mt-1">Berabere</div>
+                            <div className="font-bold text-gray-400 text-lg sm:text-2xl">{summary.draws}</div>
+                            <div className="text-gray-600 text-xs sm:text-sm mt-1">Berabere</div>
                         </div>
                         <div className="text-center">
-                            <div className="font-bold text-red-500 text-lg md:text-2xl">{summary.awayWins}</div>
-                            <div className="text-gray-600 text-xs md:text-sm mt-1">Dep Kazandı</div>
+                            <div className="font-bold text-red-500 text-lg sm:text-2xl">{summary.awayWins}</div>
+                            <div className="text-gray-600 text-xs sm:text-sm mt-1">Dep Kazandı</div>
                         </div>
                     </div>
-                    <div className="mt-3 text-gray-600 text-xs md:text-sm">
+                    <div className="mt-3 text-gray-600 text-xs sm:text-sm">
                         Toplam {summary.total} maç
                     </div>
                 </div>
@@ -934,13 +934,13 @@ function H2HContent({ data }: { data: any }) {
 
             {/* Previous H2H Matches */}
             {h2hMatches.length > 0 && (
-                <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100">
-                    <h4 className="m-0 mb-3 font-semibold text-sm md:text-base">Son Karşılaşmalar</h4>
+                <div className="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-gray-100">
+                    <h4 className="m-0 mb-3 font-semibold text-sm sm:text-base">Son Karşılaşmalar</h4>
                     <div className="flex flex-col gap-2">
                         {h2hMatches.slice(0, 5).map((match: any, idx: number) => (
                             <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center gap-2">
-                                <span className="text-xs md:text-sm text-gray-600 truncate">{match.date || match.match_time}</span>
-                                <span className="font-semibold text-sm md:text-base whitespace-nowrap">{match.home_score ?? '-'} - {match.away_score ?? '-'}</span>
+                                <span className="text-xs sm:text-sm text-gray-600 truncate">{match.date || match.match_time}</span>
+                                <span className="font-semibold text-sm sm:text-base whitespace-nowrap">{match.home_score ?? '-'} - {match.away_score ?? '-'}</span>
                             </div>
                         ))}
                     </div>
@@ -949,7 +949,7 @@ function H2HContent({ data }: { data: any }) {
 
             {/* If no data at all */}
             {!summary && h2hMatches.length === 0 && (
-                <div className="text-center p-8 md:p-10 text-gray-600 bg-white rounded-xl">
+                <div className="text-center p-8 sm:p-10 text-gray-600 bg-white rounded-xl">
                     H2H verisi bulunamadı
                 </div>
             )}
@@ -973,16 +973,16 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
     return (
         <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
             <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs md:text-sm">
+                <table className="w-full border-collapse text-xs sm:text-sm">
                     <thead>
                         <tr className="bg-gray-50">
-                            <th className="p-2 md:p-3 text-left font-semibold sticky left-0 bg-gray-50 z-10">#</th>
-                            <th className="p-2 md:p-3 text-left font-semibold min-w-[120px] md:min-w-[150px]">Takım</th>
-                            <th className="p-2 md:p-3 text-center font-semibold">O</th>
-                            <th className="p-2 md:p-3 text-center font-semibold">G</th>
-                            <th className="p-2 md:p-3 text-center font-semibold">B</th>
-                            <th className="p-2 md:p-3 text-center font-semibold">M</th>
-                            <th className="p-2 md:p-3 text-center font-semibold">P</th>
+                            <th className="p-2 sm:p-3 text-left font-semibold sticky left-0 bg-gray-50 z-10">#</th>
+                            <th className="p-2 sm:p-3 text-left font-semibold min-w-[120px] sm:min-w-[150px]">Takım</th>
+                            <th className="p-2 sm:p-3 text-center font-semibold">O</th>
+                            <th className="p-2 sm:p-3 text-center font-semibold">G</th>
+                            <th className="p-2 sm:p-3 text-center font-semibold">B</th>
+                            <th className="p-2 sm:p-3 text-center font-semibold">M</th>
+                            <th className="p-2 sm:p-3 text-center font-semibold">P</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -990,8 +990,8 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                             const isHighlighted = team.team_id === homeTeamId || team.team_id === awayTeamId;
                             return (
                                 <tr key={idx} className={`border-b border-gray-100 ${isHighlighted ? 'bg-blue-50' : 'bg-white'}`}>
-                                    <td className="p-2 md:p-3 font-semibold sticky left-0 bg-inherit z-10">{team.position || idx + 1}</td>
-                                    <td className="p-2 md:p-3">
+                                    <td className="p-2 sm:p-3 font-semibold sticky left-0 bg-inherit z-10">{team.position || idx + 1}</td>
+                                    <td className="p-2 sm:p-3">
                                         <div
                                             onClick={() => navigate(`/team/${team.team_id}`)}
                                             className="flex items-center gap-2 cursor-pointer text-blue-700 hover:text-blue-900"
@@ -1001,17 +1001,17 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
                                                 <img
                                                     src={team.team_logo}
                                                     alt=""
-                                                    className="w-4 h-4 md:w-5 md:h-5 object-contain flex-shrink-0"
+                                                    className="w-4 h-4 sm:w-5 sm:h-5 object-contain flex-shrink-0"
                                                 />
                                             )}
                                             <span className="truncate">{team.team_name || `Takım ${idx + 1}`}</span>
                                         </div>
                                     </td>
-                                    <td className="p-2 md:p-3 text-center">{team.played}</td>
-                                    <td className="p-2 md:p-3 text-center">{team.won}</td>
-                                    <td className="p-2 md:p-3 text-center">{team.drawn}</td>
-                                    <td className="p-2 md:p-3 text-center">{team.lost}</td>
-                                    <td className="p-2 md:p-3 text-center font-semibold">{team.points}</td>
+                                    <td className="p-2 sm:p-3 text-center">{team.played}</td>
+                                    <td className="p-2 sm:p-3 text-center">{team.won}</td>
+                                    <td className="p-2 sm:p-3 text-center">{team.drawn}</td>
+                                    <td className="p-2 sm:p-3 text-center">{team.lost}</td>
+                                    <td className="p-2 sm:p-3 text-center font-semibold">{team.points}</td>
                                 </tr>
                             );
                         })}
@@ -1123,18 +1123,18 @@ function AIContent({ matchId }: { matchId: string }) {
                     return (
                         <div 
                             key={prediction.id} 
-                            className={`p-3 md:p-4 hover:bg-gray-50 transition-colors duration-150`}
+                            className={`p-3 sm:p-4 hover:bg-gray-50 transition-colors duration-150`}
                         >
-                            <div className="flex items-center justify-between gap-2 md:gap-4 flex-wrap sm:flex-nowrap">
+                            <div className="flex items-center justify-between gap-3 md:gap-4 flex-wrap sm:flex-nowrap">
                                 {/* Left Side: Bot Info */}
-                                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 sm:flex-initial">
+                                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
                                     <div className="flex-shrink-0">
-                                        <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                                            <Robot size={14} weight="fill" className="text-white md:w-[18px] md:h-[18px]" />
+                                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                            <Robot size={14} weight="fill" className="text-white sm:w-[18px] sm:h-[18px]" />
                                         </div>
                                     </div>
-                                    <div className="min-w-0 flex-1 sm:flex-initial">
-                                        <div className="flex items-center gap-1 md:gap-2 flex-wrap text-xs md:text-sm">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-1 md:gap-2 flex-wrap text-xs sm:text-sm">
                                             <span className="font-bold text-gray-900 truncate">
                                                 {prediction.bot_name || 'GoalGPT AI'}
                                             </span>
@@ -1163,8 +1163,8 @@ function AIContent({ matchId }: { matchId: string }) {
 
                                 {/* Center: Prediction Detail */}
                                 <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 order-3 sm:order-2 w-full sm:w-auto justify-center sm:justify-start">
-                                    <div className="px-2 py-1 md:px-3 md:py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
-                                        <span className="text-xs md:text-sm font-bold text-gray-800 whitespace-nowrap">
+                                    <div className="px-2 py-1 sm:px-3 sm:py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
+                                        <span className="text-xs sm:text-sm font-bold text-gray-800 whitespace-nowrap">
                                             {prediction.prediction_type}
                                         </span>
                                     </div>
@@ -1173,21 +1173,21 @@ function AIContent({ matchId }: { matchId: string }) {
                                 {/* Right Side: Status Badge */}
                                 <div className="flex-shrink-0 order-2 sm:order-3">
                                     {isPending && (
-                                        <div className="flex items-center gap-1 md:gap-1.5 px-2 py-1 md:px-3 md:py-1.5 bg-amber-50 rounded-lg border border-amber-200">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-amber-50 rounded-lg border border-amber-200">
                                             <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
-                                            <span className="text-[10px] md:text-xs font-bold text-amber-700 whitespace-nowrap">BEKLİYOR</span>
+                                            <span className="text-[10px] sm:text-xs font-bold text-amber-700 whitespace-nowrap">BEKLİYOR</span>
                                         </div>
                                     )}
                                     {isWinner && (
-                                        <div className="flex items-center gap-1 md:gap-1.5 px-2 py-1 md:px-3 md:py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
-                                            <Trophy size={12} weight="fill" className="text-emerald-600 md:w-[14px] md:h-[14px]" />
-                                            <span className="text-[10px] md:text-xs font-bold text-emerald-700 whitespace-nowrap">KAZANDI</span>
+                                        <div className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+                                            <Trophy size={12} weight="fill" className="text-emerald-600 sm:w-[14px] sm:h-[14px]" />
+                                            <span className="text-[10px] sm:text-xs font-bold text-emerald-700 whitespace-nowrap">KAZANDI</span>
                                         </div>
                                     )}
                                     {isLoser && (
-                                        <div className="flex items-center gap-1 md:gap-1.5 px-2 py-1 md:px-3 md:py-1.5 bg-red-50 rounded-lg border border-red-200">
-                                            <WarningCircle size={12} weight="fill" className="text-red-600 md:w-[14px] md:h-[14px]" />
-                                            <span className="text-[10px] md:text-xs font-bold text-red-700 whitespace-nowrap">KAYBETTİ</span>
+                                        <div className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-red-50 rounded-lg border border-red-200">
+                                            <WarningCircle size={12} weight="fill" className="text-red-600 sm:w-[14px] sm:h-[14px]" />
+                                            <span className="text-[10px] sm:text-xs font-bold text-red-700 whitespace-nowrap">KAYBETTİ</span>
                                         </div>
                                     )}
                                 </div>
