@@ -25,8 +25,6 @@ import { MatchEventsTimeline } from './MatchEventsTimeline';
 import { ChartBar, ListBullets, Sword, Trophy, Users, TrendUp, Robot, CaretLeft, WarningCircle } from '@phosphor-icons/react';
 import { useMatchSocket } from '../../hooks/useSocket';
 
-import { useAIPredictions } from '../../context/AIPredictionsContext';
-
 type TabType = 'ai' | 'stats' | 'h2h' | 'standings' | 'lineup' | 'trend' | 'events';
 
 export function MatchDetailPage() {
