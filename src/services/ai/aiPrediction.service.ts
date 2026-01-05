@@ -116,20 +116,24 @@ export class AIPredictionService {
                 }
             }
 
-            // Default fallback
+            // Default fallback: Create dynamic bot name based on minute
+            const dynamicBotName = `BOT ${minute}`;
+            logger.info(`[AIPrediction] No specific bot rule found for minute ${minute}, using dynamic: ${dynamicBotName}`);
             return {
                 botGroupId: null,
-                botDisplayName: 'BOT 007',
-                displayTemplate: null,
+                botDisplayName: dynamicBotName,
+                displayTemplate: `🤖 {period} {value} ÜST ({minute}'' dk)`,
                 predictionPeriod: 'AUTO',
                 basePredictionType: 'ÜST'
             };
         } catch (error) {
-            logger.warn('[AIPrediction] Failed to get bot group, using default:', error);
+            logger.warn('[AIPrediction] Failed to get bot group, using dynamic fallback:', error);
+            // Fallback with dynamic name even on error
+            const dynamicBotName = `BOT ${minute}`;
             return {
                 botGroupId: null,
-                botDisplayName: 'BOT 007',
-                displayTemplate: null,
+                botDisplayName: dynamicBotName,
+                displayTemplate: `🤖 {period} {value} ÜST ({minute}'' dk)`,
                 predictionPeriod: 'AUTO',
                 basePredictionType: 'ÜST'
             };
