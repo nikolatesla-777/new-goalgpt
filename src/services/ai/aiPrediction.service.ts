@@ -707,6 +707,30 @@ export class AIPredictionService {
     }
 
     /**
+     * Get prediction for a specific match (for match detail page)
+     */
+    async getPredictionByMatchId(matchExternalId: string): Promise<any | null> {
+        const query = `
+      SELECT 
+        p.*,
+        pm.match_external_id,
+        pm.overall_confidence,
+        pm.prediction_result,
+        pm.final_home_score,
+        pm.final_away_score,
+        pm.matched_at,
+        pm.resulted_at
+      FROM ai_predictions p
+      JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
+      WHERE pm.match_external_id = $1
+      ORDER BY p.created_at DESC
+      LIMIT 1
+    `;
+        const result = await pool.query(query, [matchExternalId]);
+        return result.rows.length > 0 ? result.rows[0] : null;
+    }
+
+    /**
      * Get predictions by bot name (for bot detail page)
      */
     async getPredictionsByBotName(botName: string, limit: number = 50): Promise<any[]> {

@@ -290,6 +290,35 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     });
 
     /**
+     * GET /api/predictions/match/:matchId
+     * Get prediction for a specific match (for match detail page)
+     */
+    fastify.get('/api/predictions/match/:matchId', async (request: FastifyRequest<{ Params: { matchId: string } }>, reply: FastifyReply) => {
+        try {
+            const { matchId } = request.params;
+            const prediction = await aiPredictionService.getPredictionByMatchId(matchId);
+
+            if (!prediction) {
+                return reply.status(404).send({
+                    success: false,
+                    message: 'Prediction not found for this match'
+                });
+            }
+
+            return reply.status(200).send({
+                success: true,
+                prediction
+            });
+        } catch (error) {
+            logger.error('[Predictions] Get prediction by match ID error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
      * GET /api/predictions/bots
      * List bot stats with prediction counts
      */

@@ -1038,10 +1038,52 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
 
 // AI Content
 function AIContent({ matchId }: { matchId: string }) {
-    const { predictions, loading } = useAIPredictions();
-    const prediction = predictions.get(matchId);
+    const { predictions, loading: contextLoading } = useAIPredictions();
+    const [prediction, setPrediction] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
 
-    if (loading) {
+    useEffect(() => {
+        // First try to get from context
+        const contextPred = predictions.get(matchId);
+        if (contextPred) {
+            setPrediction(contextPred);
+            setLoading(false);
+            return;
+        }
+
+        // If not in context, fetch directly from API
+        const fetchPrediction = async () => {
+            try {
+                const API_BASE = import.meta.env.VITE_API_URL || '/api';
+                const res = await fetch(`${API_BASE}/predictions/match/${matchId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.prediction) {
+                        setPrediction({
+                            id: data.prediction.id,
+                            match_external_id: data.prediction.match_external_id,
+                            prediction_type: data.prediction.prediction_type,
+                            prediction_value: data.prediction.prediction_value,
+                            overall_confidence: data.prediction.overall_confidence,
+                            bot_name: data.prediction.bot_name,
+                            minute_at_prediction: data.prediction.minute_at_prediction,
+                            prediction_result: data.prediction.prediction_result,
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('[AIContent] Fetch prediction error:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (!contextLoading) {
+            fetchPrediction();
+        }
+    }, [matchId, predictions, contextLoading]);
+
+    if (loading || contextLoading) {
         return (
             <div className="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
                 <div className="flex flex-col items-center justify-center gap-4">
