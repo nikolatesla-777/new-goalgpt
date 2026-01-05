@@ -51,14 +51,15 @@ export class MatchWatchdogWorker {
       // This is used for both:
       // 1. Should-be-live matches -> transition to LIVE
       // 2. Stale LIVE matches that are finished -> transition to END
-      // CRITICAL FIX: Use time parameter for incremental updates (last 30 seconds for watchdog)
+      // CRITICAL FIX: Use time parameter for incremental updates
       // According to TheSports docs: "obtain new or changed data according to the time"
-      // Recommended frequency: 1 min/time, but we use 30 seconds for watchdog
+      // For should-be-live matches (can be 7+ hours old), we need a wider time window
+      // Use last 24 hours to catch all should-be-live matches
       let recentListAllMatches: Map<string, { statusId: number; updateTime: number | null }> = new Map();
       try {
-        // Use time parameter: last 30 seconds (watchdog runs every 30 seconds)
-        // This is more efficient than fetching all 500 matches every time
-        const timeParam = nowTs - 30; // Last 30 seconds
+        // CRITICAL FIX: Use wider time window (24 hours) to catch should-be-live matches
+        // Previous 30-second window was too restrictive and missed matches that started hours ago
+        const timeParam = nowTs - (24 * 60 * 60); // Last 24 hours
         const recentListResponse = await this.matchRecentService.getMatchRecentList({ time: timeParam, limit: 500 }, true); // forceRefresh = true
         const recentListResults = recentListResponse?.results ?? [];
 
