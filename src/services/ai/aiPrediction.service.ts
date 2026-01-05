@@ -215,7 +215,16 @@ export class AIPredictionService {
         htHome?: number, // Optional HT scores for retroactive IY settlement
         htAway?: number
     ): { isInstantWin: boolean; reason: string } {
-        const value = parseFloat(predictionValue);
+        // KRITIK: prediction_value'den sadece sayısal değeri çıkar
+        // Örnek: "IY 0.5 ÜST" -> "0.5", "0.5" -> "0.5", "MS 2.5 ÜST" -> "2.5"
+        const numericMatch = predictionValue.match(/([\d.]+)/);
+        const value = numericMatch ? parseFloat(numericMatch[1]) : parseFloat(predictionValue);
+        
+        if (isNaN(value)) {
+            logger.warn(`[AIPrediction] Invalid prediction_value: ${predictionValue}, cannot parse numeric value`);
+            return { isInstantWin: false, reason: `Invalid prediction value: ${predictionValue}` };
+        }
+        
         const isOver = predictionType.toUpperCase().includes('ÜST');
         const isUnder = predictionType.toUpperCase().includes('ALT');
         const isIY = predictionType.toUpperCase().includes('IY');
