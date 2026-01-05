@@ -78,3 +78,4 @@ async function getLatencyStats() {
 
 getLatencyStats().catch(console.error);
 
+

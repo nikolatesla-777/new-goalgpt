@@ -131,3 +131,4 @@ Historical endpoint'leri iyileştir ve fallback olarak kullan
 **Son Güncelleme:** 2026-01-03 00:20 UTC  
 **Durum:** ✅ Hook'lar yerleştirilmiş - ⚠️ API availability sorunu var
 
+

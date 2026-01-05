@@ -141,3 +141,4 @@ const matches = result.rows.map(match => ({
 **Son Güncelleme:** 2026-01-03 00:10 UTC  
 **Durum:** ✅ SORUN DÜZELTİLDİ - Test edilmeyi bekliyor
 
+

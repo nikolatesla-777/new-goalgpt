@@ -207,3 +207,4 @@ Return: { matchExternalId: "k82rekhg0w8nrep", overallConfidence: 100% }
 
 **Sonuç:** Kullanıcının anlayışı **%90 doğru**. Sadece "direkt" kelimesi biraz yanıltıcı - eğer her iki takım eşleşirse daha kesin arama yapılıyor, tek takım eşleşirse daha esnek arama yapılıyor.
 
+

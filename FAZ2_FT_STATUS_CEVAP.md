@@ -87,3 +87,4 @@ const stats = await this.combinedStatsService.getCombinedMatchStats(matchId);
 **Son Güncelleme:** 2026-01-03 00:25 UTC  
 **Durum:** ✅ Hook'lar yerleştirilmiş - ⚠️ PostMatchProcessor iyileştirilmeli
 
+

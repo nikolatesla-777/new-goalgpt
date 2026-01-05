@@ -241,3 +241,4 @@ const pattern = `%${searchName.substring(0, 2)}%`; // "%Mu%" → "Mwembe" de bul
 **Analiz Eden:** AI Prediction System  
 **Durum:** ✅ Sorun tespit edildi ve çözüldü
 
+

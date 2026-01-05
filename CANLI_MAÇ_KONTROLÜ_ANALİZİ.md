@@ -206,3 +206,4 @@ Bu sayede daha fazla tahmin eşleşecek!
 **Rapor Tarihi:** 3 Ocak 2026  
 **Durum:** ✅ Canlı maç kontrolü var, ama çok sıkı
 
+

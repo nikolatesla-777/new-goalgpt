@@ -162,3 +162,4 @@ if (homeMatch && homeMatch.confidence >= 0.6) {
 **Test Durumu:** ✅ Tüm testler başarılı  
 **Sistem Durumu:** ✅ Yeni algoritma aktif
 
+

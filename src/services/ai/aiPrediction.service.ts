@@ -542,13 +542,15 @@ export class AIPredictionService {
             }
 
             // Try to match with TheSports data FIRST
+            // CRITICAL: Pass league hint for better matching (e.g., Myanmar Professional League)
             let matchResult: MatchLookupResult | null = null;
             try {
                 matchResult = await teamNameMatcherService.findMatchByTeams(
                     parsed.homeTeamName,
                     parsed.awayTeamName,
                     parsed.minuteAtPrediction,
-                    parsed.scoreAtPrediction
+                    parsed.scoreAtPrediction,
+                    parsed.leagueName // League hint for better matching
                 );
             } catch (matchError) {
                 logger.warn('[AIPrediction] Team matching failed:', matchError);
@@ -1122,8 +1124,9 @@ export class AIPredictionService {
                     pm.prediction_result,
                     m.home_score_display,
                     m.away_score_display,
-                    m.home_score_ht,
-                    m.away_score_ht,
+                    m.home_scores,
+                    m.away_scores,
+                    m.incidents,
                     m.status_id
                 FROM ai_predictions p
                 JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
@@ -1146,15 +1149,89 @@ export class AIPredictionService {
                 const homeScore = overridingHomeScore !== undefined ? overridingHomeScore : (parseInt(row.home_score_display) || 0);
                 const awayScore = overridingAwayScore !== undefined ? overridingAwayScore : (parseInt(row.away_score_display) || 0);
 
-                // If we are overriding with Live HT scores (Status 3), use them for HT scores too
-                // (At Status 3, Current Score == HT Score)
-                let htHome = parseInt(row.home_score_ht) || 0;
-                let htAway = parseInt(row.away_score_ht) || 0;
-
+                // CRITICAL: Calculate HT scores from incidents (most accurate)
+                // Count goals in first half (minute <= 45)
+                let htHome = 0;
+                let htAway = 0;
+                
                 if (overridingStatusId === 3 && overridingHomeScore !== undefined && overridingAwayScore !== undefined) {
+                    // At Status 3 (HT), current score == HT score
                     htHome = overridingHomeScore;
                     htAway = overridingAwayScore;
+                } else {
+                    // Calculate from incidents (most accurate method)
+                    try {
+                        if (row.incidents) {
+                            const incidents = typeof row.incidents === 'string' ? JSON.parse(row.incidents) : row.incidents;
+                            if (Array.isArray(incidents)) {
+                                // Count goals in first half (minute <= 45)
+                                for (const inc of incidents) {
+                                    const minute = inc.minute || inc.time || inc.min;
+                                    if (minute !== null && minute !== undefined && minute <= 45) {
+                                        // Check if it's a goal (type 1, 8, 17 or contains 'goal')
+                                        const isGoal = inc.type === 1 || inc.type === 8 || inc.type === 17 || 
+                                                      (inc.type && String(inc.type).toLowerCase().includes('goal')) ||
+                                                      (inc.event_type && String(inc.event_type).toLowerCase().includes('goal'));
+                                        
+                                        if (isGoal) {
+                                            // Use home_score/away_score from incident (most reliable)
+                                            if (inc.home_score !== undefined && inc.home_score > htHome) {
+                                                htHome = inc.home_score;
+                                            }
+                                            if (inc.away_score !== undefined && inc.away_score > htAway) {
+                                                htAway = inc.away_score;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Fallback: If no incidents or no goals found, try home_scores/away_scores
+                        if (htHome === 0 && htAway === 0) {
+                            try {
+                                const homeScores = row.home_scores ? (typeof row.home_scores === 'string' ? JSON.parse(row.home_scores) : row.home_scores) : [];
+                                const awayScores = row.away_scores ? (typeof row.away_scores === 'string' ? JSON.parse(row.away_scores) : row.away_scores) : [];
+                                
+                                // Try index 0 first (some APIs use [0] for first half)
+                                if (Array.isArray(homeScores) && homeScores.length > 0) {
+                                    htHome = parseInt(String(homeScores[0])) || 0;
+                                }
+                                if (Array.isArray(awayScores) && awayScores.length > 0) {
+                                    htAway = parseInt(String(awayScores[0])) || 0;
+                                }
+                                
+                                // If index 0 gives 0 but we have scores, try index 1 (some APIs use [1] for first half)
+                                if (htHome === 0 && htAway === 0 && Array.isArray(homeScores) && homeScores.length > 1) {
+                                    htHome = parseInt(String(homeScores[1])) || 0;
+                                    htAway = parseInt(String(awayScores[1])) || 0;
+                                }
+                            } catch (e) {
+                                logger.warn(`[AIPrediction] Failed to parse HT scores from JSONB: ${e}`);
+                            }
+                        }
+                        
+                        // Final fallback: if status >= 3 (HT reached) and still 0-0, use current score
+                        // This handles cases where incidents are missing but match is past HT
+                        if (htHome === 0 && htAway === 0 && statusId >= 3) {
+                            // If current score is not 0-0, it's likely the HT score
+                            if (homeScore > 0 || awayScore > 0) {
+                                htHome = homeScore;
+                                htAway = awayScore;
+                                logger.warn(`[AIPrediction] Using current score as HT score (fallback): ${htHome}-${htAway}`);
+                            }
+                        }
+                    } catch (e) {
+                        logger.error(`[AIPrediction] Error calculating HT scores: ${e}`);
+                        // Last resort fallback
+                        if (statusId >= 3) {
+                            htHome = homeScore;
+                            htAway = awayScore;
+                        }
+                    }
                 }
+                
+                logger.debug(`[AIPrediction] HT Score calculated: ${htHome}-${htAway} (for IY predictions)`);
 
                 // Determine period from prediction type
                 const period = row.prediction_type?.toUpperCase().includes('IY') ? 'IY' : 'MS';

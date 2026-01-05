@@ -112,3 +112,4 @@ testNewAlgorithm()
         process.exit(1);
     });
 
+

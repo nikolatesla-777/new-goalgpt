@@ -232,3 +232,4 @@ npx tsx src/scripts/get-latency-stats.ts
 **Durum:** 🟡 FAZ 2 test edilmeyi bekliyor, diğer fazlar tamamlandı  
 **Hazırlayan:** AI Assistant
 
+

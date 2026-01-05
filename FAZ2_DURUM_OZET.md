@@ -61,3 +61,4 @@ Maç bitmeden önce (canlıyken) verileri kaydet:
 **Son Güncelleme:** 2026-01-03 00:15 UTC  
 **Durum:** ✅ Kod düzeltildi - Test edilmeyi bekliyor (canlı maç bitişi ile)
 
+

@@ -38,3 +38,4 @@
 **Son Güncelleme:** 2026-01-03 14:10 UTC  
 **Durum:** 🔴 SORUNLAR İNCELENİYOR
 
+

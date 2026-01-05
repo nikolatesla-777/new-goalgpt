@@ -230,3 +230,4 @@ Sayfada "AI" sekmesine tıklayarak tahmini görebilirsiniz.
 **Kontrol Eden:** AI Prediction System  
 **Durum:** ✅ Tamamlandı
 
+

@@ -438,8 +438,9 @@ export class TeamNameMatcherService {
 
     /**
      * Find team by alias table first, then fall back to fuzzy matching
+     * CRITICAL: Use league hint for better matching (e.g., Myanmar Professional League)
      */
-    async findTeamByAlias(teamName: string): Promise<TeamMatchResult | null> {
+    async findTeamByAlias(teamName: string, leagueHint?: string): Promise<TeamMatchResult | null> {
         const client = await pool.connect();
         try {
             // First, check alias table for exact match
@@ -467,8 +468,8 @@ export class TeamNameMatcherService {
             client.release();
         }
 
-        // Fall back to fuzzy matching
-        return this.findBestMatch(teamName);
+        // Fall back to fuzzy matching with league hint
+        return this.findBestMatch(teamName, leagueHint);
     }
 
     /**
@@ -479,11 +480,13 @@ export class TeamNameMatcherService {
         homeTeamName: string,
         awayTeamName: string,
         minuteHint?: number,
-        scoreHint?: string
+        scoreHint?: string,
+        leagueHint?: string
     ): Promise<MatchLookupResult | null> {
         // OPTIMIZED: Try to match teams sequentially (faster - stop at first match)
         // First try home team, if matched, find match immediately
-        let homeMatch = await this.findTeamByAlias(homeTeamName);
+        // CRITICAL: Use league hint for better matching (e.g., Myanmar Professional League)
+        let homeMatch = await this.findTeamByAlias(homeTeamName, leagueHint);
         
         const client = await pool.connect();
         try {
@@ -623,7 +626,7 @@ export class TeamNameMatcherService {
             }
 
             // If home team didn't match, try away team
-            const awayMatch = await this.findTeamByAlias(awayTeamName);
+            const awayMatch = await this.findTeamByAlias(awayTeamName, leagueHint);
             
             if (awayMatch && awayMatch.confidence >= 0.6) {
                 logger.info(`[TeamMatcher] Away team matched (${awayMatch.confidence * 100}%): "${awayTeamName}" → "${awayMatch.teamName}"`);

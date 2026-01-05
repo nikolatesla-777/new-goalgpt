@@ -152,3 +152,4 @@ WHERE external_id IN ($1, $3, ...)
 **Son Güncelleme:** 2026-01-02 23:30 UTC  
 **Durum:** 🚧 PLAN HAZIRLANIYOR
 
+

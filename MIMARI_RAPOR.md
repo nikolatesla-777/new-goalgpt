@@ -777,3 +777,4 @@ GoalGPT, **enterprise-grade** bir futbol tahmin sistemi olarak tasarlanmış, **
 **Hazırlayan:** AI Architect Assistant  
 **Versiyon:** 1.0.0
 
+

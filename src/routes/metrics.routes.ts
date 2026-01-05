@@ -35,3 +35,4 @@ export default async function metricsRoutes(
   fastify.get('/queue', getQueueMetrics);
 }
 
+

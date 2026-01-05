@@ -98,3 +98,4 @@ testSimilarity()
         process.exit(1);
     });
 
+

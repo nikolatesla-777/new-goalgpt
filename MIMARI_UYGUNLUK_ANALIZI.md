@@ -471,3 +471,4 @@ export function broadcastMatchEvent(matchId: string, event: MatchEvent): void {
 **Rapor Tarihi:** 3 Ocak 2026  
 **Hazırlayan:** AI Architect Assistant
 
+

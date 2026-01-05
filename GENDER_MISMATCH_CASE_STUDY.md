@@ -197,3 +197,4 @@ if (!hasReserve && similarity >= 0.7) {
 **Rapor Tarihi:** 3 Ocak 2026  
 **Durum:** ✅ Kadın takımı sorunu çözüldü, ama reserve takımı sorunu var
 
+

@@ -138,3 +138,4 @@ pm2 logs goalgpt-backend --lines 50 | grep -i "PostMatchJob"
 **Son Güncelleme:** 2026-01-02 22:52 UTC  
 **Durum:** 🟡 KISMEN ÇALIŞIYOR - PostMatchProcessor çalışıyor ama otomatik job log'ları görünmüyor
 
+

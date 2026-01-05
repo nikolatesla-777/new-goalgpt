@@ -150,3 +150,4 @@ pm2 logs goalgpt-backend | grep -i "DetailLive.*status=8\|triggerPostMatchPersis
 **Son Güncelleme:** 2026-01-02  
 **Durum:** 🟡 KISMEN BAŞARILI - PostMatchProcessor çalışıyor ama hook'lar tetiklenmiyor olabilir
 
+

@@ -181,3 +181,4 @@ VALUES ('zp5rzghj93nq82w', 'Al Taawon Buraidah');
 **Rapor Tarihi:** 3 Ocak 2026  
 **Durum:** ❌ Eşleşme sağlanamadı (similarity threshold + maç durumu)
 
+

@@ -435,3 +435,4 @@ async function getTrendFromDatabase(matchId: string): Promise<any | null> {
 **Rapor Tarihi:** 3 Ocak 2026  
 **Hazırlayan:** AI Architect Assistant
 
+
