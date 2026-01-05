@@ -416,47 +416,54 @@ export function MatchDetailPage() {
 
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-safe">
-            {/* Header */}
-            <header className="bg-slate-900 text-white p-4 sticky top-0 z-30 shadow-md">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 pb-safe">
+            {/* Premium Header */}
+            <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sticky top-0 z-30 shadow-xl border-b border-slate-700/50 backdrop-blur-sm">
                 <div className="max-w-5xl mx-auto flex items-center gap-4">
                     <button
                         onClick={() => navigate('/')}
-                        className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                        className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 bg-white/5 backdrop-blur-sm border border-white/10"
                     >
-                        <CaretLeft size={24} />
+                        <CaretLeft size={22} weight="bold" />
                     </button>
                     <div className="flex-1">
-                        <p className="text-sm text-gray-400 font-medium">
+                        <p className="text-sm text-gray-300 font-semibold tracking-wide uppercase">
                             {match.competition?.name || 'Lig'}
                         </p>
                     </div>
                 </div>
             </header>
 
-            {/* Match Info Area */}
-            <div className="bg-gray-900 text-white pt-6 pb-8 px-4">
-                <div className="max-w-3xl mx-auto flex items-start justify-between gap-2 md:gap-8 relative">
+            {/* Premium Match Info Area */}
+            <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-gray-900 text-white pt-8 pb-10 px-4 overflow-hidden">
+                {/* Animated Background Elements */}
+                <div className="absolute inset-0 opacity-10">
+                    <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500 rounded-full blur-3xl"></div>
+                    <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500 rounded-full blur-3xl"></div>
+                </div>
+                
+                <div className="max-w-3xl mx-auto flex items-start justify-between gap-2 md:gap-8 relative z-10">
 
-                    {/* Home Team */}
+                    {/* Premium Home Team */}
                     <div
                         className="flex-1 flex flex-col items-center text-center cursor-pointer group"
                         onClick={() => navigate(`/team/${match.home_team_id}`)}
                     >
                         {match.home_team?.logo_url ? (
-                            <div className="relative mb-3 transform transition-transform group-hover:scale-105 duration-200">
+                            <div className="relative mb-4 transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+                                <div className="absolute inset-0 bg-white/20 rounded-full blur-xl group-hover:blur-2xl transition-all duration-300"></div>
                                 <img
                                     src={match.home_team.logo_url}
                                     alt=""
-                                    className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg"
+                                    className="relative w-20 h-20 md:w-24 md:h-24 object-contain drop-shadow-2xl filter group-hover:brightness-110 transition-all duration-300"
                                 />
                             </div>
                         ) : (
-                            <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-800 rounded-full mb-3 flex items-center justify-center">
-                                <Users size={24} className="text-gray-600" />
+                            <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl mb-4 flex items-center justify-center shadow-xl border border-white/10 group-hover:scale-110 transition-all duration-300">
+                                <Users size={28} className="text-gray-400" />
                             </div>
                         )}
-                        <p className="font-bold text-sm md:text-lg leading-tight w-full break-words px-1">
+                        <p className="font-black text-sm md:text-lg leading-tight w-full break-words px-1 text-white drop-shadow-lg group-hover:text-white/90 transition-colors">
                             {match.home_team?.name || 'Ev Sahibi'}
                         </p>
                     </div>
@@ -470,27 +477,27 @@ export function MatchDetailPage() {
                             const minuteText = match.minute_text || '—';
 
                             return (
-                                <div className="flex items-center justify-center gap-1.5 mb-2 w-full">
+                                <div className="flex items-center justify-center gap-2 mb-3 w-full">
                                     {isLive && (
                                         <>
                                             {status === 3 ? (
-                                                <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] md:text-xs font-bold rounded-full whitespace-nowrap">
+                                                <span className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs md:text-sm font-black rounded-full whitespace-nowrap shadow-lg shadow-amber-500/50 border-2 border-white/20">
                                                     İY
                                                 </span>
                                             ) : (
-                                                <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] md:text-xs font-bold rounded-full animate-pulse whitespace-nowrap">
+                                                <span className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-rose-500 text-white text-xs md:text-sm font-black rounded-full animate-pulse whitespace-nowrap shadow-lg shadow-red-500/50 border-2 border-white/20">
                                                     CANLI
                                                 </span>
                                             )}
                                             {minuteText && minuteText !== '—' && (
-                                                <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] md:text-xs font-bold rounded-full whitespace-nowrap min-w-[24px] text-center">
+                                                <span className="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs md:text-sm font-black rounded-full whitespace-nowrap min-w-[32px] text-center shadow-lg shadow-indigo-500/50 border-2 border-white/20">
                                                     {minuteText}
                                                 </span>
                                             )}
                                         </>
                                     )}
                                     {isFinished && (
-                                        <span className="px-3 py-1 bg-gray-600 text-white text-[10px] md:text-xs font-bold rounded-full">
+                                        <span className="px-4 py-1.5 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-xs md:text-sm font-black rounded-full shadow-lg border-2 border-white/20">
                                             MS
                                         </span>
                                     )}
@@ -498,9 +505,10 @@ export function MatchDetailPage() {
                             );
                         })()}
 
-                        <div className="bg-white/10 rounded-xl px-4 py-2 md:px-6 md:py-3 backdrop-blur-sm border border-white/5 shadow-inner">
-                            <div className="text-3xl md:text-5xl font-bold tracking-widest leading-none font-mono">
-                                {match.home_score ?? 0}<span className="text-gray-400 mx-1">-</span>{match.away_score ?? 0}
+                        <div className="relative bg-gradient-to-br from-white/15 via-white/10 to-white/5 rounded-2xl px-5 py-3 md:px-8 md:py-4 backdrop-blur-md border-2 border-white/20 shadow-2xl">
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-2xl"></div>
+                            <div className="relative text-4xl md:text-6xl font-black tracking-widest leading-none font-mono text-white drop-shadow-lg">
+                                {match.home_score ?? 0}<span className="text-white/60 mx-2">-</span>{match.away_score ?? 0}
                             </div>
                         </div>
 
@@ -521,25 +529,26 @@ export function MatchDetailPage() {
                         </p>
                     </div>
 
-                    {/* Away Team */}
+                    {/* Premium Away Team */}
                     <div
                         className="flex-1 flex flex-col items-center text-center cursor-pointer group"
                         onClick={() => navigate(`/team/${match.away_team_id}`)}
                     >
                         {match.away_team?.logo_url ? (
-                            <div className="relative mb-3 transform transition-transform group-hover:scale-105 duration-200">
+                            <div className="relative mb-4 transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+                                <div className="absolute inset-0 bg-white/20 rounded-full blur-xl group-hover:blur-2xl transition-all duration-300"></div>
                                 <img
                                     src={match.away_team.logo_url}
                                     alt=""
-                                    className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg"
+                                    className="relative w-20 h-20 md:w-24 md:h-24 object-contain drop-shadow-2xl filter group-hover:brightness-110 transition-all duration-300"
                                 />
                             </div>
                         ) : (
-                            <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-800 rounded-full mb-3 flex items-center justify-center">
-                                <Users size={24} className="text-gray-600" />
+                            <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl mb-4 flex items-center justify-center shadow-xl border border-white/10 group-hover:scale-110 transition-all duration-300">
+                                <Users size={28} className="text-gray-400" />
                             </div>
                         )}
-                        <p className="font-bold text-sm md:text-lg leading-tight w-full break-words px-1">
+                        <p className="font-black text-sm md:text-lg leading-tight w-full break-words px-1 text-white drop-shadow-lg group-hover:text-white/90 transition-colors">
                             {match.away_team?.name || 'Deplasman'}
                         </p>
                     </div>
@@ -547,11 +556,11 @@ export function MatchDetailPage() {
             </div>
 
             {/* Premium Tabs */}
-            <div className="bg-white sticky top-[60px] z-20 shadow-sm border-b border-gray-100">
+            <div className="bg-gradient-to-b from-white to-gray-50/50 sticky top-[60px] z-20 shadow-lg border-b border-gray-200/50 backdrop-blur-sm">
                 <div className="max-w-5xl mx-auto">
                     <div className="flex overflow-x-auto no-scrollbar scroll-smooth">
                         {allTabs.map((tab) => {
-                            const isActive = activeTab === tab.id || (tab.id === 'ai' && activeTab === 'ai' as any); // Handle AI tab type specifically if needed
+                            const isActive = activeTab === tab.id || (tab.id === 'ai' && activeTab === 'ai' as any);
                             return (
                                 <button
                                     key={tab.id}
@@ -559,22 +568,30 @@ export function MatchDetailPage() {
                                     className={`
                                         flex-1 min-w-[85px] sm:min-w-[100px] py-4 px-2 
                                         flex flex-col items-center justify-center gap-2 
-                                        transition-all duration-200 relative group
-                                        ${isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}
+                                        transition-all duration-300 relative group
+                                        ${isActive 
+                                            ? 'text-indigo-600 bg-gradient-to-b from-indigo-50/50 to-transparent' 
+                                            : 'text-gray-500 hover:text-indigo-500 hover:bg-indigo-50/30'
+                                        }
                                     `}
                                 >
-                                    <tab.Icon
-                                        size={24}
-                                        weight={isActive ? "fill" : "regular"}
-                                        className={`transition-transform duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}
-                                    />
-                                    <span className={`text-[11px] font-semibold tracking-wide ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
+                                    <div className={`relative transition-all duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}>
+                                        <tab.Icon
+                                            size={24}
+                                            weight={isActive ? "fill" : "regular"}
+                                            className={`transition-all duration-300 ${isActive ? 'drop-shadow-lg' : ''}`}
+                                        />
+                                        {isActive && (
+                                            <div className="absolute inset-0 bg-indigo-200/30 rounded-full blur-md -z-10"></div>
+                                        )}
+                                    </div>
+                                    <span className={`text-[11px] font-bold tracking-wide transition-colors duration-300 ${isActive ? 'text-indigo-600' : 'text-gray-500 group-hover:text-indigo-500'}`}>
                                         {tab.label}
                                     </span>
 
-                                    {/* Active Indicator */}
+                                    {/* Premium Active Indicator */}
                                     {isActive && (
-                                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full mx-4" />
+                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-t-full mx-2 shadow-lg shadow-indigo-500/50" />
                                     )}
                                 </button>
                             );
@@ -584,22 +601,26 @@ export function MatchDetailPage() {
             </div>
 
 
-            {/* Tab Content */}
-            <div style={{ maxWidth: '800px', margin: '0 auto', padding: '24px 16px' }}>
+            {/* Premium Tab Content */}
+            <div className="max-w-5xl mx-auto px-4 py-6">
                 {tabLoading ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
-                        Yükleniyor...
+                    <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl p-12 text-center border border-gray-200/50 shadow-lg">
+                        <div className="flex flex-col items-center justify-center gap-4">
+                            <div className="relative">
+                                <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                                <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-t-purple-400 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
+                            </div>
+                            <p className="text-gray-600 font-semibold">Yükleniyor...</p>
+                        </div>
                     </div>
                 ) : error ? (
-                    <div style={{
-                        textAlign: 'center',
-                        padding: '40px',
-                        color: '#ef4444',
-                        backgroundColor: '#fef2f2',
-                        borderRadius: '12px',
-                        border: '1px solid #fecaca'
-                    }}>
-                        <p style={{ margin: 0, fontWeight: '500' }}>❌ {error}</p>
+                    <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-2xl p-8 text-center border-2 border-red-200/50 shadow-lg">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                                <span className="text-2xl">❌</span>
+                            </div>
+                            <p className="text-red-700 font-bold text-lg">{error}</p>
+                        </div>
                     </div>
                 ) : (
                     <>
@@ -1083,10 +1104,16 @@ function AIContent({ matchId }: { matchId: string }) {
 
     if (loading) {
         return (
-            <div className="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
-                <div className="flex flex-col items-center justify-center gap-4">
-                    <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-500 rounded-full animate-spin"></div>
-                    <p className="text-gray-500 font-medium">Yapay zeka analizi yükleniyor...</p>
+            <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl p-12 text-center border border-gray-200/50 shadow-lg">
+                <div className="flex flex-col items-center justify-center gap-6">
+                    <div className="relative">
+                        <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                        <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-purple-400 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
+                    </div>
+                    <div>
+                        <p className="text-gray-700 font-semibold text-lg mb-1">Yapay zeka analizi yükleniyor...</p>
+                        <p className="text-gray-500 text-sm">Tahminler hazırlanıyor</p>
+                    </div>
                 </div>
             </div>
         );
@@ -1094,90 +1121,178 @@ function AIContent({ matchId }: { matchId: string }) {
 
     if (predictions.length === 0) {
         return (
-            <div className="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
-                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Robot size={32} className="text-gray-400" />
+            <div className="bg-gradient-to-br from-white via-gray-50 to-white rounded-2xl p-12 text-center border border-gray-200/50 shadow-lg">
+                <div className="flex flex-col items-center justify-center">
+                    <div className="relative mb-6">
+                        <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-3xl flex items-center justify-center shadow-inner">
+                            <Robot size={40} weight="duotone" className="text-gray-400" />
+                        </div>
+                        <div className="absolute -top-1 -right-1 w-6 h-6 bg-indigo-500 rounded-full border-4 border-white"></div>
+                    </div>
+                    <h3 className="text-2xl font-black text-gray-800 mb-3 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+                        Tahmin Bulunamadı
+                    </h3>
+                    <p className="text-gray-600 max-w-md mx-auto leading-relaxed">
+                        Bu maç için henüz yapay zeka tarafından oluşturulmuş güvenilir bir tahmin bulunmuyor.
+                    </p>
                 </div>
-                <h3 className="text-lg font-bold text-gray-800 mb-2">Tahmin Bulunamadı</h3>
-                <p className="text-gray-500 max-w-md mx-auto">
-                    Bu maç için henüz yapay zeka tarafından oluşturulmuş güvenilir bir tahmin bulunmuyor.
-                </p>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col gap-4">
-            {predictions.map((prediction) => (
-                <div key={prediction.id} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                    {/* Header with Robot Icon */}
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative overflow-hidden">
-                        <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4">
-                            <Robot size={120} weight="fill" />
+        <div className="flex flex-col gap-6">
+            {predictions.map((prediction, index) => {
+                // Parse prediction value to extract numeric value
+                const numericMatch = prediction.prediction_value?.match(/([\d.]+)/);
+                const numericValue = numericMatch ? parseFloat(numericMatch[1]) : null;
+                
+                // Determine status colors
+                const isWinner = prediction.prediction_result === 'winner';
+                const isLoser = prediction.prediction_result === 'loser';
+                const isPending = !prediction.prediction_result || prediction.prediction_result === 'pending';
+                
+                return (
+                    <div 
+                        key={prediction.id} 
+                        className="group relative bg-gradient-to-br from-white via-white to-gray-50 rounded-2xl overflow-hidden shadow-lg border border-gray-200/50 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+                        style={{
+                            animationDelay: `${index * 100}ms`,
+                            animation: 'fadeInUp 0.5s ease-out forwards'
+                        }}
+                    >
+                        {/* Premium Gradient Header */}
+                        <div className="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-8 text-white overflow-hidden">
+                            {/* Animated Background Pattern */}
+                            <div className="absolute inset-0 opacity-20">
+                                <div className="absolute right-0 top-0 w-64 h-64 bg-white rounded-full blur-3xl transform translate-x-16 -translate-y-16"></div>
+                                <div className="absolute left-0 bottom-0 w-48 h-48 bg-blue-300 rounded-full blur-2xl transform -translate-x-12 translate-y-12"></div>
+                            </div>
+                            
+                            {/* Decorative Robot Icon */}
+                            <div className="absolute right-0 top-0 opacity-10 transform translate-x-8 -translate-y-8 transition-transform duration-500 group-hover:scale-110">
+                                <Robot size={140} weight="fill" />
+                            </div>
+
+                            <div className="relative z-10">
+                                {/* Bot Name and Minute Badge */}
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30">
+                                            <Robot size={20} weight="fill" className="text-white" />
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-0.5">
+                                                AI Bot
+                                            </div>
+                                            <div className="text-lg font-bold text-white">
+                                                {prediction.bot_name || 'GoalGPT AI'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {prediction.minute_at_prediction && (
+                                        <div className="px-4 py-2 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 flex items-center gap-2">
+                                            <span className="text-sm">⏱</span>
+                                            <span className="text-sm font-bold">{prediction.minute_at_prediction}. dk</span>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {/* Title */}
+                                <h2 className="text-3xl font-black tracking-tight">Maç Tahmini</h2>
+                            </div>
                         </div>
 
-                        <div className="relative z-10">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-3">
-                                    <Robot size={24} weight="fill" className="text-blue-200" />
-                                    <span className="text-blue-100 font-bold tracking-wider text-xs uppercase">
-                                        {prediction.bot_name || 'GoalGPT AI'}
+                        {/* Premium Content Card */}
+                        <div className="p-8 bg-white">
+                            {/* Prediction Type & Value */}
+                            <div className="text-center mb-8">
+                                <div className="inline-block px-4 py-1.5 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-full mb-4">
+                                    <span className="text-xs font-bold text-indigo-700 uppercase tracking-widest">
+                                        Önerilen Tercih
                                     </span>
                                 </div>
-                                {prediction.minute_at_prediction && (
-                                    <span className="text-blue-100 text-xs font-medium bg-blue-800/30 px-2 py-1 rounded">
-                                        ⏱ {prediction.minute_at_prediction}. dk
-                                    </span>
+                                
+                                <div className="mb-4">
+                                    <div className="text-5xl font-black bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-2 tracking-tight">
+                                        {prediction.prediction_type}
+                                    </div>
+                                    {numericValue && (
+                                        <div className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border-2 border-indigo-200/50 shadow-sm">
+                                            <span className="text-2xl font-black text-indigo-700">
+                                                {numericValue}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Premium Status Badge */}
+                            <div className="mb-8">
+                                {isPending && (
+                                    <div className="relative overflow-hidden bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 rounded-2xl p-6 border-2 border-amber-200/50 shadow-lg">
+                                        <div className="absolute inset-0 bg-gradient-to-r from-amber-400/10 to-yellow-400/10"></div>
+                                        <div className="relative flex items-center justify-center gap-4">
+                                            <div className="relative">
+                                                <div className="w-4 h-4 bg-amber-500 rounded-full animate-pulse"></div>
+                                                <div className="absolute inset-0 w-4 h-4 bg-amber-500 rounded-full animate-ping opacity-75"></div>
+                                            </div>
+                                            <span className="text-xl font-black text-amber-700 tracking-wide">BEKLİYOR</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {isWinner && (
+                                    <div className="relative overflow-hidden bg-gradient-to-r from-emerald-50 via-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-emerald-200/50 shadow-lg">
+                                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/10 to-green-400/10"></div>
+                                        <div className="relative flex items-center justify-center gap-4">
+                                            <div className="p-3 bg-gradient-to-br from-emerald-400 to-green-500 rounded-2xl shadow-lg transform rotate-12">
+                                                <Trophy size={28} weight="fill" className="text-white" />
+                                            </div>
+                                            <span className="text-xl font-black text-emerald-700 tracking-wide">KAZANDI</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {isLoser && (
+                                    <div className="relative overflow-hidden bg-gradient-to-r from-red-50 via-rose-50 to-red-50 rounded-2xl p-6 border-2 border-red-200/50 shadow-lg">
+                                        <div className="absolute inset-0 bg-gradient-to-r from-red-400/10 to-rose-400/10"></div>
+                                        <div className="relative flex items-center justify-center gap-4">
+                                            <div className="p-3 bg-gradient-to-br from-red-400 to-rose-500 rounded-2xl shadow-lg">
+                                                <WarningCircle size={28} weight="fill" className="text-white" />
+                                            </div>
+                                            <span className="text-xl font-black text-red-700 tracking-wide">KAYBETTİ</span>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
-                            <h2 className="text-2xl font-bold">Maç Tahmini</h2>
-                        </div>
-                    </div>
 
-                    {/* Prediction Content */}
-                    <div className="p-6">
-                        <div className="flex flex-col items-center justify-center text-center mb-8">
-                            <span className="text-sm text-gray-400 font-medium mb-2 uppercase tracking-wide">Önerilen Tercih</span>
-                            <div className="text-4xl font-black text-gray-800 mb-2 tracking-tight">
-                                {prediction.prediction_type}
-                            </div>
-                            <div className="bg-gray-100 px-4 py-1 rounded-full text-gray-600 font-bold text-sm">
-                                {prediction.prediction_value}
+                            {/* Premium Footer */}
+                            <div className="pt-6 border-t border-gray-100">
+                                <p className="text-xs text-center text-gray-500 leading-relaxed">
+                                    <span className="font-semibold">*</span> Bu tahmin yapay zeka modelleri tarafından istatistiksel veriler kullanılarak oluşturulmuştur. Kesinlik içermez.
+                                </p>
                             </div>
                         </div>
 
-                        {/* Status Badge (Replaces Confidence Meter) */}
-                        <div className="mb-6">
-                            {(!prediction.prediction_result || prediction.prediction_result === 'pending') && (
-                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-center gap-3 text-amber-700">
-                                    <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
-                                    <span className="font-bold text-lg">BEKLİYOR</span>
-                                </div>
-                            )}
-                            {prediction.prediction_result === 'winner' && (
-                                <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-center gap-3 text-green-700">
-                                    <div className="p-1 bg-green-100 rounded-full">
-                                        <Trophy size={20} weight="fill" className="text-green-600" />
-                                    </div>
-                                    <span className="font-bold text-lg">KAZANDI</span>
-                                </div>
-                            )}
-                            {prediction.prediction_result === 'loser' && (
-                                <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-center gap-3 text-red-700">
-                                    <div className="p-1 bg-red-100 rounded-full">
-                                        <WarningCircle size={20} weight="fill" className="text-red-600" />
-                                    </div>
-                                    <span className="font-bold text-lg">KAYBETTİ</span>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="text-xs text-center text-gray-400">
-                            * Bu tahmin yapay zeka modelleri tarafından istatistiksel veriler kullanılarak oluşturulmuştur. Kesinlik içermez.
+                        {/* Premium Glow Effect */}
+                        <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-pink-500/5 rounded-2xl"></div>
                         </div>
                     </div>
-                </div>
-            ))}
+                );
+            })}
+            
+            <style>{`
+                @keyframes fadeInUp {
+                    from {
+                        opacity: 0;
+                        transform: translateY(20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+            `}</style>
         </div>
     );
 }
