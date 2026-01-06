@@ -80,7 +80,7 @@ export function AdminPredictions() {
     const [predictions, setPredictions] = useState<UnifiedPrediction[]>([]); // Corrected this line
     const [stats, setStats] = useState<PredictionStats | null>(null);
     const [bots, setBots] = useState<BotStat[]>([]);
-    const [pagination, setPagination] = useState<Pagination | null>(null);
+    // Pagination state removed as it was unused and causing build error
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<FilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -106,7 +106,7 @@ export function AdminPredictions() {
                     setPredictions(data.data.predictions || []);
                     setStats(data.data.stats || null);
                     setBots(data.data.bots || []);
-                    setPagination(data.data.pagination || null);
+                    // setPagination(data.data.pagination || null);
                 }
             }
         } catch (err) {
