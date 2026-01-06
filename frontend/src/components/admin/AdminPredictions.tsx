@@ -64,13 +64,6 @@ interface BotStat {
     winRate: string;
 }
 
-interface Pagination {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-}
-
 type FilterType = 'all' | 'pending' | 'matched' | 'won' | 'lost';
 
 export function AdminPredictions() {
