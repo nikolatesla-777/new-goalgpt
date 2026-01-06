@@ -133,21 +133,11 @@ export class MatchWatchdogService {
   ): Promise<Array<{ matchId: string; matchTime: number; minutesAgo: number }>> {
     const client = await pool.connect();
     try {
-      // CRITICAL FIX: Use TSİ-based today start (UTC-3 hours) to catch all today's matches
-      // This ensures matches that started early morning (05:00 TSİ) are still caught even if
-      // many hours have passed (e.g., 5+ hours ago)
-      const TSI_OFFSET_SECONDS = 3 * 3600;
-      const nowDate = new Date(nowTs * 1000);
-      const year = nowDate.getUTCFullYear();
-      const month = nowDate.getUTCMonth();
-      const day = nowDate.getUTCDate();
-      // TSİ midnight = UTC midnight - 3 hours
-      const todayStartTSI = Math.floor((Date.UTC(year, month, day, 0, 0, 0) - TSI_OFFSET_SECONDS * 1000) / 1000);
-      
-      // CRITICAL FIX: For today's matches, use todayStartTSI instead of maxMinutesAgo limit
-      // This ensures ALL today's matches are caught, even if they started many hours ago
-      // Only apply maxMinutesAgo limit if it's more restrictive than todayStartTSI
-      const minTime = Math.max(nowTs - (maxMinutesAgo * 60), todayStartTSI);
+      // CRITICAL FIX: Use maxMinutesAgo directly to calculate minimum time
+      // This ensures we catch ALL stuck matches from the last N minutes,
+      // regardless of which TSI day they started on.
+      // Previous logic used TSI-based todayStart which filtered out yesterday's matches.
+      const minTime = nowTs - (maxMinutesAgo * 60); // e.g., 1440 min = 24 hours ago
 
       const query = `
         SELECT 
@@ -156,14 +146,14 @@ export class MatchWatchdogService {
           EXTRACT(EPOCH FROM NOW()) - match_time as seconds_ago
         FROM ts_matches
         WHERE match_time <= $1
-          AND match_time >= $2  -- Today start (TSİ-based) - catches ALL today's matches
+          AND match_time >= $2  -- Last N minutes (e.g., 24 hours)
           AND status_id = 1  -- NOT_STARTED but match_time has passed
         ORDER BY match_time DESC
         LIMIT $3
       `;
 
-      const result = await client.query(query, [nowTs, todayStartTSI, limit]);
-      
+      const result = await client.query(query, [nowTs, minTime, limit]);
+
       return result.rows.map((row: any) => ({
         matchId: row.match_id,
         matchTime: row.match_time,

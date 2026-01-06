@@ -30,22 +30,86 @@ export class TeamNameMatcherService {
     /**
      * Normalize team name for comparison
      * - Lowercase
+     * - Remove leading asterisks and special chars
+     * - NORMALIZE (not remove) gender/age markers: (W) → Women, Youth → Youth
      * - Remove common suffixes (FC, SC, CF, etc.)
      * - Remove punctuation and extra spaces
      */
     normalizeTeamName(name: string): string {
         if (!name) return '';
 
-        return name
+        let normalized = name
             .toLowerCase()
-            // Remove reserve/youth/women suffixes FIRST (before other processing)
-            .replace(/\s*\((w|women|reserve|reserves|youth|u\d+|u19|u21|u23|u17)\)/gi, '')
-            .replace(/\s+(w|women|reserve|reserves|youth|u\d+|u19|u21|u23|u17)\s*$/gi, '')
-            // Remove common suffixes
-            .replace(/\s?(fc|sc|cf|afc|bc|ac|fk|sk|as|ss|us|bk|if|ssk|spor|kulübü|club|team|united|city)\.?$/gi, '')
-            .replace(/[^\w\s]/g, '') // Remove punctuation
-            .replace(/\s+/g, ' ')    // Normalize whitespace
+            // STEP 1: Remove leading asterisks and special prefixes (e.g., "*Santos Laguna")
+            .replace(/^[\*\#\@\!\+]+\s*/g, '')
+            // STEP 2: Normalize gender markers - (W) or (Women) → Women suffix
+            .replace(/\s*\(w\)\s*$/gi, ' women')
+            .replace(/\s*\(women\)\s*$/gi, ' women')
+            // STEP 3: Normalize youth markers - various formats to standard
+            .replace(/\s*\(youth\)\s*$/gi, ' youth')
+            .replace(/\s*\(u\d+\)\s*$/gi, (match) => ' ' + match.replace(/[()]/g, '').toLowerCase())
+            // STEP 4: Handle inline markers (e.g., "Team Name U20" or "Team Name Youth")
+            // Keep these as-is, they're already in good format
+            // STEP 5: Remove common suffixes ONLY (not gender/age)
+            .replace(/\s?(fc|sc|cf|afc|bc|ac|fk|sk|as|ss|us|bk|if|ssk|spor|kulübü|club|team|united|city)\.?\s*$/gi, '')
+            // STEP 6: Remove remaining punctuation (but keep spaces)
+            .replace(/[^\w\s]/g, '')
+            // STEP 7: Normalize whitespace
+            .replace(/\s+/g, ' ')
             .trim();
+
+        return normalized;
+    }
+
+    /**
+     * Extract team category (gender/age) from name
+     * Returns: 'women', 'youth', 'u19', 'u20', 'u21', 'u23', 'reserve', or null for main team
+     */
+    extractTeamCategory(name: string): string | null {
+        if (!name) return null;
+        const lower = name.toLowerCase();
+
+        // Check for women's team
+        if (/\(w\)|women|femenil|feminin|ladies/i.test(lower)) return 'women';
+
+        // Check for age categories
+        if (/u17|under.?17/i.test(lower)) return 'u17';
+        if (/u19|under.?19/i.test(lower)) return 'u19';
+        if (/u20|under.?20/i.test(lower)) return 'u20';
+        if (/u21|under.?21/i.test(lower)) return 'u21';
+        if (/u23|under.?23/i.test(lower)) return 'u23';
+
+        // Check for youth/reserve
+        if (/youth|junior|juniores|juvenil/i.test(lower)) return 'youth';
+        if (/reserve|ii$|b$| b /i.test(lower)) return 'reserve';
+
+        return null; // Main/senior team
+    }
+
+    /**
+     * Check if two team categories are compatible
+     * Women's team should only match women's team, youth should match youth, etc.
+     */
+    categoriesMatch(cat1: string | null, cat2: string | null): boolean {
+        // Both null = both main teams, compatible
+        if (cat1 === null && cat2 === null) return true;
+
+        // One has category, other doesn't = incompatible
+        if (cat1 === null || cat2 === null) return false;
+
+        // Both have categories, check if same type
+        // Women must match women
+        if (cat1 === 'women' || cat2 === 'women') {
+            return cat1 === 'women' && cat2 === 'women';
+        }
+
+        // Youth categories are somewhat flexible (youth can match U19, U20, etc.)
+        const youthCategories = ['youth', 'u17', 'u19', 'u20', 'u21', 'u23', 'reserve'];
+        if (youthCategories.includes(cat1) && youthCategories.includes(cat2)) {
+            return true; // Youth teams can match each other
+        }
+
+        return cat1 === cat2;
     }
 
     /**
@@ -91,7 +155,7 @@ export class TeamNameMatcherService {
         // For multi-word names, use word-based similarity (more accurate)
         const words1 = str1.split(/\s+/).filter(w => w.length > 0);
         const words2 = str2.split(/\s+/).filter(w => w.length > 0);
-        
+
         // If both have 2+ words, use word-based matching
         if (words1.length >= 2 && words2.length >= 2) {
             return this.calculateWordBasedSimilarity(words1, words2, str1, str2);
@@ -164,7 +228,7 @@ export class TeamNameMatcherService {
      */
     calculateWordSimilarity(word1: string, word2: string): number {
         if (word1 === word2) return 1.0;
-        
+
         const maxLen = Math.max(word1.length, word2.length);
         if (maxLen === 0) return 1.0;
 
@@ -236,19 +300,19 @@ export class TeamNameMatcherService {
             // Try normalized match - IMPROVED: Use word-based search for better matching
             // For multi-word names, search for teams that contain the key words
             const words = normalizedSearch.split(/\s+/).filter(w => w.length > 1); // Filter single chars
-            
+
             let normalizedQuery = '';
             let normalizedParams: string[] = [];
-            
+
             if (words.length >= 2) {
                 // Multi-word: Search for teams that contain at least 2 key words
                 // Example: "al ittihad jeddah" → search for teams with ("al" AND "ittihad") OR ("ittihad" AND "jeddah")
                 // This allows "Al Ittihad Club" to match (has "al" and "ittihad")
                 const firstTwoWords = words.slice(0, 2);
-                const wordConditions = firstTwoWords.map((_, i) => 
+                const wordConditions = firstTwoWords.map((_, i) =>
                     `LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9\\s]', '', 'g')) ILIKE $${i + 1}`
                 ).join(' AND ');
-                
+
                 normalizedQuery = `
                     SELECT external_id, name, short_name 
                     FROM ts_teams 
@@ -272,71 +336,55 @@ export class TeamNameMatcherService {
                 `;
                 normalizedParams = [`%${normalizedSearch}%`];
             }
-            
+
             const normalizedResult = await client.query(normalizedQuery, normalizedParams);
 
             if (normalizedResult.rows.length > 0) {
                 // Score ALL candidates using word-based similarity and pick the best
                 let bestTeam = null;
                 let bestScore = 0;
-                
+
                 for (const team of normalizedResult.rows) {
                     const teamNormalized = this.normalizeTeamName(team.name);
                     let similarity = this.calculateSimilarity(normalizedSearch, teamNormalized);
-                    
+
                     // BONUS: If search name has location word (e.g., "Jeddah") and team name doesn't have it,
                     // but team name has other location (e.g., "Club"), give bonus for main team
                     // Example: "Al Ittihad Jeddah" vs "Al Ittihad Club" → prefer "Club" if it's the main team
                     const searchWords = normalizedSearch.split(/\s+/);
                     const teamWords = teamNormalized.split(/\s+/);
-                    
+
                     // Check if search has location word that team doesn't have
-                    const searchHasLocation = searchWords.some(w => 
+                    const searchHasLocation = searchWords.some(w =>
                         w.length > 3 && !['al', 'the', 'fc', 'sc', 'cf'].includes(w)
                     );
-                    const teamHasLocation = teamWords.some(w => 
+                    const teamHasLocation = teamWords.some(w =>
                         w.length > 3 && !['al', 'the', 'fc', 'sc', 'cf'].includes(w)
                     );
-                    
+
                     // If both have location words but different, prefer team without reserve suffix
                     const teamNameLower = team.name.toLowerCase();
-                    const hasReserve = /reserve|youth|u\d+|u19|u21|u23|u17|women|\(w\)|w\)/i.test(teamNameLower);
-                    
-                    if (searchHasLocation && teamHasLocation && !hasReserve && similarity >= 0.75) {
-                        // Small bonus for main teams when location differs
-                        similarity = Math.min(1.0, similarity * 1.05);
+
+                    // CRITICAL: Category-based matching using new extractTeamCategory function
+                    // This ensures Women's predictions ONLY match Women's teams, Youth matches Youth, etc.
+                    const searchCategory = this.extractTeamCategory(searchName);
+                    const teamCategory = this.extractTeamCategory(team.name);
+
+                    if (!this.categoriesMatch(searchCategory, teamCategory)) {
+                        // Categories don't match - heavy penalty (50%)
+                        // e.g., "*Santos Laguna (W)" should NOT match "Santos Laguna" (men's team)
+                        similarity = similarity * 0.5;
+                    } else if (searchCategory !== null && teamCategory !== null) {
+                        // Categories match exactly - give small bonus
+                        similarity = Math.min(1.0, similarity * 1.1);
                     }
-                    
-                    // PENALTY: Reduce similarity for reserve/youth/women teams
-                    // CRITICAL: If prediction doesn't specify gender/type, heavily penalize women/reserve teams
-                    // to avoid matching "Al Ittihad Jeddah" (men) with "Al Ittihad Jeddah (W)" (women)
-                    const searchNameLower = searchName.toLowerCase();
-                    const searchHasGender = /\(w\)|women|reserve|youth|u\d+/i.test(searchNameLower);
-                    
-                    if (hasReserve) {
-                        const isWomenTeam = /\(w\)|women/i.test(teamNameLower);
-                        
-                        if (isWomenTeam) {
-                            // Women teams: Heavy penalty (40%) if search doesn't specify women
-                            // This prevents matching "Al Ittihad Jeddah" (men) with "Al Ittihad Jeddah (W)" (women)
-                            if (!searchHasGender) {
-                                similarity = similarity * 0.6; // 40% penalty for women teams when search has no gender
-                            } else {
-                                similarity = similarity * 0.85; // 15% penalty if search also has gender
-                            }
-                        } else {
-                            // Reserve/Youth teams: Standard penalty (15%)
-                            // Apply penalty even for high similarity to prefer main teams
-                            similarity = similarity * 0.85;
-                        }
-                    }
-                    
+
                     if (similarity > bestScore) {
                         bestScore = similarity;
                         bestTeam = team;
                     }
                 }
-                
+
                 // Only return if similarity >= 60% (threshold)
                 if (bestTeam && bestScore >= 0.6) {
                     return {
@@ -367,12 +415,12 @@ export class TeamNameMatcherService {
           LENGTH(name)
         LIMIT 50
       `;
-            
+
             // Generate multiple prefix patterns for better matching
             const prefix2 = searchName.substring(0, 2); // First 2 chars
             const prefix3 = searchName.substring(0, 3); // First 3 chars
             const prefix4 = searchName.substring(0, 4); // First 4 chars
-            
+
             const fuzzyResult = await client.query(fuzzyQuery, [
                 `%${prefix2}%`,  // Pattern 1: First 2 chars
                 `%${prefix3}%`,  // Pattern 2: First 3 chars
@@ -487,14 +535,14 @@ export class TeamNameMatcherService {
         // First try home team, if matched, find match immediately
         // CRITICAL: Use league hint for better matching (e.g., Myanmar Professional League)
         let homeMatch = await this.findTeamByAlias(homeTeamName, leagueHint);
-        
+
         const client = await pool.connect();
         try {
             // OPTIMIZED STRATEGY: Single team match is faster - use first matched team
             // If home team matches, find its match immediately (no need to check away team)
             if (homeMatch && homeMatch.confidence >= 0.6) {
                 logger.info(`[TeamMatcher] Home team matched (${homeMatch.confidence * 100}%): "${homeTeamName}" → "${homeMatch.teamName}"`);
-                
+
                 // Find LIVE match where this team is playing
                 const matchQuery = `
                     SELECT 
@@ -513,10 +561,14 @@ export class TeamNameMatcherService {
                     JOIN ts_teams ta ON ta.external_id = m.away_team_id
                     WHERE 
                         (m.home_team_id = $1 OR m.away_team_id = $1)
-                        AND m.status_id IN (2, 3, 4, 5, 7) -- Only LIVE matches
+                        AND m.status_id IN (1, 2, 3, 4, 5, 7, 8) -- Include Pending (1) and Finished (8)
                     ORDER BY 
-                        CASE WHEN m.status_id IN (2, 3, 4) THEN 0 ELSE 1 END, -- Prioritize active play
-                        m.match_time DESC
+                        CASE -- Priority: Live > Pending > Finished
+                            WHEN m.status_id IN (2, 3, 4, 5, 7) THEN 0 
+                            WHEN m.status_id = 1 THEN 1
+                            ELSE 2 
+                        END,
+                        m.match_time ASC -- Pick nearest match (crucial for pending)
                     LIMIT 5
                 `;
 
@@ -527,11 +579,11 @@ export class TeamNameMatcherService {
                     if (matchResult.rows.length === 1) {
                         const m = matchResult.rows[0];
                         const isHome = m.home_team_id === homeMatch.teamId;
-                        
+
                         // Check if away team name matches (for confidence calculation)
                         const awayTeamMatch = await this.findTeamByAlias(awayTeamName);
                         const awayConfidence = awayTeamMatch ? awayTeamMatch.confidence : 0.5;
-                        
+
                         logger.info(`[TeamMatcher] Match found via home team: ${m.home_team_name} vs ${m.away_team_name}`);
 
                         return {
@@ -561,16 +613,16 @@ export class TeamNameMatcherService {
                     for (const m of matchResult.rows) {
                         const isHome = m.home_team_id === homeMatch.teamId;
                         const opponentName = isHome ? m.away_team_name : m.home_team_name;
-                        
+
                         // Check if away team name matches opponent
                         const similarity = this.calculateSimilarity(
                             this.normalizeTeamName(awayTeamName),
                             this.normalizeTeamName(opponentName)
                         );
-                        
+
                         if (similarity >= 0.6) {
                             logger.info(`[TeamMatcher] Match found with away team similarity (${similarity * 100}%): ${m.home_team_name} vs ${m.away_team_name}`);
-                            
+
                             return {
                                 matchExternalId: m.external_id,
                                 matchUuid: m.match_uuid,
@@ -594,13 +646,13 @@ export class TeamNameMatcherService {
                             };
                         }
                     }
-                    
+
                     // No away team match, use first match anyway
                     const m = matchResult.rows[0];
                     const isHome = m.home_team_id === homeMatch.teamId;
-                    
+
                     logger.info(`[TeamMatcher] Using first match (away team not matched): ${m.home_team_name} vs ${m.away_team_name}`);
-                    
+
                     return {
                         matchExternalId: m.external_id,
                         matchUuid: m.match_uuid,
@@ -627,7 +679,7 @@ export class TeamNameMatcherService {
 
             // If home team didn't match, try away team
             const awayMatch = await this.findTeamByAlias(awayTeamName, leagueHint);
-            
+
             if (awayMatch && awayMatch.confidence >= 0.6) {
                 logger.info(`[TeamMatcher] Away team matched (${awayMatch.confidence * 100}%): "${awayTeamName}" → "${awayMatch.teamName}"`);
 
@@ -649,10 +701,14 @@ export class TeamNameMatcherService {
                     JOIN ts_teams ta ON ta.external_id = m.away_team_id
                     WHERE 
                         (m.home_team_id = $1 OR m.away_team_id = $1)
-                        AND m.status_id IN (2, 3, 4, 5, 7) -- Only LIVE matches
+                        AND m.status_id IN (1, 2, 3, 4, 5, 7, 8) -- Include Pending and Finished
                     ORDER BY 
-                        CASE WHEN m.status_id IN (2, 3, 4) THEN 0 ELSE 1 END,
-                        m.match_time DESC
+                        CASE 
+                            WHEN m.status_id IN (2, 3, 4, 5, 7) THEN 0
+                            WHEN m.status_id = 1 THEN 1
+                            ELSE 2 
+                        END,
+                        m.match_time ASC
                     LIMIT 5
                 `;
 
@@ -663,7 +719,7 @@ export class TeamNameMatcherService {
                     if (matchResult.rows.length === 1) {
                         const m = matchResult.rows[0];
                         const isAway = m.away_team_id === awayMatch.teamId;
-                        
+
                         logger.info(`[TeamMatcher] Match found via away team: ${m.home_team_name} vs ${m.away_team_name}`);
 
                         return {
@@ -693,15 +749,15 @@ export class TeamNameMatcherService {
                     for (const m of matchResult.rows) {
                         const isAway = m.away_team_id === awayMatch.teamId;
                         const opponentName = isAway ? m.home_team_name : m.away_team_name;
-                        
+
                         const similarity = this.calculateSimilarity(
                             this.normalizeTeamName(homeTeamName),
                             this.normalizeTeamName(opponentName)
                         );
-                        
+
                         if (similarity >= 0.6) {
                             logger.info(`[TeamMatcher] Match found with home team similarity (${similarity * 100}%): ${m.home_team_name} vs ${m.away_team_name}`);
-                            
+
                             return {
                                 matchExternalId: m.external_id,
                                 matchUuid: m.match_uuid,
@@ -725,13 +781,13 @@ export class TeamNameMatcherService {
                             };
                         }
                     }
-                    
+
                     // No home team match, use first match anyway
                     const m = matchResult.rows[0];
                     const isAway = m.away_team_id === awayMatch.teamId;
-                    
+
                     logger.info(`[TeamMatcher] Using first match (home team not matched): ${m.home_team_name} vs ${m.away_team_name}`);
-                    
+
                     return {
                         matchExternalId: m.external_id,
                         matchUuid: m.match_uuid,

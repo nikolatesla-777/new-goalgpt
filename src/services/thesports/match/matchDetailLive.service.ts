@@ -286,31 +286,6 @@ export class MatchDetailLiveService {
       (Array.isArray(root?.match_incidents) ? root.match_incidents : null) ??
       null;
 
-    // CRITICAL FIX: Calculate score from incidents if available (TheSports API sometimes delays score array update)
-    // Incident types: 1=Goal, 8=Penalty, 17=Own Goal
-    if (Array.isArray(incidents) && incidents.length > 0) {
-      let incHomeScore = -1;
-      let incAwayScore = -1;
-
-      for (const inc of incidents) {
-        if (inc && (inc.type === 1 || inc.type === 8 || inc.type === 17)) {
-          // Track max score found in incidents
-          if (typeof inc.home_score === 'number' && inc.home_score > incHomeScore) incHomeScore = inc.home_score;
-          if (typeof inc.away_score === 'number' && inc.away_score > incAwayScore) incAwayScore = inc.away_score;
-        }
-      }
-
-      // Override display scores if incidents show a higher score
-      if (incHomeScore > -1 && (homeScoreDisplay === null || incHomeScore > homeScoreDisplay)) {
-        logger.debug(`[DetailLive] Overriding homeScoreDisplay (${homeScoreDisplay}) with incident score (${incHomeScore})`);
-        homeScoreDisplay = incHomeScore;
-      }
-      if (incAwayScore > -1 && (awayScoreDisplay === null || incAwayScore > awayScoreDisplay)) {
-        logger.debug(`[DetailLive] Overriding awayScoreDisplay (${awayScoreDisplay}) with incident score (${incAwayScore})`);
-        awayScoreDisplay = incAwayScore;
-      }
-    }
-
     const statistics =
       (Array.isArray(root?.statistics) ? root.statistics : null) ??
       (Array.isArray(root?.stats) ? root.stats : null) ??
@@ -386,24 +361,12 @@ export class MatchDetailLiveService {
     existingMinute: number | null,
     nowTs: number
   ): number | null {
-    // PHASE 4-2: Cast bigints from DB to Number to prevent string concatenation
-    // Ensure we don't return NaN which would crash DB integer columns
-    const toSafeNum = (val: any) => {
-      if (val === null || val === undefined || val === '') return null;
-      const num = Number(val);
-      return isNaN(num) ? null : num;
-    };
-
-    const firstHalfTs = toSafeNum(firstHalfKickoffTs);
-    const secondHalfTs = toSafeNum(secondHalfKickoffTs);
-    const overtimeTs = toSafeNum(overtimeKickoffTs);
-
     if (statusId === null) return null;
 
     // Status 2 (FIRST_HALF)
     if (statusId === 2) {
-      if (firstHalfTs === null) return null;
-      const calculated = Math.floor((nowTs - firstHalfTs) / 60) + 1;
+      if (firstHalfKickoffTs === null) return null;
+      const calculated = Math.floor((nowTs - firstHalfKickoffTs) / 60) + 1;
       return Math.min(calculated, 45); // Clamp max 45
     }
 
@@ -414,25 +377,25 @@ export class MatchDetailLiveService {
 
     // Status 4 (SECOND_HALF)
     if (statusId === 4) {
-      if (secondHalfTs === null) {
+      if (secondHalfKickoffTs === null) {
         // CRITICAL FIX: If second_half_kickoff_ts is NULL but first_half_kickoff_ts exists,
         // estimate second half start time (typically 15 minutes after first half ends)
         // First half = 45 minutes, half-time break = 15 minutes, so second half starts ~60 minutes after first half kickoff
-        if (firstHalfTs !== null) {
-          const estimatedSecondHalfStart = firstHalfTs + (45 * 60) + (15 * 60); // 45 min first half + 15 min break
+        if (firstHalfKickoffTs !== null) {
+          const estimatedSecondHalfStart = firstHalfKickoffTs + (45 * 60) + (15 * 60); // 45 min first half + 15 min break
           const calculated = 45 + Math.floor((nowTs - estimatedSecondHalfStart) / 60) + 1;
           return Math.max(calculated, 46); // Clamp min 46
         }
         return null;
       }
-      const calculated = 45 + Math.floor((nowTs - secondHalfTs) / 60) + 1;
+      const calculated = 45 + Math.floor((nowTs - secondHalfKickoffTs) / 60) + 1;
       return Math.max(calculated, 46); // Clamp min 46
     }
 
     // Status 5 (OVERTIME)
     if (statusId === 5) {
-      if (overtimeTs === null) return null;
-      return 90 + Math.floor((nowTs - overtimeTs) / 60) + 1;
+      if (overtimeKickoffTs === null) return null;
+      return 90 + Math.floor((nowTs - overtimeKickoffTs) / 60) + 1;
     }
 
     // Status 7 (PENALTY) - retain existing minute
@@ -501,26 +464,6 @@ export class MatchDetailLiveService {
    * - match_time must remain immutable (fixture time) and is NOT touched here
    * - live_kickoff_time is only persisted if the provider explicitly supplies a kickoff epoch (we never derive it)
    */
-  /**
-   * Trigger post-match persistence when match ends
-   * CRITICAL: Ensures all match data (stats, incidents, trend, player stats, standings) is saved
-   */
-  private async triggerPostMatchPersistence(matchId: string): Promise<void> {
-    try {
-      // Import PostMatchProcessor dynamically to avoid circular dependencies
-      const { PostMatchProcessor } = await import('../../../services/liveData/postMatchProcessor');
-      
-      const processor = new PostMatchProcessor(this.client);
-      
-      // Trigger post-match processing
-      await processor.onMatchEnded(matchId);
-      logger.info(`[DetailLive] ✅ Post-match persistence completed for ${matchId}`);
-    } catch (error: any) {
-      logger.error(`[DetailLive] ❌ Failed to trigger post-match persistence for ${matchId}:`, error);
-      // Don't throw - this is a background operation, shouldn't block reconciliation
-    }
-  }
-
   async reconcileMatchToDatabase(
     match_id: string,
     providerUpdateTimeOverride: number | null = null
@@ -532,9 +475,6 @@ export class MatchDetailLiveService {
     providerUpdateTime?: number | null; // Phase 5-S: For watchdog proof logs
   }> {
     const t0 = Date.now();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDetailLive.service.ts:524',message:'reconcileMatchToDatabase start',data:{match_id,providerUpdateTimeOverride},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     logEvent('info', 'detail_live.reconcile.start', {
       match_id,
       provider_update_time: providerUpdateTimeOverride !== null ? providerUpdateTimeOverride : undefined,
@@ -600,14 +540,7 @@ export class MatchDetailLiveService {
 
       const existing = existingResult.rows[0];
       const existingStatusId = existing.status_id;
-
-      const toSafeNum = (val: any) => {
-        if (val === null || val === undefined || val === '') return null;
-        const num = Number(val);
-        return isNaN(num) ? null : num;
-      };
-
-      const matchTime = toSafeNum(existing.match_time);
+      const matchTime = existing.match_time;
       const nowTs = Math.floor(Date.now() / 1000);
 
       // CRITICAL FIX: If provider didn't return match data AND match is currently LIVE status,
@@ -636,15 +569,14 @@ export class MatchDetailLiveService {
           // CRITICAL FIX: Match is LIVE in DB but provider didn't return it
           // This likely means match has finished. Check if enough time has passed (150 minutes)
           // Standard match: 90 minutes + 15 min HT = 105 minutes, with overtime: up to 120 minutes
-          // CRITICAL FIX: Reduced safety margin from 150 to 120 minutes (2 hours) for faster match ending
-          // This ensures matches end faster when they should be finished
-          const minTimeForEnd = (matchTime || 0) + (120 * 60); // 120 minutes in seconds (was 150)
+          // Safety margin: 150 minutes (2.5 hours) from match_time
+          const minTimeForEnd = matchTime + (150 * 60); // 150 minutes in seconds
 
           if (nowTs >= minTimeForEnd) {
-            // Match time is old enough (>120 min), safe to transition to END
+            // Match time is old enough (>150 min), safe to transition to END
             logger.info(
               `[DetailLive] Match ${match_id} not found in provider response and match_time (${matchTime}) ` +
-              `is ${Math.floor((nowTs - matchTime) / 60)} minutes ago (>120 min). ` +
+              `is ${Math.floor((nowTs - matchTime) / 60)} minutes ago (>150 min). ` +
               `Transitioning from status ${existingStatusId} to END (8).`
             );
 
@@ -657,9 +589,6 @@ export class MatchDetailLiveService {
             );
 
             if (updateResult.rowCount && updateResult.rowCount > 0) {
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDetailLive.service.ts:648',message:'status update to END',data:{match_id,oldStatus:existingStatusId,newStatus:8,rowCount:updateResult.rowCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-              // #endregion
               logEvent('info', 'detail_live.reconcile.done', {
                 match_id,
                 duration_ms: Date.now() - t0,
@@ -667,13 +596,6 @@ export class MatchDetailLiveService {
                 status_id: 8,
                 reason: 'finished_not_in_provider_response',
               });
-
-              // CRITICAL FIX: Trigger post-match persistence when match transitions to END
-              logger.info(`[DetailLive] Match ${match_id} transitioned to END (8), triggering post-match persistence...`);
-              this.triggerPostMatchPersistence(match_id).catch(err => {
-                logger.error(`[DetailLive] Failed to trigger post-match persistence for ${match_id}:`, err);
-              });
-
               return { updated: true, rowCount: updateResult.rowCount, statusId: 8, score: null, providerUpdateTime: null };
             }
           } else {
@@ -705,10 +627,11 @@ export class MatchDetailLiveService {
       // Continue with normal reconciliation flow below
       // Note: existing, existingStatusId, matchTime, nowTs are already defined above
 
-      const existingProviderTime = toSafeNum(existing.provider_update_time);
-      const existingEventTime = toSafeNum(existing.last_event_ts);
+      const existingProviderTime = existing.provider_update_time;
+      const existingEventTime = existing.last_event_ts;
 
       // CRITICAL FIX: Allow status transitions even if timestamps suggest stale data
+      // Status transitions (e.g., 1→2, 2→3, 3→4) are critical and should always be applied
       const isStatusTransition = live.statusId !== null && live.statusId !== existingStatusId;
       const isCriticalTransition =
         (existingStatusId === 1 && live.statusId === 2) || // NOT_STARTED → FIRST_HALF
@@ -717,14 +640,8 @@ export class MatchDetailLiveService {
         (existingStatusId === 4 && live.statusId === 8) || // SECOND_HALF → END
         ([2, 3, 4, 5, 7].includes(existingStatusId) && live.statusId === 8); // Any LIVE → END
 
-      // CRITICAL FIX: If match is live but scores are NULL/undefined in DB, 
-      // we MUST update them to at least 0 even if the update is technically "stale"
-      // to fix the "GOL BİLGİSİ ANA EKRANDA YOK" issue.
-      const dbScoresAreNull = existing.home_score_regular === null || existing.away_score_regular === null;
-      const isCurrentlyLive = [2, 3, 4, 5, 7].includes(live.statusId || existingStatusId);
-
-      // Check freshness (idempotent guard) - but allow critical status transitions OR score initialization
-      if (!isCriticalTransition && !(isCurrentlyLive && dbScoresAreNull)) {
+      // Check freshness (idempotent guard) - but allow critical status transitions
+      if (!isCriticalTransition) {
         if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
           // Provider supplied update_time
           if (existingProviderTime !== null && incomingProviderUpdateTime <= existingProviderTime) {
@@ -745,10 +662,9 @@ export class MatchDetailLiveService {
       } else {
         logger.info(
           `[DetailLive] CRITICAL TRANSITION detected for ${match_id}: ${existingStatusId} → ${live.statusId}. ` +
-          `Allowing update despite timestamp check. ` +
-          `(provider_time: ${incomingProviderUpdateTime}, existing_time: ${existingProviderTime}, ingestion_ts: ${ingestionTs})`
+          `Allowing update despite timestamp check.`
         );
-
+        
         // CRITICAL: Save first half stats when transitioning to HALF_TIME
         if (existingStatusId === 2 && live.statusId === 3) {
           logger.info(`[DetailLive] ⚽ HALF_TIME TRANSITION! Saving first half stats for ${match_id}`);
@@ -762,7 +678,7 @@ export class MatchDetailLiveService {
       const providerTimeToWrite =
         incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined
           ? Math.max(existingProviderTime || 0, incomingProviderUpdateTime)
-          : (existingProviderTime || null);
+          : null;
 
       const setParts: string[] = [
         'updated_at = NOW()',
@@ -779,58 +695,10 @@ export class MatchDetailLiveService {
       // If we only have providerUpdateTimeOverride (no live data), skip status/score updates
       const hasLiveData = live.statusId !== null || live.homeScoreDisplay !== null || live.awayScoreDisplay !== null;
 
-      // CRITICAL FIX: Status update with regression guard
+      // Status update (only if we have live data)
       if (hasLiveData && live.statusId !== null) {
-        // Status hierarchy to prevent regression
-        const statusHierarchy: Record<number, number> = {
-          1: 0,  // NOT_STARTED
-          2: 1,  // FIRST_HALF
-          3: 2,  // HALF_TIME
-          4: 3,  // SECOND_HALF
-          5: 4,  // OVERTIME
-          7: 5,  // PENALTY_SHOOTOUT
-          8: 6,  // END
-        };
-        
-        const existingLevel = statusHierarchy[existingStatusId] ?? 0;
-        const newLevel = statusHierarchy[live.statusId] ?? 0;
-        
-        // CRITICAL: Prevent status regression (except END which is always allowed)
-        if (live.statusId === 8) {
-          // END (8) is always allowed from any status (match can end anytime)
-          setParts.push(`status_id = $${i++}`);
-          values.push(live.statusId);
-          logger.info(
-            `[DetailLive] Status transition to END (8) for ${match_id} from status ${existingStatusId} - allowed`
-          );
-
-          // CRITICAL FIX: Trigger post-match persistence when match transitions to END
-          // This ensures all match data is saved immediately
-          this.triggerPostMatchPersistence(match_id).catch(err => {
-            logger.error(`[DetailLive] Failed to trigger post-match persistence for ${match_id}:`, err);
-          });
-        } else if (newLevel < existingLevel) {
-          // Status regression detected - reject update
-          logger.error(
-            `[DetailLive] ❌ STATUS REGRESSION DETECTED for ${match_id}: ` +
-            `${existingStatusId} (level ${existingLevel}) → ${live.statusId} (level ${newLevel}). ` +
-            `Rejecting update to prevent data corruption.`
-          );
-          
-          // Don't update status, but continue with other updates (scores, etc.)
-          // This allows score updates even if status is wrong
-        } else {
-          // Forward transition or same status - allowed
-          setParts.push(`status_id = $${i++}`);
-          values.push(live.statusId);
-          
-          if (existingStatusId !== live.statusId) {
-            logger.info(
-              `[DetailLive] ✅ Status transition for ${match_id}: ${existingStatusId} → ${live.statusId} ` +
-              `(provider_time: ${providerTimeToWrite}, existing_time: ${existingProviderTime})`
-            );
-          }
-        }
+        setParts.push(`status_id = $${i++}`);
+        values.push(live.statusId);
       }
 
       // Kickoff timestamp write-once (status transition based)
@@ -839,9 +707,9 @@ export class MatchDetailLiveService {
 
       // CRITICAL FIX: Track which kickoff timestamps we're setting in this update
       // This allows minute calculation to use the NEW values, not just existing ones
-      let firstHalfKickoffToUse = toSafeNum(existing.first_half_kickoff_ts);
-      let secondHalfKickoffToUse = toSafeNum(existing.second_half_kickoff_ts);
-      let overtimeKickoffToUse = toSafeNum(existing.overtime_kickoff_ts);
+      let firstHalfKickoffToUse = existing.first_half_kickoff_ts;
+      let secondHalfKickoffToUse = existing.second_half_kickoff_ts;
+      let overtimeKickoffToUse = existing.overtime_kickoff_ts;
 
       if (hasLiveData && live.statusId !== null) {
         // CRITICAL FIX: Set first_half_kickoff_ts for status 2, 3, 4, 5, 7 if NULL
@@ -982,37 +850,32 @@ export class MatchDetailLiveService {
 
       // Canonical score update (independent of status)
       if (this.hasNewScoreColumns) {
-        // If match is live but scores are NULL/undefined, initialize to 0
-        const isCurrentlyLive = [2, 3, 4, 5, 7].includes(live.statusId || existingStatusId);
-
-        let homeScore = live.homeScoreDisplay;
-        let awayScore = live.awayScoreDisplay;
-
-        if (isCurrentlyLive) {
-          if (homeScore === null || homeScore === undefined) homeScore = 0;
-          if (awayScore === null || awayScore === undefined) awayScore = 0;
-        }
-
-        if (homeScore !== null) {
+        if (live.homeScoreDisplay !== null) {
           setParts.push(`home_score_regular = $${i++}`);
-          values.push(homeScore);
+          values.push(live.homeScoreDisplay);
 
           setParts.push(`home_score_display = $${i++}`);
-          values.push(homeScore);
-
-          setParts.push(`home_scores = $${i++}::jsonb`);
-          values.push(JSON.stringify([homeScore]));
+          values.push(live.homeScoreDisplay);
         }
-        if (awayScore !== null) {
+        if (live.awayScoreDisplay !== null) {
           setParts.push(`away_score_regular = $${i++}`);
-          values.push(awayScore);
+          values.push(live.awayScoreDisplay);
 
           setParts.push(`away_score_display = $${i++}`);
-          values.push(awayScore);
-
-          setParts.push(`away_scores = $${i++}::jsonb`);
-          values.push(JSON.stringify([awayScore]));
+          values.push(live.awayScoreDisplay);
         }
+      }
+
+      // CRITICAL FIX: home_scores is JSONB, not PostgreSQL array
+      if (live.homeScoreDisplay !== null) {
+        setParts.push(`home_scores = $${i++}::jsonb`);
+        values.push(JSON.stringify([live.homeScoreDisplay]));
+      }
+
+      // CRITICAL FIX: away_scores is JSONB, not PostgreSQL array
+      if (live.awayScoreDisplay !== null) {
+        setParts.push(`away_scores = $${i++}::jsonb`);
+        values.push(JSON.stringify([live.awayScoreDisplay]));
       }
 
       if (this.hasIncidentsColumn && live.incidents !== null) {
@@ -1040,13 +903,6 @@ export class MatchDetailLiveService {
       const res = await client.query(query, values);
 
       const affected = res.rowCount ?? 0;
-
-      // #region agent log
-      const statusUpdated = setParts.some(p => p.includes('status_id'));
-      if (statusUpdated && affected > 0) {
-        fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDetailLive.service.ts:1040',message:'reconcileMatchToDatabase status update done',data:{match_id,oldStatus:existingStatusId,newStatus:live.statusId,rowCount:affected},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      }
-      // #endregion
 
       if (affected === 0) {
         logger.warn(
@@ -1106,17 +962,17 @@ export class MatchDetailLiveService {
       // Import CombinedStatsService dynamically to avoid circular dependency
       const { CombinedStatsService } = await import('./combinedStats.service');
       const combinedStatsService = new CombinedStatsService(this.client);
-
+      
       // Check if first_half_stats already exists
       const hasStats = await combinedStatsService.hasFirstHalfStats(matchId);
       if (hasStats) {
         logger.debug(`[DetailLive] First half stats already saved for ${matchId}, skipping`);
         return;
       }
-
+      
       // Fetch current stats from API
       const result = await combinedStatsService.getCombinedMatchStats(matchId);
-
+      
       if (result && result.allStats && result.allStats.length > 0) {
         await combinedStatsService.saveFirstHalfStats(matchId, result.allStats);
         logger.info(`[DetailLive] ✅ Saved first half stats for ${matchId} (${result.allStats.length} stats)`);

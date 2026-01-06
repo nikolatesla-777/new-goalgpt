@@ -59,7 +59,175 @@ interface BotRule {
     base_prediction_type: string | null;
 }
 
+export interface BotStats {
+    bot_name: string;
+    total_predictions: number;
+    wins: number;
+    losses: number;
+    pending: number;
+    win_rate: number;
+}
+
 export class AIPredictionService {
+    /**
+     * Get statistics for all bots
+     */
+    async getBotPerformanceStats(): Promise<{ global: BotStats; bots: BotStats[] }> {
+        try {
+            // Get stats grouped by bot_name
+            const result = await pool.query(`
+                SELECT 
+                    p.bot_name,
+                    COUNT(*) as total_predictions,
+                    SUM(CASE 
+                        WHEN m.status_id >= 8 THEN 
+                            CASE
+                                -- OVER 2.5
+                                WHEN (p.prediction_value LIKE '%2.5%' OR p.prediction_type LIKE '%2.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
+                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) >= 3 THEN 1 ELSE 0 END
+                                
+                                -- OVER 1.5
+                                WHEN (p.prediction_value LIKE '%1.5%' OR p.prediction_type LIKE '%1.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
+                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) >= 2 THEN 1 ELSE 0 END
+
+                                -- OVER 0.5
+                                WHEN (p.prediction_value LIKE '%0.5%' OR p.prediction_type LIKE '%0.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
+                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) >= 1 THEN 1 ELSE 0 END
+                                
+                                -- KG VAR
+                                WHEN (p.prediction_value LIKE '%KG%' OR p.prediction_type LIKE '%Var%') THEN
+                                    CASE WHEN COALESCE(m.home_score_regular, 0) > 0 AND COALESCE(m.away_score_regular, 0) > 0 THEN 1 ELSE 0 END
+
+                                ELSE 0 
+                            END
+                        ELSE 0 
+                    END) as wins,
+                    
+                    SUM(CASE 
+                        WHEN m.status_id >= 8 THEN 
+                            CASE
+                                -- OVER 2.5 Loss
+                                WHEN (p.prediction_value LIKE '%2.5%' OR p.prediction_type LIKE '%2.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
+                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) < 3 THEN 1 ELSE 0 END
+                                
+                                -- OVER 1.5 Loss
+                                WHEN (p.prediction_value LIKE '%1.5%' OR p.prediction_type LIKE '%1.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
+                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) < 2 THEN 1 ELSE 0 END
+
+                                -- OVER 0.5 Loss
+                                WHEN (p.prediction_value LIKE '%0.5%' OR p.prediction_type LIKE '%0.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
+                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) < 1 THEN 1 ELSE 0 END
+
+                                -- KG VAR Loss
+                                WHEN (p.prediction_value LIKE '%KG%' OR p.prediction_type LIKE '%Var%') THEN
+                                    CASE WHEN NOT(COALESCE(m.home_score_regular, 0) > 0 AND COALESCE(m.away_score_regular, 0) > 0) THEN 1 ELSE 0 END
+                                
+                                ELSE 0 
+                            END
+                        ELSE 0 
+                    END) as losses,
+
+                    SUM(CASE WHEN m.status_id < 8 OR m.status_id IS NULL THEN 1 ELSE 0 END) as pending
+                FROM ai_predictions p
+                LEFT JOIN ai_prediction_matches pm ON p.id = pm.prediction_id
+                LEFT JOIN ts_matches m ON pm.match_external_id = m.external_id
+                GROUP BY p.bot_name
+            `);
+
+            // Normalization Map
+            const nameMap: Record<string, string> = {
+                'ALERT: D': 'Alert D',
+                'ALERT D': 'Alert D',
+                'CODE: 35': 'Code 35',
+                'Algoritma: 01': 'Algoritma 01',
+                'Alert System': 'Alert System'
+            };
+
+            const rawBots = result.rows.map(row => {
+                const wins = parseInt(row.wins);
+                const losses = parseInt(row.losses);
+                const total = parseInt(row.total_predictions);
+                const pending = parseInt(row.pending);
+                const totalFinished = wins + losses;
+
+                const originalName = row.bot_name || 'Unknown';
+                const displayName = nameMap[originalName] || originalName;
+
+                return {
+                    bot_name: displayName,
+                    total_predictions: total,
+                    wins: wins,
+                    losses: losses,
+                    pending: pending,
+                    win_rate: totalFinished > 0 ? parseFloat(((wins / totalFinished) * 100).toFixed(1)) : 0
+                };
+            });
+
+            // Merge stats by normalized name
+            const mergedStats: Record<string, BotStats> = {};
+
+            for (const bot of rawBots) {
+                if (!mergedStats[bot.bot_name]) {
+                    mergedStats[bot.bot_name] = { ...bot };
+                } else {
+                    const existing = mergedStats[bot.bot_name];
+                    const newTotalFinished = (existing.wins + bot.wins) + (existing.losses + bot.losses);
+
+                    existing.total_predictions += bot.total_predictions;
+                    existing.wins += bot.wins;
+                    existing.losses += bot.losses;
+                    existing.pending += bot.pending;
+                    existing.win_rate = newTotalFinished > 0
+                        ? parseFloat((((existing.wins) / newTotalFinished) * 100).toFixed(1))
+                        : 0;
+                }
+            }
+
+            const botStats: BotStats[] = Object.values(mergedStats);
+
+            // Calculate global stats
+            const globalTotal = botStats.reduce((sum, b) => sum + b.total_predictions, 0);
+            const globalWins = botStats.reduce((sum, b) => sum + b.wins, 0);
+            const globalLosses = botStats.reduce((sum, b) => sum + b.losses, 0);
+            const globalPending = botStats.reduce((sum, b) => sum + b.pending, 0);
+            const globalFinished = globalWins + globalLosses;
+
+            const globalStats: BotStats = {
+                bot_name: 'GLOBAL',
+                total_predictions: globalTotal,
+                wins: globalWins,
+                losses: globalLosses,
+                pending: globalPending,
+                win_rate: globalFinished > 0 ? parseFloat(((globalWins / globalFinished) * 100).toFixed(1)) : 0
+            };
+
+            return {
+                global: globalStats,
+                bots: botStats
+            };
+
+        } catch (error) {
+            logger.error('[AIPrediction] Error calculating bot stats:', error);
+            return {
+                global: { bot_name: 'GLOBAL', total_predictions: 0, wins: 0, losses: 0, pending: 0, win_rate: 0 },
+                bots: []
+            };
+        }
+    }
+
+    /**
+     * Get all bot rules for admin display
+     */
+    async getAllBotRules(): Promise<BotRule[]> {
+        const result = await pool.query(`
+            SELECT 
+                id, bot_group_id, bot_display_name, minute_from, minute_to, 
+                priority, is_active, created_at, prediction_type_pattern
+            FROM ai_bot_rules
+            ORDER BY priority DESC
+        `);
+        return result.rows;
+    }
     /**
      * Decode Base64 prediction payload and URL-decode the content
      */
@@ -181,22 +349,27 @@ export class AIPredictionService {
 
         // Determine period and prediction value
         const period = this.determinePeriod(minute, botRule.predictionPeriod);
-        const predictionValue = this.calculatePredictionValue(totalGoals);
-        const predictionType = botRule.basePredictionType || 'ÜST';
+        const bareValue = this.calculatePredictionValue(totalGoals);
+        const baseType = botRule.basePredictionType || 'ÜST';
+
+        // Format: "MS 0.5 ÜST" (Period + Value + Type)
+        const predictionValue = `${period} ${bareValue} ${baseType}`;
+        // Type: "MS" (Period) - keeps it clean for aggregation
+        const predictionType = period;
 
         // Build display text from template or default
         let displayPrediction: string;
         if (botRule.displayTemplate) {
             displayPrediction = botRule.displayTemplate
                 .replace('{period}', period)
-                .replace('{value}', predictionValue)
+                .replace('{value}', bareValue)
                 .replace('{minute}', minute.toString());
         } else {
-            displayPrediction = `🤖 ${period} ${predictionValue} ${predictionType} (${minute}' dk)`;
+            displayPrediction = `🤖 ${predictionValue} (${minute}' dk)`;
         }
 
         return {
-            predictionType: `${period} ${predictionType}`,
+            predictionType: predictionType,
             predictionValue: predictionValue,
             displayPrediction
         };
@@ -219,12 +392,12 @@ export class AIPredictionService {
         // Örnek: "IY 0.5 ÜST" -> "0.5", "0.5" -> "0.5", "MS 2.5 ÜST" -> "2.5"
         const numericMatch = predictionValue.match(/([\d.]+)/);
         const value = numericMatch ? parseFloat(numericMatch[1]) : parseFloat(predictionValue);
-        
+
         if (isNaN(value)) {
             logger.warn(`[AIPrediction] Invalid prediction_value: ${predictionValue}, cannot parse numeric value`);
             return { isInstantWin: false, reason: `Invalid prediction value: ${predictionValue}` };
         }
-        
+
         const isOver = predictionType.toUpperCase().includes('ÜST');
         const isUnder = predictionType.toUpperCase().includes('ALT');
         const isIY = predictionType.toUpperCase().includes('IY');
@@ -581,10 +754,10 @@ export class AIPredictionService {
             // Insert into ai_predictions with GENERATED details (overriding payload type/value)
             const insertQuery = `
         INSERT INTO ai_predictions (
-          external_id, bot_group_id, bot_name, league_name, home_team_name, away_team_name,
+          external_id, bot_group_id, bot_name, canonical_bot_name, league_name, home_team_name, away_team_name,
           score_at_prediction, minute_at_prediction, prediction_type, prediction_value,
           raw_payload, processed, display_prediction
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, $12)
+        ) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, $12)
         RETURNING id
       `;
 
@@ -592,6 +765,7 @@ export class AIPredictionService {
                 parsed.externalId,
                 botGroup.botGroupId,
                 botGroup.botDisplayName,
+                // canonical_bot_name passed as $3 (same as bot_name)
                 parsed.leagueName,
                 parsed.homeTeamName,
                 parsed.awayTeamName,
@@ -684,7 +858,7 @@ export class AIPredictionService {
     }
 
     /**
-     * Get matched predictions with results
+     * Get matched predictions with results (enhanced with match/team/league data)
      */
     async getMatchedPredictions(limit: number = 50): Promise<any[]> {
         const query = `
@@ -696,9 +870,26 @@ export class AIPredictionService {
         pm.final_home_score,
         pm.final_away_score,
         pm.matched_at,
-        pm.resulted_at
+        pm.resulted_at,
+        m.status_id as match_status_id,
+        m.minute as match_minute,
+        m.home_score_display,
+        m.away_score_display,
+        ht.name as home_team_db_name,
+        ht.logo_url as home_team_logo,
+        at.name as away_team_db_name,
+        at.logo_url as away_team_logo,
+        c.name as competition_name,
+        c.logo_url as competition_logo,
+        ctry.name as country_name,
+        ctry.logo as country_logo
       FROM ai_predictions p
       JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
+      LEFT JOIN ts_matches m ON m.external_id = pm.match_external_id
+      LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
+      LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
+      LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+      LEFT JOIN ts_countries ctry ON c.country_id = ctry.external_id
       ORDER BY p.created_at DESC
       LIMIT $1
     `;
@@ -730,9 +921,37 @@ export class AIPredictionService {
     }
 
     /**
-     * Get predictions by bot name (for bot detail page)
-     */
+         * Get predictions by bot name (for bot detail page)
+         * Uses flexible matching to handle name variations (e.g. ALERT: D vs Alert D)
+         */
     async getPredictionsByBotName(botName: string, limit: number = 50): Promise<any[]> {
+        let whereClause = 'p.bot_name = $1';
+        let params: any[] = [botName];
+
+        // Ensure limit is safe integer
+        const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+
+        // Normalize specific bot names for fuzzy matching
+        const normalized = botName.toLowerCase().trim();
+
+        // Helper to switch to pattern matching mode (no params needed for name)
+        const usePattern = (clause: string) => {
+            whereClause = clause;
+            params = []; // No parameters used in WHERE clause
+        };
+
+        if (normalized.includes('alert d')) {
+            usePattern("(p.bot_name ILIKE '%Alert%D%' OR p.bot_name = 'ALERT: D')");
+        } else if (normalized.includes('alert system')) {
+            usePattern("p.bot_name ILIKE '%Alert System%'");
+        } else if (normalized.includes('code 35') || normalized.includes('code: 35')) {
+            usePattern("(p.bot_name ILIKE '%Code%35%' OR p.bot_name = 'CODE: 35')");
+        } else if (normalized.includes('code zero')) {
+            usePattern("p.bot_name ILIKE '%Code%Zero%'");
+        } else if (normalized.includes('algoritma 01') || normalized.includes('algoritma: 01')) {
+            usePattern("(p.bot_name ILIKE '%Algoritma%01%' OR p.bot_name = 'Algoritma: 01')");
+        }
+
         const query = `
       SELECT 
         p.*,
@@ -742,14 +961,24 @@ export class AIPredictionService {
         pm.final_home_score,
         pm.final_away_score,
         pm.matched_at,
-        pm.resulted_at
+        pm.resulted_at,
+        COALESCE(ht.name, p.home_team_name, 'Unknown Home') as home_team_name,
+        COALESCE(at.name, p.away_team_name, 'Unknown Away') as away_team_name,
+        COALESCE(c.name, p.league_name, 'Unknown League') as league_name,
+        p.score_at_prediction,
+        p.minute_at_prediction
       FROM ai_predictions p
       LEFT JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
-      WHERE p.bot_name = $1
+      LEFT JOIN ts_matches m ON p.external_id = m.external_id
+      LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
+      LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
+      LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+      WHERE ${whereClause}
       ORDER BY p.created_at DESC
-      LIMIT $2
+      LIMIT ${safeLimit}
     `;
-        const result = await pool.query(query, [botName, limit]);
+
+        const result = await pool.query(query, params);
         return result.rows;
     }
 
@@ -757,14 +986,24 @@ export class AIPredictionService {
      * Get available bot names with prediction counts
      */
     async getBotStats(): Promise<{ bot_name: string; count: number; pending: number; matched: number }[]> {
+        // Use CASE statement to normalize bot names for accurate aggregation
         const query = `
       SELECT 
-        p.bot_name,
+        CASE
+            WHEN p.bot_name ILIKE '%Alert%D%' OR p.bot_name = 'ALERT: D' THEN 'Alert D'
+            WHEN p.bot_name ILIKE '%Alert System%' THEN 'Alert System'
+            WHEN p.bot_name ILIKE '%Code%35%' OR p.bot_name = 'CODE: 35' THEN 'Code 35'
+            WHEN p.bot_name ILIKE '%Code%Zero%' THEN 'Code Zero'
+            WHEN p.bot_name ILIKE '%Algoritma%01%' OR p.bot_name = 'Algoritma: 01' THEN 'Algoritma 01'
+            WHEN p.bot_name ILIKE '%BOT%007%' THEN 'BOT 007'
+            WHEN p.bot_name ILIKE '%70%Dakika%' THEN '70. Dakika Botu'
+            ELSE p.bot_name
+        END as bot_name,
         COUNT(*) as count,
         COUNT(*) FILTER (WHERE p.processed = false) as pending,
         COUNT(*) FILTER (WHERE p.processed = true) as matched
       FROM ai_predictions p
-      GROUP BY p.bot_name
+      GROUP BY 1
       ORDER BY count DESC
     `;
         const result = await pool.query(query);
@@ -915,9 +1154,30 @@ export class AIPredictionService {
         // ---------------------------------------------------------
         // 1. OVER / ÜST Logic (Can WIN instantly)
         // ---------------------------------------------------------
-        const overMatch = fullPrediction.match(/([\d.]+)\s*(ÜST|OVER|O)/i);
+        // ---------------------------------------------------------
+        // 1. OVER / ÜST Logic (Can WIN instantly)
+        // ---------------------------------------------------------
+        // Try strict match first: "2.5 ÜST" or "ÜST 2.5"
+        let overMatch = fullPrediction.match(/([\d.]+)\s*(ÜST|OVER|O)/i);
+        if (!overMatch) {
+            overMatch = fullPrediction.match(/(ÜST|OVER|O)\s*([\d.]+)/i); // Backwards
+        }
+
+        // Fallback: If just a number like "5.5" and NO "ALT/UNDER", assume ÜST
+        if (!overMatch) {
+            const bareNumber = fullPrediction.match(/(\d+\.5)/); // Match 0.5, 1.5, 5.5 etc specifically
+            const isUnder = fullPrediction.match(/ALT|UNDER|U/i);
+            if (bareNumber && !isUnder) {
+                // Mock the match result structure [full, number, type]
+                overMatch = [bareNumber[0], bareNumber[1], 'ÜST'];
+            }
+        }
+
         if (overMatch) {
-            const line = parseFloat(overMatch[1]);
+            // Group 1 is number in regex 1, Group 2 in regex 2. 
+            // Normalized handling: find the digit part
+            const numStr = overMatch[1].match(/[\d.]/) ? overMatch[1] : overMatch[2];
+            const line = parseFloat(numStr);
             const isOver = totalGoals > line;
 
             if (isOver) {
@@ -930,9 +1190,11 @@ export class AIPredictionService {
 
             // If not yet over, we can only lose if period is finished
             if (period === 'IY') {
+                // Check IY specific status
                 if (isHalftimeReached) return { outcome: 'loser', reason: `Finished IY: ${totalGoals} <= ${line}` };
                 return null; // Wait
-            } else { // MS
+            } else {
+                // MS
                 if (isMatchFinished) return { outcome: 'loser', reason: `Finished MS: ${totalGoals} <= ${line}` };
                 return null; // Wait
             }
@@ -1176,7 +1438,7 @@ export class AIPredictionService {
                 // Count goals in first half (minute <= 45)
                 let htHome = 0;
                 let htAway = 0;
-                
+
                 if (overridingStatusId === 3 && overridingHomeScore !== undefined && overridingAwayScore !== undefined) {
                     // At Status 3 (HT), current score == HT score
                     htHome = overridingHomeScore;
@@ -1192,10 +1454,10 @@ export class AIPredictionService {
                                     const minute = inc.minute || inc.time || inc.min;
                                     if (minute !== null && minute !== undefined && minute <= 45) {
                                         // Check if it's a goal (type 1, 8, 17 or contains 'goal')
-                                        const isGoal = inc.type === 1 || inc.type === 8 || inc.type === 17 || 
-                                                      (inc.type && String(inc.type).toLowerCase().includes('goal')) ||
-                                                      (inc.event_type && String(inc.event_type).toLowerCase().includes('goal'));
-                                        
+                                        const isGoal = inc.type === 1 || inc.type === 8 || inc.type === 17 ||
+                                            (inc.type && String(inc.type).toLowerCase().includes('goal')) ||
+                                            (inc.event_type && String(inc.event_type).toLowerCase().includes('goal'));
+
                                         if (isGoal) {
                                             // Use home_score/away_score from incident (most reliable)
                                             if (inc.home_score !== undefined && inc.home_score > htHome) {
@@ -1209,13 +1471,13 @@ export class AIPredictionService {
                                 }
                             }
                         }
-                        
+
                         // Fallback: If no incidents or no goals found, try home_scores/away_scores
                         if (htHome === 0 && htAway === 0) {
                             try {
                                 const homeScores = row.home_scores ? (typeof row.home_scores === 'string' ? JSON.parse(row.home_scores) : row.home_scores) : [];
                                 const awayScores = row.away_scores ? (typeof row.away_scores === 'string' ? JSON.parse(row.away_scores) : row.away_scores) : [];
-                                
+
                                 // Try index 0 first (some APIs use [0] for first half)
                                 if (Array.isArray(homeScores) && homeScores.length > 0) {
                                     htHome = parseInt(String(homeScores[0])) || 0;
@@ -1223,7 +1485,7 @@ export class AIPredictionService {
                                 if (Array.isArray(awayScores) && awayScores.length > 0) {
                                     htAway = parseInt(String(awayScores[0])) || 0;
                                 }
-                                
+
                                 // If index 0 gives 0 but we have scores, try index 1 (some APIs use [1] for first half)
                                 if (htHome === 0 && htAway === 0 && Array.isArray(homeScores) && homeScores.length > 1) {
                                     htHome = parseInt(String(homeScores[1])) || 0;
@@ -1233,7 +1495,7 @@ export class AIPredictionService {
                                 logger.warn(`[AIPrediction] Failed to parse HT scores from JSONB: ${e}`);
                             }
                         }
-                        
+
                         // Final fallback: if status >= 3 (HT reached) and still 0-0, use current score
                         // This handles cases where incidents are missing but match is past HT
                         if (htHome === 0 && htAway === 0 && statusId >= 3) {
@@ -1253,7 +1515,7 @@ export class AIPredictionService {
                         }
                     }
                 }
-                
+
                 logger.debug(`[AIPrediction] HT Score calculated: ${htHome}-${htAway} (for IY predictions)`);
 
                 // Determine period from prediction type
@@ -1356,7 +1618,7 @@ export class AIPredictionService {
 
                 // Use effective minute (from parameter or database)
                 const effectiveMinuteForCheck = (minute && minute > 0) ? minute : (row.minute || 0);
-                
+
                 const check = this.checkInstantWin(
                     row.prediction_type,
                     row.prediction_value,
@@ -1459,15 +1721,16 @@ export class AIPredictionService {
             // 1. Insert into ai_predictions
             await client.query(`
                 INSERT INTO ai_predictions (
-                    id, external_id, bot_name, league_name, 
+                    id, external_id, bot_name, canonical_bot_name, league_name, 
                     home_team_name, away_team_name, score_at_prediction, 
                     minute_at_prediction, prediction_type, prediction_value, 
                     processed, created_at, access_type, display_prediction
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13)
+                ) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13)
             `, [
                 predictionId,
                 externalId,
                 'Alert System', // Always use Alert System for manual predictions
+                // canonical_bot_name is also Alert System (passed as $3)
                 leagueName || '', // Güncellenmiş lig bilgisi
                 data.home_team,
                 data.away_team,

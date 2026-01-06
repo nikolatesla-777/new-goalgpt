@@ -32,6 +32,7 @@ import { TheSportsClient } from './services/thesports/client/thesports-client';
 import { MatchWatchdogWorker } from './jobs/matchWatchdog.job';
 import { MatchDetailLiveService } from './services/thesports/match/matchDetailLive.service';
 import { MatchRecentService } from './services/thesports/match/matchRecent.service';
+import { unifiedPredictionService } from './services/ai/unifiedPrediction.service';
 
 // Workers - Correct existing files from src/jobs
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
@@ -135,29 +136,34 @@ const start = async () => {
     try {
       await websocketService.connect();
       setWebSocketState(true, true);
-      
+
       // CRITICAL: Connect WebSocketService events to Fastify WebSocket broadcasting
       // This ensures real-time events reach frontend clients
       const { broadcastEvent, setLatencyMonitor } = await import('./routes/websocket.routes');
       const { setLatencyMonitor: setMetricsLatencyMonitor, setWriteQueue } = await import('./controllers/metrics.controller');
-      
+
       // LATENCY MONITORING: Share latency monitor instance
       const latencyMonitor = (websocketService as any).latencyMonitor;
       const writeQueue = (websocketService as any).writeQueue;
-      
+
       if (latencyMonitor) {
         setLatencyMonitor(latencyMonitor);
         setMetricsLatencyMonitor(latencyMonitor);
       }
-      
+
       if (writeQueue) {
         setWriteQueue(writeQueue);
       }
-      
+
       websocketService.onEvent((event: any, mqttReceivedTs?: number) => {
         broadcastEvent(event, mqttReceivedTs);
+
+        // Auto-result predictions based on real-time events
+        unifiedPredictionService.processMatchEvent(event).catch(err => {
+          logger.error('Error processing match event for predictions:', err);
+        });
       });
-      
+
       logger.info('✅ WebSocketService connected and event broadcasting enabled');
     } catch (e: any) {
       logger.error('WebSocket connection failed:', e.message);

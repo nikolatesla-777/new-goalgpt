@@ -494,21 +494,55 @@ export class MatchWatchdogWorker {
                 continue;
               }
 
-              // detail_live failed - DO NOT use diary as fallback
-              // According to TheSports docs: "Real-time data is obtained through the real-time data interface"
-              // /match/diary is for schedule, NOT for real-time status/score
-              // If detail_live fails, we cannot reliably determine the match status
-              logger.warn(
-                `[Watchdog] detail_live failed for ${match.matchId}. ` +
-                `Cannot use /match/diary as fallback (diary is for schedule, not real-time data). ` +
-                `Match will be retried on next watchdog tick.`
-              );
-              
-              // REMOVED: Diary fallback (incorrect usage according to docs)
-              // The diary endpoint is for schedule, not real-time status
-              // If we need status, we should rely on detail_live or recent/list
+              // detail_live returned no data - check if match is VERY OLD (>3 hours)
+              // Old matches should be transitioned to END since they're clearly finished
+              const matchAgeMinutes = match.minutesAgo;
+              const OLD_MATCH_THRESHOLD_MINUTES = 180; // 3 hours
 
-              // Both detail_live and diary failed
+              if (matchAgeMinutes > OLD_MATCH_THRESHOLD_MINUTES) {
+                // Match is >3 hours old with no live data - transition to END
+                logger.info(
+                  `[Watchdog] Match ${match.matchId} is ${matchAgeMinutes} min old (>${OLD_MATCH_THRESHOLD_MINUTES}min) ` +
+                  `with no detail_live data. Transitioning to END (status=8).`
+                );
+
+                const client = await pool.connect();
+                try {
+                  const updateResult = await client.query(
+                    `UPDATE ts_matches 
+                     SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
+                     WHERE external_id = $2 AND status_id = 1`,
+                    [Math.floor(Date.now() / 1000), match.matchId]
+                  );
+
+                  if (updateResult.rowCount && updateResult.rowCount > 0) {
+                    successCount++;
+                    reasons['old_match_transition_to_end'] = (reasons['old_match_transition_to_end'] || 0) + 1;
+
+                    logEvent('info', 'watchdog.reconcile.done', {
+                      match_id: match.matchId,
+                      result: 'success',
+                      reason: 'old_match_transition_to_end',
+                      duration_ms: Date.now() - reconcileStartTime,
+                      row_count: updateResult.rowCount,
+                      match_age_minutes: matchAgeMinutes,
+                      new_status_id: 8,
+                    });
+                  }
+                } finally {
+                  client.release();
+                }
+                continue;
+              }
+
+              // Match is recent but no live data - skip and retry later
+              logger.warn(
+                `[Watchdog] detail_live returned no data for ${match.matchId}. ` +
+                `Match is ${matchAgeMinutes} min old (<${OLD_MATCH_THRESHOLD_MINUTES}min threshold). ` +
+                `Will retry on next tick.`
+              );
+
+              // Match is not old enough to force-end, skip for now
               skippedCount++;
               reasons['not_in_recent_list_no_detail_data'] = (reasons['not_in_recent_list_no_detail_data'] || 0) + 1;
               logEvent('info', 'watchdog.reconcile.done', {
@@ -757,7 +791,7 @@ export class MatchWatchdogWorker {
       logger.warn('Match watchdog worker already started');
       return;
     }
-    
+
     logger.info('[Watchdog] Starting MatchWatchdogWorker for should-be-live matches');
     // Run immediately on start
     void this.tick();

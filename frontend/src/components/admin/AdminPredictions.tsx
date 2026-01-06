@@ -1,146 +1,151 @@
 /**
  * Admin Predictions Page
- * Lists all AI predictions with filtering and search
+ * 
+ * Lists all AI predictions with filtering and search.
+ * Uses unified prediction context for centralized data management.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './admin.css';
+import { useSocket } from '../../hooks/useSocket';
 
-interface Prediction {
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+// Types matching unified backend response
+interface UnifiedPrediction {
     id: string;
     external_id: string;
     bot_name: string;
+    canonical_bot_name: string;
     league_name: string;
     home_team_name: string;
     away_team_name: string;
+    home_team_logo: string | null;
+    away_team_logo: string | null;
     score_at_prediction: string;
     minute_at_prediction: number;
     prediction_type: string;
     prediction_value: string;
-    display_prediction?: string; // Admin-editable display text for users
-    processed: boolean;
+    display_prediction: string | null;
+    match_id: string | null;
+    match_time: number | null;
+    match_status: number;
+    result: 'pending' | 'won' | 'lost' | 'cancelled';
+    final_score: string | null;
+    confidence: number;
+    access_type: 'VIP' | 'FREE';
     created_at: string;
-    // From joined match data
-    overall_confidence?: number;
-    prediction_result?: string;
-    match_external_id?: string;
+    // Enhanced Data
+    country_name?: string;
+    country_logo?: string;
+    live_match_status?: number;
+    live_match_minute?: number;
+    home_score_display?: number;
+    away_score_display?: number;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
-
-type FilterType = 'all' | 'pending' | 'matched' | 'winners' | 'losers';
-
-interface Stats {
+interface PredictionStats {
     total: number;
     pending: number;
     matched: number;
-    winners: number;
-    losers: number;
+    won: number;
+    lost: number;
     winRate: string;
 }
 
+interface BotStat {
+    name: string;
+    displayName: string;
+    total: number;
+    pending: number;
+    won: number;
+    lost: number;
+    winRate: string;
+}
+
+interface Pagination {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+}
+
+type FilterType = 'all' | 'pending' | 'matched' | 'won' | 'lost';
+
 export function AdminPredictions() {
-    const [predictions, setPredictions] = useState<Prediction[]>([]);
+    const navigate = useNavigate();
+
+    // State
+    const [predictions, setPredictions] = useState<UnifiedPrediction[]>([]); // Corrected this line
+    const [stats, setStats] = useState<PredictionStats | null>(null);
+    const [bots, setBots] = useState<BotStat[]>([]);
+    const [pagination, setPagination] = useState<Pagination | null>(null);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<FilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
-    const [stats, setStats] = useState<Stats | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
     const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        fetchStats();
-        fetchPredictions();
-    }, [filter]);
-
-    const fetchStats = async () => {
-        try {
-            const res = await fetch(`${API_BASE}/predictions/stats`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.success) {
-                    setStats({
-                        total: data.stats.predictions.total || 0,
-                        pending: data.stats.predictions.pending || 0,
-                        matched: data.stats.predictions.matched || 0,
-                        winners: data.stats.predictions.winners || 0,
-                        losers: data.stats.predictions.losers || 0,
-                        winRate: data.stats.predictions.win_rate || 'N/A'
-                    });
-                }
-            }
-        } catch (err) {
-            console.error('Fetch stats error:', err);
-        }
-    };
-
-    const fetchPredictions = async () => {
+    // Fetch unified data
+    const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            let results: Prediction[] = [];
+            const params = new URLSearchParams();
+            if (filter !== 'all') {
+                params.set('status', filter);
+            }
+            params.set('limit', '100');
 
-            if (filter === 'all') {
-                // Fetch both pending and matched for "Tümü" view
-                const [pendingRes, matchedRes] = await Promise.all([
-                    fetch(`${API_BASE}/predictions/pending?limit=100`),
-                    fetch(`${API_BASE}/predictions/matched?limit=100`)
-                ]);
+            const response = await fetch(`${API_BASE}/predictions/unified?${params.toString()}`);
 
-                if (pendingRes.ok) {
-                    const pendingData = await pendingRes.json();
-                    results = [...(pendingData.predictions || [])];
-                }
-                if (matchedRes.ok) {
-                    const matchedData = await matchedRes.json();
-                    results = [...results, ...(matchedData.predictions || [])];
-                }
-
-                // Sort by created_at descending (newest first)
-                results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            } else if (filter === 'pending') {
-                const res = await fetch(`${API_BASE}/predictions/pending?limit=100`);
-                if (res.ok) {
-                    const data = await res.json();
-                    results = data.predictions || [];
-                }
-            } else {
-                // matched, winners, losers
-                const res = await fetch(`${API_BASE}/predictions/matched?limit=100`);
-                if (res.ok) {
-                    const data = await res.json();
-                    results = data.predictions || [];
-
-                    // Client-side filter for winners/losers
-                    if (filter === 'winners') {
-                        results = results.filter((p: Prediction) => p.prediction_result === 'winner');
-                    } else if (filter === 'losers') {
-                        results = results.filter((p: Prediction) => p.prediction_result === 'loser');
-                    }
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data) {
+                    setPredictions(data.data.predictions || []);
+                    setStats(data.data.stats || null);
+                    setBots(data.data.bots || []);
+                    setPagination(data.data.pagination || null);
                 }
             }
-
-            setPredictions(results);
         } catch (err) {
             console.error('Fetch predictions error:', err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [filter]);
 
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    // Client-side search filter
     const filteredPredictions = predictions.filter((p) => {
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
         return (
             p.home_team_name?.toLowerCase().includes(q) ||
             p.away_team_name?.toLowerCase().includes(q) ||
-            p.bot_name?.toLowerCase().includes(q) ||
+            p.canonical_bot_name?.toLowerCase().includes(q) ||
             p.league_name?.toLowerCase().includes(q)
         );
     });
 
-    const formatTime = (dateStr: string) => {
-        const date = new Date(dateStr);
+    // Real-time updates
+    const { lastEvent } = useSocket();
+
+    useEffect(() => {
+        if (lastEvent) {
+            // Trigger refresh on any match/prediction event
+            // Debouncing is handled implicitly by ensuring we don't fetch too often if desired,
+            // but for now simple trigger is fine for Admin
+            fetchData();
+        }
+    }, [lastEvent]); // Trigger fetchData when a new event arrives
+
+    const formatTime = (dateString: string) => {
+        const date = new Date(dateString);
         return date.toLocaleString('tr-TR', {
             hour: '2-digit',
             minute: '2-digit',
@@ -149,7 +154,7 @@ export function AdminPredictions() {
         });
     };
 
-    const handleEditClick = (pred: Prediction) => {
+    const handleEditClick = (pred: UnifiedPrediction) => {
         setEditingId(pred.id);
         setEditValue(pred.display_prediction || '');
     };
@@ -163,7 +168,6 @@ export function AdminPredictions() {
                 body: JSON.stringify({ display_prediction: editValue })
             });
             if (res.ok) {
-                // Update local state
                 setPredictions(prev => prev.map(p =>
                     p.id === predId ? { ...p, display_prediction: editValue } : p
                 ));
@@ -184,14 +188,14 @@ export function AdminPredictions() {
         setEditValue('');
     };
 
-    const getResultBadge = (prediction: Prediction) => {
-        if (!prediction.processed) {
+    const getResultBadge = (prediction: UnifiedPrediction) => {
+        if (prediction.result === 'pending') {
             return <span className="admin-badge warning">Bekliyor</span>;
         }
-        if (prediction.prediction_result === 'winner') {
+        if (prediction.result === 'won') {
             return <span className="admin-badge success">Kazandı</span>;
         }
-        if (prediction.prediction_result === 'loser') {
+        if (prediction.result === 'lost') {
             return <span className="admin-badge error">Kaybetti</span>;
         }
         return <span className="admin-badge neutral">Eşleşti</span>;
@@ -201,8 +205,8 @@ export function AdminPredictions() {
         { key: 'all', label: 'Tümü' },
         { key: 'pending', label: 'Bekleyen' },
         { key: 'matched', label: 'Eşleşen' },
-        { key: 'winners', label: 'Kazanan' },
-        { key: 'losers', label: 'Kaybeden' },
+        { key: 'won', label: 'Kazanan' },
+        { key: 'lost', label: 'Kaybeden' },
     ];
 
     return (
@@ -212,7 +216,7 @@ export function AdminPredictions() {
                     <h1 className="admin-header-title">AI Tahminleri</h1>
                     <p className="admin-header-subtitle">Dış yapay zekadan gelen tüm tahminler</p>
                 </div>
-                <button className="admin-btn admin-btn-primary" onClick={() => { fetchStats(); fetchPredictions(); }}>
+                <button className="admin-btn admin-btn-primary" onClick={fetchData}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
                         <path d="M21 3v5h-5" />
@@ -256,7 +260,7 @@ export function AdminPredictions() {
                                     </svg>
                                 </div>
                             </div>
-                            <div className="admin-stat-value">{stats.winners}</div>
+                            <div className="admin-stat-value">{stats.won}</div>
                             <div className="admin-stat-label">Kazanan</div>
                         </div>
                         <div className="admin-stat-card">
@@ -267,7 +271,7 @@ export function AdminPredictions() {
                                     </svg>
                                 </div>
                             </div>
-                            <div className="admin-stat-value">{stats.losers}</div>
+                            <div className="admin-stat-value">{stats.lost}</div>
                             <div className="admin-stat-label">Kaybeden</div>
                         </div>
                         <div className="admin-stat-card">
@@ -318,7 +322,7 @@ export function AdminPredictions() {
                         <h3 className="admin-table-title">
                             {filteredPredictions.length} Tahmin
                         </h3>
-                        <button className="admin-btn admin-btn-secondary" onClick={fetchPredictions}>
+                        <button className="admin-btn admin-btn-secondary" onClick={fetchData}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
                                 <path d="M21 3v5h-5" />
@@ -343,22 +347,42 @@ export function AdminPredictions() {
                         <table className="admin-table">
                             <thead>
                                 <tr>
-                                    <th>Bot</th>
+                                    <th>Ülke</th>
+                                    <th>Bot (Başarı)</th>
                                     <th>Lig</th>
                                     <th>Maç</th>
-                                    <th>Skor</th>
-                                    <th>Dk</th>
+                                    <th>Paylaşım Anı</th>
                                     <th>Tahmin</th>
-                                    <th>Güven</th>
+                                    <th>Canlı Durum</th>
                                     <th>Zaman</th>
                                     <th>Durum</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredPredictions.map((pred) => (
-                                    <tr key={pred.id}>
-                                        <td>
-                                            <span className="admin-badge neutral">{pred.bot_name}</span>
+                                    <tr
+                                        key={pred.id}
+                                        onClick={() => pred.match_id && navigate(`/match/${pred.match_id}`)}
+                                        style={{ cursor: pred.match_id ? 'pointer' : 'default' }}
+                                        className={pred.match_id ? 'clickable-row' : ''}
+                                    >
+                                        <td style={{ textAlign: 'center' }}>
+                                            {pred.country_logo ? (
+                                                <img src={pred.country_logo} alt={pred.country_name} title={pred.country_name} style={{ width: '20px', height: '15px', objectFit: 'cover', borderRadius: '2px' }} />
+                                            ) : (
+                                                <span style={{ fontSize: '11px', color: '#666' }}>-</span>
+                                            )}
+                                        </td>
+                                        <td> // Bot (Başarı)
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                <span className="admin-badge neutral">{pred.canonical_bot_name || pred.bot_name}</span>
+                                                <span style={{ fontSize: '10px', color: '#aaa', marginLeft: '4px' }}>
+                                                    {(() => {
+                                                        const b = bots.find(b => b.name === (pred.canonical_bot_name || pred.bot_name));
+                                                        return b ? `%${b.winRate} Başarı` : '-';
+                                                    })()}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td style={{ color: 'var(--admin-text-secondary)', fontSize: '13px' }}>
                                             {pred.league_name || '-'}
@@ -366,9 +390,12 @@ export function AdminPredictions() {
                                         <td style={{ fontWeight: 500 }}>
                                             {pred.home_team_name} - {pred.away_team_name}
                                         </td>
-                                        <td style={{ fontWeight: 600 }}>{pred.score_at_prediction}</td>
-                                        <td>{pred.minute_at_prediction}'</td>
-                                        <td>
+                                        <td style={{ fontFamily: 'monospace', fontSize: '13px' }}> // Paylaşım Anı (Merge)
+                                            <span style={{ color: '#aaa' }}>{pred.minute_at_prediction}'</span>
+                                            <span style={{ margin: '0 4px', color: '#555' }}>|</span>
+                                            <span style={{ fontWeight: 600 }}>{pred.score_at_prediction || '0-0'}</span>
+                                        </td>
+                                        <td> // Tahmin (Editable Display)
                                             {editingId === pred.id ? (
                                                 <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                                                     <input
@@ -421,7 +448,7 @@ export function AdminPredictions() {
                                                 </div>
                                             ) : (
                                                 <div
-                                                    onClick={() => handleEditClick(pred)}
+                                                    onClick={(e) => { e.stopPropagation(); handleEditClick(pred); }}
                                                     style={{
                                                         cursor: 'pointer',
                                                         display: 'flex',
@@ -434,13 +461,10 @@ export function AdminPredictions() {
                                                         <span style={{ color: 'var(--admin-accent)', fontWeight: 600 }}>
                                                             {pred.display_prediction}
                                                         </span>
-                                                    ) : pred.prediction_type ? (
-                                                        <span style={{ fontWeight: 500 }}>
-                                                            {pred.prediction_type}
-                                                        </span>
                                                     ) : (
-                                                        <span style={{ color: 'var(--admin-text-muted)', fontStyle: 'italic' }}>
-                                                            (Girilmedi)
+                                                        // Fallback to type/value if no custom display
+                                                        <span style={{ fontWeight: 500 }}>
+                                                            {pred.prediction_type} {pred.prediction_value}
                                                         </span>
                                                     )}
                                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5 }}>
@@ -451,9 +475,17 @@ export function AdminPredictions() {
                                             )}
                                         </td>
                                         <td>
-                                            {pred.overall_confidence
-                                                ? `${(pred.overall_confidence * 100).toFixed(0)}%`
-                                                : '-'}
+                                            {(pred.live_match_status || 0) === 8 ? (
+                                                <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '12px' }}>MS {pred.home_score_display}-{pred.away_score_display}</span>
+                                            ) : (pred.live_match_status || 0) >= 2 ? (
+                                                <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '12px' }} className="animate-pulse">
+                                                    {pred.live_match_minute}' {pred.home_score_display}-{pred.away_score_display}
+                                                </span>
+                                            ) : (
+                                                <span style={{ color: '#f59e0b', fontSize: '12px' }}>
+                                                    {pred.match_time ? new Date(Number(pred.match_time) * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : 'Bekliyor'}
+                                                </span>
+                                            )}
                                         </td>
                                         <td style={{ color: 'var(--admin-text-secondary)', fontSize: '13px' }}>
                                             {formatTime(pred.created_at)}

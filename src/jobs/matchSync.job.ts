@@ -16,6 +16,7 @@ import { logger } from '../utils/logger';
 import { MatchDetailLiveService } from '../services/thesports/match/matchDetailLive.service';
 import { pool } from '../database/connection';
 import { logEvent } from '../utils/obsLogger';
+import { AIPredictionService } from '../services/ai/aiPrediction.service';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -33,6 +34,8 @@ export class MatchSyncWorker {
   private reconcileQueue = new Set<string>();
   private isReconciling = false;
   private liveTickInterval: NodeJS.Timeout | null = null;
+  private predictionResultInterval: NodeJS.Timeout | null = null;
+  private aiPredictionService: AIPredictionService;
 
   // Reconcile backpressure constants
   private readonly RECONCILE_BATCH_LIMIT = 15;
@@ -56,6 +59,7 @@ export class MatchSyncWorker {
 
     this.recentSyncService = new RecentSyncService(client, matchSyncService);
     this.matchDetailLiveService = new MatchDetailLiveService(client);
+    this.aiPredictionService = new AIPredictionService();
   }
 
   /**
@@ -214,6 +218,19 @@ export class MatchSyncWorker {
       this.processReconcileQueue().catch(err => logger.error('[LiveReconcile] process interval error:', err));
     }, 1000);
 
+    // Prediction Resulter: Update prediction results every 30 seconds
+    // Checks matched predictions where match has ended and calculates win/lose
+    this.predictionResultInterval = setInterval(async () => {
+      try {
+        const updatedCount = await this.aiPredictionService.updatePredictionResults();
+        if (updatedCount > 0) {
+          logger.info(`[PredictionResulter] Updated ${updatedCount} prediction results`);
+        }
+      } catch (err) {
+        logger.error('[PredictionResulter] Error updating prediction results:', err);
+      }
+    }, 30000); // Every 30 seconds
+
     // Run immediately on start (but wait 10 seconds to let bootstrap complete)
     setTimeout(() => {
       this.syncMatches();
@@ -256,6 +273,12 @@ export class MatchSyncWorker {
       clearInterval(this.halfTimeInterval);
       this.halfTimeInterval = null;
       logger.info('Half-time reconcile interval stopped');
+    }
+
+    if (this.predictionResultInterval) {
+      clearInterval(this.predictionResultInterval);
+      this.predictionResultInterval = null;
+      logger.info('Prediction result interval stopped');
     }
   }
 }

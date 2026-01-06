@@ -16,6 +16,7 @@ import {
   AdminLivescore,
   AdminManualPredictions
 } from './components/admin';
+import { AIPredictionsPage } from './components/ai/AIPredictionsPage';
 import { AIPredictionsProvider } from './context/AIPredictionsContext';
 
 function App() {
@@ -30,6 +31,9 @@ function App() {
 
             {/* Livescore moved to /livescore */}
             <Route path="/livescore" element={<AdminLivescore />} />
+
+            {/* New Premium AI Page */}
+            <Route path="/ai-predictions" element={<AIPredictionsPage />} />
 
             {/* Admin Panel Routes */}
             <Route path="/admin/predictions" element={<AdminPredictions />} />

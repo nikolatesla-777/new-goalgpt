@@ -9,6 +9,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { aiPredictionService, RawPredictionPayload } from '../services/ai/aiPrediction.service';
+import { unifiedPredictionService, PredictionFilter } from '../services/ai/unifiedPrediction.service';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 
@@ -198,6 +199,51 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     });
 
     /**
+     * GET /api/predictions/rules
+     * Get all bot rules
+     */
+    fastify.get('/api/predictions/rules', async (request: FastifyRequest, reply: FastifyReply) => {
+        try {
+            const rules = await aiPredictionService.getAllBotRules();
+            return reply.status(200).send({
+                success: true,
+                rules
+            });
+        } catch (error) {
+            logger.error('[Predictions] Get bot rules error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: 'Failed to retrieve bot rules'
+            });
+        }
+    });
+
+    /**
+    * GET /api/predictions/stats/bots
+    * Get statistics for all bots (Total, Wins, Losses, Ratio)
+    */
+    fastify.get('/api/predictions/stats/bots', async (request: FastifyRequest, reply: FastifyReply) => {
+        try {
+            const stats = await aiPredictionService.getBotPerformanceStats();
+            return reply
+                .header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+                .header('Pragma', 'no-cache')
+                .header('Expires', '0')
+                .status(200).send({
+                    success: true,
+                    ...stats,
+                    timestamp: new Date().toISOString()
+                });
+        } catch (error) {
+            logger.error('[Predictions] Get bot stats error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: 'Failed to retrieve bot statistics'
+            });
+        }
+    });
+
+    /**
      * GET /api/predictions/requests
      * Get request logs for debugging
      */
@@ -236,6 +282,89 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
             });
         } catch (error) {
             logger.error('[Predictions] Get requests error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
+     * GET /api/predictions/unified
+     * 
+     * UNIFIED ENDPOINT - Single source of truth for all prediction pages
+     * Serves: /admin/predictions, /ai-predictions, /admin/bots, /admin/bots/[botName]
+     * 
+     * Query params:
+     *   - status: all | pending | matched | won | lost
+     *   - bot: bot name filter (partial match)
+     *   - date: YYYY-MM-DD
+     *   - access: all | vip | free
+     *   - page: page number (default 1)
+     *   - limit: items per page (default 50)
+     */
+    fastify.get('/api/predictions/unified', async (request: FastifyRequest<{
+        Querystring: {
+            status?: string;
+            bot?: string;
+            date?: string;
+            access?: string;
+            page?: string;
+            limit?: string;
+        }
+    }>, reply: FastifyReply) => {
+        try {
+            const { status, bot, date, access, page, limit } = request.query;
+
+            const filter: PredictionFilter = {
+                status: (status as PredictionFilter['status']) || 'all',
+                bot: bot || undefined,
+                date: date || undefined,
+                access: (access as PredictionFilter['access']) || 'all',
+                page: page ? parseInt(page, 10) : 1,
+                limit: limit ? Math.min(parseInt(limit, 10), 100) : 50
+            };
+
+            const result = await unifiedPredictionService.getPredictions(filter);
+
+            return reply.status(200).send({
+                success: true,
+                data: result
+            });
+        } catch (error) {
+            logger.error('[Predictions] Unified endpoint error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
+     * GET /api/predictions/bot/:botName
+     * 
+     * Get specific bot detail with predictions
+     */
+    fastify.get('/api/predictions/bot/:botName', async (request: FastifyRequest<{
+        Params: { botName: string };
+        Querystring: { page?: string; limit?: string; }
+    }>, reply: FastifyReply) => {
+        try {
+            const { botName } = request.params;
+            const { page, limit } = request.query;
+
+            const result = await unifiedPredictionService.getBotDetail(
+                decodeURIComponent(botName),
+                page ? parseInt(page, 10) : 1,
+                limit ? Math.min(parseInt(limit, 10), 100) : 50
+            );
+
+            return reply.status(200).send({
+                success: true,
+                data: result
+            });
+        } catch (error) {
+            logger.error('[Predictions] Bot detail error:', error);
             return reply.status(500).send({
                 success: false,
                 error: error instanceof Error ? error.message : 'Internal server error'

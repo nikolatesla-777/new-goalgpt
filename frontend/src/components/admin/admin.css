@@ -325,6 +325,15 @@
   background-color: var(--admin-bg-hover);
 }
 
+.admin-table tr.clickable-row:hover {
+  background-color: rgba(20, 184, 166, 0.08);
+  cursor: pointer;
+}
+
+.admin-table tr.clickable-row:hover td {
+  color: var(--admin-accent);
+}
+
 /* Status Badges */
 .admin-badge {
   display: inline-flex;

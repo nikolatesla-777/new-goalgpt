@@ -47,25 +47,57 @@ export function AdminBotDetail() {
 
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/predictions/bot-history?botName=${encodeURIComponent(botName)}&limit=100`);
+            // Use the new unified bot endpoint
+            const res = await fetch(`${API_BASE}/predictions/bot/${encodeURIComponent(botName)}?limit=100`);
             if (res.ok) {
                 const data = await res.json();
-                const preds = data.predictions || [];
-                setPredictions(preds);
+                if (data.success && data.data) {
+                    // Map unified format to local format
+                    const preds = (data.data.predictions || []).map((p: any) => ({
+                        id: p.id,
+                        external_id: p.external_id,
+                        bot_name: p.canonical_bot_name || p.bot_name,
+                        league_name: p.league_name,
+                        home_team_name: p.home_team_name,
+                        away_team_name: p.away_team_name,
+                        score_at_prediction: p.score_at_prediction,
+                        minute_at_prediction: p.minute_at_prediction,
+                        prediction_type: p.prediction_type,
+                        prediction_value: p.prediction_value,
+                        processed: p.result !== 'pending',
+                        created_at: p.created_at,
+                        match_external_id: p.match_id,
+                        overall_confidence: p.confidence,
+                        prediction_result: p.result === 'won' ? 'winner' : p.result === 'lost' ? 'loser' : null
+                    }));
+                    setPredictions(preds);
 
-                // Calculate stats
-                const pending = preds.filter((p: Prediction) => !p.processed).length;
-                const matched = preds.filter((p: Prediction) => p.processed).length;
-                const winners = preds.filter((p: Prediction) => p.prediction_result === 'winner').length;
-                const losers = preds.filter((p: Prediction) => p.prediction_result === 'loser').length;
+                    // Use stats from response if available
+                    const botStat = data.data.bot;
+                    if (botStat) {
+                        setStats({
+                            total: botStat.total || preds.length,
+                            pending: botStat.pending || preds.filter((p: Prediction) => !p.processed).length,
+                            matched: preds.filter((p: Prediction) => p.match_external_id).length,
+                            winners: botStat.won || 0,
+                            losers: botStat.lost || 0
+                        });
+                    } else {
+                        // Calculate stats from predictions
+                        const pending = preds.filter((p: Prediction) => !p.processed).length;
+                        const matched = preds.filter((p: Prediction) => p.processed).length;
+                        const winners = preds.filter((p: Prediction) => p.prediction_result === 'winner').length;
+                        const losers = preds.filter((p: Prediction) => p.prediction_result === 'loser').length;
 
-                setStats({
-                    total: preds.length,
-                    pending,
-                    matched,
-                    winners,
-                    losers
-                });
+                        setStats({
+                            total: preds.length,
+                            pending,
+                            matched,
+                            winners,
+                            losers
+                        });
+                    }
+                }
             }
         } catch (err) {
             console.error('Fetch predictions error:', err);
