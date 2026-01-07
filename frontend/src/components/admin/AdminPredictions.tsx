@@ -12,11 +12,10 @@ import { useSocket } from '../../hooks/useSocket';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-// Types matching unified backend response
+// Types matching new 29-column schema
 interface UnifiedPrediction {
     id: string;
     external_id: string;
-    bot_name: string;
     canonical_bot_name: string;
     league_name: string;
     home_team_name: string;
@@ -25,18 +24,16 @@ interface UnifiedPrediction {
     away_team_logo: string | null;
     score_at_prediction: string;
     minute_at_prediction: number;
-    prediction_type: string;
-    prediction_value: string;
-    display_prediction: string | null;
+    prediction: string;              // "IY 0.5 ÜST", "MS 2.5 ÜST"
+    prediction_threshold: number;    // 0.5, 1.5, 2.5
     match_id: string | null;
-    match_time: number | null;
-    match_status: number;
     result: 'pending' | 'won' | 'lost' | 'cancelled';
     final_score: string | null;
-    confidence: number;
+    result_reason: string | null;
     access_type: 'VIP' | 'FREE';
+    source: string;
     created_at: string;
-    // Enhanced Data
+    // Live data from ts_matches join
     country_name?: string;
     country_logo?: string;
     live_match_status?: number;
@@ -77,9 +74,7 @@ export function AdminPredictions() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<FilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editValue, setEditValue] = useState('');
-    const [saving, setSaving] = useState(false);
+    // Note: Edit functionality removed - predictions now use unified 'prediction' field
 
     // Fetch unified data
     const fetchData = useCallback(async () => {
@@ -145,40 +140,6 @@ export function AdminPredictions() {
             day: '2-digit',
             month: '2-digit',
         });
-    };
-
-    const handleEditClick = (pred: UnifiedPrediction) => {
-        setEditingId(pred.id);
-        setEditValue(pred.display_prediction || '');
-    };
-
-    const handleSaveDisplay = async (predId: string) => {
-        setSaving(true);
-        try {
-            const res = await fetch(`${API_BASE}/predictions/${predId}/display`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ display_prediction: editValue })
-            });
-            if (res.ok) {
-                setPredictions(prev => prev.map(p =>
-                    p.id === predId ? { ...p, display_prediction: editValue } : p
-                ));
-                setEditingId(null);
-            } else {
-                alert('Kayıt başarısız');
-            }
-        } catch (err) {
-            console.error('Save display error:', err);
-            alert('Kayıt hatası');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleCancelEdit = () => {
-        setEditingId(null);
-        setEditValue('');
     };
 
     const getResultBadge = (prediction: UnifiedPrediction) => {
@@ -366,12 +327,12 @@ export function AdminPredictions() {
                                                 <span style={{ fontSize: '11px', color: '#666' }}>-</span>
                                             )}
                                         </td>
-                                        <td> // Bot (Başarı)
+                                        <td>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                <span className="admin-badge neutral">{pred.canonical_bot_name || pred.bot_name}</span>
+                                                <span className="admin-badge neutral">{pred.canonical_bot_name}</span>
                                                 <span style={{ fontSize: '10px', color: '#aaa', marginLeft: '4px' }}>
                                                     {(() => {
-                                                        const b = bots.find(b => b.name === (pred.canonical_bot_name || pred.bot_name));
+                                                        const b = bots.find(b => b.name === pred.canonical_bot_name);
                                                         return b ? `%${b.winRate} Başarı` : '-';
                                                     })()}
                                                 </span>
@@ -388,96 +349,20 @@ export function AdminPredictions() {
                                             <span style={{ margin: '0 4px', color: '#555' }}>|</span>
                                             <span style={{ fontWeight: 600 }}>{pred.score_at_prediction || '0-0'}</span>
                                         </td>
-                                        <td> // Tahmin (Editable Display)
-                                            {editingId === pred.id ? (
-                                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                                    <input
-                                                        type="text"
-                                                        value={editValue}
-                                                        onChange={(e) => setEditValue(e.target.value)}
-                                                        placeholder="Kullanıcıya gösterilecek metin..."
-                                                        style={{
-                                                            padding: '4px 8px',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid var(--admin-border)',
-                                                            fontSize: '13px',
-                                                            width: '180px'
-                                                        }}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') handleSaveDisplay(pred.id);
-                                                            if (e.key === 'Escape') handleCancelEdit();
-                                                        }}
-                                                        autoFocus
-                                                    />
-                                                    <button
-                                                        onClick={() => handleSaveDisplay(pred.id)}
-                                                        disabled={saving}
-                                                        style={{
-                                                            padding: '4px 8px',
-                                                            borderRadius: '4px',
-                                                            background: 'var(--admin-accent)',
-                                                            color: 'white',
-                                                            border: 'none',
-                                                            cursor: 'pointer',
-                                                            fontSize: '12px'
-                                                        }}
-                                                    >
-                                                        {saving ? '...' : '✓'}
-                                                    </button>
-                                                    <button
-                                                        onClick={handleCancelEdit}
-                                                        style={{
-                                                            padding: '4px 8px',
-                                                            borderRadius: '4px',
-                                                            background: 'var(--admin-bg-tertiary)',
-                                                            color: 'var(--admin-text-secondary)',
-                                                            border: 'none',
-                                                            cursor: 'pointer',
-                                                            fontSize: '12px'
-                                                        }}
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div
-                                                    onClick={(e) => { e.stopPropagation(); handleEditClick(pred); }}
-                                                    style={{
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px'
-                                                    }}
-                                                    title="Düzenlemek için tıklayın"
-                                                >
-                                                    {pred.display_prediction ? (
-                                                        <span style={{ color: 'var(--admin-accent)', fontWeight: 600 }}>
-                                                            {pred.display_prediction}
-                                                        </span>
-                                                    ) : (
-                                                        // Fallback to type/value if no custom display
-                                                        <span style={{ fontWeight: 500 }}>
-                                                            {pred.prediction_type} {pred.prediction_value}
-                                                        </span>
-                                                    )}
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5 }}>
-                                                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                                                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                                    </svg>
-                                                </div>
-                                            )}
+                                        <td>
+                                            <span style={{ fontWeight: 600, color: 'var(--admin-accent)' }}>
+                                                {pred.prediction}
+                                            </span>
                                         </td>
                                         <td>
                                             {(pred.live_match_status || 0) === 8 ? (
-                                                <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '12px' }}>MS {pred.home_score_display}-{pred.away_score_display}</span>
+                                                <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '12px' }}>MS {pred.home_score_display ?? 0}-{pred.away_score_display ?? 0}</span>
                                             ) : (pred.live_match_status || 0) >= 2 ? (
                                                 <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '12px' }} className="animate-pulse">
-                                                    {pred.live_match_minute}' {pred.home_score_display}-{pred.away_score_display}
+                                                    {pred.live_match_minute ?? 0}' {pred.home_score_display ?? 0}-{pred.away_score_display ?? 0}
                                                 </span>
                                             ) : (
-                                                <span style={{ color: '#f59e0b', fontSize: '12px' }}>
-                                                    {pred.match_time ? new Date(Number(pred.match_time) * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : 'Bekliyor'}
-                                                </span>
+                                                <span style={{ color: '#f59e0b', fontSize: '12px' }}>Bekliyor</span>
                                             )}
                                         </td>
                                         <td style={{ color: 'var(--admin-text-secondary)', fontSize: '13px' }}>

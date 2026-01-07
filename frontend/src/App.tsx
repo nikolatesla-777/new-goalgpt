@@ -23,6 +23,7 @@ import {
 import { AIPredictionsPage } from './components/ai/AIPredictionsPage';
 import { AIPredictionsProvider } from './context/AIPredictionsContext';
 import { FavoritesProvider } from './context/FavoritesContext';
+import { PredictionToast } from './components/ui/PredictionToast';
 
 // New Livescore Components with Nested Routes
 import {
@@ -146,6 +147,8 @@ function App() {
             </Route>
           </Route>
         </Routes>
+        {/* Real-time prediction settlement notifications */}
+        <PredictionToast />
       </BrowserRouter>
     </AIPredictionsProvider>
   </FavoritesProvider>

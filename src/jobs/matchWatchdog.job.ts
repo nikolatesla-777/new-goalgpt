@@ -212,7 +212,7 @@ export class MatchWatchdogWorker {
                 if (nowTs < minTimeForEnd) {
                   logger.warn(
                     `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list but match started ` +
-                    `${Math.floor((nowTs - matchTime) / 60)} minutes ago (<120 min). ` +
+                    `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (<120 min). ` +
                     `Skipping END transition. Will retry later.`
                   );
                   skippedCount++;
@@ -222,7 +222,7 @@ export class MatchWatchdogWorker {
                   // Match time is old enough, safe to transition to END
                   logger.info(
                     `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list and match started ` +
-                    `${Math.floor((nowTs - matchTime) / 60)} minutes ago (>120 min). Transitioning to END.`
+                    `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>120 min). Transitioning to END.`
                   );
 
                   const updateResult = await client.query(
@@ -244,7 +244,7 @@ export class MatchWatchdogWorker {
                       row_count: updateResult.rowCount,
                       new_status_id: 8,
                       match_time: matchTime,
-                      elapsed_minutes: Math.floor((nowTs - matchTime) / 60),
+                      elapsed_minutes: Math.floor((nowTs - (matchTime ?? nowTs)) / 60),
                     });
 
                     // CRITICAL FIX: Trigger post-match persistence when HALF_TIME match transitions to END
@@ -319,7 +319,7 @@ export class MatchWatchdogWorker {
               if (nowTs < minTimeForEnd) {
                 logger.warn(
                   `[Watchdog] Match ${stale.matchId} not in recent/list but match_time (${matchTime}) ` +
-                  `is less than 120 minutes ago (now: ${nowTs}, diff: ${Math.floor((nowTs - matchTime) / 60)} min). ` +
+                  `is less than 120 minutes ago (now: ${nowTs}, diff: ${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} min). ` +
                   `Skipping END transition. Will try detail_live instead.`
                 );
                 // Continue to detail_live reconcile instead of END
@@ -328,7 +328,7 @@ export class MatchWatchdogWorker {
                 // Match time is old enough, safe to transition to END
                 logger.info(
                   `[Watchdog] Match ${stale.matchId} not in recent/list and match_time (${matchTime}) ` +
-                  `is ${Math.floor((nowTs - matchTime) / 60)} minutes ago (>150 min). Transitioning to END.`
+                  `is ${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>120 min). Transitioning to END.`
                 );
 
                 const updateResult = await client.query(
@@ -350,7 +350,7 @@ export class MatchWatchdogWorker {
                     row_count: updateResult.rowCount,
                     new_status_id: 8,
                     match_time: matchTime,
-                    elapsed_minutes: Math.floor((nowTs - matchTime) / 60),
+                    elapsed_minutes: Math.floor((nowTs - (matchTime ?? nowTs)) / 60),
                   });
                   continue; // Skip detail_live reconcile
                 }

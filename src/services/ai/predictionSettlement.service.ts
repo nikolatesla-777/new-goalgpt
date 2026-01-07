@@ -47,6 +47,32 @@ interface PendingPrediction {
   id: string;
   minute_at_prediction: number;
   score_at_prediction: string;
+  prediction: string;
+  prediction_threshold: number;
+  canonical_bot_name: string;
+  home_team_name: string;
+  away_team_name: string;
+}
+
+// Settlement event broadcast data (for Phase 3)
+export interface PredictionSettledData {
+  predictionId: string;
+  matchId: string;
+  botName: string;
+  prediction: string;
+  result: 'won' | 'lost';
+  resultReason: string;
+  homeTeam: string;
+  awayTeam: string;
+  finalScore?: string;
+  timestamp: number;
+}
+
+// Callback for WebSocket broadcast (set by server.ts)
+let onPredictionSettled: ((data: PredictionSettledData) => void) | null = null;
+
+export function setOnPredictionSettled(callback: (data: PredictionSettledData) => void): void {
+  onPredictionSettled = callback;
 }
 
 // ============================================================================
@@ -150,8 +176,11 @@ class PredictionSettlementService {
       await client.query('BEGIN');
 
       // FOR UPDATE ile lock al - race condition önlenir
+      // Phase 2: prediction_threshold kolonunu direkt kullan
       const pending = await client.query<PendingPrediction>(`
-        SELECT id, minute_at_prediction, score_at_prediction
+        SELECT id, minute_at_prediction, score_at_prediction,
+               prediction, prediction_threshold,
+               canonical_bot_name, home_team_name, away_team_name
         FROM ai_predictions
         WHERE match_id = $1 AND result = 'pending'
         FOR UPDATE
@@ -163,29 +192,57 @@ class PredictionSettlementService {
       }
 
       const totalGoals = event.homeScore + event.awayScore;
-      const currentMinute = event.minute ?? 90; // Default to 90 if minute not provided
+      const currentMinute = event.minute ?? 90;
+      const currentScore = `${event.homeScore}-${event.awayScore}`;
 
       for (const row of pending.rows) {
         const period = row.minute_at_prediction <= 45 ? 'IY' : 'MS';
-        const threshold = this.calculateThreshold(row.score_at_prediction);
+        // Phase 2: prediction_threshold kolonunu kullan (hesaplama yok!)
+        const threshold = row.prediction_threshold;
 
         // Instant win kontrolü - threshold aşıldı mı?
         if (totalGoals > threshold) {
           // IY tahminleri için: Sadece 1. yarıda gol atılmışsa kontrol et
-          // (2. yarıda atılan goller IY tahminini etkilemez)
           if (period === 'IY') {
             if (currentMinute <= 45) {
-              await this.markWon(client, row.id, 'instant_win_iy');
+              await this.markWon(client, row.id, 'instant_win_iy', currentScore);
               settled++;
               logger.info(`[Settlement] INSTANT WIN (IY): ${row.id} - ${totalGoals} goals > ${threshold} threshold`);
+
+              // Phase 3: WebSocket broadcast
+              this.broadcastSettlement({
+                predictionId: row.id,
+                matchId: event.matchId,
+                botName: row.canonical_bot_name,
+                prediction: row.prediction,
+                result: 'won',
+                resultReason: 'instant_win_iy',
+                homeTeam: row.home_team_name,
+                awayTeam: row.away_team_name,
+                finalScore: currentScore,
+                timestamp: Date.now(),
+              });
             }
-            // else: 2. yarıda gol, IY tahmini için instant win yok
           }
           // MS tahminleri için: Her gol sonrası kontrol et
           else if (period === 'MS') {
-            await this.markWon(client, row.id, 'instant_win_ms');
+            await this.markWon(client, row.id, 'instant_win_ms', currentScore);
             settled++;
             logger.info(`[Settlement] INSTANT WIN (MS): ${row.id} - ${totalGoals} goals > ${threshold} threshold`);
+
+            // Phase 3: WebSocket broadcast
+            this.broadcastSettlement({
+              predictionId: row.id,
+              matchId: event.matchId,
+              botName: row.canonical_bot_name,
+              prediction: row.prediction,
+              result: 'won',
+              resultReason: 'instant_win_ms',
+              homeTeam: row.home_team_name,
+              awayTeam: row.away_team_name,
+              finalScore: currentScore,
+              timestamp: Date.now(),
+            });
           }
         }
       }
@@ -221,8 +278,11 @@ class PredictionSettlementService {
       await client.query('BEGIN');
 
       // Sadece IY tahminlerini al (minute <= 45)
+      // Phase 2: prediction_threshold kolonunu direkt kullan
       const pending = await client.query<PendingPrediction>(`
-        SELECT id, minute_at_prediction, score_at_prediction
+        SELECT id, minute_at_prediction, score_at_prediction,
+               prediction, prediction_threshold,
+               canonical_bot_name, home_team_name, away_team_name
         FROM ai_predictions
         WHERE match_id = $1
           AND result = 'pending'
@@ -237,19 +297,49 @@ class PredictionSettlementService {
       }
 
       const htTotal = event.homeScore + event.awayScore;
-      logger.info(`[Settlement] HT Settlement for ${event.matchId}: HT Score ${event.homeScore}-${event.awayScore}, ${pending.rows.length} IY predictions`);
+      const htScore = `${event.homeScore}-${event.awayScore}`;
+      logger.info(`[Settlement] HT Settlement for ${event.matchId}: HT Score ${htScore}, ${pending.rows.length} IY predictions`);
 
       for (const row of pending.rows) {
-        const threshold = this.calculateThreshold(row.score_at_prediction);
+        // Phase 2: prediction_threshold kolonunu kullan
+        const threshold = row.prediction_threshold;
 
         if (htTotal > threshold) {
-          await this.markWon(client, row.id, 'halftime_settlement');
+          await this.markWon(client, row.id, 'halftime_settlement', htScore);
           winners++;
           logger.info(`[Settlement] HT WON: ${row.id} - HT ${htTotal} > ${threshold}`);
+
+          // Phase 3: WebSocket broadcast
+          this.broadcastSettlement({
+            predictionId: row.id,
+            matchId: event.matchId,
+            botName: row.canonical_bot_name,
+            prediction: row.prediction,
+            result: 'won',
+            resultReason: 'halftime_settlement',
+            homeTeam: row.home_team_name,
+            awayTeam: row.away_team_name,
+            finalScore: htScore,
+            timestamp: Date.now(),
+          });
         } else {
-          await this.markLost(client, row.id, 'halftime_settlement');
+          await this.markLost(client, row.id, 'halftime_threshold_not_met', htScore);
           losers++;
           logger.info(`[Settlement] HT LOST: ${row.id} - HT ${htTotal} <= ${threshold}`);
+
+          // Phase 3: WebSocket broadcast
+          this.broadcastSettlement({
+            predictionId: row.id,
+            matchId: event.matchId,
+            botName: row.canonical_bot_name,
+            prediction: row.prediction,
+            result: 'lost',
+            resultReason: 'halftime_threshold_not_met',
+            homeTeam: row.home_team_name,
+            awayTeam: row.away_team_name,
+            finalScore: htScore,
+            timestamp: Date.now(),
+          });
         }
       }
 
@@ -284,8 +374,11 @@ class PredictionSettlementService {
       await client.query('BEGIN');
 
       // Sadece MS tahminlerini al (minute > 45)
+      // Phase 2: prediction_threshold kolonunu direkt kullan
       const pending = await client.query<PendingPrediction>(`
-        SELECT id, minute_at_prediction, score_at_prediction
+        SELECT id, minute_at_prediction, score_at_prediction,
+               prediction, prediction_threshold,
+               canonical_bot_name, home_team_name, away_team_name
         FROM ai_predictions
         WHERE match_id = $1
           AND result = 'pending'
@@ -300,19 +393,49 @@ class PredictionSettlementService {
       }
 
       const finalTotal = event.homeScore + event.awayScore;
-      logger.info(`[Settlement] FT Settlement for ${event.matchId}: Final Score ${event.homeScore}-${event.awayScore}, ${pending.rows.length} MS predictions`);
+      const finalScore = `${event.homeScore}-${event.awayScore}`;
+      logger.info(`[Settlement] FT Settlement for ${event.matchId}: Final Score ${finalScore}, ${pending.rows.length} MS predictions`);
 
       for (const row of pending.rows) {
-        const threshold = this.calculateThreshold(row.score_at_prediction);
+        // Phase 2: prediction_threshold kolonunu kullan
+        const threshold = row.prediction_threshold;
 
         if (finalTotal > threshold) {
-          await this.markWon(client, row.id, 'fulltime_settlement');
+          await this.markWon(client, row.id, 'fulltime_settlement', finalScore);
           winners++;
           logger.info(`[Settlement] FT WON: ${row.id} - Final ${finalTotal} > ${threshold}`);
+
+          // Phase 3: WebSocket broadcast
+          this.broadcastSettlement({
+            predictionId: row.id,
+            matchId: event.matchId,
+            botName: row.canonical_bot_name,
+            prediction: row.prediction,
+            result: 'won',
+            resultReason: 'fulltime_settlement',
+            homeTeam: row.home_team_name,
+            awayTeam: row.away_team_name,
+            finalScore: finalScore,
+            timestamp: Date.now(),
+          });
         } else {
-          await this.markLost(client, row.id, 'fulltime_settlement');
+          await this.markLost(client, row.id, 'fulltime_threshold_not_met', finalScore);
           losers++;
           logger.info(`[Settlement] FT LOST: ${row.id} - Final ${finalTotal} <= ${threshold}`);
+
+          // Phase 3: WebSocket broadcast
+          this.broadcastSettlement({
+            predictionId: row.id,
+            matchId: event.matchId,
+            botName: row.canonical_bot_name,
+            prediction: row.prediction,
+            result: 'lost',
+            resultReason: 'fulltime_threshold_not_met',
+            homeTeam: row.home_team_name,
+            awayTeam: row.away_team_name,
+            finalScore: finalScore,
+            timestamp: Date.now(),
+          });
         }
       }
 
@@ -338,7 +461,7 @@ class PredictionSettlementService {
   // ==========================================================================
 
   /**
-   * Threshold hesapla (Over X.5 logic)
+   * Threshold hesapla (Over X.5 logic) - LEGACY, artık prediction_threshold kullanılıyor
    * "0-0" → 0.5
    * "1-1" → 2.5
    * "2-0" → 2.5
@@ -352,34 +475,61 @@ class PredictionSettlementService {
 
   /**
    * Tahmini WON olarak işaretle
+   * Phase 2: result_reason ve final_score kolonlarını güncelle
    */
-  private async markWon(client: any, predictionId: string, reason: string): Promise<void> {
+  private async markWon(client: any, predictionId: string, reason: string, score?: string): Promise<void> {
     await client.query(`
       UPDATE ai_predictions
-      SET result = 'won', resulted_at = NOW()
+      SET result = 'won',
+          resulted_at = NOW(),
+          updated_at = NOW(),
+          result_reason = $2,
+          final_score = COALESCE($3, final_score)
       WHERE id = $1 AND result = 'pending'
-    `, [predictionId]);
+    `, [predictionId, reason, score || null]);
 
     logEvent('info', 'settlement.won', {
       prediction_id: predictionId,
       reason,
+      score,
     });
   }
 
   /**
    * Tahmini LOST olarak işaretle
+   * Phase 2: result_reason ve final_score kolonlarını güncelle
    */
-  private async markLost(client: any, predictionId: string, reason: string): Promise<void> {
+  private async markLost(client: any, predictionId: string, reason: string, score?: string): Promise<void> {
     await client.query(`
       UPDATE ai_predictions
-      SET result = 'lost', resulted_at = NOW()
+      SET result = 'lost',
+          resulted_at = NOW(),
+          updated_at = NOW(),
+          result_reason = $2,
+          final_score = COALESCE($3, final_score)
       WHERE id = $1 AND result = 'pending'
-    `, [predictionId]);
+    `, [predictionId, reason, score || null]);
 
     logEvent('info', 'settlement.lost', {
       prediction_id: predictionId,
       reason,
+      score,
     });
+  }
+
+  /**
+   * WebSocket broadcast helper
+   * Phase 3: Tüm bağlı frontend'lere settlement event'i gönder
+   */
+  private broadcastSettlement(data: PredictionSettledData): void {
+    if (onPredictionSettled) {
+      try {
+        onPredictionSettled(data);
+        logger.debug(`[Settlement] Broadcasted ${data.result} for ${data.predictionId}`);
+      } catch (error: any) {
+        logger.warn(`[Settlement] Broadcast failed for ${data.predictionId}:`, error.message);
+      }
+    }
   }
 
   /**

@@ -20,7 +20,6 @@ export interface PredictionFilter {
 export interface UnifiedPrediction {
     id: string;
     external_id: string;
-    bot_name: string;
     canonical_bot_name: string;
     league_name: string;
     home_team_name: string;
@@ -29,15 +28,16 @@ export interface UnifiedPrediction {
     away_team_logo: string | null;
     score_at_prediction: string;
     minute_at_prediction: number;
-    prediction_type: string;
-    prediction_value: string;
-    display_prediction: string | null;
+    // Phase 2: New prediction columns
+    prediction: string;               // "IY 0.5 ÜST", "MS 2.5 ÜST"
+    prediction_threshold: number;     // 0.5, 1.5, 2.5
     match_id: string | null;
     match_time: number | null;
     match_status: number;
     result: 'pending' | 'won' | 'lost' | 'cancelled';
     final_score: string | null;
-    confidence: number;
+    result_reason: string | null;     // "instant_win_iy", "halftime_settlement"
+    source: string;                   // "external", "manual"
     access_type: 'VIP' | 'FREE';
     created_at: string;
     resulted_at: string | null;
@@ -145,32 +145,34 @@ class UnifiedPredictionService {
             : '';
 
         // Main query - JOIN with ts_matches, ts_teams, ts_competitions for complete data
+        // Phase 2: Updated to use new 29-column schema
         const query = `
-      SELECT 
-        p.id, p.external_id, p.bot_name, p.canonical_bot_name,
+      SELECT
+        p.id, p.external_id, p.canonical_bot_name,
         p.league_name, p.home_team_name, p.away_team_name,
         -- Prefer dynamic logos from teams table, fallback to prediction table
         COALESCE(th.logo_url, p.home_team_logo) as home_team_logo,
         COALESCE(ta.logo_url, p.away_team_logo) as away_team_logo,
         p.score_at_prediction, p.minute_at_prediction,
-        p.prediction_type, p.prediction_value, p.display_prediction,
+        -- Phase 2: New prediction columns
+        p.prediction, p.prediction_threshold,
         p.match_id, p.match_time, p.match_status,
         p.access_type, p.created_at, p.resulted_at,
-        p.result, p.final_score, p.confidence,
+        p.result, p.final_score, p.result_reason, p.source,
         -- Valid Live Data from Single Source of Truth (ts_matches)
         -- If match is finished (8), use regular score. If live, use display score.
-        CASE 
+        CASE
             WHEN m.status_id = 8 THEN COALESCE(m.home_score_regular, 0)
             ELSE m.home_score_display
         END as home_score_display,
-        CASE 
+        CASE
             WHEN m.status_id = 8 THEN COALESCE(m.away_score_regular, 0)
             ELSE m.away_score_display
         END as away_score_display,
         m.status_id as live_match_status, m.minute as live_match_minute,
         -- Competition & Country Data
-        COALESCE(cnt.name, 'World') as country_name, 
-        cnt.logo as country_logo, 
+        COALESCE(cnt.name, 'World') as country_name,
+        cnt.logo as country_logo,
         c.logo_url as competition_logo
       FROM ai_predictions p
       LEFT JOIN ts_matches m ON p.match_id = m.external_id
@@ -389,93 +391,38 @@ class UnifiedPredictionService {
 
     /**
      * Process real-time match event to result predictions
+     *
+     * Phase 2: This method is now DEPRECATED - use predictionSettlementService instead
+     * The settlement service handles period-aware logic (IY vs MS) properly.
      */
     async processMatchEvent(event: any): Promise<void> {
-        // Only care about SCORE_CHANGE or MATCH_STATE_CHANGE
-        const { type, matchId, homeScore, awayScore, statusId } = event;
+        // DEPRECATED: Settlement is now handled by predictionSettlementService
+        // This method is kept for backward compatibility but logs a warning
+        logger.warn('[UnifiedPredictionService] processMatchEvent is DEPRECATED - use predictionSettlementService');
 
+        const { type, matchId, statusId } = event;
         if (!matchId) return;
 
-        // 1. Result predictions if match ended (Status 8)
+        // Only log for monitoring - actual settlement handled elsewhere
         if (type === 'MATCH_STATE_CHANGE' && statusId === 8) {
-            try {
-                // Fetch final score if not provided
-                // Usually we need to fetch from DB to be safe, but let's try to use event data or fetch
-                const matchRes = await pool.query(
-                    'SELECT home_score_regular, away_score_regular, home_team_name, away_team_name FROM ts_matches WHERE external_id = $1',
-                    [matchId]
-                );
-
-                if (matchRes.rows.length === 0) return;
-
-                const match = matchRes.rows[0];
-                const finalScore = `${match.home_score_regular}-${match.away_score_regular}`;
-
-                // Find all pending predictions for this match
-                const pendingPreds = await pool.query(
-                    `SELECT id, prediction_type, prediction_value, bot_name
-                     FROM ai_predictions 
-                     WHERE match_id = $1 AND result = 'pending'`,
-                    [matchId]
-                );
-
-                for (const pred of pendingPreds.rows) {
-                    const isWin = this.checkPredictionWin(
-                        pred.prediction_type,
-                        pred.prediction_value,
-                        match.home_score_regular,
-                        match.away_score_regular
-                    );
-
-                    const result = isWin ? 'won' : 'lost';
-                    await this.updatePredictionResult(pred.id, result, finalScore);
-                    logger.info(`[UnifiedPredictionService] Auto-resulted prediction ${pred.id} (${pred.bot_name}) as ${result}`);
-                }
-            } catch (err) {
-                logger.error(`[UnifiedPredictionService] Error processing end match ${matchId}:`, err);
-            }
+            logger.debug(`[UnifiedPredictionService] Match ${matchId} ended - settlement handled by predictionSettlementService`);
         }
-
-        // 2. Can also implement "Live Won" detection (e.g. Over 0.5 hit) here if needed
     }
 
-    private checkPredictionWin(type: string, value: string, home: number, away: number): boolean {
-        // Normalize type
-        const t = type.toLowerCase();
-        const v = value.toLowerCase();
-        const total = home + away;
-
-        // KG (Both Teams to Score)
-        if (t.includes('kg') || t.includes('btts')) {
-            if (v === 'var' || v === 'yes') return home > 0 && away > 0;
-            if (v === 'yok' || v === 'no') return home === 0 || away === 0;
+    /**
+     * Check prediction win - Phase 2: Uses prediction_threshold column directly
+     */
+    private checkPredictionWin(prediction: string, threshold: number, totalGoals: number): boolean {
+        // Simple threshold check - if prediction contains "ÜST" (over)
+        if (prediction.toUpperCase().includes('ÜST') || prediction.toLowerCase().includes('over')) {
+            return totalGoals > threshold;
         }
-
-        // Over/Under (Üst/Alt)
-        if (t.includes('üst') || t.includes('over') || v.includes('üst') || v.includes('over')) {
-            const threshold = parseFloat(v.replace(/[^0-9.]/g, '')); // Extract 0.5, 1.5 etc
-            if (!isNaN(threshold)) return total > threshold;
+        // For "ALT" (under)
+        if (prediction.toUpperCase().includes('ALT') || prediction.toLowerCase().includes('under')) {
+            return totalGoals < threshold;
         }
-
-        if (t.includes('alt') || t.includes('under') || v.includes('alt') || v.includes('under')) {
-            const threshold = parseFloat(v.replace(/[^0-9.]/g, ''));
-            if (!isNaN(threshold)) return total < threshold;
-        }
-
-        // MS (Match Result)
-        if (t.includes('ms') || t.includes('1x2')) {
-            if (v === '1') return home > away;
-            if (v === '2') return away > home;
-            if (v === 'x' || v === '0') return home === away;
-            if (v === '1x') return home >= away;
-            if (v === 'x2') return away >= home;
-            if (v === '12') return home !== away;
-        }
-
-        // IY (First Half) - Not possible to check with full time score only, unless passing half time scores.
-        // For simplicity, assuming these are Full Time checks. IY needs HT score.
-
-        return false; // Default safe fail
+        // Default to threshold comparison
+        return totalGoals > threshold;
     }
 }
 

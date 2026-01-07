@@ -8,27 +8,25 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAIPredictions } from '../../context/AIPredictionsContext';
 import { useSocket } from '../../hooks/useSocket';
 import './admin.css';
 
 interface Prediction {
     id: string;
     external_id: string;
-    bot_name: string;
+    canonical_bot_name: string;
     league_name: string;
     home_team_name: string;
     away_team_name: string;
     score_at_prediction: string;
     minute_at_prediction: number;
-    prediction_type: string;
-    prediction_value: string;
-    processed: boolean;
+    prediction: string;              // "IY 0.5 ÜST", "MS 2.5 ÜST"
+    prediction_threshold: number;
+    match_id: string | null;
+    result: 'pending' | 'won' | 'lost' | 'cancelled';
+    final_score: string | null;
+    result_reason: string | null;
     created_at: string;
-    match_external_id: string | null;
-    overall_confidence: number | null;
-    prediction_result: string | null;
-    result?: string; // 'pending' | 'won' | 'lost'
 }
 
 interface Country {
@@ -73,10 +71,18 @@ interface DetailedStats {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+interface BotRule {
+    id: string;
+    bot_display_name: string;
+    excluded_countries?: string[];
+    excluded_competitions?: string[];
+}
+
 export function AdminBotDetail() {
     const { botName } = useParams<{ botName: string }>();
     const navigate = useNavigate();
-    const { botRules, updateBotRule, refreshBotRules } = useAIPredictions();
+    // Bot rules managed locally since context doesn't have this feature
+    const [botRules, setBotRules] = useState<BotRule[]>([]);
 
     const [predictions, setPredictions] = useState<Prediction[]>([]);
     const [loading, setLoading] = useState(true);
@@ -102,12 +108,50 @@ export function AdminBotDetail() {
     const [showBreakdown, setShowBreakdown] = useState(false);
     const [breakdownTab, setBreakdownTab] = useState<'country' | 'competition'>('country');
 
+    // Bot rules API functions
+    const refreshBotRules = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_BASE}/predictions/bot-rules`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setBotRules(data.rules || []);
+                }
+            }
+        } catch (err) {
+            console.error('Fetch bot rules error:', err);
+        }
+    }, []);
+
+    const updateBotRule = useCallback(async (ruleId: string, updates: { excluded_countries?: string[]; excluded_competitions?: string[] }): Promise<boolean> => {
+        try {
+            const res = await fetch(`${API_BASE}/predictions/bot-rules/${ruleId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
+            if (res.ok) {
+                const data = await res.json();
+                return data.success || false;
+            }
+            return false;
+        } catch (err) {
+            console.error('Update bot rule error:', err);
+            return false;
+        }
+    }, []);
+
+    // Load bot rules on mount
+    useEffect(() => {
+        refreshBotRules();
+    }, [refreshBotRules]);
+
     // Get match IDs for WebSocket filtering
     const matchIds = useMemo(() => {
-        return new Set(predictions.filter(p => p.match_external_id).map(p => p.match_external_id!));
+        return new Set(predictions.filter(p => p.match_id).map(p => p.match_id!));
     }, [predictions]);
 
-    // WEBSOCKET: Instant Win - Gol geldiğinde ANLIK güncelle
+    // WEBSOCKET: Real-time updates using new schema
     useSocket({
         onScoreChange: (event) => {
             if (!matchIds.has(event.matchId)) return;
@@ -115,40 +159,25 @@ export function AdminBotDetail() {
             const totalGoals = event.homeScore + event.awayScore;
 
             setPredictions(prev => prev.map(p => {
-                if (p.match_external_id !== event.matchId) return p;
+                if (p.match_id !== event.matchId) return p;
+                if (p.result !== 'pending') return p;
 
-                // Sadece pending tahminleri kontrol et
-                if (p.prediction_result === 'winner' || p.prediction_result === 'loser') return p;
+                // Use prediction_threshold directly from new schema
+                const threshold = p.prediction_threshold;
 
-                // Threshold hesapla
-                const scoreAtPred = p.score_at_prediction || '0-0';
-                const [predHome, predAway] = scoreAtPred.split('-').map(s => parseInt(s.trim()) || 0);
-                const threshold = predHome + predAway + 0.5;
-
-                // INSTANT WIN!
+                // INSTANT WIN check
                 if (totalGoals > threshold) {
-                    console.log(`🎉 AdminBotDetail INSTANT WIN: ${p.prediction_value} (${totalGoals} > ${threshold})`);
-                    return {
-                        ...p,
-                        prediction_result: 'winner',
-                        result: 'won',
-                        processed: true
-                    };
+                    console.log(`[AdminBotDetail] INSTANT WIN: ${p.prediction} (${totalGoals} > ${threshold})`);
+                    return { ...p, result: 'won' };
                 }
                 return p;
             }));
 
-            // Stats'ı da güncelle
+            // Update stats
             setStats(prev => {
                 const newWinners = predictions.filter(p =>
-                    p.match_external_id === event.matchId &&
-                    !p.prediction_result
-                ).filter(p => {
-                    const scoreAtPred = p.score_at_prediction || '0-0';
-                    const [predHome, predAway] = scoreAtPred.split('-').map(s => parseInt(s.trim()) || 0);
-                    const threshold = predHome + predAway + 0.5;
-                    return totalGoals > threshold;
-                }).length;
+                    p.match_id === event.matchId && p.result === 'pending'
+                ).filter(p => totalGoals > p.prediction_threshold).length;
 
                 return {
                     ...prev,
@@ -160,37 +189,34 @@ export function AdminBotDetail() {
         onMatchStateChange: (event) => {
             if (!matchIds.has(event.matchId)) return;
 
-            // INSTANT LOSE: Devre arası veya maç sonu
+            // Period-based settlement on HT/FT
             if (event.statusId === 3 || event.statusId === 8) {
                 let newLosses = 0;
 
                 setPredictions(prev => prev.map(p => {
-                    if (p.match_external_id !== event.matchId) return p;
-
-                    // Skip if already settled
-                    if (p.prediction_result === 'winner' || p.prediction_result === 'loser') return p;
+                    if (p.match_id !== event.matchId) return p;
+                    if (p.result !== 'pending') return p;
 
                     const minute = p.minute_at_prediction || 0;
-                    const isFirstHalf = minute < 45;
+                    const isIYPrediction = minute <= 45;
 
-                    // Status 3 (HT): IY tahminleri lose
-                    if (event.statusId === 3 && isFirstHalf) {
-                        console.log(`❌ AdminBotDetail INSTANT LOSE (HT): ${p.prediction_value}`);
+                    // Status 3 (HT): IY predictions settle
+                    if (event.statusId === 3 && isIYPrediction) {
+                        console.log(`[AdminBotDetail] SETTLED (HT): ${p.prediction}`);
                         newLosses++;
-                        return { ...p, prediction_result: 'loser', result: 'lost' };
+                        return { ...p, result: 'lost' };
                     }
 
-                    // Status 8 (FT): MS tahminleri lose
-                    if (event.statusId === 8 && !isFirstHalf) {
-                        console.log(`❌ AdminBotDetail INSTANT LOSE (FT): ${p.prediction_value}`);
+                    // Status 8 (FT): MS predictions settle
+                    if (event.statusId === 8 && !isIYPrediction) {
+                        console.log(`[AdminBotDetail] SETTLED (FT): ${p.prediction}`);
                         newLosses++;
-                        return { ...p, prediction_result: 'loser', result: 'lost' };
+                        return { ...p, result: 'lost' };
                     }
 
                     return p;
                 }));
 
-                // Update stats
                 if (newLosses > 0) {
                     setStats(prev => ({
                         ...prev,
@@ -352,28 +378,28 @@ export function AdminBotDetail() {
 
         setLoading(true);
         try {
-            // Use the new unified bot endpoint
+            // Use the unified bot endpoint
             const res = await fetch(`${API_BASE}/predictions/bot/${encodeURIComponent(botName)}?limit=100`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.success && data.data) {
-                    // Map unified format to local format
-                    const preds = (data.data.predictions || []).map((p: any) => ({
+                    // Map to new schema format
+                    const preds: Prediction[] = (data.data.predictions || []).map((p: any) => ({
                         id: p.id,
                         external_id: p.external_id,
-                        bot_name: p.canonical_bot_name || p.bot_name,
+                        canonical_bot_name: p.canonical_bot_name,
                         league_name: p.league_name,
                         home_team_name: p.home_team_name,
                         away_team_name: p.away_team_name,
                         score_at_prediction: p.score_at_prediction,
                         minute_at_prediction: p.minute_at_prediction,
-                        prediction_type: p.prediction_type,
-                        prediction_value: p.prediction_value,
-                        processed: p.result !== 'pending',
-                        created_at: p.created_at,
-                        match_external_id: p.match_id,
-                        overall_confidence: p.confidence,
-                        prediction_result: p.result === 'won' ? 'winner' : p.result === 'lost' ? 'loser' : null
+                        prediction: p.prediction,
+                        prediction_threshold: p.prediction_threshold,
+                        match_id: p.match_id,
+                        result: p.result,
+                        final_score: p.final_score,
+                        result_reason: p.result_reason,
+                        created_at: p.created_at
                     }));
                     setPredictions(preds);
 
@@ -382,24 +408,19 @@ export function AdminBotDetail() {
                     if (botStat) {
                         setStats({
                             total: botStat.total || preds.length,
-                            pending: botStat.pending || preds.filter((p: Prediction) => !p.processed).length,
-                            matched: preds.filter((p: Prediction) => p.match_external_id).length,
+                            pending: botStat.pending || preds.filter(p => p.result === 'pending').length,
+                            matched: preds.filter(p => p.match_id).length,
                             winners: botStat.won || 0,
                             losers: botStat.lost || 0
                         });
                     } else {
                         // Calculate stats from predictions
-                        const pending = preds.filter((p: Prediction) => !p.processed).length;
-                        const matched = preds.filter((p: Prediction) => p.processed).length;
-                        const winners = preds.filter((p: Prediction) => p.prediction_result === 'winner').length;
-                        const losers = preds.filter((p: Prediction) => p.prediction_result === 'loser').length;
-
                         setStats({
                             total: preds.length,
-                            pending,
-                            matched,
-                            winners,
-                            losers
+                            pending: preds.filter(p => p.result === 'pending').length,
+                            matched: preds.filter(p => p.match_id).length,
+                            winners: preds.filter(p => p.result === 'won').length,
+                            losers: preds.filter(p => p.result === 'lost').length
                         });
                     }
                 }
@@ -423,23 +444,16 @@ export function AdminBotDetail() {
     };
 
     const getStatusBadge = (prediction: Prediction) => {
-        if (prediction.prediction_result === 'winner') {
+        if (prediction.result === 'won') {
             return <span className="admin-badge success">Kazandı</span>;
         }
-        if (prediction.prediction_result === 'loser') {
+        if (prediction.result === 'lost') {
             return <span className="admin-badge error">Kaybetti</span>;
         }
-        if (prediction.processed) {
-            return <span className="admin-badge info">Eşleşti</span>;
+        if (prediction.result === 'cancelled') {
+            return <span className="admin-badge neutral">İptal</span>;
         }
         return <span className="admin-badge warning">Bekliyor</span>;
-    };
-
-    const getConfidenceBadge = (confidence: number | null) => {
-        if (!confidence) return null;
-        const percent = Math.round(confidence * 100);
-        const colorClass = percent >= 80 ? 'success' : percent >= 60 ? 'warning' : 'error';
-        return <span className={`admin-badge ${colorClass}`}>{percent}%</span>;
     };
 
     return (
@@ -988,12 +1002,11 @@ export function AdminBotDetail() {
                     ) : (
                         <div className="admin-logs-list">
                             {predictions.map((pred) => (
-                                <div key={pred.id} className={`admin-log-card ${pred.processed ? 'success' : ''}`}>
+                                <div key={pred.id} className={`admin-log-card ${pred.result === 'won' ? 'success' : pred.result === 'lost' ? 'error' : ''}`}>
                                     <div className="admin-log-card-header" style={{ cursor: 'default' }}>
                                         <div className="admin-log-main">
                                             <div className="admin-log-status">
                                                 {getStatusBadge(pred)}
-                                                {getConfidenceBadge(pred.overall_confidence)}
                                             </div>
                                             <div className="admin-log-info">
                                                 <div className="admin-log-endpoint" style={{ color: 'var(--admin-text-primary)', fontFamily: 'inherit' }}>
@@ -1005,12 +1018,18 @@ export function AdminBotDetail() {
                                                     <span>{pred.score_at_prediction} ({pred.minute_at_prediction}')</span>
                                                     <span className="admin-log-separator">•</span>
                                                     <span className="admin-log-time">{formatTime(pred.created_at)}</span>
+                                                    {pred.final_score && (
+                                                        <>
+                                                            <span className="admin-log-separator">•</span>
+                                                            <span style={{ color: '#22c55e' }}>MS: {pred.final_score}</span>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="admin-log-result">
                                             <span className="admin-badge info" style={{ fontWeight: 600 }}>
-                                                {pred.prediction_type || pred.prediction_value || 'N/A'}
+                                                {pred.prediction}
                                             </span>
                                         </div>
                                     </div>

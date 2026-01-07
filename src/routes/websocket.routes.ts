@@ -13,6 +13,7 @@ import { MatchEvent } from '../services/thesports/websocket/event-detector';
 import { EventLatencyMonitor } from '../services/thesports/websocket/eventLatencyMonitor';
 import { liveMatchCache } from '../services/thesports/match/liveMatchCache.service';
 import { generateMinuteText } from '../utils/matchMinuteText';
+import { PredictionSettledData, setOnPredictionSettled } from '../services/ai/predictionSettlement.service';
 
 // Store active WebSocket connections
 const activeConnections = new Set<any>();
@@ -143,6 +144,56 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
     );
   }
 }
+
+/**
+ * Broadcast prediction settlement event to all connected clients
+ * Phase 3: Real-time prediction result updates
+ *
+ * @param data - Settlement data containing prediction result
+ */
+export function broadcastPredictionSettled(data: PredictionSettledData): void {
+  const message = JSON.stringify({
+    type: 'PREDICTION_SETTLED',
+    predictionId: data.predictionId,
+    matchId: data.matchId,
+    botName: data.botName,
+    prediction: data.prediction,
+    result: data.result,
+    resultReason: data.resultReason,
+    homeTeam: data.homeTeam,
+    awayTeam: data.awayTeam,
+    finalScore: data.finalScore,
+    timestamp: data.timestamp,
+  });
+
+  let sentCount = 0;
+  let errorCount = 0;
+
+  activeConnections.forEach((socket) => {
+    try {
+      if (socket.readyState === 1) {
+        socket.send(message);
+        sentCount++;
+      } else {
+        activeConnections.delete(socket);
+      }
+    } catch (error: any) {
+      logger.error(`[WebSocket Route] Error sending settlement to client:`, error);
+      errorCount++;
+      activeConnections.delete(socket);
+    }
+  });
+
+  if (sentCount > 0) {
+    logger.info(
+      `[WebSocket Route] Broadcasted PREDICTION_SETTLED (${data.result}) to ${sentCount} clients ` +
+      `- ${data.botName}: ${data.homeTeam} vs ${data.awayTeam}`
+    );
+  }
+}
+
+// Initialize the settlement callback when this module loads
+setOnPredictionSettled(broadcastPredictionSettled);
 
 export default async function websocketRoutes(
   fastify: FastifyInstance,

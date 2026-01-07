@@ -992,13 +992,13 @@ function StandingsContent({ data, homeTeamId, awayTeamId }: { data: any; homeTea
     );
 }
 
-// AI Content
+// AI Content - Uses new 29-column schema
 function AIContent({ matchId }: { matchId: string }) {
     const [predictions, setPredictions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Fetch all predictions for this match
+        // Fetch predictions for this match using new schema
         const fetchPredictions = async () => {
             try {
                 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -1009,14 +1009,13 @@ function AIContent({ matchId }: { matchId: string }) {
                     if (data.success && data.predictions) {
                         const preds = data.predictions.map((p: any) => ({
                             id: p.id,
-                            match_external_id: p.match_external_id,
-                            prediction_type: p.prediction_type,
-                            prediction_value: p.prediction_value,
-                            overall_confidence: p.overall_confidence,
-                            bot_name: p.bot_name,
+                            match_id: p.match_id,
+                            prediction: p.prediction,           // "IY 0.5 ÜST"
+                            canonical_bot_name: p.canonical_bot_name,
                             minute_at_prediction: p.minute_at_prediction,
                             score_at_prediction: p.score_at_prediction,
-                            prediction_result: p.prediction_result,
+                            result: p.result,                   // 'pending', 'won', 'lost'
+                            final_score: p.final_score,
                             created_at: p.created_at,
                         }));
                         setPredictions(preds);
@@ -1074,17 +1073,16 @@ function AIContent({ matchId }: { matchId: string }) {
         <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
             <div className="divide-y divide-gray-100">
                 {predictions.map((prediction) => {
-                    // Determine status colors
-                    const isWinner = prediction.prediction_result === 'winner';
-                    const isLoser = prediction.prediction_result === 'loser';
-                    const isPending = !prediction.prediction_result || prediction.prediction_result === 'pending';
-                    
-                    // Parse score at prediction
+                    // Use new schema field names
+                    const isWinner = prediction.result === 'won';
+                    const isLoser = prediction.result === 'lost';
+                    const isPending = !prediction.result || prediction.result === 'pending';
+
                     const scoreAtPrediction = prediction.score_at_prediction || '0-0';
-                    
+
                     return (
-                        <div 
-                            key={prediction.id} 
+                        <div
+                            key={prediction.id}
                             className={`p-3 sm:p-4 hover:bg-gray-50 transition-colors duration-150`}
                         >
                             <div className="flex items-center justify-between gap-3 md:gap-4 flex-wrap sm:flex-nowrap">
@@ -1098,7 +1096,7 @@ function AIContent({ matchId }: { matchId: string }) {
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-1 md:gap-2 flex-wrap text-xs sm:text-sm">
                                             <span className="font-bold text-gray-900 truncate">
-                                                {prediction.bot_name || 'GoalGPT AI'}
+                                                {prediction.canonical_bot_name || 'GoalGPT AI'}
                                             </span>
                                             {prediction.minute_at_prediction && (
                                                 <>
@@ -1127,7 +1125,7 @@ function AIContent({ matchId }: { matchId: string }) {
                                 <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 order-3 sm:order-2 w-full sm:w-auto justify-center sm:justify-start">
                                     <div className="px-2 py-1 sm:px-3 sm:py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
                                         <span className="text-xs sm:text-sm font-bold text-gray-800 whitespace-nowrap">
-                                            {prediction.prediction_type}
+                                            {prediction.prediction}
                                         </span>
                                     </div>
                                 </div>

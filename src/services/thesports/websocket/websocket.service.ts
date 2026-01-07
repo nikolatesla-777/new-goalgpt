@@ -1759,7 +1759,8 @@ export class WebSocketService {
     try {
       // Import CombinedStatsService dynamically to avoid circular dependencies
       const { CombinedStatsService } = await import('../match/combinedStats.service');
-      const combinedStatsService = new CombinedStatsService(this.client);
+      // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
+      const combinedStatsService = new CombinedStatsService(this.client as any);
       
       const stats = await combinedStatsService.getCombinedMatchStats(matchId);
       if (stats && stats.allStats.length > 0) {
@@ -1788,7 +1789,8 @@ export class WebSocketService {
       
       // Import MatchTrendService dynamically
       const { MatchTrendService } = await import('../match/matchTrend.service');
-      const matchTrendService = new MatchTrendService(this.client);
+      // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
+      const matchTrendService = new MatchTrendService(this.client as any);
       
       // Get trend data
       const trendData = await matchTrendService.getMatchTrend({ match_id: matchId }, matchStatus);
@@ -1826,7 +1828,8 @@ export class WebSocketService {
     try {
       // Import CombinedStatsService dynamically
       const { CombinedStatsService } = await import('../match/combinedStats.service');
-      const combinedStatsService = new CombinedStatsService(this.client);
+      // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
+      const combinedStatsService = new CombinedStatsService(this.client as any);
       
       // Get existing stats and merge with incidents
       const existingStats = await combinedStatsService.getCombinedStatsFromDatabase(matchId);

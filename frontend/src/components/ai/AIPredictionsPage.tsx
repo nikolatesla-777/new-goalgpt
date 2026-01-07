@@ -11,7 +11,7 @@ type DateFilter = 'today' | 'yesterday' | 'month';
 
 export function AIPredictionsPage() {
     const navigate = useNavigate();
-    const { allPredictions: contextPredictions, loading } = useAIPredictions();
+    const { predictions: contextPredictions, loading } = useAIPredictions();
     const { stats: botStatsResponse } = useBotStats(); // Fetch bot stats
 
     // Create a fast lookup map for bot stats
@@ -77,9 +77,9 @@ export function AIPredictionsPage() {
     }, [allPredictions, dateFilter]);
 
     // Calculate Stats based on date-filtered predictions
-    const activePredictions = filteredByDate.filter(p => !p.prediction_result || p.prediction_result === 'pending');
-    const wonPredictions = filteredByDate.filter(p => p.prediction_result === 'winner');
-    const lostPredictions = filteredByDate.filter(p => p.prediction_result === 'loser');
+    const activePredictions = filteredByDate.filter(p => !p.result || p.result === 'pending');
+    const wonPredictions = filteredByDate.filter(p => p.result === 'won');
+    const lostPredictions = filteredByDate.filter(p => p.result === 'lost');
     const favoritePredictions = filteredByDate.filter(p => favorites.includes(p.id));
 
     const totalPredictions = filteredByDate.length;
@@ -129,9 +129,6 @@ export function AIPredictionsPage() {
         { key: 'won', label: 'Kazandı', icon: <Trophy size={16} weight="fill" />, count: wonPredictions.length },
         { key: 'lost', label: 'Kaybetti', icon: <X size={16} weight="bold" />, count: lostPredictions.length },
     ];
-
-    // Simple heuristic for VIP (mock logic for now: High Confidence or specific bot)
-    const isVipPrediction = (confidence: number) => confidence > 80;
 
     return (
         <div className="min-h-screen bg-[#0A0A0A] text-white pb-20">
@@ -236,10 +233,10 @@ export function AIPredictionsPage() {
                             <PredictionCard
                                 key={pred.id}
                                 prediction={pred}
-                                isVip={isVipPrediction(pred.overall_confidence)}
+                                isVip={pred.access_type === 'VIP'}
                                 isFavorite={favorites.includes(pred.id)}
                                 onToggleFavorite={() => toggleFavorite(pred.id)}
-                                botStats={botStatsMap[pred.bot_name || ''] || botStatsMap[(pred.bot_name || '').toLowerCase()]}
+                                botStats={botStatsMap[pred.canonical_bot_name || ''] || botStatsMap[(pred.canonical_bot_name || '').toLowerCase()]}
                             />
                         ))
                     ) : (

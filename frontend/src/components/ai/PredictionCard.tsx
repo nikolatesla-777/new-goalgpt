@@ -18,12 +18,13 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
     const navigate = useNavigate();
     const [isInfoOpen, setIsInfoOpen] = useState(false);
 
-    const isWinner = prediction.prediction_result === 'winner';
-    const isLoser = prediction.prediction_result === 'loser';
-    const isPending = !prediction.prediction_result || prediction.prediction_result === 'pending';
+    // Phase 5: Use new result field
+    const isWinner = prediction.result === 'won';
+    const isLoser = prediction.result === 'lost';
+    const isPending = !prediction.result || prediction.result === 'pending';
 
-    // Bot Info Logic - use canonical_bot_name for consistency
-    const botName = prediction.canonical_bot_name || prediction.bot_name || 'AI Bot';
+    // Bot Info Logic - use canonical_bot_name
+    const botName = prediction.canonical_bot_name || 'AI Bot';
     const description = BOT_DESCRIPTIONS[botName] || DEFAULT_BOT_DESCRIPTION;
 
     // Success Rate Display
@@ -47,16 +48,17 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
 
     // Determine the score to display
     const getDisplayScore = () => {
-        if ((isWinner || isLoser) &&
-            prediction.final_home_score != null &&
-            prediction.final_away_score != null) {
-            return `${prediction.final_home_score} - ${prediction.final_away_score}`;
+        // If finished and has final_score, parse it
+        if ((isWinner || isLoser) && prediction.final_score) {
+            return prediction.final_score;
         }
 
+        // Live scores from ts_matches join
         if (prediction.home_score_display != null && prediction.away_score_display != null) {
             return `${prediction.home_score_display} - ${prediction.away_score_display}`;
         }
 
+        // Fallback to score at prediction time
         if (prediction.score_at_prediction) {
             return prediction.score_at_prediction;
         }
@@ -66,23 +68,26 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
 
     // Get current minute
     const getCurrentMinute = () => {
-        if (prediction.match_minute && (prediction.match_status_id || 0) >= 2 && (prediction.match_status_id || 0) <= 7) {
-            return prediction.match_minute;
+        // Phase 5: Use live_match_minute and live_match_status
+        if (prediction.live_match_minute && (prediction.live_match_status || 0) >= 2 && (prediction.live_match_status || 0) <= 7) {
+            return prediction.live_match_minute;
         }
         return prediction.minute_at_prediction;
     };
 
     // Handle navigation to match detail
     const handleClick = () => {
-        if (prediction.match_external_id) {
-            navigate(`/match/${prediction.match_external_id}`);
+        // Phase 5: Use match_id instead of match_external_id
+        if (prediction.match_id) {
+            navigate(`/match/${prediction.match_id}`);
         }
     };
 
     const displayScore = getDisplayScore();
     const currentMinute = getCurrentMinute();
-    const isLive = (prediction.match_status_id || 0) >= 2 && (prediction.match_status_id || 0) <= 7;
-    const isFinished = prediction.match_status_id === 8;
+    // Phase 5: Use live_match_status
+    const isLive = (prediction.live_match_status || 0) >= 2 && (prediction.live_match_status || 0) <= 7;
+    const isFinished = prediction.live_match_status === 8;
 
     return (
         <>
@@ -109,7 +114,7 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                                 </button>
                             </div>
                             <span className="text-[11px] text-gray-400 font-medium tracking-wide block mt-0.5 opacity-80">
-                                Başarı Oranı %{successRate}
+                                Basari Orani %{successRate}
                             </span>
                         </div>
                     </div>
@@ -153,16 +158,16 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                                     {prediction.country_name}
                                 </span>
                             )}
-                            <span className="text-[10px] text-gray-600 font-bold mx-0.5">•</span>
+                            <span className="text-[10px] text-gray-600 font-bold mx-0.5">.</span>
                         </div>
                     )}
 
-                    {/* League Name (No Icon) */}
+                    {/* League Name */}
                     <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest truncate opacity-80 flex-1">
-                        {prediction.competition_name || prediction.league_name || 'UNKNOWN LEAGUE'}
+                        {prediction.league_name || 'UNKNOWN LEAGUE'}
                     </span>
 
-                    {/* Date/Time (Moved here) */}
+                    {/* Date/Time */}
                     <span className="text-[11px] text-gray-500 font-bold tracking-tight whitespace-nowrap pl-2 opacity-60">
                         {dateTimeString}
                     </span>
@@ -228,10 +233,11 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                             <Robot size={18} />
                         </div>
                         <div className="flex flex-col min-w-0 flex-1">
-                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">AI TAHMİNİ</span>
+                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">AI TAHMINI</span>
                             <div className="flex items-center flex-wrap gap-2">
+                                {/* Phase 5: Use unified prediction field */}
                                 <span className="text-sm font-black text-white tracking-tight whitespace-nowrap">
-                                    {prediction.prediction_value || prediction.prediction_type}
+                                    {prediction.prediction}
                                 </span>
 
                                 {/* Context Badge (Minute | Score) */}
