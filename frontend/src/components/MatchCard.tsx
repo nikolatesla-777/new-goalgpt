@@ -28,10 +28,11 @@ interface MatchCardProps {
 
 export function MatchCard({ match }: MatchCardProps) {
   const navigate = useNavigate();
-  const { matchIds, predictions } = useAIPredictions();
+  // Phase 5: Use new context structure
+  const { getPredictionByMatch } = useAIPredictions();
   const { isFavorite, toggleFavorite } = useFavorites();
-  const hasPrediction = matchIds.has(match.id);
-  const prediction = predictions.get(match.id);
+  const prediction = getPredictionByMatch(match.id);
+  const hasPrediction = !!prediction;
   const aiResultBadge = hasPrediction ? getAIResultBadge(prediction?.result) : null;
   const isMatchFavorite = isFavorite(match.id);
 
