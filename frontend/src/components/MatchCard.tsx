@@ -2,7 +2,25 @@ import { useNavigate } from 'react-router-dom';
 import type { Match } from '../api/matches';
 import { isLiveMatch, isFinishedMatch, getMatchStatusText, formatMatchTime, MatchState } from '../utils/matchStatus';
 import { useAIPredictions } from '../context/AIPredictionsContext';
-import { Robot } from '@phosphor-icons/react';
+import { useFavorites } from '../context/FavoritesContext';
+import { Robot, Star } from '@phosphor-icons/react';
+
+// AI Result Badge Helper
+function getAIResultBadge(result: string | undefined | null): { text: string; bg: string; color: string } | null {
+  switch (result) {
+    case 'won':
+      return { text: 'KAZANDI', bg: '#22c55e', color: 'white' };
+    case 'lost':
+      return { text: 'KAYBETTİ', bg: '#ef4444', color: 'white' };
+    case 'pending':
+      return { text: 'BEKLİYOR', bg: '#f59e0b', color: 'white' };
+    case 'push':
+    case 'cancelled':
+      return { text: 'İADE', bg: '#6b7280', color: 'white' };
+    default:
+      return null;
+  }
+}
 
 interface MatchCardProps {
   match: Match;
@@ -10,18 +28,27 @@ interface MatchCardProps {
 
 export function MatchCard({ match }: MatchCardProps) {
   const navigate = useNavigate();
-  const { matchIds } = useAIPredictions();
+  const { matchIds, predictions } = useAIPredictions();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const hasPrediction = matchIds.has(match.id);
+  const prediction = predictions.get(match.id);
+  const aiResultBadge = hasPrediction ? getAIResultBadge(prediction?.result) : null;
+  const isMatchFavorite = isFavorite(match.id);
 
   // CRITICAL FIX: Safety checks
   if (!match || typeof match !== 'object' || !match.id) {
-    console.error('❌ [MatchCard] Invalid match object:', match);
     return (
       <div style={{ padding: '1rem', backgroundColor: '#fee2e2', borderRadius: '8px' }}>
-        <p style={{ color: '#991b1b', margin: 0, fontSize: '0.875rem' }}>❌ Geçersiz maç verisi</p>
+        <p style={{ color: '#991b1b', margin: 0, fontSize: '0.875rem' }}>Geçersiz maç verisi</p>
       </div>
     );
   }
+
+  // Handle favorite toggle (prevent navigation)
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleFavorite(match.id);
+  };
 
   // Backend is authoritative: do not override status on the frontend based on timestamps.
   const status = (match as any).status ?? (match as any).match_status ?? 0;
@@ -77,7 +104,7 @@ export function MatchCard({ match }: MatchCardProps) {
   };
 
   const handleClick = () => {
-    navigate(`/match/${match.id}`);
+    navigate(`/match/${match.id}/stats`);
   };
 
   return (
@@ -171,12 +198,56 @@ export function MatchCard({ match }: MatchCardProps) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Favorite Toggle Button */}
+          <button
+            onClick={handleFavoriteClick}
+            title={isMatchFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '4px',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#fef3c7';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <Star
+              size={20}
+              weight={isMatchFavorite ? 'fill' : 'regular'}
+              color={isMatchFavorite ? '#f59e0b' : '#9ca3af'}
+            />
+          </button>
+
           {hasPrediction && (
-            <div
-              title="Yapay Zeka Tahmini Var"
-              className="bg-blue-100 text-blue-600 p-1 rounded-md animate-pulse"
-            >
-              <Robot size={16} weight="fill" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div
+                title="Yapay Zeka Tahmini Var"
+                className="bg-blue-100 text-blue-600 p-1 rounded-md"
+              >
+                <Robot size={16} weight="fill" />
+              </div>
+              {aiResultBadge && (
+                <span style={{
+                  padding: '4px 8px',
+                  backgroundColor: aiResultBadge.bg,
+                  color: aiResultBadge.color,
+                  fontSize: '0.7rem',
+                  fontWeight: 'bold',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {aiResultBadge.text}
+                </span>
+              )}
             </div>
           )}
           <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>

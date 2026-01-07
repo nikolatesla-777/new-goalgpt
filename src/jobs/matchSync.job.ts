@@ -17,6 +17,7 @@ import { MatchDetailLiveService } from '../services/thesports/match/matchDetailL
 import { pool } from '../database/connection';
 import { logEvent } from '../utils/obsLogger';
 import { AIPredictionService } from '../services/ai/aiPrediction.service';
+import { predictionSettlementService } from '../services/ai/predictionSettlement.service';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -220,11 +221,51 @@ export class MatchSyncWorker {
 
     // Prediction Resulter: Update prediction results every 30 seconds
     // Checks matched predictions where match has ended and calculates win/lose
+    // Uses centralized PredictionSettlementService for proper IY/MS differentiation
     this.predictionResultInterval = setInterval(async () => {
       try {
-        const updatedCount = await this.aiPredictionService.updatePredictionResults();
-        if (updatedCount > 0) {
-          logger.info(`[PredictionResulter] Updated ${updatedCount} prediction results`);
+        // Find matches with pending predictions that have finished or are at halftime
+        const pendingResult = await pool.query(`
+          SELECT DISTINCT
+            p.match_id,
+            m.status_id,
+            m.home_score_display,
+            m.away_score_display,
+            m.ht_home_score,
+            m.ht_away_score
+          FROM ai_predictions p
+          JOIN ts_matches m ON p.match_id = m.external_id
+          WHERE p.result = 'pending'
+            AND p.match_id IS NOT NULL
+            AND (m.status_id = 8 OR m.status_id = 3)
+        `);
+
+        let totalSettled = 0;
+        for (const row of pendingResult.rows) {
+          const eventType = row.status_id === 3 ? 'halftime' : 'fulltime';
+          const homeScore = eventType === 'halftime'
+            ? (parseInt(row.ht_home_score) || 0)
+            : (parseInt(row.home_score_display) || 0);
+          const awayScore = eventType === 'halftime'
+            ? (parseInt(row.ht_away_score) || 0)
+            : (parseInt(row.away_score_display) || 0);
+
+          const result = await predictionSettlementService.processEvent({
+            matchId: row.match_id,
+            eventType,
+            homeScore,
+            awayScore,
+            htHome: parseInt(row.ht_home_score) || undefined,
+            htAway: parseInt(row.ht_away_score) || undefined,
+            statusId: row.status_id,
+            timestamp: Date.now(),
+          });
+
+          totalSettled += result.settled;
+        }
+
+        if (totalSettled > 0) {
+          logger.info(`[PredictionResulter] Settled ${totalSettled} prediction results`);
         }
       } catch (err) {
         logger.error('[PredictionResulter] Error updating prediction results:', err);

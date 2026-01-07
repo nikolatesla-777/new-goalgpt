@@ -8,19 +8,20 @@
 import { pool } from '../../../database/connection';
 import { logger } from '../../../utils/logger';
 import { MatchDiaryResponse } from '../../../types/thesports/match';
-import { TheSportsClient } from '../client/thesports-client';
 import { MatchRecentService } from './matchRecent.service';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { generateMinuteText } from '../../../utils/matchMinuteText';
+import { liveMatchCache } from './liveMatchCache.service';
+// SINGLETON: Use shared API client
+import { theSportsAPI } from '../../../core';
 
 export class MatchDatabaseService {
-  private theSportsClient: TheSportsClient;
   private matchRecentService: MatchRecentService;
 
   constructor() {
-    this.theSportsClient = new TheSportsClient();
-    this.matchRecentService = new MatchRecentService(this.theSportsClient);
+    // SINGLETON: Use shared API client with global rate limiting
+    this.matchRecentService = new MatchRecentService(theSportsAPI as any);
   }
 
   /**
@@ -102,11 +103,14 @@ export class MatchDatabaseService {
           -- Competition
           c.name as competition_name,
           c.logo_url as competition_logo,
-          c.country_id as competition_country_id
+          c.country_id as competition_country_id,
+          -- Country (via competition)
+          co.name as competition_country_name
         FROM ts_matches m
         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+        LEFT JOIN ts_countries co ON c.country_id = co.external_id
         WHERE m.match_time >= $1 AND m.match_time <= $2
       `;
 
@@ -185,6 +189,7 @@ export class MatchDatabaseService {
             name: row.competition_name,
             logo_url: row.competition_logo || null,
             country_id: row.competition_country_id || null,
+            country_name: row.competition_country_name || null,
           } : null,
           // Raw names for fallback
           home_team_name: row.home_team_name || null,
@@ -220,16 +225,14 @@ export class MatchDatabaseService {
    */
   async getLiveMatches(): Promise<MatchDiaryResponse> {
     try {
-      // CRITICAL FIX: Disable cache for live matches - always fetch fresh from DB
-      // Cache was causing stale data (showing 3 matches instead of 18)
-      // Live matches change frequently, cache is not appropriate
-      // Removed cache check - always fetch from DB
+      // Phase 6: Smart Cache - Check cache first (event-driven invalidation)
+      const cached = liveMatchCache.getLiveMatches();
+      if (cached) {
+        logger.debug(`[MatchDatabase] Cache HIT for live matches`);
+        return cached;
+      }
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDatabase.service.ts:203',message:'getLiveMatches query start',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-
-      logger.info(`🔍 [MatchDatabase] Querying live matches from DATABASE...`);
+      logger.info(`🔍 [MatchDatabase] Cache MISS - querying live matches from DATABASE...`);
 
       // Phase 5-S Fix: Removed "should be live" reconciliation from /live endpoint
       // "Should be live" matches are now handled by watchdog and exposed via /api/matches/should-be-live
@@ -288,11 +291,13 @@ export class MatchDatabaseService {
           at.logo_url as away_team_logo,
           c.name as competition_name,
           c.logo_url as competition_logo,
-          c.country_id as competition_country_id
+          c.country_id as competition_country_id,
+          co.name as competition_country_name
         FROM ts_matches m
         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+        LEFT JOIN ts_countries co ON c.country_id = co.external_id
         WHERE m.status_id IN (2, 3, 4, 5, 7)  -- CRITICAL FIX: ONLY strictly live matches (no finished/interrupted)
           AND m.match_time >= $1  -- CRITICAL FIX: Only matches that started within last 4 hours
           AND m.match_time <= $2  -- CRITICAL FIX: Exclude future matches
@@ -373,6 +378,7 @@ export class MatchDatabaseService {
             name: row.competition_name,
             logo_url: row.competition_logo || null,
             country_id: row.competition_country_id || null,
+            country_name: row.competition_country_name || null,
           } : null,
           home_team_name: row.home_team_name || null,
           away_team_name: row.away_team_name || null,
@@ -386,13 +392,9 @@ export class MatchDatabaseService {
         results: transformedMatches as any,
       };
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDatabase.service.ts:349',message:'getLiveMatches return',data:{finalCount:transformedMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-
-      // CRITICAL FIX: Cache disabled for live matches (was causing stale data)
-      // Live matches change frequently, cache is not appropriate
-      // await cacheService.set(cacheKey, response, CacheTTL.ThirtySeconds);
+      // Phase 6: Smart Cache - Store in cache with short TTL (event-driven invalidation)
+      liveMatchCache.setLiveMatches(response);
+      logger.debug(`[MatchDatabase] Cache SET - ${transformedMatches.length} live matches`);
 
       return response;
     } catch (error: any) {
@@ -482,11 +484,13 @@ export class MatchDatabaseService {
           at.logo_url as away_team_logo,
           c.name as competition_name,
           c.logo_url as competition_logo,
-          c.country_id as competition_country_id
+          c.country_id as competition_country_id,
+          co.name as competition_country_name
         FROM ts_matches m
         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+        LEFT JOIN ts_countries co ON c.country_id = co.external_id
         WHERE m.status_id = 1  -- NOT_STARTED
           AND m.match_time <= $1  -- match_time has passed
           AND m.match_time >= $2  -- Today's matches (TSİ-based) or maxMinutesAgo window
@@ -547,6 +551,7 @@ export class MatchDatabaseService {
             name: row.competition_name,
             logo_url: row.competition_logo || null,
             country_id: row.competition_country_id || null,
+            country_name: row.competition_country_name || null,
           } : null,
           home_team_name: row.home_team_name || null,
           away_team_name: row.away_team_name || null,

@@ -44,60 +44,42 @@ export function MatchDetailPage() {
 
 
 
-    // Fetch match info with periodic polling for live matches
-    // CRITICAL FIX: Prefer getLiveMatches for live matches (more up-to-date)
-    // getMatchById is fallback for finished/upcoming matches
+    // Fetch match info - FAST first, then live data if needed
     useEffect(() => {
         const fetchMatch = async () => {
             if (!matchId) return;
 
-            // Only show loading on initial fetch, not on poll updates
+            // Only show loading on initial fetch
             if (!hasLoadedRef.current) setLoading(true);
 
             try {
                 let foundMatch: Match | undefined;
 
-                // Step 1: Try getLiveMatches first (most up-to-date for live matches)
-                // This ensures we get the latest status for live matches
+                // Step 1: Get match by ID first (FAST - ~0.3s)
                 try {
-                    const liveResponse = await getLiveMatches();
-                    foundMatch = liveResponse.results?.find((m: Match) => m.id === matchId);
-                } catch (error: any) {
-                    // Live endpoint failed, continue to next step
-                    console.log('[MatchDetailPage] Live matches endpoint failed, trying getMatchById...');
+                    foundMatch = await getMatchById(matchId);
+                } catch {
+                    // Match not found by ID
                 }
 
-                // Step 2: If not found in live matches, try getMatchById (works for any date)
-                if (!foundMatch) {
-                    try {
-                        foundMatch = await getMatchById(matchId);
-                    } catch (error: any) {
-                        // Match not found
-                        console.log('[MatchDetailPage] Match not found by ID');
-                    }
-                }
-
-                // Step 3: If found in both, prefer live matches data (more up-to-date)
+                // Step 2: If match is LIVE, get fresh data from live endpoint
                 if (foundMatch) {
-                    // Double-check: if match is live, prefer live matches data
                     const isLiveStatus = [2, 3, 4, 5, 7].includes((foundMatch as any).status_id ?? 0);
                     if (isLiveStatus) {
-                        // Try to get from live matches again to ensure consistency
                         try {
                             const liveResponse = await getLiveMatches();
                             const liveMatch = liveResponse.results?.find((m: Match) => m.id === matchId);
                             if (liveMatch) {
-                                foundMatch = liveMatch;  // Prefer live matches data
+                                foundMatch = liveMatch;
                             }
                         } catch {
-                            // Keep foundMatch
+                            // Keep foundMatch from getMatchById
                         }
                     }
 
                     setMatch(foundMatch);
                     setError(null);
                 } else if (!match) {
-                    // Only set error if we don't have existing data
                     setError('Maç bulunamadı');
                 }
             } catch (err: any) {
@@ -111,31 +93,32 @@ export function MatchDetailPage() {
         };
 
         fetchMatch();
-
-        // CRITICAL FIX: Removed polling to prevent screen flickering
-        // Real-time updates should come from WebSocket, not polling
-        // Polling causes unnecessary re-renders and screen flickering
-        // If WebSocket is not available, user can manually refresh the page
-
-        // No polling interval - WebSocket handles real-time updates
     }, [matchId]);
+
+    // Helper: Fetch with timeout (5 seconds max)
+    const fetchWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 5000): Promise<T | null> => {
+        try {
+            const result = await Promise.race([
+                promise,
+                new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeoutMs))
+            ]);
+            return result;
+        } catch {
+            return null;
+        }
+    };
 
     // Fetch tab data function - extracted to be reusable from WebSocket handlers
     const fetchTabData = useCallback(async (forceRefresh: boolean = false) => {
         if (!matchId) return;
 
         // CRITICAL FIX: Check if this exact tab+matchId combination has already been loaded
-        // This prevents unnecessary refetches when match object reference changes (e.g., WebSocket updates)
-        // But allow force refresh from WebSocket events
         if (!forceRefresh && tabDataLoadedRef.current?.tab === activeTab && tabDataLoadedRef.current?.matchId === matchId) {
-            // This tab data is already loaded for this match, skip refetch
-            // CRITICAL: Don't set loading state or clear data - just return silently
             return;
         }
 
-        // CRITICAL FIX: For standings tab, we need match.season_id, so wait for match to load
+        // For standings tab, we need match.season_id
         if (activeTab === 'standings' && !match?.season_id) {
-            // Don't fetch yet, wait for match to load
             return;
         }
 
@@ -143,24 +126,19 @@ export function MatchDetailPage() {
         if (isFetchingRef.current) return;
         isFetchingRef.current = true;
 
-        // CRITICAL FIX: Only set loading state when actually fetching NEW data
-        // Don't clear existing data until we have new data (prevents flickering)
         setTabLoading(true);
-        // DON'T clear tabData here - keep existing data visible while loading new data
-        setError(null); // Clear previous errors
+        setError(null);
 
         try {
             let result;
             switch (activeTab) {
                 case 'stats':
-                    // Fetch combined stats (live-stats endpoint includes both basic and detailed stats)
-                    // Also fetch half time stats for period selection
+                    // Fetch with 5s timeout - don't wait forever for slow APIs
                     const [liveStats, halfStats] = await Promise.allSettled([
-                        getMatchLiveStats(matchId).catch(() => null), // Fail gracefully, fallback to teamStats
-                        getMatchHalfStats(matchId).catch(() => null) // Fail gracefully
+                        fetchWithTimeout(getMatchLiveStats(matchId), 5000),
+                        fetchWithTimeout(getMatchHalfStats(matchId), 5000)
                     ]);
 
-                    // If liveStats failed, fallback to teamStats
                     let fullTimeData = null;
                     if (liveStats.status === 'fulfilled' && liveStats.value) {
                         fullTimeData = {
@@ -168,9 +146,9 @@ export function MatchDetailPage() {
                             incidents: liveStats.value.incidents || [],
                         };
                     } else {
-                        // Fallback to getMatchTeamStats
+                        // Fallback to getMatchTeamStats (faster)
                         try {
-                            const teamStats = await getMatchTeamStats(matchId);
+                            const teamStats = await fetchWithTimeout(getMatchTeamStats(matchId), 3000);
                             fullTimeData = teamStats;
                         } catch {
                             fullTimeData = null;
@@ -199,11 +177,10 @@ export function MatchDetailPage() {
                     result = await getMatchLineup(matchId);
                     break;
                 case 'trend':
-                    // Fetch both trend and live detail (for incidents/events)
-                    // If match is finished, getMatchDetailLive might still return events if available
+                    // Fetch with timeout - don't wait forever
                     const [trendData, detailLive] = await Promise.all([
-                        getMatchTrend(matchId),
-                        getMatchDetailLive(matchId).catch(() => ({})) // Fail gracefully
+                        fetchWithTimeout(getMatchTrend(matchId), 5000),
+                        fetchWithTimeout(getMatchDetailLive(matchId), 5000)
                     ]);
                     result = {
                         trend: trendData,
@@ -211,14 +188,13 @@ export function MatchDetailPage() {
                     };
                     break;
                 case 'events':
-                    // Fetch incidents for events timeline
-                    // Try detail-live first (for live matches), then fallback to stats (for finished matches)
-                    let eventsData = await getMatchDetailLive(matchId).catch(() => ({}));
+                    // Fetch with timeout
+                    let eventsData = await fetchWithTimeout(getMatchDetailLive(matchId), 5000);
                     let incidents = eventsData?.incidents || [];
 
-                    // If no incidents from detail-live, try stats endpoint (has historical data)
+                    // If no incidents, try stats endpoint (faster fallback)
                     if (incidents.length === 0) {
-                        const statsData = await getMatchTeamStats(matchId).catch(() => ({}));
+                        const statsData = await fetchWithTimeout(getMatchTeamStats(matchId), 3000);
                         incidents = statsData?.incidents || [];
                     }
 
@@ -308,8 +284,6 @@ export function MatchDetailPage() {
         onScoreChange: (event) => {
             if (!matchId || event.matchId !== matchId) return;
 
-            console.log('[MatchDetailPage] WebSocket score change:', event);
-
             // Optimistic update: Update match info immediately
             setMatch(prevMatch => {
                 if (!prevMatch) return prevMatch;
@@ -331,8 +305,6 @@ export function MatchDetailPage() {
         onMatchStateChange: (event) => {
             if (!matchId || event.matchId !== matchId) return;
 
-            console.log('[MatchDetailPage] WebSocket match state change:', event);
-
             // Update match status
             setMatch(prevMatch => {
                 if (!prevMatch) return prevMatch;
@@ -351,8 +323,6 @@ export function MatchDetailPage() {
         },
         onAnyEvent: (event) => {
             if (!matchId || event.matchId !== matchId) return;
-
-            console.log('[MatchDetailPage] WebSocket any event:', event);
 
             // For events tab, refresh immediately
             if (activeTab === 'events') {
@@ -1033,12 +1003,9 @@ function AIContent({ matchId }: { matchId: string }) {
             try {
                 const API_BASE = import.meta.env.VITE_API_URL || '/api';
                 const url = `${API_BASE}/predictions/match/${matchId}`;
-                console.log('[AIContent] Fetching predictions from:', url);
                 const res = await fetch(url);
-                console.log('[AIContent] Response status:', res.status);
                 if (res.ok) {
                     const data = await res.json();
-                    console.log('[AIContent] Response data:', data);
                     if (data.success && data.predictions) {
                         const preds = data.predictions.map((p: any) => ({
                             id: p.id,
@@ -1052,16 +1019,11 @@ function AIContent({ matchId }: { matchId: string }) {
                             prediction_result: p.prediction_result,
                             created_at: p.created_at,
                         }));
-                        console.log('[AIContent] Setting predictions:', preds);
                         setPredictions(preds);
-                    } else {
-                        console.log('[AIContent] No predictions in response');
                     }
-                } else {
-                    console.error('[AIContent] Response not OK:', res.status, res.statusText);
                 }
-            } catch (error) {
-                console.error('[AIContent] Fetch predictions error:', error);
+            } catch {
+                // Failed to fetch predictions
             } finally {
                 setLoading(false);
             }

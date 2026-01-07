@@ -142,8 +142,9 @@ export async function searchPlayers(
 
     client = await pool.connect();
 
+    // Filter out duplicates from search results
     const result = await client.query(`
-      SELECT 
+      SELECT
         p.external_id,
         p.name,
         p.short_name,
@@ -155,6 +156,7 @@ export async function searchPlayers(
       FROM ts_players p
       LEFT JOIN ts_teams t ON p.team_id = t.external_id
       WHERE p.name ILIKE $1
+        AND (p.is_duplicate = false OR p.is_duplicate IS NULL)
       ORDER BY p.market_value DESC NULLS LAST
       LIMIT $2
     `, [`%${q}%`, limit]);
@@ -177,6 +179,7 @@ export async function searchPlayers(
 
 /**
  * Get players by team ID
+ * Filters out duplicates using is_duplicate flag and name similarity
  */
 export async function getPlayersByTeam(
   request: FastifyRequest<{ Params: { teamId?: string; team_id?: string } }>,
@@ -189,8 +192,13 @@ export async function getPlayersByTeam(
   const client = await pool.connect();
 
   try {
+    // Use DISTINCT ON with normalized name to filter duplicates
+    // This handles cases where uid field isn't populated but names are similar
+    // Priority: higher market_value, then position order, then shirt_number
     const result = await client.query(`
-      SELECT 
+      SELECT DISTINCT ON (
+        LOWER(REGEXP_REPLACE(p.name, '[^a-zA-Z0-9]', '', 'g'))
+      )
         p.external_id,
         p.name,
         p.short_name,
@@ -204,23 +212,46 @@ export async function getPlayersByTeam(
         p.season_stats
       FROM ts_players p
       WHERE p.team_id = $1
-      ORDER BY 
-        CASE p.position 
-          WHEN 'G' THEN 1 
+        AND (p.is_duplicate = false OR p.is_duplicate IS NULL)
+      ORDER BY
+        LOWER(REGEXP_REPLACE(p.name, '[^a-zA-Z0-9]', '', 'g')),
+        p.market_value DESC NULLS LAST,
+        CASE p.position
+          WHEN 'G' THEN 1
           WHEN 'GK' THEN 1
-          WHEN 'D' THEN 2 
+          WHEN 'D' THEN 2
           WHEN 'DF' THEN 2
-          WHEN 'M' THEN 3 
+          WHEN 'M' THEN 3
           WHEN 'MF' THEN 3
-          WHEN 'F' THEN 4 
+          WHEN 'F' THEN 4
           WHEN 'FW' THEN 4
-          ELSE 5 
+          ELSE 5
         END,
-        p.shirt_number NULLS LAST,
-        p.name
+        p.shirt_number NULLS LAST
     `, [teamId]);
 
-    return reply.send({ success: true, data: { players: result.rows } });
+    // Re-sort by position for display (DISTINCT ON requires specific ordering)
+    const sortedPlayers = result.rows.sort((a, b) => {
+      const posOrder: Record<string, number> = {
+        'G': 1, 'GK': 1,
+        'D': 2, 'DF': 2,
+        'M': 3, 'MF': 3,
+        'F': 4, 'FW': 4
+      };
+      const posA = posOrder[a.position] || 5;
+      const posB = posOrder[b.position] || 5;
+      if (posA !== posB) return posA - posB;
+
+      // Then by shirt number
+      const shirtA = a.shirt_number ?? 999;
+      const shirtB = b.shirt_number ?? 999;
+      if (shirtA !== shirtB) return shirtA - shirtB;
+
+      // Then by name
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    return reply.send({ success: true, data: { players: sortedPlayers } });
 
   } catch (error: any) {
     logger.error('Error fetching team players:', error);

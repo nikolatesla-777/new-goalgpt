@@ -397,8 +397,9 @@ export class DailyMatchSyncWorker {
       // This runs after match sync completes, only for matches that haven't started yet
       try {
         const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
-        const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
-        const preSyncService = new DailyPreSyncService(new TheSportsClient());
+        const { theSportsAPI } = await import('../core');
+        // SINGLETON: Use shared API client with global rate limiting
+        const preSyncService = new DailyPreSyncService(theSportsAPI as any);
 
         // Get NOT_STARTED matches from database for this date
         const client = await pool.connect();

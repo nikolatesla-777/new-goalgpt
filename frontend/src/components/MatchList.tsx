@@ -5,35 +5,45 @@ import { LeagueSection } from './LeagueSection';
 import { isLiveMatch, isFinishedMatch, MatchState } from '../utils/matchStatus';
 
 interface MatchListProps {
-  view: 'diary' | 'live' | 'finished' | 'not_started' | 'ai';
+  view: 'diary' | 'live' | 'finished' | 'not_started' | 'ai' | 'favorites';
   date?: string;
   sortBy?: 'league' | 'time';
+  // For favorites view - pass favorite matches directly
+  favoriteMatches?: Match[];
+  // CRITICAL FIX: Pass pre-fetched matches to avoid double fetching
+  // When provided, MatchList skips internal fetching and WebSocket connection
+  prefetchedMatches?: Match[];
+  // Skip internal WebSocket and polling when parent handles it
+  skipInternalUpdates?: boolean;
 }
 
-export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
+export function MatchList({ view, date, sortBy = 'league', favoriteMatches, prefetchedMatches, skipInternalUpdates = false }: MatchListProps) {
   // ============================================
   // STEP 1: ALL HOOKS MUST BE CALLED FIRST
   // ============================================
   const [matches, setMatches] = useState<Match[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!prefetchedMatches); // Skip loading state if prefetched
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
-  const hasLoadedRef = useRef(false);
+  const hasLoadedRef = useRef(!!prefetchedMatches); // Already loaded if prefetched
   const isFetchingRef = useRef(false);
   const fetchRef = useRef<() => Promise<void>>(async () => { });
   const debounceTimerRef = useRef<number | null>(null); // Debounce timer for WebSocket + polling coordination
 
+  // Collapsed state for league sections
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
   // CRITICAL FIX: Ensure matches is always an array (never null/undefined)
-  const safeMatches = Array.isArray(matches) ? matches : [];
+  // Priority: 1) favorites view → favoriteMatches, 2) prefetchedMatches, 3) internal matches state
+  const safeMatches = view === 'favorites' && favoriteMatches
+    ? favoriteMatches
+    : (prefetchedMatches ? prefetchedMatches : (Array.isArray(matches) ? matches : []));
 
 
   const fetchMatches = useCallback(async () => {
     // Prevent overlapping requests (important for WS + polling together)
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatchList.tsx:30',message:'fetchMatches start',data:{view,currentCount:safeMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     try {
       setError(null);
 
@@ -49,10 +59,32 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         response = await getLiveMatches();
       } else if (view === 'ai') {
         // Fetch matched AI predictions
-        const aiData = await getMatchedPredictions(50);
+        const aiData = await getMatchedPredictions(100);
+
+        // CRITICAL FIX: Filter predictions by selected date
+        // The API returns all predictions, we need to filter by match_time
+        const { getTodayInTurkey } = await import('../utils/dateUtils');
+        const selectedDateStr = date || getTodayInTurkey();
+
+        // Parse selected date to get day boundaries (TSI timezone)
+        const year = parseInt(selectedDateStr.substring(0, 4));
+        const month = parseInt(selectedDateStr.substring(4, 6)) - 1;
+        const day = parseInt(selectedDateStr.substring(6, 8));
+
+        // TSI (UTC+3) day boundaries
+        const TSI_OFFSET_SECONDS = 3 * 3600;
+        const dayStartUTC = new Date(Date.UTC(year, month, day, 0, 0, 0)).getTime() / 1000 - TSI_OFFSET_SECONDS;
+        const dayEndUTC = new Date(Date.UTC(year, month, day, 23, 59, 59)).getTime() / 1000 - TSI_OFFSET_SECONDS;
+
+        // Filter predictions by match_time within selected date
+        const filteredPredictions = (aiData.predictions || []).filter((p: any) => {
+          const matchTime = Number(p.match_time); // Ensure numeric comparison
+          return matchTime >= dayStartUTC && matchTime <= dayEndUTC;
+        });
+
         // Map AI predictions to Match objects
         // The API returns predictions with joined match data
-        const mappedMatches = (aiData.predictions || []).map((p: any) => {
+        const mappedMatches = filteredPredictions.map((p: any) => {
           // Construct Match object from prediction data
           // We prioritize match data from the join
           return {
@@ -141,24 +173,18 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
           }
           // CRITICAL FIX: Only update matches if we have valid data
           // Don't clear matches on polling refresh if response is empty (preserve existing data)
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatchList.tsx:125',message:'fetchMatches result',data:{view,rawCount:results.length,filteredCount:filteredResults.length,previousCount:safeMatches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
           setMatches(filteredResults);
           setLastUpdate(new Date());
           setError(null);
         } else {
-          // Invalid response structure - keep existing matches, just log warning
-          console.warn('[MatchList] Invalid response.results structure, keeping existing matches');
+          // Invalid response structure - keep existing matches
           setLastUpdate(new Date());
         }
       } else {
-        // Invalid response - keep existing matches, just log warning
-        console.warn('[MatchList] Invalid response structure, keeping existing matches');
+        // Invalid response - keep existing matches
       setLastUpdate(new Date());
       }
     } catch (err: any) {
-      console.error('Error fetching matches:', err);
       const errorMessage = err?.message || 'Maçlar yüklenirken bir hata oluştu';
       // CRITICAL FIX: Don't clear matches on error - preserve existing data
       // Only set error state so user knows something went wrong, but don't lose data
@@ -177,116 +203,167 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
     fetchRef.current = fetchMatches;
   }, [fetchMatches]);
 
-  // Group matches by competition or sort by time - MUST BE CALLED BEFORE ANY EARLY RETURNS
-  const matchesByCompetition = useMemo(() => {
+  // Toggle section collapse
+  const toggleSection = useCallback((sectionKey: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) {
+        next.delete(sectionKey);
+      } else {
+        next.add(sectionKey);
+      }
+      return next;
+    });
+  }, []);
+
+  // Group matches by Country → Competition hierarchy
+  // CRITICAL FIX: Preserve country/league info even when sorting by time
+  const matchesByCountryAndCompetition = useMemo(() => {
     // CRITICAL FIX: Ensure matches is always an array before processing
     if (!Array.isArray(safeMatches)) {
-      console.error('❌ [MatchList] safeMatches is not an array:', typeof safeMatches, safeMatches);
       return [];
     }
 
-    console.log('🔄 [MatchList] Grouping matches - total:', safeMatches.length, 'sortBy:', sortBy);
-
-    // If sorting by time, don't group by competition
-    if (sortBy === 'time') {
-      // CRITICAL FIX: Sort by minute (descending) for live matches, match_time for others
-      // Live matches should show highest minute first (80' before 73')
-      const sortedByTime = [...safeMatches].sort((a, b) => {
+    // Helper to sort matches within a group
+    const sortMatchesInGroup = (matchList: Match[]) => {
+      return [...matchList].sort((a, b) => {
         const statusA = (a as any).status_id ?? (a as any).status ?? 0;
         const statusB = (b as any).status_id ?? (b as any).status ?? 0;
         const isLiveA = [2, 3, 4, 5, 7].includes(statusA);
         const isLiveB = [2, 3, 4, 5, 7].includes(statusB);
-        
-        // For live matches, sort by minute (descending - highest minute first)
-        if (isLiveA && isLiveB) {
-          const minuteA = a.minute ?? 0;
-          const minuteB = b.minute ?? 0;
-          return minuteB - minuteA; // Descending: 80' before 73'
-        }
-        
-        // If only one is live, live matches come first
-        if (isLiveA && !isLiveB) return -1;
-        if (!isLiveA && isLiveB) return 1;
-        
-        // For non-live matches, sort by match_time (ascending - earliest first)
-        const timeA = a.match_time || 0;
-        const timeB = b.match_time || 0;
-        return timeA - timeB;
-      });
 
-      // Return as single "group" with null competition
-      return [['__time_sorted__', { competition: null, matches: sortedByTime }]] as [string | null, { competition: Competition | null; matches: Match[] }][];
-    }
-
-    // Group by league (default)
-    const grouped = new Map<string | null, { competition: Competition | null; matches: Match[] }>();
-
-    safeMatches.forEach((match) => {
-      // CRITICAL FIX: Validate match object before processing
-      if (!match || typeof match !== 'object' || !match.id) {
-        console.warn('⚠️ [MatchList] Invalid match object:', match);
-        return;
-      }
-
-      const compId = match.competition_id || null;
-      const comp = match.competition || null;
-
-      if (!grouped.has(compId)) {
-        grouped.set(compId, { competition: comp, matches: [] });
-      }
-      grouped.get(compId)!.matches.push(match);
-    });
-
-    // CRITICAL FIX: Sort matches within each competition with stable secondary sort
-    // This prevents matches from constantly changing positions during polling
-    // Primary sort: status (live first), then minute/match_time
-    // Secondary sort: match ID (stable, prevents reordering of same-time matches)
-    grouped.forEach((group) => {
-      group.matches.sort((a, b) => {
-        const statusA = (a as any).status_id ?? (a as any).status ?? 0;
-        const statusB = (b as any).status_id ?? (b as any).status ?? 0;
-        const isLiveA = [2, 3, 4, 5, 7].includes(statusA);
-        const isLiveB = [2, 3, 4, 5, 7].includes(statusB);
-        
         // For live matches, sort by minute (descending - highest minute first)
         if (isLiveA && isLiveB) {
           const minuteA = a.minute ?? 0;
           const minuteB = b.minute ?? 0;
           if (minuteA !== minuteB) {
-            return minuteB - minuteA; // Descending: 80' before 73'
+            return minuteB - minuteA;
           }
-          // CRITICAL: Secondary sort by ID for stability (same minute matches stay in same order)
           return a.id.localeCompare(b.id);
         }
-        
+
         // If only one is live, live matches come first
         if (isLiveA && !isLiveB) return -1;
         if (!isLiveA && isLiveB) return 1;
-        
+
         // For non-live matches, sort by match_time (ascending - earliest first)
         const timeA = a.match_time || 0;
         const timeB = b.match_time || 0;
         if (timeA !== timeB) {
           return timeA - timeB;
         }
-        // CRITICAL: Secondary sort by ID for stability (same time matches stay in same order)
         return a.id.localeCompare(b.id);
       });
+    };
+
+    // If sorting by time, group by time slots but preserve country/league info
+    if (sortBy === 'time') {
+      // Sort all matches by time first
+      const sortedByTime = sortMatchesInGroup(safeMatches);
+
+      // Group by hour slots (e.g., "14:00", "15:00")
+      const grouped = new Map<string, {
+        timeSlot: string;
+        matches: Match[];
+      }>();
+
+      sortedByTime.forEach((match) => {
+        if (!match || typeof match !== 'object' || !match.id) return;
+
+        const matchTime = match.match_time || 0;
+        const date = new Date(matchTime * 1000);
+        const hours = date.getHours().toString().padStart(2, '0');
+        const timeSlot = `${hours}:00`;
+
+        if (!grouped.has(timeSlot)) {
+          grouped.set(timeSlot, { timeSlot, matches: [] });
+        }
+        grouped.get(timeSlot)!.matches.push(match);
+      });
+
+      // Convert to array format for rendering
+      // Each entry: [sectionKey, { competition, matches, countryName, isTimeGroup }]
+      const result: [string, {
+        competition: Competition | null;
+        matches: Match[];
+        countryName: string | null;
+        isTimeGroup: boolean;
+        timeSlot?: string;
+      }][] = [];
+
+      Array.from(grouped.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .forEach(([timeSlot, group]) => {
+          result.push([`time_${timeSlot}`, {
+            competition: null,
+            matches: group.matches,
+            countryName: null,
+            isTimeGroup: true,
+            timeSlot,
+          }]);
+        });
+
+      return result;
+    }
+
+    // Group by Country → Competition (default)
+    // Key format: "countryName|competitionId"
+    const grouped = new Map<string, {
+      competition: Competition | null;
+      matches: Match[];
+      countryName: string;
+    }>();
+
+    safeMatches.forEach((match) => {
+      if (!match || typeof match !== 'object' || !match.id) return;
+
+      const comp = match.competition || null;
+      const countryName = comp?.country_name || 'Diğer';
+      const compId = match.competition_id || 'unknown';
+      const groupKey = `${countryName}|${compId}`;
+
+      if (!grouped.has(groupKey)) {
+        grouped.set(groupKey, {
+          competition: comp,
+          matches: [],
+          countryName,
+        });
+      }
+      grouped.get(groupKey)!.matches.push(match);
     });
 
-    // Sort competitions alphabetically by name
+    // Sort matches within each group
+    grouped.forEach((group) => {
+      group.matches = sortMatchesInGroup(group.matches);
+    });
+
+    // Sort by country name first, then by competition name
     const sorted = Array.from(grouped.entries()).sort((a, b) => {
+      const countryA = a[1].countryName || 'Diğer';
+      const countryB = b[1].countryName || 'Diğer';
+
+      // Country comparison first
+      const countryCompare = countryA.localeCompare(countryB, 'tr');
+      if (countryCompare !== 0) return countryCompare;
+
+      // Then by competition name
       const nameA = a[1].competition?.name || 'Bilinmeyen Lig';
       const nameB = b[1].competition?.name || 'Bilinmeyen Lig';
       return nameA.localeCompare(nameB, 'tr');
     });
 
-    console.log('✅ [MatchList] Grouped into', sorted.length, 'competitions');
-    return sorted;
+    // Add isTimeGroup: false to each entry
+    return sorted.map(([key, value]) => [key, { ...value, isTimeGroup: false }] as [string, typeof value & { isTimeGroup: boolean }]);
   }, [safeMatches, sortBy]);
 
   // CRITICAL: WebSocket connection for real-time updates (with reconnect)
+  // CRITICAL FIX: Skip if using prefetched data (parent handles WebSocket)
   useEffect(() => {
+    // Skip WebSocket if parent provides prefetched data or skipInternalUpdates is true
+    if (prefetchedMatches || skipInternalUpdates) {
+      return; // Parent (LivescoreContext) handles WebSocket
+    }
+
     let ws: WebSocket | null = null;
     let reconnectTimer: number | null = null;
 
@@ -298,13 +375,12 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       ws = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
 
       ws.onopen = () => {
-        console.log('✅ WebSocket connected for real-time updates');
+        // WebSocket connected
       };
 
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          console.log('📨 WebSocket event received:', message);
 
           // CRITICAL FIX: Listen to all critical events for real-time updates
           // GOAL: Goal scored
@@ -315,38 +391,28 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
             message.type === 'SCORE_CHANGE' ||
             message.type === 'MATCH_STATE_CHANGE'
           ) {
-            console.log(
-              `⚡ Real-time update (${message.type}) for match ${message.matchId} - debounced refresh...`
-            );
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatchList.tsx:291',message:'WebSocket event received',data:{type:message.type,matchId:message.matchId,debounceActive:debounceTimerRef.current!==null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
             // CRITICAL FIX: Debounce WebSocket events to prevent race condition with polling
             // Clear existing debounce timer
             if (debounceTimerRef.current !== null) {
               window.clearTimeout(debounceTimerRef.current);
             }
-            
+
             // Set new debounce timer (500ms delay)
             debounceTimerRef.current = window.setTimeout(() => {
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MatchList.tsx:307',message:'WebSocket debounce trigger fetchMatches',data:{type:message.type,matchId:message.matchId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-              // #endregion
               fetchRef.current(); // Always call latest fetch
               debounceTimerRef.current = null;
             }, 500); // 500ms debounce to batch rapid WebSocket events
           }
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
+        } catch {
+          // Failed to parse WebSocket message
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      ws.onerror = () => {
+        // WebSocket error
       };
 
       ws.onclose = () => {
-        console.log('WebSocket disconnected, will reconnect...');
         if (reconnectTimer) window.clearTimeout(reconnectTimer);
 
         // Reconnect after 5 seconds
@@ -363,9 +429,15 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
       if (ws) ws.close();
     };
-  }, []);
+  }, [prefetchedMatches, skipInternalUpdates]);
 
   useEffect(() => {
+    // CRITICAL FIX: Skip fetching and polling if using prefetched data
+    if (prefetchedMatches || skipInternalUpdates) {
+      // Data comes from parent (LivescoreContext), no need to fetch
+      return;
+    }
+
     fetchMatches();
 
     // CRITICAL FIX: Poll every 15 seconds for real-time score updates (increased from 10s to reduce race condition)
@@ -378,30 +450,16 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       // This prevents polling and WebSocket from conflicting
       if (debounceTimerRef.current === null) {
         fetchMatches();
-      } else {
-        console.log('[MatchList] Skipping polling cycle - WebSocket debounce active');
       }
     }, pollInterval);
 
     return () => {
       clearInterval(interval);
     };
-  }, [fetchMatches, error]);
+  }, [fetchMatches, error, prefetchedMatches, skipInternalUpdates]);
 
   // ============================================
-  // STEP 2: DEBUG LOGS (after hooks)
-  // ============================================
-  console.log('🎯 [MatchList] Render - View:', view, 'Date:', date, 'Matches count:', safeMatches.length);
-  console.log('🎯 [MatchList] First match sample:', safeMatches[0] ? {
-    id: safeMatches[0].id,
-    hasHomeTeam: !!safeMatches[0].home_team,
-    hasAwayTeam: !!safeMatches[0].away_team,
-    homeTeamName: safeMatches[0].home_team?.name,
-  } : 'No matches');
-  console.log('🎨 [MatchList] Rendering - matchesByCompetition:', matchesByCompetition.length);
-
-  // ============================================
-  // STEP 3: GUARD CLAUSES (early returns AFTER all hooks)
+  // STEP 2: GUARD CLAUSES (early returns AFTER all hooks)
   // ============================================
   if (loading) {
     return (
@@ -515,7 +573,6 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
 
   // CRITICAL FIX: Safety check before rendering
   if (!Array.isArray(safeMatches)) {
-    console.error('❌ [MatchList] CRITICAL: matches is not an array!', typeof safeMatches, safeMatches);
     return (
       <div style={{ textAlign: 'center', padding: '3rem 0', color: '#ef4444' }}>
         <p style={{ marginBottom: '12px' }}>❌ Veri formatı hatası: Maçlar array değil</p>
@@ -576,11 +633,10 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   }
 
   // CRITICAL FIX: Final safety check before rendering
-  if (!Array.isArray(matchesByCompetition)) {
-    console.error('❌ [MatchList] matchesByCompetition is not an array!');
+  if (!Array.isArray(matchesByCountryAndCompetition)) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem 0', color: '#ef4444' }}>
-        <p>❌ Render hatası: Gruplandırma başarısız</p>
+        <p>Render hatası: Gruplandırma başarısız</p>
         <button
           onClick={fetchMatches}
           style={{
@@ -603,7 +659,17 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
   // STEP 4: MAIN JSX RENDER
   // ============================================
 
-  // CRITICAL: Total Counter - Defined here after matchesByCompetition is available
+  // View titles
+  const viewTitles: Record<string, string> = {
+    live: 'Canlı Maçlar',
+    finished: 'Biten Maçlar',
+    not_started: 'Başlamamış Maçlar',
+    ai: 'AI Tahminli Maçlar',
+    favorites: 'Favori Maçlarım',
+    diary: 'Günün Maçları',
+  };
+
+  // CRITICAL: Total Counter
   const totalCounter = (
     <div style={{
       marginBottom: '1rem',
@@ -617,17 +683,17 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
     }}>
       <div>
         <span style={{ fontWeight: '600', color: '#1e40af', fontSize: '1rem' }}>
-          {view === 'live' ? 'CANLI MAÇLAR' : view === 'finished' ? 'BİTEN MAÇLAR' : view === 'not_started' ? 'BAŞLAMAYAN MAÇLAR' : 'TOPLAM MAÇ'}: {safeMatches.length}
+          {viewTitles[view]?.toUpperCase() || 'TOPLAM MAÇ'}: {safeMatches.length}
         </span>
         {safeMatches.length > 0 && (
           <span style={{ marginLeft: '12px', fontSize: '0.875rem', color: '#64748b' }}>
-            ({matchesByCompetition.length} competitions)
+            ({matchesByCountryAndCompetition.length} {sortBy === 'time' ? 'saat dilimi' : 'lig'})
           </span>
         )}
       </div>
-      {safeMatches.length === 0 && !loading && (
+      {safeMatches.length === 0 && !loading && view !== 'favorites' && (
         <span style={{ fontSize: '0.875rem', color: '#f59e0b' }}>
-          ⚠️ No matches found. Check API response.
+          Maç bulunamadı
         </span>
       )}
     </div>
@@ -643,7 +709,7 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
         justifyContent: 'space-between',
       }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
-          {view === 'live' ? 'Canlı Maçlar' : view === 'finished' ? 'Biten Maçlar' : view === 'not_started' ? 'Başlamamış Maçlar' : 'Günün Maçları'}
+          {viewTitles[view] || 'Günün Maçları'}
         </h2>
         <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
           Son güncelleme: {lastUpdate.toLocaleTimeString('tr-TR')}
@@ -651,27 +717,40 @@ export function MatchList({ view, date, sortBy = 'league' }: MatchListProps) {
       </div>
 
       <div>
-        {matchesByCompetition.length > 0 ? (
-          matchesByCompetition.map(([compId, { competition, matches: compMatches }]) => {
-            // CRITICAL FIX: Validate compMatches before passing to LeagueSection
-            if (!Array.isArray(compMatches)) {
-              console.warn('⚠️ [MatchList] compMatches is not an array for competition:', compId);
+        {matchesByCountryAndCompetition.length > 0 ? (
+          matchesByCountryAndCompetition.map(([sectionKey, groupData]) => {
+            // CRITICAL FIX: Validate matches before passing to LeagueSection
+            if (!Array.isArray(groupData.matches)) {
               return null;
             }
+
+            const isCollapsed = collapsedSections.has(sectionKey);
+
             return (
-          <LeagueSection
-            key={compId || 'unknown'}
-            competition={competition}
-            matches={compMatches}
-          />
+              <LeagueSection
+                key={sectionKey || 'unknown'}
+                competition={groupData.competition}
+                matches={groupData.matches}
+                countryName={(groupData as any).countryName || null}
+                isTimeGroup={(groupData as any).isTimeGroup || false}
+                timeSlot={(groupData as any).timeSlot}
+                isCollapsed={isCollapsed}
+                onToggleCollapse={() => toggleSection(sectionKey)}
+              />
             );
           })
         ) : (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-            <p>Maç bulunamadı (matchesByCompetition is empty)</p>
-            <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
-              Matches count: {safeMatches.length}
-            </p>
+            {view === 'favorites' ? (
+              <>
+                <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>Henüz favori maçınız yok</p>
+                <p style={{ fontSize: '0.875rem' }}>
+                  Maç kartlarındaki ⭐ ikonuna tıklayarak maçları favorilere ekleyebilirsiniz
+                </p>
+              </>
+            ) : (
+              <p>Maç bulunamadı</p>
+            )}
           </div>
         )}
       </div>

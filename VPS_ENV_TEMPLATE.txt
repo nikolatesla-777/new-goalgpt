@@ -6,12 +6,12 @@ DB_HOST=aws-0-eu-central-1.pooler.supabase.com
 DB_PORT=6543
 DB_NAME=postgres
 DB_USER=postgres.wakbsxzocfpngywyzdml
-DB_PASSWORD=fH1MyVUk0h7a0t14
+DB_PASSWORD=[YOUR_SUPABASE_PASSWORD]
 DB_MAX_CONNECTIONS=20
 
 # TheSports API
 THESPORTS_API_BASE_URL=https://api.thesports.com/v1/football
-THESPORTS_API_SECRET=3205e4f6efe04a03f0055152c4aa0f37
+THESPORTS_API_SECRET=[YOUR_THESPORTS_API_SECRET]
 THESPORTS_API_USER=goalgpt
 
 # Server

@@ -154,8 +154,8 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
           onMatchStateChange?.(wsEvent as MatchStateChangeEvent);
           break;
       }
-    } catch (error) {
-      console.error('[useSocket] Failed to parse message:', error);
+    } catch {
+      // Failed to parse message - silently ignore
     }
   }, [onScoreChange, onDangerAlert, onGoalCancelled, onMatchStateChange, onAnyEvent]);
 
@@ -166,43 +166,36 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
 
     try {
       const wsUrl = getWsUrl();
-      console.log('[useSocket] Connecting to:', wsUrl);
-      
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[useSocket] Connected');
         setIsConnected(true);
         reconnectAttempts.current = 0;
       };
 
       ws.onmessage = handleMessage;
 
-      ws.onerror = (error) => {
-        console.error('[useSocket] Error:', error);
+      ws.onerror = () => {
+        // WebSocket error - will trigger onclose
       };
 
-      ws.onclose = (event) => {
-        console.log('[useSocket] Disconnected:', event.code, event.reason);
+      ws.onclose = () => {
         setIsConnected(false);
         wsRef.current = null;
 
         // Auto-reconnect with exponential backoff
         if (reconnectAttempts.current < maxReconnectAttempts) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-          console.log(`[useSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
-          
+
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttempts.current++;
             connect();
           }, delay);
-        } else {
-          console.error('[useSocket] Max reconnection attempts reached');
         }
       };
-    } catch (error) {
-      console.error('[useSocket] Failed to connect:', error);
+    } catch {
+      // Failed to connect - silently handle
     }
   }, [handleMessage]);
 

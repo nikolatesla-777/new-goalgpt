@@ -19,6 +19,8 @@ import { VARResult, MatchState, isLiveMatchState, canResurrectFromEnd } from '..
 import { MatchWriteQueue } from './matchWriteQueue';
 import { EventLatencyMonitor } from './eventLatencyMonitor';
 import { aiPredictionService } from '../../ai/aiPrediction.service';
+import { predictionSettlementService } from '../../ai/predictionSettlement.service';
+import { halfStatsPersistenceService } from '../match/halfStatsPersistence.service';
 
 export class WebSocketService {
   private client: WebSocketClient;
@@ -157,10 +159,19 @@ export class WebSocketService {
 
               // CRITICAL FIX: Trigger post-match persistence when match ends (status 8)
               if (parsedScore.statusId === 8) {
-                logger.info(`[WebSocket] Match ${parsedScore.matchId} ended (status=8), triggering post-match persistence...`);
+                logger.info(`[WebSocket] Match ${parsedScore.matchId} ended (status=8), triggering post-match persistence + second half data save...`);
+
+                // Trigger post-match persistence
                 this.triggerPostMatchPersistence(parsedScore.matchId).catch(err => {
                   logger.error(`[WebSocket] Failed to trigger post-match persistence for ${parsedScore.matchId}:`, err);
                 });
+
+                // HALF STATS PERSISTENCE: Save second half data (stats + incidents)
+                halfStatsPersistenceService.saveSecondHalfData(parsedScore.matchId)
+                  .then(res => {
+                    if (res.success) logger.info(`[HalfStatsPersistence] Second half data saved for ${parsedScore.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                  })
+                  .catch(err => logger.error(`[HalfStatsPersistence] Failed to save second half data for ${parsedScore.matchId}:`, err));
               }
             }
 
@@ -193,20 +204,27 @@ export class WebSocketService {
             }, mqttReceivedTs);
 
             // AUTO SETTLEMENT: Trigger instant settlement on score change
-            // CRITICAL: Use actual minute from parsedScore if available, otherwise derive from status
+            // CRITICAL: Derive proxy minute from status since ParsedScore doesn't include minute
             // Status 2 (1H) -> 1, Status 4 (2H) -> 46
-            const proxyMinute = parsedScore.minute || (parsedScore.statusId === 2 ? 1 : parsedScore.statusId === 4 ? 46 : 0);
-            
+            const proxyMinute = parsedScore.statusId === 2 ? 1 : parsedScore.statusId === 4 ? 46 : 0;
+
             // CRITICAL: Settlement MUST happen when score changes via WebSocket
             // This is the primary mechanism - if WebSocket updates score, settlement should work
-            aiPredictionService.settleInstantWin(
-              parsedScore.matchId,
-              parsedScore.home.score,
-              parsedScore.away.score,
-              proxyMinute,
-              parsedScore.statusId
-            ).then(() => {
-              logger.debug(`[AutoSettlement] Settlement check completed for ${parsedScore.matchId} (Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${proxyMinute})`);
+            // REFACTORED: Now using centralized PredictionSettlementService
+            predictionSettlementService.processEvent({
+              matchId: parsedScore.matchId,
+              eventType: 'score_change',
+              homeScore: parsedScore.home.score,
+              awayScore: parsedScore.away.score,
+              minute: proxyMinute,
+              statusId: parsedScore.statusId,
+              timestamp: Date.now(),
+            }).then((result) => {
+              if (result.settled > 0) {
+                logger.info(`[AutoSettlement] Score change settlement for ${parsedScore.matchId}: ${result.settled} settled (${result.winners}W/${result.losers}L)`);
+              } else {
+                logger.debug(`[AutoSettlement] Settlement check completed for ${parsedScore.matchId} (Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${proxyMinute})`);
+              }
             }).catch(err => {
               logger.error(`[AutoSettlement] CRITICAL ERROR in score change handler for ${parsedScore.matchId}: ${err.message}`);
               logger.error(`[AutoSettlement] Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${proxyMinute}, Status: ${parsedScore.statusId}`);
@@ -294,12 +312,19 @@ export class WebSocketService {
               this.emitEvent(goalEvent, incidentsMqttTs);
 
               // AUTO SETTLEMENT: Trigger instant settlement on verified GOAL event
-              aiPredictionService.settleInstantWin(
-                parsedIncident.matchId,
-                goalEvent.homeScore,
-                goalEvent.awayScore,
-                goalEvent.time
-              ).catch(err => logger.error(`[AutoSettlement] Error in goal handler: ${err.message}`));
+              // REFACTORED: Now using centralized PredictionSettlementService
+              predictionSettlementService.processEvent({
+                matchId: parsedIncident.matchId,
+                eventType: 'goal',
+                homeScore: goalEvent.homeScore,
+                awayScore: goalEvent.awayScore,
+                minute: goalEvent.time,
+                timestamp: Date.now(),
+              }).then((result) => {
+                if (result.settled > 0) {
+                  logger.info(`[AutoSettlement] Goal settlement for ${parsedIncident.matchId}: ${result.settled} instant wins`);
+                }
+              }).catch(err => logger.error(`[AutoSettlement] Error in goal handler: ${err.message}`));
             }
 
             // Detect card
@@ -861,6 +886,35 @@ export class WebSocketService {
       });
 
       logger.info(`Match ${matchId} is LIVE: ${currentState === MatchState.OVERTIME ? 'Overtime' : 'Penalty Shootout'}`);
+    } else if (currentState === MatchState.HALF_TIME) {
+      // STATUS 3 (HALF_TIME) - Trigger HT settlement immediately!
+      this.matchStates.set(matchId, {
+        status: currentState,
+        lastStatus8Time: null,
+      });
+
+      logger.info(`[WebSocket] Match ${matchId} reached Halftime (Status 3). Triggering AI Settlement + First Half Data Persistence...`);
+
+      // For HT, current scores ARE the HT scores
+      // REFACTORED: Now using centralized PredictionSettlementService
+      predictionSettlementService.processEvent({
+        matchId,
+        eventType: 'halftime',
+        homeScore: homeScore ?? 0,
+        awayScore: awayScore ?? 0,
+        timestamp: Date.now(),
+      })
+        .then(res => {
+          if (res.settled > 0) logger.info(`[AutoSettlement] HT Settlement for ${matchId}: ${res.settled} settled (${res.winners}W/${res.losers}L)`);
+        })
+        .catch(err => logger.error(`[AutoSettlement] HT Settlement failed for ${matchId}:`, err));
+
+      // HALF STATS PERSISTENCE: Save first half data (stats + incidents)
+      halfStatsPersistenceService.saveFirstHalfData(matchId)
+        .then(res => {
+          if (res.success) logger.info(`[HalfStatsPersistence] First half data saved for ${matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+        })
+        .catch(err => logger.error(`[HalfStatsPersistence] Failed to save first half data for ${matchId}:`, err));
     } else if (isLiveMatchState(currentState)) {
       // Other live states (2, 4) - clear any keepalive timers
       this.clearMatchKeepalive(matchId);
@@ -869,17 +923,6 @@ export class WebSocketService {
         status: currentState,
         lastStatus8Time: null,
       });
-
-      // CRITICAL FIX: Trigger Halftime Settlement immediately
-      if (statusId === 3) { // 3 = Halftime
-        logger.info(`[WebSocket] Match ${matchId} reached Halftime (Status 3). Triggering AI Settlement...`);
-        // Pass live scores as HT scores
-        aiPredictionService.settleMatchPredictions(matchId, statusId, homeScore, awayScore)
-          .then(res => {
-            if (res.settled > 0) logger.info(`[AutoSettlement] HT Settlement for ${matchId}: ${res.settled} settled`);
-          })
-          .catch(err => logger.error(`[AutoSettlement] HT Settlement failed for ${matchId}:`, err));
-      }
     } else {
       // Other states - just track
       this.matchStates.set(matchId, {
@@ -898,22 +941,43 @@ export class WebSocketService {
     this.clearMatchKeepalive(matchId);
 
     // Set new timer
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       const matchState = this.matchStates.get(matchId);
       if (matchState?.status === MatchState.END) {
         // Status 8 has been stable for 20 minutes - consider it final
         logger.info(`Match ${matchId} Status 8 (END) stable for 20 minutes. Marking as definitely finished.`);
 
-        // Auto-settle any pending AI predictions for this match
-        aiPredictionService.settleMatchPredictions(matchId)
-          .then(result => {
-            if (result.settled > 0) {
-              logger.info(`[AutoSettlement] Match ${matchId}: ${result.settled} predictions settled (${result.winners} wins, ${result.losers} losses)`);
-            }
-          })
-          .catch(err => {
-            logger.error(`[AutoSettlement] Failed for match ${matchId}:`, err);
+        // Fetch final scores from database for settlement
+        try {
+          const matchData = await pool.query(`
+            SELECT home_score_display, away_score_display,
+                   (home_scores->>1)::INTEGER as ht_home,
+                   (away_scores->>1)::INTEGER as ht_away
+            FROM ts_matches WHERE external_id = $1
+          `, [matchId]);
+
+          const finalHome = matchData.rows[0]?.home_score_display ?? 0;
+          const finalAway = matchData.rows[0]?.away_score_display ?? 0;
+          const htHome = matchData.rows[0]?.ht_home;
+          const htAway = matchData.rows[0]?.ht_away;
+
+          // REFACTORED: Now using centralized PredictionSettlementService
+          const result = await predictionSettlementService.processEvent({
+            matchId,
+            eventType: 'fulltime',
+            homeScore: finalHome,
+            awayScore: finalAway,
+            htHome,
+            htAway,
+            timestamp: Date.now(),
           });
+
+          if (result.settled > 0) {
+            logger.info(`[AutoSettlement] Match ${matchId}: ${result.settled} predictions settled (${result.winners} wins, ${result.losers} losses)`);
+          }
+        } catch (err: any) {
+          logger.error(`[AutoSettlement] Failed for match ${matchId}:`, err);
+        }
       }
       this.matchKeepaliveTimers.delete(matchId);
     }, this.KEEPALIVE_DURATION_MS);
@@ -1022,8 +1086,10 @@ export class WebSocketService {
     }
 
     const existing = result.rows[0];
-    const existingProviderTime = existing.provider_update_time;
-    const existingEventTime = existing.last_event_ts;
+    // CRITICAL FIX: Convert to numbers to avoid string concatenation bug
+    // PostgreSQL BIGINT can be returned as string depending on node-postgres config
+    const existingProviderTime = existing.provider_update_time !== null ? Number(existing.provider_update_time) : null;
+    const existingEventTime = existing.last_event_ts !== null ? Number(existing.last_event_ts) : null;
 
     // Check freshness
     if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
@@ -1663,11 +1729,11 @@ export class WebSocketService {
   private async triggerPostMatchPersistence(matchId: string): Promise<void> {
     try {
       // Import PostMatchProcessor dynamically to avoid circular dependencies
-      const { PostMatchProcessor } = await import('../../services/liveData/postMatchProcessor');
-      const { TheSportsClient } = await import('../thesports/client/thesports-client');
+      const { PostMatchProcessor } = await import('../../liveData/postMatchProcessor');
+      const { theSportsAPI } = await import('../../../core');
 
-      const client = new TheSportsClient();
-      const processor = new PostMatchProcessor(client);
+      // SINGLETON: Use shared API client with global rate limiting
+      const processor = new PostMatchProcessor(theSportsAPI as any);
 
       // Trigger post-match processing
       await processor.onMatchEnded(matchId);

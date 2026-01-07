@@ -22,6 +22,7 @@ import {
   triggerPreSync,
   getMatchH2H,
   getMatchById,
+  getUnifiedMatches,
 } from '../controllers/match.controller';
 
 export default async function matchRoutes(
@@ -46,6 +47,22 @@ export default async function matchRoutes(
    * NO "should be live" matches (status=1) - those are handled by watchdog
    */
   fastify.get('/live', getLiveMatches);
+
+  /**
+   * GET /api/matches/unified
+   * Phase 6: Unified endpoint - single API call for frontend
+   *
+   * Query params:
+   * - date: YYYY-MM-DD or YYYYMMDD (default: today)
+   * - include_live: boolean (default: true) - include cross-day live matches
+   * - status: comma-separated status IDs (optional) - filter by status
+   *
+   * Features:
+   * - Merges diary + live data server-side
+   * - Handles cross-day matches automatically
+   * - Uses smart cache with event-driven invalidation
+   */
+  fastify.get('/unified', getUnifiedMatches);
 
   /**
    * GET /api/matches/should-be-live

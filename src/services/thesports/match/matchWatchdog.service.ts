@@ -114,6 +114,64 @@ export class MatchWatchdogService {
   }
 
   /**
+   * Find matches that exceeded maximum expected duration (should have ended)
+   *
+   * These matches are stuck in live status but minute exceeds normal game time:
+   * - status_id = 4 (SECOND_HALF) AND minute > 105 (90 + 15 injury time)
+   * - status_id = 5 (OVERTIME) AND minute > 130 (120 + 10 injury time)
+   *
+   * These need immediate reconciliation to get correct status from API.
+   *
+   * @param limit - Maximum number of matches to return (default 50)
+   * @returns Array of matches that should have ended
+   */
+  async findOverdueMatches(
+    limit: number = 50
+  ): Promise<Array<{ matchId: string; statusId: number; minute: number; reason: string }>> {
+    const client = await pool.connect();
+    try {
+      const query = `
+        SELECT
+          external_id,
+          status_id,
+          minute
+        FROM ts_matches
+        WHERE
+          (status_id = 4 AND minute > 105)  -- SECOND_HALF exceeded max (90 + 15 injury)
+          OR (status_id = 5 AND minute > 130) -- OVERTIME exceeded max (120 + 10 injury)
+          OR (status_id = 2 AND minute > 60)  -- FIRST_HALF exceeded max (45 + 15 injury - something is very wrong)
+        ORDER BY minute DESC
+        LIMIT $1
+      `;
+
+      const result = await client.query(query, [limit]);
+
+      return result.rows.map((row: any) => {
+        let reason = '';
+        if (row.status_id === 4 && row.minute > 105) {
+          reason = `SECOND_HALF minute ${row.minute} > 105 (should have ended)`;
+        } else if (row.status_id === 5 && row.minute > 130) {
+          reason = `OVERTIME minute ${row.minute} > 130 (should have ended)`;
+        } else if (row.status_id === 2 && row.minute > 60) {
+          reason = `FIRST_HALF minute ${row.minute} > 60 (abnormal)`;
+        }
+
+        return {
+          matchId: row.external_id,
+          statusId: row.status_id,
+          minute: row.minute,
+          reason,
+        };
+      });
+    } catch (error: any) {
+      logger.error('[Watchdog] Error finding overdue matches:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Find matches that should be live (match_time passed but status still NOT_STARTED)
    * 
    * These matches need status update from API to transition from NOT_STARTED to LIVE

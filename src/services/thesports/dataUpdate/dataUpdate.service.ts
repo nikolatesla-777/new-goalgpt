@@ -9,9 +9,10 @@ import { config } from '../../../config';
 import { logger } from '../../../utils/logger';
 import { logEvent } from '../../../utils/obsLogger';
 import { TeamSyncService } from '../team/teamSync.service';
-import { TheSportsClient } from '../client/thesports-client';
 import { TeamDataService } from '../team/teamData.service';
 import { CircuitOpenError } from '../../../utils/circuitBreaker';
+// SINGLETON: Use shared API client
+import { theSportsAPI } from '../../../core';
 
 export interface UpdateItem {
   match_id?: string;
@@ -35,16 +36,15 @@ export class DataUpdateService {
   private secret: string;
   private teamSyncService: TeamSyncService;
   private teamDataService: TeamDataService;
-  private theSportsClient: TheSportsClient;
 
   constructor() {
     this.baseUrl = config.thesports?.baseUrl || 'https://api.thesports.com/v1/football';
     this.user = config.thesports?.user || '';
     this.secret = config.thesports?.secret || '';
     this.teamSyncService = new TeamSyncService();
-    this.theSportsClient = new TheSportsClient({ timeout: 5000 }); // Phase 4-2: 5s timeout
-    this.teamDataService = new TeamDataService(this.theSportsClient);
-    // Phase 4-2: Single circuit layer - circuit breaker is in TheSportsClient, not here
+    // SINGLETON: Use shared API client with global rate limiting
+    this.teamDataService = new TeamDataService(theSportsAPI as any);
+    // Phase 4-2: Single circuit layer - circuit breaker is in singleton, not here
   }
 
   /**
@@ -57,7 +57,7 @@ export class DataUpdateService {
       
       // Phase 4-2: Single circuit layer - circuit breaker is in TheSportsClient
       try {
-        const data = await this.theSportsClient.get<DataUpdateResponse>('/data/update', {});
+        const data = await theSportsAPI.get<DataUpdateResponse>('/data/update', {});
 
         // Check for errors in response
         if (data.err || (data.code && data.code !== 200 && data.code !== 0)) {
@@ -172,7 +172,7 @@ export class DataUpdateService {
           try {
             // Use MatchDetailLiveService to fetch the match
             // This will update cache and can be extended to update database
-            const response = await this.theSportsClient.get('/match/detail_live', { match_id: matchId });
+            const response = await theSportsAPI.get('/match/detail_live', { match_id: matchId });
             logger.debug(`Updated match ${matchId} from data/update`);
           } catch (error: any) {
             logger.warn(`Failed to sync match ${matchId}:`, error.message);

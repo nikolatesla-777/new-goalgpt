@@ -60,6 +60,9 @@ export class MatchMinuteService {
     }
 
     // Status 4 (SECOND_HALF)
+    // CRITICAL FIX: Max clamp at 90+15 = 105 (normal time + injury time max)
+    // If minute exceeds this, match should have ended - watchdog will reconcile
+    const SECOND_HALF_MAX = 105;
     if (statusId === 4) {
       if (secondHalfTs === null) {
         // FALLBACK: If second_half_kickoff_ts is missing, estimate from first_half
@@ -68,22 +71,28 @@ export class MatchMinuteService {
           const estimatedSecondHalfStart = firstHalfTs + 3600; // 60 minutes
           const calculated = 45 + Math.floor((nowTs - estimatedSecondHalfStart) / 60) + 1;
           logger.debug(`[MinuteEngine] Using fallback for status 4 (estimated_start=${estimatedSecondHalfStart}): minute=${calculated}`);
-          return Math.max(calculated, 46); // Clamp min 46
+          // CRITICAL FIX: Clamp between 46 and SECOND_HALF_MAX
+          return Math.min(Math.max(calculated, 46), SECOND_HALF_MAX);
         }
         logger.warn(`[MinuteEngine] Cannot calculate minute for status 4: both second_half_kickoff_ts and first_half_kickoff_ts are NULL`);
         return null;
       }
       const calculated = 45 + Math.floor((nowTs - secondHalfTs) / 60) + 1;
-      return Math.max(calculated, 46); // Clamp min 46
+      // CRITICAL FIX: Clamp between 46 and SECOND_HALF_MAX
+      return Math.min(Math.max(calculated, 46), SECOND_HALF_MAX);
     }
 
     // Status 5 (OVERTIME)
+    // CRITICAL FIX: Max clamp at 120+10 = 130 (overtime + injury time max)
+    const OVERTIME_MAX = 130;
     if (statusId === 5) {
       if (overtimeTs === null) {
         logger.warn(`[MinuteEngine] Cannot calculate minute for status 5: overtime_kickoff_ts is NULL`);
         return null;
       }
-      return 90 + Math.floor((nowTs - overtimeTs) / 60) + 1;
+      const calculated = 90 + Math.floor((nowTs - overtimeTs) / 60) + 1;
+      // CRITICAL FIX: Clamp between 91 and OVERTIME_MAX
+      return Math.min(Math.max(calculated, 91), OVERTIME_MAX);
     }
 
     // Status 7 (PENALTY) - retain existing minute

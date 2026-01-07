@@ -12,6 +12,7 @@ import { MatchWatchdogService } from '../services/thesports/match/matchWatchdog.
 import { MatchDetailLiveService } from '../services/thesports/match/matchDetailLive.service';
 import { MatchRecentService } from '../services/thesports/match/matchRecent.service';
 import { MatchDiaryService } from '../services/thesports/match/matchDiary.service';
+import { halfStatsPersistenceService } from '../services/thesports/match/halfStatsPersistence.service';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
@@ -85,7 +86,8 @@ export class MatchWatchdogWorker {
       // CRITICAL FIX: Re-enable stale match detection for HALF_TIME matches stuck in status 3
       // /data/update handles live match updates but doesn't handle HALF_TIME -> END transitions
       // We need to find stale matches (especially HALF_TIME) that should be END
-      const stales = await this.matchWatchdogService.findStaleLiveMatches(nowTs, 120, 900, 100);
+      // UPDATED: Reduced HALF_TIME threshold from 900s (15 min) to 300s (5 min) for faster recovery
+      const stales = await this.matchWatchdogService.findStaleLiveMatches(nowTs, 120, 300, 100);
 
       // CRITICAL FIX: Also find matches that should be live (match_time passed but status still NOT_STARTED)
       // This ensures matches transition from NOT_STARTED to LIVE when they actually start
@@ -94,7 +96,15 @@ export class MatchWatchdogWorker {
       // CRITICAL: Increase limit to 2000 to process more matches per tick (was 1000)
       const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 2000);
 
-      const candidatesCount = stales.length + shouldBeLive.length;
+      // CRITICAL FIX: Find matches that exceeded maximum duration (minute > 105 for 2nd half, > 130 for overtime)
+      // These matches should have ended but status is still LIVE - need immediate reconciliation
+      const overdueMatches = await this.matchWatchdogService.findOverdueMatches(50);
+      if (overdueMatches.length > 0) {
+        logger.warn(`[Watchdog] Found ${overdueMatches.length} OVERDUE matches (minute exceeded max):`);
+        overdueMatches.forEach(m => logger.warn(`  - ${m.matchId}: ${m.reason}`));
+      }
+
+      const candidatesCount = stales.length + shouldBeLive.length + overdueMatches.length;
 
       if (candidatesCount === 0) {
         // Phase 5-S: Emit summary even when no candidates (for observability)
@@ -238,16 +248,24 @@ export class MatchWatchdogWorker {
                     });
 
                     // CRITICAL FIX: Trigger post-match persistence when HALF_TIME match transitions to END
-                    logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} transitioned to END (8), triggering post-match persistence...`);
+                    logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} transitioned to END (8), triggering post-match persistence + half stats save...`);
                     try {
                       const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
-                      const { TheSportsClient } = await import('../services/thesports/client/thesports-client');
-                      const processor = new PostMatchProcessor(new TheSportsClient());
+                      const { theSportsAPI } = await import('../core');
+                      // SINGLETON: Use shared API client with global rate limiting
+                      const processor = new PostMatchProcessor(theSportsAPI as any);
                       await processor.onMatchEnded(stale.matchId);
                       logger.info(`[Watchdog] ✅ Post-match persistence completed for ${stale.matchId}`);
                     } catch (postMatchErr: any) {
                       logger.warn(`[Watchdog] Failed to trigger post-match persistence for ${stale.matchId}:`, postMatchErr.message);
                     }
+
+                    // HALF STATS PERSISTENCE: Save second half data when match transitions to END
+                    halfStatsPersistenceService.saveSecondHalfData(stale.matchId)
+                      .then(res => {
+                        if (res.success) logger.info(`[Watchdog] Half stats saved for ${stale.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                      })
+                      .catch(err => logger.warn(`[Watchdog] Failed to save half stats for ${stale.matchId}:`, err.message));
 
                     continue; // Skip further processing
                   }
@@ -373,6 +391,14 @@ export class MatchWatchdogWorker {
                   new_status_id: 8,
                   provider_status_id: recentListMatch.statusId,
                 });
+
+                // HALF STATS PERSISTENCE: Save second half data when match transitions to END
+                halfStatsPersistenceService.saveSecondHalfData(stale.matchId)
+                  .then(res => {
+                    if (res.success) logger.info(`[Watchdog] Half stats saved for ${stale.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                  })
+                  .catch(err => logger.warn(`[Watchdog] Failed to save half stats for ${stale.matchId}:`, err.message));
+
                 continue; // Skip detail_live reconcile
               }
             } finally {
@@ -749,6 +775,143 @@ export class MatchWatchdogWorker {
         }
       }
 
+      // CRITICAL FIX: Process OVERDUE matches (minute exceeded maximum)
+      // These matches have status=4 with minute>105 or status=5 with minute>130
+      // They should have ended but didn't get status update - force reconcile to get correct status
+      for (const overdue of overdueMatches) {
+        logEvent('warn', 'watchdog.overdue_detected', {
+          match_id: overdue.matchId,
+          status_id: overdue.statusId,
+          minute: overdue.minute,
+          reason: overdue.reason,
+        });
+
+        const reconcileStartTime = Date.now();
+        attemptedCount++;
+
+        try {
+          // First try to reconcile via API to get correct status
+          const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(overdue.matchId, null);
+          const duration = Date.now() - reconcileStartTime;
+
+          if (reconcileResult.updated && reconcileResult.rowCount > 0) {
+            // API returned updated data
+            successCount++;
+            reasons['overdue_reconciled'] = (reasons['overdue_reconciled'] || 0) + 1;
+
+            logEvent('info', 'watchdog.reconcile.done', {
+              match_id: overdue.matchId,
+              result: 'success',
+              reason: 'overdue_reconciled',
+              duration_ms: duration,
+              row_count: reconcileResult.rowCount,
+              old_minute: overdue.minute,
+              old_status: overdue.statusId,
+              new_status: reconcileResult.statusId || 'unknown',
+            });
+
+            // If match transitioned to END, trigger post-match persistence
+            if (reconcileResult.statusId === 8) {
+              logger.info(`[Watchdog] Overdue match ${overdue.matchId} transitioned to END (8), triggering post-match persistence...`);
+              try {
+                const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
+                const { theSportsAPI } = await import('../core');
+                const processor = new PostMatchProcessor(theSportsAPI as any);
+                await processor.onMatchEnded(overdue.matchId);
+                logger.info(`[Watchdog] ✅ Post-match persistence completed for overdue match ${overdue.matchId}`);
+              } catch (postMatchErr: any) {
+                logger.warn(`[Watchdog] Failed to trigger post-match persistence for overdue ${overdue.matchId}:`, postMatchErr.message);
+              }
+
+              // Save half stats
+              halfStatsPersistenceService.saveSecondHalfData(overdue.matchId)
+                .then(res => {
+                  if (res.success) logger.info(`[Watchdog] Half stats saved for overdue ${overdue.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                })
+                .catch(err => logger.warn(`[Watchdog] Failed to save half stats for overdue ${overdue.matchId}:`, err.message));
+            }
+            continue;
+          }
+
+          // API didn't return updated data - force transition to END
+          // Match minute is way over maximum (105 for 2nd half, 130 for overtime)
+          // This means match should have ended but provider didn't send update
+          logger.warn(
+            `[Watchdog] Overdue match ${overdue.matchId} (minute=${overdue.minute}, status=${overdue.statusId}) ` +
+            `not updated by API. Force transitioning to END (status=8).`
+          );
+
+          const client = await pool.connect();
+          try {
+            const nowTs = Math.floor(Date.now() / 1000);
+            const updateResult = await client.query(
+              `UPDATE ts_matches
+               SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
+               WHERE external_id = $2 AND status_id IN (2, 4, 5)`,
+              [nowTs, overdue.matchId]
+            );
+
+            if (updateResult.rowCount && updateResult.rowCount > 0) {
+              successCount++;
+              reasons['overdue_force_end'] = (reasons['overdue_force_end'] || 0) + 1;
+
+              logEvent('info', 'watchdog.reconcile.done', {
+                match_id: overdue.matchId,
+                result: 'success',
+                reason: 'overdue_force_end',
+                duration_ms: Date.now() - reconcileStartTime,
+                row_count: updateResult.rowCount,
+                old_minute: overdue.minute,
+                old_status: overdue.statusId,
+                new_status: 8,
+              });
+
+              // Trigger post-match persistence
+              logger.info(`[Watchdog] Overdue match ${overdue.matchId} force-ended, triggering post-match persistence...`);
+              try {
+                const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
+                const { theSportsAPI } = await import('../core');
+                const processor = new PostMatchProcessor(theSportsAPI as any);
+                await processor.onMatchEnded(overdue.matchId);
+              } catch (postMatchErr: any) {
+                logger.warn(`[Watchdog] Failed to trigger post-match persistence for force-ended ${overdue.matchId}:`, postMatchErr.message);
+              }
+
+              // Save half stats
+              halfStatsPersistenceService.saveSecondHalfData(overdue.matchId)
+                .then(res => {
+                  if (res.success) logger.info(`[Watchdog] Half stats saved for force-ended ${overdue.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                })
+                .catch(err => logger.warn(`[Watchdog] Failed to save half stats for force-ended ${overdue.matchId}:`, err.message));
+            } else {
+              skippedCount++;
+              reasons['overdue_no_update'] = (reasons['overdue_no_update'] || 0) + 1;
+            }
+          } finally {
+            client.release();
+          }
+        } catch (error: any) {
+          failCount++;
+          let failureReason = 'overdue_reconcile_failed';
+          if (error instanceof CircuitOpenError) {
+            failureReason = 'circuit_open';
+          } else if (error.message?.includes('timeout')) {
+            failureReason = 'timeout';
+          }
+          reasons[failureReason] = (reasons[failureReason] || 0) + 1;
+
+          logger.error(`[Watchdog] Overdue match reconcile failed for ${overdue.matchId}:`, error);
+
+          logEvent('error', 'watchdog.reconcile.done', {
+            match_id: overdue.matchId,
+            result: 'fail',
+            reason: failureReason,
+            duration_ms: Date.now() - reconcileStartTime,
+            error_message: error.message || 'Unknown error',
+          });
+        }
+      }
+
       // Phase 5-S: Emit summary log with detailed breakdown
       const duration = Date.now() - startedAt;
       logEvent('info', 'watchdog.tick.summary', {
@@ -759,12 +922,13 @@ export class MatchWatchdogWorker {
         skipped_count: skippedCount,
         stale_count: stales.length,
         should_be_live_count: shouldBeLive.length,
+        overdue_count: overdueMatches.length,
         reasons: reasons,
         duration_ms: duration,
       });
 
       logger.info(
-        `[Watchdog] tick: stale=${stales.length} should_be_live=${shouldBeLive.length} ` +
+        `[Watchdog] tick: stale=${stales.length} should_be_live=${shouldBeLive.length} overdue=${overdueMatches.length} ` +
         `attempted=${attemptedCount} success=${successCount} fail=${failCount} skipped=${skippedCount} (${duration}ms)`
       );
     } catch (error: any) {

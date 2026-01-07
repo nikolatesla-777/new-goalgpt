@@ -18,7 +18,6 @@ import { MatchAnalysisService } from '../services/thesports/match/matchAnalysis.
 import { MatchTrendService } from '../services/thesports/match/matchTrend.service';
 import { MatchHalfStatsService } from '../services/thesports/match/matchHalfStats.service';
 import { SeasonStandingsService } from '../services/thesports/season/standings.service';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
 import { MatchSyncService } from '../services/thesports/match/matchSync.service';
 import { TeamDataService } from '../services/thesports/team/teamData.service';
 import { CompetitionService } from '../services/thesports/competition/competition.service';
@@ -27,25 +26,28 @@ import { MatchRecentParams, MatchDiaryParams, MatchDetailLiveParams, MatchSeason
 import { SeasonStandingsParams } from '../types/thesports/season/seasonStandings.types';
 import { logger } from '../utils/logger';
 import { generateMinuteText } from '../utils/matchMinuteText';
+import { liveMatchCache } from '../services/thesports/match/liveMatchCache.service';
+// SINGLETON: Use shared API client instead of creating new instances
+import { theSportsAPI } from '../core';
 
-// Initialize services
-const theSportsClient = new TheSportsClient();
-const matchRecentService = new MatchRecentService(theSportsClient);
-const matchDiaryService = new MatchDiaryService(theSportsClient);
+// Initialize services with SINGLETON API client
+// This ensures global rate limiting and circuit breaker protection
+const matchRecentService = new MatchRecentService(theSportsAPI as any);
+const matchDiaryService = new MatchDiaryService(theSportsAPI as any);
 const matchDatabaseService = new MatchDatabaseService();
-const matchDetailLiveService = new MatchDetailLiveService(theSportsClient);
-const matchSeasonRecentService = new MatchSeasonRecentService(theSportsClient);
-const matchLineupService = new MatchLineupService(theSportsClient);
-const matchTeamStatsService = new MatchTeamStatsService(theSportsClient);
-const matchPlayerStatsService = new MatchPlayerStatsService(theSportsClient);
-const matchAnalysisService = new MatchAnalysisService(theSportsClient);
-const matchTrendService = new MatchTrendService(theSportsClient);
-const matchHalfStatsService = new MatchHalfStatsService(theSportsClient);
-const seasonStandingsService = new SeasonStandingsService(theSportsClient);
-const teamDataService = new TeamDataService(theSportsClient);
-const competitionService = new CompetitionService(theSportsClient);
+const matchDetailLiveService = new MatchDetailLiveService(theSportsAPI as any);
+const matchSeasonRecentService = new MatchSeasonRecentService(theSportsAPI as any);
+const matchLineupService = new MatchLineupService(theSportsAPI as any);
+const matchTeamStatsService = new MatchTeamStatsService(theSportsAPI as any);
+const matchPlayerStatsService = new MatchPlayerStatsService(theSportsAPI as any);
+const matchAnalysisService = new MatchAnalysisService(theSportsAPI as any);
+const matchTrendService = new MatchTrendService(theSportsAPI as any);
+const matchHalfStatsService = new MatchHalfStatsService(theSportsAPI as any);
+const seasonStandingsService = new SeasonStandingsService(theSportsAPI as any);
+const teamDataService = new TeamDataService(theSportsAPI as any);
+const competitionService = new CompetitionService(theSportsAPI as any);
 const matchSyncService = new MatchSyncService(teamDataService, competitionService);
-const combinedStatsService = new CombinedStatsService(theSportsClient);
+const combinedStatsService = new CombinedStatsService(theSportsAPI as any);
 
 // --- Date helpers (TSİ bulletin) ---
 const TSI_OFFSET_SECONDS = 3 * 3600;
@@ -487,11 +489,40 @@ export const getMatchDetailLive = async (
         });
         return;
       }
+
+      // Finished but no DB data - return empty immediately (don't wait for slow API)
+      logger.warn(`[MatchController] Match finished but no DB data for detail-live ${match_id}, returning empty`);
+      reply.send({
+        success: true,
+        data: {
+          results: [{ id: match_id, incidents: [], stats: [], score: null }],
+          source: 'database (no data available)'
+        },
+      });
+      return;
     }
 
-    // Fetch from API
+    // Fetch from API (only for LIVE matches) with 3s timeout
     const params: MatchDetailLiveParams = { match_id };
-    const result = await matchDetailLiveService.getMatchDetailLive(params);
+    let result: any = null;
+    try {
+      const apiPromise = matchDetailLiveService.getMatchDetailLive(params);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('API timeout')), 3000)
+      );
+      result = await Promise.race([apiPromise, timeoutPromise]);
+    } catch (err: any) {
+      logger.warn(`[MatchController] detail-live API timeout for ${match_id}: ${err.message}`);
+      // Return empty on timeout
+      reply.send({
+        success: true,
+        data: {
+          results: [{ id: match_id, incidents: [], stats: [], score: null }],
+          source: 'timeout (API too slow)'
+        },
+      });
+      return;
+    }
 
     // Save incidents to database (merge with existing stats)
     if (result?.results && Array.isArray(result.results)) {
@@ -579,7 +610,7 @@ export const getMatchLineup = async (
 
     // Try database first
     const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
-    const preSyncService = new DailyPreSyncService(theSportsClient);
+    const preSyncService = new DailyPreSyncService(theSportsAPI as any);
 
     let lineupData = await preSyncService.getLineupFromDb(match_id);
 
@@ -1174,7 +1205,8 @@ export const getMatchLiveStats = async (
     if (isFinished) {
       const dbResult = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
       const firstHalfStats = await combinedStatsService.getFirstHalfStats(match_id);
-      
+      const secondHalfStats = await combinedStatsService.getSecondHalfStats(match_id);
+
       if (dbResult && dbResult.allStats.length > 0) {
         logger.debug(`[MatchController] Match finished, returning stats from DB for ${match_id}`);
         reply.send({
@@ -1188,6 +1220,7 @@ export const getMatchLiveStats = async (
               results: dbResult.allStats,
             },
             firstHalfStats: firstHalfStats || null,
+            secondHalfStats: secondHalfStats || null,
             halfTime: dbResult.halfTimeStats || null,
             incidents: dbResult.incidents,
             score: dbResult.score,
@@ -1196,27 +1229,93 @@ export const getMatchLiveStats = async (
               detailed: dbResult.detailedStats.length,
               from: 'database (match finished)',
               hasFirstHalfSnapshot: !!firstHalfStats,
+              hasSecondHalfSnapshot: !!secondHalfStats,
             },
           },
         });
         return;
       }
       
-      // Finished but no DB data - try API as last resort
-      logger.warn(`[MatchController] Match finished but no DB data, trying API for ${match_id}`);
+      // Finished but no DB data - return empty immediately (don't wait for API)
+      // TheSportsAPI doesn't return data for finished matches anyway
+      logger.warn(`[MatchController] Match finished but no DB data for ${match_id}, returning empty`);
+      reply.send({
+        success: true,
+        data: {
+          match_id,
+          match_status: 8,
+          stats: [],
+          fullTime: { stats: [], results: [] },
+          firstHalfStats: firstHalfStats || null,
+          secondHalfStats: secondHalfStats || null,
+          halfTime: null,
+          incidents: [],
+          score: null,
+          sources: { basic: 0, detailed: 0, from: 'database (no data available)' },
+        },
+      });
+      return;
     }
 
     // Get match status to detect HALF_TIME or 2nd half
     const matchStatus = await combinedStatsService.getMatchStatus(match_id);
     const isHalfTime = matchStatus === 3; // HALF_TIME
     const isSecondHalf = matchStatus === 4 || matchStatus === 5 || matchStatus === 7; // 2nd half, overtime, penalties
-    
-    // Get first_half_stats from database (if exists)
+
+    // Get first_half_stats and second_half_stats from database (if exists)
     let firstHalfStats = await combinedStatsService.getFirstHalfStats(match_id);
-    
-    // For LIVE matches: Always fetch fresh data from API
-    logger.info(`[MatchController] Fetching stats from API for ${match_id} (status: ${matchStatus})`);
-    let result = await combinedStatsService.getCombinedMatchStats(match_id);
+    let secondHalfStats = await combinedStatsService.getSecondHalfStats(match_id);
+
+    // For LIVE matches: ULTRA-FAST direct HTTP to TheSportsAPI (bypass all services)
+    logger.info(`[MatchController] ULTRA-FAST fetch for ${match_id} (status: ${matchStatus})`);
+
+    let result: any = null;
+    try {
+      // Direct HTTP call - no cache, no circuit breaker, no overhead
+      const apiUrl = `https://api.thesports.com/v1/football/match/detail_live?user=${process.env.THESPORTS_API_USER}&secret=${process.env.THESPORTS_API_SECRET}&id=${match_id}`;
+      const response = await fetch(apiUrl);
+      const liveData = await response.json() as { results?: any[] };
+      const matchData = liveData?.results?.find((r: any) => r.id === match_id) || liveData?.results?.[0];
+
+      if (matchData) {
+        // Map basic stats with names
+        const STAT_NAMES: Record<number, { name: string; nameTr: string }> = {
+          2: { name: 'Corner Kicks', nameTr: 'Korner' },
+          3: { name: 'Yellow Cards', nameTr: 'Sarı Kart' },
+          4: { name: 'Red Cards', nameTr: 'Kırmızı Kart' },
+          8: { name: 'Penalties', nameTr: 'Penaltı' },
+          21: { name: 'Shots on Target', nameTr: 'İsabetli Şut' },
+          22: { name: 'Shots off Target', nameTr: 'İsabetsiz Şut' },
+          23: { name: 'Attacks', nameTr: 'Atak' },
+          24: { name: 'Dangerous Attacks', nameTr: 'Tehlikeli Atak' },
+          25: { name: 'Ball Possession (%)', nameTr: 'Top Hakimiyeti' },
+          37: { name: 'Blocked Shots', nameTr: 'Engellenen Şut' },
+        };
+
+        const allStats = (matchData.stats || []).map((s: any) => ({
+          type: s.type,
+          home: s.home,
+          away: s.away,
+          name: STAT_NAMES[s.type]?.name || `Stat ${s.type}`,
+          nameTr: STAT_NAMES[s.type]?.nameTr || `İstatistik ${s.type}`,
+          source: 'basic'
+        }));
+
+        result = {
+          matchId: match_id,
+          allStats,
+          basicStats: allStats,
+          detailedStats: [],
+          incidents: matchData.incidents || [],
+          score: matchData.score || null,
+        };
+      } else {
+        result = { matchId: match_id, allStats: [], basicStats: [], detailedStats: [], incidents: [], score: null };
+      }
+    } catch (err: any) {
+      logger.warn(`[MatchController] Fast fetch error for ${match_id}: ${err.message}`);
+      result = { matchId: match_id, allStats: [], basicStats: [], detailedStats: [], incidents: [], score: null };
+    }
 
     // CRITICAL: Save first half stats when match reaches HALF_TIME
     if (isHalfTime && result && result.allStats.length > 0 && !firstHalfStats) {
@@ -1224,7 +1323,7 @@ export const getMatchLiveStats = async (
       await combinedStatsService.saveFirstHalfStats(match_id, result.allStats);
       firstHalfStats = result.allStats;
     }
-    
+
     // Save to database (CRITICAL for persistence after match ends)
     if (result && result.allStats.length > 0) {
       combinedStatsService.saveCombinedStatsToDatabase(match_id, result).catch((err) => {
@@ -1232,7 +1331,7 @@ export const getMatchLiveStats = async (
       });
     }
 
-    // Build response with first_half_stats for 2nd half calculation on frontend
+    // Build response with first_half_stats and second_half_stats for period selection on frontend
     reply.send({
       success: true,
       data: {
@@ -1243,8 +1342,9 @@ export const getMatchLiveStats = async (
           stats: result.allStats,
           results: result.allStats,
         },
-        // CRITICAL: first_half_stats for frontend to calculate 2nd half
+        // Half stats for frontend period selector (1. YARI / 2. YARI / TÜMÜ)
         firstHalfStats: firstHalfStats || null,
+        secondHalfStats: secondHalfStats || null,
         halfTime: result.halfTimeStats || null,
         incidents: result.incidents,
         score: result.score,
@@ -1253,6 +1353,7 @@ export const getMatchLiveStats = async (
           detailed: result.detailedStats.length,
           from: 'api',
           hasFirstHalfSnapshot: !!firstHalfStats,
+          hasSecondHalfSnapshot: !!secondHalfStats,
         },
       },
     });
@@ -1276,7 +1377,7 @@ export const triggerPreSync = async (
 ): Promise<void> => {
   try {
     const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
-    const preSyncService = new DailyPreSyncService(theSportsClient);
+    const preSyncService = new DailyPreSyncService(theSportsAPI as any);
 
     // Get today's matches from database
     const today = new Date().toISOString().split('T')[0];
@@ -1317,7 +1418,7 @@ export const getMatchH2H = async (
 
     // Try database first
     const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
-    const preSyncService = new DailyPreSyncService(theSportsClient);
+    const preSyncService = new DailyPreSyncService(theSportsAPI as any);
 
     let h2hData = await preSyncService.getH2HFromDb(match_id);
     logger.info(`[getMatchH2H] Database query result for ${match_id}: ${h2hData ? 'FOUND' : 'NOT FOUND'}`);
@@ -1384,6 +1485,180 @@ export const getMatchH2H = async (
     }
   } catch (error: any) {
     logger.error('[MatchController] Error in getMatchH2H:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+};
+
+/**
+ * GET /api/matches/unified
+ *
+ * Phase 6: Unified endpoint for frontend - single API call for all match data
+ *
+ * Query params:
+ * - date: YYYY-MM-DD or YYYYMMDD (default: today)
+ * - include_live: boolean (default: true) - include cross-day live matches
+ * - status: comma-separated status IDs (optional) - filter by status
+ *
+ * Features:
+ * - Merges diary matches with live matches
+ * - Handles cross-day matches (yesterday's match still live)
+ * - Uses smart cache with event-driven invalidation
+ * - Single API call replaces frontend's multiple fetches
+ */
+export const getUnifiedMatches = async (
+  request: FastifyRequest<{
+    Querystring: {
+      date?: string;
+      include_live?: string;
+      status?: string;
+    };
+  }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const { date, include_live, status } = request.query;
+
+    // Parse date (default: today in TSİ timezone)
+    const TSI_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const nowTSI = new Date(Date.now() + TSI_OFFSET_MS);
+    const todayStr = nowTSI.toISOString().split('T')[0].replace(/-/g, '');
+
+    let dateStr = date?.replace(/-/g, '') || todayStr;
+    if (!/^\d{8}$/.test(dateStr)) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Invalid date format. Expected YYYY-MM-DD or YYYYMMDD',
+      });
+    }
+
+    // Parse include_live (default: true)
+    const includeLive = include_live !== 'false';
+
+    // Parse status filter
+    let statusFilter: number[] | undefined;
+    if (status) {
+      statusFilter = status.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+    }
+
+    // Check cache first
+    const cached = liveMatchCache.getUnified(dateStr, includeLive);
+    if (cached && !statusFilter) { // Don't use cache if status filter is applied
+      logger.debug(`[MatchController] Unified cache HIT for ${dateStr}`);
+      return reply.send({
+        success: true,
+        data: {
+          results: cached.results,
+          date: dateStr,
+          includeLive,
+          source: 'cache',
+          cacheStats: liveMatchCache.getStats(),
+        },
+      });
+    }
+
+    logger.info(`[MatchController] Unified fetch for date=${dateStr}, includeLive=${includeLive}`);
+
+    // Normalize match helper
+    const normalizeMatch = (row: any) => {
+      const statusId = row.status_id ?? row.status ?? 1;
+      const minute = row.minute !== null && row.minute !== undefined ? Number(row.minute) : null;
+      const minuteText = generateMinuteText(minute, statusId);
+
+      return {
+        id: row.id,
+        competition_id: row.competition_id,
+        season_id: row.season_id,
+        match_time: row.match_time,
+        status_id: statusId,
+        status: statusId,
+        minute: minute,
+        minute_text: minuteText,
+        home_team_id: row.home_team_id,
+        away_team_id: row.away_team_id,
+        home_score: row.home_score ?? null,
+        away_score: row.away_score ?? null,
+        home_score_overtime: row.home_score_overtime ?? null,
+        away_score_overtime: row.away_score_overtime ?? null,
+        home_score_penalties: row.home_score_penalties ?? null,
+        away_score_penalties: row.away_score_penalties ?? null,
+        home_red_cards: row.home_red_cards ?? 0,
+        away_red_cards: row.away_red_cards ?? 0,
+        home_yellow_cards: row.home_yellow_cards ?? 0,
+        away_yellow_cards: row.away_yellow_cards ?? 0,
+        home_corners: row.home_corners ?? 0,
+        away_corners: row.away_corners ?? 0,
+        live_kickoff_time: row.live_kickoff_time ?? row.match_time ?? null,
+        home_team: row.home_team || null,
+        away_team: row.away_team || null,
+        competition: row.competition || null,
+        home_team_name: row.home_team_name || row.home_team?.name || null,
+        away_team_name: row.away_team_name || row.away_team?.name || null,
+      };
+    };
+
+    // Step 1: Fetch diary matches for selected date
+    const diaryResult = await matchDatabaseService.getMatchesByDate(dateStr, statusFilter);
+    const diaryMatches = (diaryResult.results || []).map(normalizeMatch);
+    const diaryMatchIds = new Set(diaryMatches.map((m: any) => m.id));
+
+    logger.debug(`[MatchController] Diary: ${diaryMatches.length} matches for ${dateStr}`);
+
+    // Step 2: Fetch live matches (if include_live is true)
+    let crossDayLiveMatches: any[] = [];
+    if (includeLive) {
+      const liveResult = await matchDatabaseService.getLiveMatches();
+      const allLiveMatches = (liveResult.results || []).map(normalizeMatch);
+
+      // Only include live matches NOT in diary (cross-day matches)
+      crossDayLiveMatches = allLiveMatches.filter((m: any) => !diaryMatchIds.has(m.id));
+
+      logger.debug(`[MatchController] Cross-day live: ${crossDayLiveMatches.length} matches`);
+    }
+
+    // Step 3: Merge diary + cross-day live
+    // Diary matches come first (sorted by match_time)
+    // Cross-day live matches appended at the end
+    const mergedMatches = [...diaryMatches, ...crossDayLiveMatches];
+
+    // Apply status filter if provided (for cross-day matches too)
+    let finalMatches = mergedMatches;
+    if (statusFilter && statusFilter.length > 0) {
+      finalMatches = mergedMatches.filter((m: any) => statusFilter!.includes(m.status_id));
+    }
+
+    // Build response
+    const response = {
+      results: finalMatches,
+    };
+
+    // Cache the result (only if no status filter)
+    if (!statusFilter) {
+      liveMatchCache.setUnified(dateStr, includeLive, response);
+    }
+
+    reply.send({
+      success: true,
+      data: {
+        results: finalMatches,
+        date: dateStr,
+        includeLive,
+        counts: {
+          total: finalMatches.length,
+          diary: diaryMatches.length,
+          crossDayLive: crossDayLiveMatches.length,
+          live: finalMatches.filter((m: any) => [2, 3, 4, 5, 7].includes(m.status_id)).length,
+          finished: finalMatches.filter((m: any) => m.status_id === 8).length,
+          notStarted: finalMatches.filter((m: any) => m.status_id === 1).length,
+        },
+        source: 'database',
+        cacheStats: liveMatchCache.getStats(),
+      },
+    });
+  } catch (error: any) {
+    logger.error('[MatchController] Error in getUnifiedMatches:', error);
     reply.status(500).send({
       success: false,
       message: error.message || 'Internal server error',

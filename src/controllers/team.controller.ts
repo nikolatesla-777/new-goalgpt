@@ -6,12 +6,12 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { pool } from '../database/connection';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
 import { SeasonStandingsService } from '../services/thesports/season/standings.service';
 import { logger } from '../utils/logger';
+// SINGLETON: Use shared API client
+import { theSportsAPI } from '../core';
 
-const theSportsClient = new TheSportsClient();
-const seasonStandingsService = new SeasonStandingsService(theSportsClient);
+const seasonStandingsService = new SeasonStandingsService(theSportsAPI as any);
 
 /**
  * Get team by ID

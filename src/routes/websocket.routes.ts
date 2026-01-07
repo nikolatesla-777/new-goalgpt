@@ -1,14 +1,18 @@
 /**
  * WebSocket Routes
- * 
+ *
  * Fastify WebSocket route for real-time match event broadcasting
  * Frontend connects to ws://localhost:3000/ws to receive real-time updates
+ *
+ * Phase 6: Integrated with LiveMatchCache for event-driven cache invalidation
  */
 
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { logger } from '../utils/logger';
 import { MatchEvent } from '../services/thesports/websocket/event-detector';
 import { EventLatencyMonitor } from '../services/thesports/websocket/eventLatencyMonitor';
+import { liveMatchCache } from '../services/thesports/match/liveMatchCache.service';
+import { generateMinuteText } from '../utils/matchMinuteText';
 
 // Store active WebSocket connections
 const activeConnections = new Set<any>();
@@ -54,6 +58,10 @@ export function getWebSocketHealth() {
 
 /**
  * Broadcast event to all connected clients
+ *
+ * Phase 6 Enhancements:
+ * 1. Cache invalidation on score-related events
+ * 2. Optimistic data injection for instant frontend updates
  */
 export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void {
   // LATENCY MONITORING: Record broadcast sent timestamp
@@ -61,10 +69,48 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
     latencyMonitor.recordBroadcastSent(event.type, event.matchId, mqttReceivedTs);
   }
 
+  // Phase 6: Cache Invalidation - Invalidate on score-related events
+  const cacheInvalidatingEvents = ['SCORE_CHANGE', 'GOAL', 'GOAL_CANCELLED', 'MATCH_STATE_CHANGE'];
+  if (cacheInvalidatingEvents.includes(event.type)) {
+    liveMatchCache.invalidateMatch(event.matchId, event.type);
+    logger.debug(`[WebSocket Route] Cache invalidated for ${event.matchId} (${event.type})`);
+  }
+
+  // Phase 6: Optimistic Data - Add pre-computed data for instant frontend updates
+  // This allows frontend to update immediately without waiting for API refresh
+  let optimisticData: any = null;
+
+  if (event.type === 'SCORE_CHANGE' || event.type === 'GOAL') {
+    const eventData = event as any;
+    if (eventData.homeScore !== undefined && eventData.awayScore !== undefined) {
+      const minute = eventData.minute ?? null;
+      const statusId = eventData.statusId ?? 2;
+      optimisticData = {
+        homeScore: eventData.homeScore,
+        awayScore: eventData.awayScore,
+        minute: minute,
+        minuteText: generateMinuteText(minute, statusId),
+        statusId: statusId,
+      };
+    }
+  } else if (event.type === 'MATCH_STATE_CHANGE') {
+    const eventData = event as any;
+    if (eventData.newStatus !== undefined) {
+      const minute = eventData.minute ?? null;
+      optimisticData = {
+        statusId: eventData.newStatus,
+        minute: minute,
+        minuteText: generateMinuteText(minute, eventData.newStatus),
+      };
+    }
+  }
+
+  // Spread event first, then override with explicit properties to avoid duplicates
   const message = JSON.stringify({
+    ...event,
     type: event.type,
     matchId: event.matchId,
-    ...event,
+    optimistic: optimisticData,  // Phase 6: Optimistic data for instant updates
     timestamp: Date.now(),
   });
 
@@ -93,7 +139,7 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
   if (sentCount > 0) {
     logger.debug(
       `[WebSocket Route] Broadcasted ${event.type} event to ${sentCount} clients ` +
-      `(${errorCount} errors, ${broadcastDuration}ms)`
+      `(${errorCount} errors, ${broadcastDuration}ms)${optimisticData ? ' [+optimistic]' : ''}`
     );
   }
 }

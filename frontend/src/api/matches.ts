@@ -252,14 +252,11 @@ export async function getMatchDiary(date?: string, status?: string): Promise<Mat
   }
 
   const fullUrl = `${API_BASE_URL}/matches/diary?${queryParams}`;
-  console.log('🔍 [getMatchDiary] Full URL:', fullUrl);
-  console.log('🔍 [getMatchDiary] Date param:', date);
 
   const response = await retryFetch(fullUrl);
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('❌ [getMatchDiary] HTTP Error:', response.status, errorText);
     if (response.status === 502 || response.status === 503 || response.status === 504) {
       throw new Error(`HTTP ${response.status}: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
     }
@@ -267,19 +264,8 @@ export async function getMatchDiary(date?: string, status?: string): Promise<Mat
   }
 
   const data: ApiResponse<MatchDiaryResponse> = await response.json();
-  console.log('📦 [getMatchDiary] Response structure:', {
-    success: data.success,
-    hasData: !!data.data,
-    hasResults: !!data.data?.results,
-    resultsCount: data.data?.results?.length || 0,
-    hasErr: !!data.data?.err,
-    err: data.data?.err,
-    dataType: typeof data.data,
-    isArray: Array.isArray(data.data),
-  });
 
   if (!data.success) {
-    console.error('❌ [getMatchDiary] API returned success=false:', data.message);
     throw new Error(data.message || 'Failed to fetch match diary');
   }
 
@@ -290,14 +276,11 @@ export async function getMatchDiary(date?: string, status?: string): Promise<Mat
 
   // Check for TheSports API error
   if (responseData?.err) {
-    console.error('❌ [getMatchDiary] TheSports API error:', responseData.err);
     throw new Error(responseData.err);
   }
 
   // CRITICAL FIX: Ensure results is always an array
   const results = Array.isArray(responseData?.results) ? responseData.results : [];
-
-  console.log('✅ [getMatchDiary] Returning data with', results.length, 'matches');
 
   // Return safe structure: always return { results: array, err?: string }
   return {
@@ -305,6 +288,77 @@ export async function getMatchDiary(date?: string, status?: string): Promise<Mat
     err: responseData?.err ?? undefined,
     total: responseData?.total,
   };
+}
+
+/**
+ * Phase 6: Unified Matches Endpoint
+ *
+ * Get unified matches (diary + live merged server-side)
+ * Single API call replaces separate diary + live fetches
+ *
+ * Benefits:
+ * - Server-side merging (consistent logic)
+ * - Cross-day live matches handled automatically
+ * - Smart cache with event-driven invalidation
+ * - Reduced network requests
+ *
+ * @param date Date in YYYY-MM-DD format (default: today)
+ * @param includeLive Include cross-day live matches (default: true)
+ * @param status Optional comma-separated status IDs filter
+ */
+export async function getUnifiedMatches(params?: {
+  date?: string;
+  includeLive?: boolean;
+  status?: string;
+}): Promise<MatchDiaryResponse & { counts?: { total: number; diary: number; crossDayLive: number; live: number } }> {
+  const queryParams = new URLSearchParams();
+  if (params?.date) queryParams.append('date', params.date);
+  if (params?.includeLive !== undefined) queryParams.append('include_live', String(params.includeLive));
+  if (params?.status) queryParams.append('status', params.status);
+
+  const url = `${API_BASE_URL}/matches/unified?${queryParams}`;
+
+  // Add timeout (60 seconds) to prevent hanging
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+  try {
+    const response = await retryFetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (response.status === 502 || response.status === 503 || response.status === 504) {
+        throw new Error(`HTTP ${response.status}: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
+      }
+      throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+    }
+
+    const data: ApiResponse<{
+      results: MatchDiary[];
+      counts?: { total: number; diary: number; crossDayLive: number; live: number };
+      cacheStats?: any;
+    }> = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch unified matches');
+    }
+
+    // CRITICAL FIX: Ensure results is always an array
+    const results = Array.isArray(data.data?.results) ? data.data.results : [];
+
+    return {
+      results,
+      total: data.data?.counts?.total,
+      counts: data.data?.counts,
+    };
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout: Unified matches fetch took too long.');
+    }
+    throw error;
+  }
 }
 
 /**
@@ -336,7 +390,6 @@ export async function getMatchById(matchId: string): Promise<Match> {
 
     return data.data;
   } catch (error: any) {
-    console.error('[getMatchById] Error:', error);
     throw error;
   }
 }
@@ -357,7 +410,6 @@ export async function getMatchAnalysis(matchId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getMatchAnalysis] Error:', error);
     throw error;
   }
 }
@@ -377,7 +429,6 @@ export async function getMatchH2H(matchId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getMatchH2H] Error:', error);
     throw error;
   }
 }
@@ -396,7 +447,6 @@ export async function getMatchTrend(matchId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getMatchTrend] Error:', error);
     throw error;
   }
 }
@@ -415,7 +465,6 @@ export async function getMatchHalfStats(matchId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getMatchHalfStats] Error:', error);
     throw error;
   }
 }
@@ -434,7 +483,6 @@ export async function getMatchLineup(matchId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getMatchLineup] Error:', error);
     throw error;
   }
 }
@@ -455,7 +503,6 @@ export async function getMatchLiveStats(matchId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getMatchLiveStats] Error:', error);
     throw error;
   }
 }
@@ -474,7 +521,6 @@ export async function getMatchTeamStats(matchId: string): Promise<any> {
     if (liveResponse.ok) {
       const liveData: ApiResponse<any> = await liveResponse.json();
       if (liveData.data?.stats?.length > 0) {
-        console.log('[getMatchTeamStats] Got stats from live feed:', liveData.data.stats.length);
         return liveData.data;
       }
     }
@@ -487,7 +533,6 @@ export async function getMatchTeamStats(matchId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getMatchTeamStats] Error:', error);
     throw error;
   }
 }
@@ -507,7 +552,6 @@ export async function getMatchPlayerStats(matchId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getMatchPlayerStats] Error:', error);
     throw error;
   }
 }
@@ -543,7 +587,6 @@ export async function getMatchDetailLive(matchId: string): Promise<any> {
     // Match not found in live results (may have ended or not started)
     return { incidents: [], stats: [], score: null, tlive: [] };
   } catch (error) {
-    console.error('[getMatchDetailLive] Error:', error);
     throw error;
   }
 }
@@ -562,7 +605,6 @@ export async function getSeasonStandings(seasonId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getSeasonStandings] Error:', error);
     throw error;
   }
 }
@@ -587,7 +629,6 @@ export async function getTeamById(teamId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getTeamById] Error:', error);
     throw error;
   }
 }
@@ -609,7 +650,6 @@ export async function getTeamFixtures(teamId: string, seasonId?: string): Promis
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getTeamFixtures] Error:', error);
     throw error;
   }
 }
@@ -631,7 +671,6 @@ export async function getTeamStandings(teamId: string, seasonId?: string): Promi
     const data: ApiResponse<any> = await response.json();
     return data.data;
   } catch (error) {
-    console.error('[getTeamStandings] Error:', error);
     throw error;
   }
 }
@@ -653,7 +692,6 @@ export async function searchTeams(query: string): Promise<any> {
     // Checking controller: reply.send({ success: true, data: result.rows... })
     // Yes, data.data will be the array of teams
   } catch (error) {
-    console.error('[searchTeams] Error:', error);
     throw error;
   }
 }
@@ -674,7 +712,6 @@ export async function getPlayersByTeam(teamId: string): Promise<any> {
     // Controller player.controller.ts: return reply.send({ players: result.rows });
     // So data.data will be { players: [...] }
   } catch (error) {
-    console.error('[getPlayersByTeam] Error:', error);
     throw error;
   }
 }
@@ -700,7 +737,6 @@ export async function getPlayerById(playerId: string): Promise<any> {
     // But fastify might not auto-wrap.
     // Let's assume raw return for now based on code I saw.
   } catch (error) {
-    console.error('[getPlayerById] Error:', error);
     throw error;
   }
 }
@@ -723,7 +759,6 @@ export async function getLeagueById(leagueId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data; // Backend returns { league: ..., currentSeason: ... }
   } catch (error) {
-    console.error('[getLeagueById] Error:', error);
     throw error;
   }
 }
@@ -749,7 +784,6 @@ export async function getLeagueFixtures(leagueId: string, params?: { limit?: num
     const data: ApiResponse<any> = await response.json();
     return data; // returns { fixtures: [...] }
   } catch (error) {
-    console.error('[getLeagueFixtures] Error:', error);
     throw error;
   }
 }
@@ -768,7 +802,6 @@ export async function getLeagueStandings(leagueId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data; // returns { standings: [...], season_id: ... }
   } catch (error) {
-    console.error('[getLeagueStandings] Error:', error);
     throw error;
   }
 }
@@ -787,7 +820,6 @@ export async function getLeagueTeams(leagueId: string): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data; // returns { teams: [...] }
   } catch (error) {
-    console.error('[getLeagueTeams] Error:', error);
     throw error;
   }
 }
@@ -807,7 +839,6 @@ export async function getMatchedPredictions(limit = 100): Promise<any> {
     const data: ApiResponse<any> = await response.json();
     return data; // returns { predictions: [...] }
   } catch (error) {
-    console.error('[getMatchedPredictions] Error:', error);
     throw error;
   }
 }

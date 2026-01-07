@@ -676,6 +676,46 @@ export class CombinedStatsService {
     }
 
     /**
+     * Get second half stats from database
+     * Returns the statistics_second_half column if it exists
+     */
+    async getSecondHalfStats(matchId: string): Promise<CombinedStatItem[] | null> {
+        const client = await pool.connect();
+        try {
+            // Check if column exists
+            const colCheck = await client.query(`
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'ts_matches'
+                  AND column_name = 'statistics_second_half'
+            `);
+
+            if (colCheck.rows.length === 0) {
+                // Column doesn't exist yet
+                return null;
+            }
+
+            const result = await client.query(`
+                SELECT statistics_second_half
+                FROM ts_matches
+                WHERE external_id = $1
+                  AND statistics_second_half IS NOT NULL
+            `, [matchId]);
+
+            if (result.rows.length === 0 || !result.rows[0].statistics_second_half) {
+                return null;
+            }
+
+            return result.rows[0].statistics_second_half;
+        } catch (error: any) {
+            logger.error(`[CombinedStats] Error reading second half stats for ${matchId}:`, error);
+            return null;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
      * Get match status from database
      */
     async getMatchStatus(matchId: string): Promise<number | null> {

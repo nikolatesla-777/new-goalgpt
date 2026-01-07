@@ -11,12 +11,13 @@ import { CountrySyncWorker } from '../jobs/countrySync.job';
 import { CompetitionSyncWorker } from '../jobs/competitionSync.job';
 import { TeamSyncWorker } from '../jobs/teamSync.job';
 import { MatchDiaryService } from './thesports/match/matchDiary.service';
-import { TheSportsClient } from './thesports/client/thesports-client';
 import { MatchSyncService } from './thesports/match/matchSync.service';
 import { TeamDataService } from './thesports/team/teamData.service';
 import { CompetitionService } from './thesports/competition/competition.service';
 import { pool } from '../database/connection';
 import { formatTheSportsDate } from '../utils/thesports/timestamp.util';
+// SINGLETON: Use shared API client
+import { theSportsAPI } from '../core';
 
 export class BootstrapService {
   private categorySyncWorker: CategorySyncWorker;
@@ -25,21 +26,20 @@ export class BootstrapService {
   private teamSyncWorker: TeamSyncWorker;
   private matchDiaryService: MatchDiaryService;
   private matchSyncService: MatchSyncService;
-  private theSportsClient: TheSportsClient;
   private teamDataService: TeamDataService;
   private competitionService: CompetitionService;
 
   constructor() {
-    this.theSportsClient = new TheSportsClient();
+    // SINGLETON: Use shared API client with global rate limiting
     this.categorySyncWorker = new CategorySyncWorker();
     this.countrySyncWorker = new CountrySyncWorker();
     this.competitionSyncWorker = new CompetitionSyncWorker();
     this.teamSyncWorker = new TeamSyncWorker();
 
-    this.teamDataService = new TeamDataService(this.theSportsClient);
-    this.competitionService = new CompetitionService(this.theSportsClient);
+    this.teamDataService = new TeamDataService(theSportsAPI as any);
+    this.competitionService = new CompetitionService(theSportsAPI as any);
     this.matchSyncService = new MatchSyncService(this.teamDataService, this.competitionService);
-    this.matchDiaryService = new MatchDiaryService(this.theSportsClient);
+    this.matchDiaryService = new MatchDiaryService(theSportsAPI as any);
   }
 
   /**

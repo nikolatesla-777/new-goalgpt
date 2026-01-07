@@ -13,6 +13,7 @@ import { MatchDetailLiveService } from '../services/thesports/match/matchDetailL
 import { MatchTrendService } from '../services/thesports/match/matchTrend.service';
 import { MatchDatabaseService } from '../services/thesports/match/matchDatabase.service';
 import { AIPredictionService } from '../services/ai/aiPrediction.service';
+import { predictionSettlementService } from '../services/ai/predictionSettlement.service';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
@@ -213,16 +214,26 @@ export class MatchDataSyncWorker {
             const minute = match.minute || 0;
             const statusId = match.status_id;
 
-            // Trigger settlement check
-            await this.aiPredictionService.settleInstantWin(
+            // Trigger settlement check using centralized PredictionSettlementService
+            // Determine event type based on status
+            const eventType = statusId === 3 ? 'halftime' : statusId === 8 ? 'fulltime' : 'score_change';
+
+            const settlementResult = await predictionSettlementService.processEvent({
               matchId,
+              eventType,
               homeScore,
               awayScore,
               minute,
-              statusId
-            );
-            result.settlement = true;
-            logger.debug(`[MatchDataSync] Settlement check completed for ${matchId}`);
+              statusId,
+              timestamp: Date.now(),
+            });
+
+            result.settlement = settlementResult.settled > 0;
+            if (settlementResult.settled > 0) {
+              logger.info(`[MatchDataSync] Settlement for ${matchId}: ${settlementResult.settled} settled (${settlementResult.winners}W/${settlementResult.losers}L)`);
+            } else {
+              logger.debug(`[MatchDataSync] Settlement check completed for ${matchId} (no pending predictions)`);
+            }
           }
         } finally {
           client.release();

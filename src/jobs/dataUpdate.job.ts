@@ -9,15 +9,15 @@ import { DataUpdateService } from '../services/thesports/dataUpdate/dataUpdate.s
 import { MatchDetailLiveService } from '../services/thesports/match/matchDetailLive.service';
 import { CombinedStatsService } from '../services/thesports/match/combinedStats.service';
 import { MatchTrendService } from '../services/thesports/match/matchTrend.service';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
+// SINGLETON: Use shared API client for global rate limiting
+import { theSportsAPI } from '../core';
 
 
 export class DataUpdateWorker {
   private dataUpdateService: DataUpdateService;
-  private apiClient: TheSportsClient;
   private matchDetailLiveService: MatchDetailLiveService;
   private combinedStatsService: CombinedStatsService;
   private matchTrendService: MatchTrendService;
@@ -26,10 +26,10 @@ export class DataUpdateWorker {
 
   constructor() {
     this.dataUpdateService = new DataUpdateService();
-    this.apiClient = new TheSportsClient();
-    this.matchDetailLiveService = new MatchDetailLiveService(this.apiClient);
-    this.combinedStatsService = new CombinedStatsService(this.apiClient);
-    this.matchTrendService = new MatchTrendService(this.apiClient);
+    // SINGLETON: All services share the same API client with global rate limiting
+    this.matchDetailLiveService = new MatchDetailLiveService(theSportsAPI as any);
+    this.combinedStatsService = new CombinedStatsService(theSportsAPI as any);
+    this.matchTrendService = new MatchTrendService(theSportsAPI as any);
   }
 
   /**

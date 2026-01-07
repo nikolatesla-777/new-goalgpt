@@ -627,31 +627,68 @@ export class MatchDetailLiveService {
       // Continue with normal reconciliation flow below
       // Note: existing, existingStatusId, matchTime, nowTs are already defined above
 
-      const existingProviderTime = existing.provider_update_time;
-      const existingEventTime = existing.last_event_ts;
+      // CRITICAL FIX: Convert to numbers to avoid string concatenation bug
+      // PostgreSQL BIGINT can be returned as string depending on node-postgres config
+      const existingProviderTime = existing.provider_update_time !== null ? Number(existing.provider_update_time) : null;
+      let existingEventTime = existing.last_event_ts !== null ? Number(existing.last_event_ts) : null;
+
+      // CRITICAL FIX: Validate timestamps to detect corrupted values
+      // Valid Unix timestamp range: 1700000000 to current time + 1 day
+      const MAX_VALID_TS = ingestionTs + (24 * 60 * 60); // Current time + 1 day
+      const MIN_VALID_TS = 1700000000; // ~2023
+
+      if (existingEventTime !== null && (existingEventTime > MAX_VALID_TS || existingEventTime < MIN_VALID_TS)) {
+        logger.warn(
+          `[DetailLive] CORRUPTED last_event_ts detected for ${match_id}: ${existingEventTime} ` +
+          `(valid range: ${MIN_VALID_TS} - ${MAX_VALID_TS}). Treating as NULL.`
+        );
+        existingEventTime = null;
+      }
+
+      if (existingProviderTime !== null && (existingProviderTime > MAX_VALID_TS || existingProviderTime < MIN_VALID_TS)) {
+        logger.warn(
+          `[DetailLive] CORRUPTED provider_update_time detected for ${match_id}: ${existingProviderTime} ` +
+          `(valid range: ${MIN_VALID_TS} - ${MAX_VALID_TS}). Ignoring for freshness check.`
+        );
+      }
 
       // CRITICAL FIX: Allow status transitions even if timestamps suggest stale data
       // Status transitions (e.g., 1→2, 2→3, 3→4) are critical and should always be applied
       const isStatusTransition = live.statusId !== null && live.statusId !== existingStatusId;
+
+      // EXPANDED CRITICAL TRANSITION LOGIC:
+      // If we missed a transition (e.g., 1→2), we should still allow 1→3, 1→4, etc.
+      // Any transition FROM NOT_STARTED to any LIVE status is critical
+      const LIVE_STATUSES = [2, 3, 4, 5, 7]; // FIRST_HALF, HALF_TIME, SECOND_HALF, OVERTIME, PENALTY
       const isCriticalTransition =
-        (existingStatusId === 1 && live.statusId === 2) || // NOT_STARTED → FIRST_HALF
+        // NOT_STARTED → ANY LIVE STATUS (handles missed transitions)
+        (existingStatusId === 1 && LIVE_STATUSES.includes(live.statusId as number)) ||
+        // Standard forward transitions
         (existingStatusId === 2 && live.statusId === 3) || // FIRST_HALF → HALF_TIME
         (existingStatusId === 3 && live.statusId === 4) || // HALF_TIME → SECOND_HALF
-        (existingStatusId === 4 && live.statusId === 8) || // SECOND_HALF → END
-        ([2, 3, 4, 5, 7].includes(existingStatusId) && live.statusId === 8); // Any LIVE → END
+        (existingStatusId === 4 && live.statusId === 5) || // SECOND_HALF → OVERTIME
+        (existingStatusId === 5 && live.statusId === 7) || // OVERTIME → PENALTY
+        // Any LIVE → END (final transition)
+        (LIVE_STATUSES.includes(existingStatusId) && live.statusId === 8) ||
+        // NOT_STARTED → END (match finished without us seeing it live)
+        (existingStatusId === 1 && live.statusId === 8);
 
       // Check freshness (idempotent guard) - but allow critical status transitions
       if (!isCriticalTransition) {
         if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
-          // Provider supplied update_time
-          if (existingProviderTime !== null && incomingProviderUpdateTime <= existingProviderTime) {
+          // Provider supplied update_time - validate before comparing
+          const validExistingProviderTime = (existingProviderTime !== null &&
+            existingProviderTime >= MIN_VALID_TS && existingProviderTime <= MAX_VALID_TS)
+            ? existingProviderTime : null;
+
+          if (validExistingProviderTime !== null && incomingProviderUpdateTime <= validExistingProviderTime) {
             logger.debug(
-              `Skipping stale update for ${match_id} (provider time: ${incomingProviderUpdateTime} <= ${existingProviderTime})`
+              `Skipping stale update for ${match_id} (provider time: ${incomingProviderUpdateTime} <= ${validExistingProviderTime})`
             );
             return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
           }
         } else {
-          // No provider update_time, use event time comparison
+          // No provider update_time, use event time comparison (existingEventTime already validated above)
           if (existingEventTime !== null && ingestionTs <= existingEventTime + 5) {
             logger.debug(
               `Skipping stale update for ${match_id} (event time: ${ingestionTs} <= ${existingEventTime + 5})`
@@ -660,9 +697,13 @@ export class MatchDetailLiveService {
           }
         }
       } else {
+        // Log critical transition with more detail
+        const transitionType = existingStatusId === 1 ? 'MATCH_START' :
+          live.statusId === 8 ? 'MATCH_END' : 'STATUS_CHANGE';
         logger.info(
-          `[DetailLive] CRITICAL TRANSITION detected for ${match_id}: ${existingStatusId} → ${live.statusId}. ` +
-          `Allowing update despite timestamp check.`
+          `[DetailLive] ⚡ CRITICAL TRANSITION (${transitionType}) for ${match_id}: ` +
+          `status ${existingStatusId} → ${live.statusId}, score ${live.homeScoreDisplay}-${live.awayScoreDisplay}. ` +
+          `Bypassing timestamp check (existingEventTime=${existingEventTime}, existingProviderTime=${existingProviderTime}).`
         );
         
         // CRITICAL: Save first half stats when transitioning to HALF_TIME

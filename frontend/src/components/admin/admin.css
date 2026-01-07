@@ -579,6 +579,76 @@
   background-color: white;
 }
 
+/* Tab Badges for counts */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  background-color: rgba(0, 0, 0, 0.1);
+  color: var(--admin-text-secondary);
+}
+
+.admin-filter-btn.active .tab-badge {
+  background-color: rgba(255, 255, 255, 0.25);
+  color: white;
+}
+
+.tab-badge.live {
+  background-color: var(--admin-success-light);
+  color: var(--admin-success);
+}
+
+.admin-filter-btn.active .tab-badge.live {
+  background-color: rgba(255, 255, 255, 0.25);
+  color: white;
+}
+
+.tab-badge.ai {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #8B5CF6;
+}
+
+/* AI Tab specific styling */
+.admin-filter-btn.ai-tab.active {
+  background: linear-gradient(135deg, #8B5CF6, #6366F1);
+  border-color: transparent;
+  color: white;
+}
+
+.admin-filter-btn.ai-tab:not(.active):hover {
+  border-color: #8B5CF6;
+  color: #8B5CF6;
+}
+
+/* Favorites Tab specific styling */
+.tab-badge.favorites {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.admin-filter-btn.favorites-tab.active {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-color: transparent;
+  color: white;
+}
+
+.admin-filter-btn.favorites-tab:not(.active):hover {
+  border-color: #f59e0b;
+  color: #d97706;
+}
+
+.admin-filter-btn.favorites-tab.active .tab-badge.favorites {
+  background-color: rgba(255, 255, 255, 0.25);
+  color: white;
+}
+
 @keyframes pulse {
 
   0%,
