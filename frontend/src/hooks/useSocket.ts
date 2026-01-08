@@ -89,11 +89,31 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<WebSocketEvent | null>(null);
   const [dangerAlerts, setDangerAlerts] = useState<Map<string, DangerAlertEvent>>(new Map());
-  
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 10;
+
+  // FIX: Store callbacks in refs to prevent useEffect dependency changes
+  const callbacksRef = useRef({
+    onScoreChange,
+    onDangerAlert,
+    onGoalCancelled,
+    onMatchStateChange,
+    onAnyEvent,
+  });
+
+  // Update refs when callbacks change (without triggering reconnect)
+  useEffect(() => {
+    callbacksRef.current = {
+      onScoreChange,
+      onDangerAlert,
+      onGoalCancelled,
+      onMatchStateChange,
+      onAnyEvent,
+    };
+  }, [onScoreChange, onDangerAlert, onGoalCancelled, onMatchStateChange, onAnyEvent]);
 
   // Clear danger alert after 10 seconds (they're time-sensitive)
   const clearDangerAlertTimeout = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -102,15 +122,15 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     try {
       const data = JSON.parse(event.data);
       const wsEvent = data.data || data; // Handle wrapped or unwrapped format
-      
+
       if (!wsEvent.type) return;
 
       setLastEvent(wsEvent);
-      onAnyEvent?.(wsEvent);
+      callbacksRef.current.onAnyEvent?.(wsEvent);
 
       switch (wsEvent.type) {
         case 'SCORE_CHANGE':
-          onScoreChange?.(wsEvent as ScoreChangeEvent);
+          callbacksRef.current.onScoreChange?.(wsEvent as ScoreChangeEvent);
           // Clear any danger alert for this match (goal happened!)
           setDangerAlerts(prev => {
             const next = new Map(prev);
@@ -121,19 +141,19 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
 
         case 'DANGER_ALERT':
           const dangerEvent = wsEvent as DangerAlertEvent;
-          onDangerAlert?.(dangerEvent);
-          
+          callbacksRef.current.onDangerAlert?.(dangerEvent);
+
           // Store the alert
           setDangerAlerts(prev => {
             const next = new Map(prev);
             next.set(dangerEvent.matchId, dangerEvent);
             return next;
           });
-          
+
           // Auto-clear after 10 seconds
           const existingTimeout = clearDangerAlertTimeout.current.get(dangerEvent.matchId);
           if (existingTimeout) clearTimeout(existingTimeout);
-          
+
           const timeout = setTimeout(() => {
             setDangerAlerts(prev => {
               const next = new Map(prev);
@@ -142,22 +162,22 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
             });
             clearDangerAlertTimeout.current.delete(dangerEvent.matchId);
           }, 10000);
-          
+
           clearDangerAlertTimeout.current.set(dangerEvent.matchId, timeout);
           break;
 
         case 'GOAL_CANCELLED':
-          onGoalCancelled?.(wsEvent as GoalCancelledEvent);
+          callbacksRef.current.onGoalCancelled?.(wsEvent as GoalCancelledEvent);
           break;
 
         case 'MATCH_STATE_CHANGE':
-          onMatchStateChange?.(wsEvent as MatchStateChangeEvent);
+          callbacksRef.current.onMatchStateChange?.(wsEvent as MatchStateChangeEvent);
           break;
       }
     } catch {
       // Failed to parse message - silently ignore
     }
-  }, [onScoreChange, onDangerAlert, onGoalCancelled, onMatchStateChange, onAnyEvent]);
+  }, []); // FIX: Empty dependency array - callbacks are accessed via ref
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

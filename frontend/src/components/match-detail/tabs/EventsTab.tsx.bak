@@ -33,7 +33,7 @@ export function EventsTab() {
   }
 
   const incidents = events?.incidents || [];
-  
+  console.log(`[EventsTab] Displaying ${incidents.length} incidents`);
   const matchStatusId = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
 
   return (

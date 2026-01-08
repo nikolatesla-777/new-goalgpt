@@ -78,13 +78,19 @@ export class MatchIncidentsService {
       // Finished matches: 5min max staleness
       const maxStalenessMs = isLive ? 30000 : 300000;
 
-      if (staleness < maxStalenessMs && incidents.length > 0) {
+      // CRITICAL FIX: If incidents is empty, ALWAYS fetch from API
+      // This ensures events are never missing due to empty database cache
+      if (incidents.length === 0) {
+        logger.info(`[MatchIncidents] Database incidents empty for ${matchId}, fetching from API`);
+        // Fall through to STEP 3
+      } else if (staleness < maxStalenessMs) {
+        // Cache is fresh and has data - use it
         logger.debug(`[MatchIncidents] ✓ Using cached incidents for ${matchId} (age: ${Math.round(staleness / 1000)}s, ${incidents.length} incidents)`);
         return { incidents };
       }
 
       // ============================================================
-      // STEP 3: FETCH FRESH DATA FROM API (IF STALE)
+      // STEP 3: FETCH FRESH DATA FROM API (IF STALE OR EMPTY)
       // ============================================================
 
       logger.info(`[MatchIncidents] Fetching fresh incidents for ${matchId} (stale: ${Math.round(staleness / 1000)}s, live: ${isLive})`);
