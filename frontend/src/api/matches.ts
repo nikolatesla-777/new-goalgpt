@@ -571,16 +571,9 @@ export async function getMatchDetailLive(matchId: string): Promise<any> {
     }
     const data: ApiResponse<any> = await response.json();
 
-    console.log('[getMatchDetailLive] Full API response:', JSON.stringify(data, null, 2));
-    console.log('[getMatchDetailLive] Looking for matchId:', matchId);
-
     // API returns array of all live matches, find the specific match
     const results = data.data?.results || [];
-    console.log('[getMatchDetailLive] Results array length:', results.length);
-    console.log('[getMatchDetailLive] Results IDs:', results.map((m: any) => m.id));
-
     const matchData = results.find((m: any) => m.id === matchId);
-    console.log('[getMatchDetailLive] Found matchData:', matchData);
 
     if (matchData) {
       const result = {
@@ -589,12 +582,12 @@ export async function getMatchDetailLive(matchId: string): Promise<any> {
         score: matchData.score || null,
         tlive: matchData.tlive || []
       };
-      console.log('[getMatchDetailLive] Returning incidents count:', result.incidents.length);
+      console.log(`[getMatchDetailLive] ✓ Found ${result.incidents.length} incidents for ${matchId}`);
       return result;
     }
 
     // Match not found in live results (may have ended or not started)
-    console.warn('[getMatchDetailLive] Match not found in results!');
+    console.warn(`[getMatchDetailLive] ❌ Match ${matchId} not found in ${results.length} results`);
     return { incidents: [], stats: [], score: null, tlive: [] };
   } catch (error) {
     console.error('[getMatchDetailLive] Error:', error);

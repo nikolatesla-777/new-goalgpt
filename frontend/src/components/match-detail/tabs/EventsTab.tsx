@@ -15,10 +15,6 @@ export function EventsTab() {
   const events = tabData.events;
   const hasData = events !== null && events !== undefined;
 
-  console.log('[EventsTab Render] tabData:', tabData);
-  console.log('[EventsTab Render] events:', events);
-  console.log('[EventsTab Render] hasData:', hasData);
-
   if (!hasData) {
     return (
       <div className="text-center p-10 text-gray-600">
@@ -28,8 +24,7 @@ export function EventsTab() {
   }
 
   const incidents = events?.incidents || [];
-  console.log('[EventsTab Render] incidents:', incidents);
-  console.log('[EventsTab Render] incidents.length:', incidents.length);
+  console.log(`[EventsTab] Displaying ${incidents.length} incidents`);
   const matchStatusId = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
 
   return (
