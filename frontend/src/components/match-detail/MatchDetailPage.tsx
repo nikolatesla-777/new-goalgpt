@@ -198,7 +198,7 @@ export function MatchDetailPage() {
                         incidents = statsData?.incidents || [];
                     }
 
-                    result = { incidents };
+                    result = { events: { incidents } };
                     break;
             }
             // CRITICAL FIX: Only update data if we got a result
