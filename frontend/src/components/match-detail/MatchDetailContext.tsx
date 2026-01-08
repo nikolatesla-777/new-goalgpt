@@ -176,6 +176,8 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   const fetchMatch = useCallback(async () => {
     if (!matchId) return;
 
+    console.log('[MatchDetailContext] fetchMatch called with matchId:', matchId);
+
     if (!hasLoadedRef.current) setLoading(true);
 
     try {
@@ -184,8 +186,10 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
       // Step 1: Get match by ID first (FAST - ~0.3s)
       try {
         foundMatch = await getMatchById(matchId);
+        console.log('[MatchDetailContext] getMatchById returned:', foundMatch?.id, foundMatch);
       } catch {
         // Match not found by ID
+        console.log('[MatchDetailContext] getMatchById failed for:', matchId);
       }
 
       // Step 2: If match is LIVE, get fresh data from live endpoint
@@ -237,6 +241,9 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
   const fetchAllTabData = useCallback(async () => {
     if (!matchId) return;
+
+    console.log('[MatchDetailContext] fetchAllTabData called with matchId:', matchId);
+    console.log('[MatchDetailContext] match object:', match);
 
     setTabDataLoading(true);
 
