@@ -570,101 +570,6 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     }
   }, [matchId, tabData.ai, isCacheValid, updateCacheTimestamp]);
 
-  const fetchAllTabData = useCallback(async () => {
-    if (!matchId) return;
-
-    console.log(`[MatchDetailContext] fetchAllTabData for match: ${matchId}`);
-
-    setTabDataLoading(true);
-
-    try {
-      // ALL fetches in PARALLEL - no sequential blocking!
-      const [statsResult, h2hResult, standingsResult, aiResult, eventsResult, trendResult] = await Promise.allSettled([
-        // Stats
-        (async () => {
-          const [liveStats, halfStats] = await Promise.allSettled([
-            fetchWithTimeout(getMatchLiveStats(matchId), 2000),
-            fetchWithTimeout(getMatchHalfStats(matchId), 2000),
-          ]);
-          const liveData = liveStats.status === 'fulfilled' ? liveStats.value : null;
-          const halfData = halfStats.status === 'fulfilled' ? halfStats.value : null;
-          return {
-            fullTime: liveData?.fullTime ?? liveData ?? null,
-            halfTime: halfData ?? null,
-            firstHalfStats: liveData?.firstHalfStats ?? null,
-          } as StatsData;
-        })(),
-
-        // H2H
-        (async () => {
-          const h2h = await fetchWithTimeout(getMatchH2H(matchId), 2000);
-          return {
-            summary: h2h?.summary ?? null,
-            h2hMatches: h2h?.h2hMatches ?? [],
-            homeRecentForm: h2h?.homeRecentForm ?? [],
-            awayRecentForm: h2h?.awayRecentForm ?? [],
-          } as H2HData;
-        })(),
-
-        // Standings
-        (async () => {
-          if (!match?.season_id) return { results: [] } as StandingsData;
-          const standings = await fetchWithTimeout(getSeasonStandings(match.season_id), 2000);
-          return { results: standings?.data?.results ?? [] } as StandingsData;
-        })(),
-
-        // AI predictions
-        (async () => {
-          const response = await fetchWithTimeout(fetch(`/api/predictions/match/${matchId}`), 2000);
-          if (response?.ok) {
-            const data = await response.json();
-            return { predictions: data.predictions ?? [] } as AIData;
-          }
-          return { predictions: [] } as AIData;
-        })(),
-
-        // Events - NO TIMEOUT (let it complete naturally)
-        (async () => {
-          try {
-            const eventsData = await getMatchDetailLive(matchId);
-            const result = {
-              incidents: eventsData?.incidents ?? [],
-            } as EventsData;
-            console.log(`[MatchDetailContext] Events: ${result.incidents.length} incidents for ${matchId}`);
-            return result;
-          } catch (error) {
-            console.error('[MatchDetailContext] Events fetch error:', error);
-            return { incidents: [] } as EventsData;
-          }
-        })(),
-
-        // Trend
-        (async () => {
-          const trendData = await fetchWithTimeout(getMatchTrend(matchId), 2000);
-          return {
-            trend: trendData?.trend ?? null,
-            incidents: trendData?.incidents ?? [],
-          } as TrendData;
-        })(),
-      ]);
-
-      // Update state - all data fetched in parallel
-      setTabData({
-        stats: statsResult.status === 'fulfilled' ? statsResult.value : null,
-        events: eventsResult.status === 'fulfilled' ? eventsResult.value : null,
-        h2h: h2hResult.status === 'fulfilled' ? h2hResult.value : null,
-        standings: standingsResult.status === 'fulfilled' ? standingsResult.value : null,
-        lineup: null,
-        trend: trendResult.status === 'fulfilled' ? trendResult.value : null,
-        ai: aiResult.status === 'fulfilled' ? aiResult.value : null,
-      });
-    } catch (err) {
-      console.error('[MatchDetailContext] Error fetching tab data:', err);
-    } finally {
-      setTabDataLoading(false);
-    }
-  }, [matchId, match?.season_id]);
-
   // ============================================================================
   // REFRESH FUNCTIONS
   // ============================================================================
@@ -673,21 +578,27 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     await fetchMatch();
   }, [fetchMatch]);
 
-  const refreshTabData = useCallback(async (_tabKey?: keyof AllTabData) => {
-    // For now, refresh all tab data
-    // In future, could be optimized to refresh only specific tab
-    await fetchAllTabData();
-  }, [fetchAllTabData]);
+  // Debounced refresh for ACTIVE TAB ONLY (WebSocket optimization)
+  const debouncedRefreshActiveTab = useCallback(() => {
+    if (!activeTab) {
+      console.log('[MatchDetail] No active tab, skipping refresh');
+      return;
+    }
 
-  // Debounced refresh for WebSocket events
-  const debouncedRefresh = useCallback(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
+
     debounceTimerRef.current = setTimeout(() => {
-      fetchAllTabData();
+      console.log(`[MatchDetail] WebSocket refresh for active tab: ${activeTab}`);
+
+      // Invalidate cache for active tab
+      invalidateCache(activeTab);
+
+      // Refetch active tab
+      fetchTabData(activeTab);
     }, 500);
-  }, [fetchAllTabData]);
+  }, [activeTab, invalidateCache, fetchTabData]);
 
   // ============================================================================
   // WEBSOCKET INTEGRATION
@@ -740,8 +651,10 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
         };
       });
 
-      // Refresh tab data (debounced)
-      debouncedRefresh();
+      // NEW: Only refresh active tab if it's affected by score changes
+      if (['stats', 'events', 'trend', 'ai'].includes(activeTab || '')) {
+        debouncedRefreshActiveTab();
+      }
     },
     onMatchStateChange: (event) => {
       // Update match status
@@ -790,12 +703,16 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
         });
       }
 
-      // Refresh all tab data on status change
-      debouncedRefresh();
+      // NEW: Only refresh active tab on status change
+      if (activeTab) {
+        debouncedRefreshActiveTab();
+      }
     },
     onAnyEvent: () => {
-      // Refresh tab data for any event
-      debouncedRefresh();
+      // NEW: Only refresh active tab if it's affected by generic events
+      if (['events', 'stats', 'trend'].includes(activeTab || '')) {
+        debouncedRefreshActiveTab();
+      }
     },
   });
 
@@ -808,12 +725,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     fetchMatch();
   }, [matchId]);
 
-  // Fetch tab data when match is loaded
-  useEffect(() => {
-    if (match) {
-      fetchAllTabData();
-    }
-  }, [match?.id, match?.season_id]);
+  // NOTE: Old eager loading removed - tabs now load lazily when clicked
 
   // ============================================================================
   // CONTEXT VALUE
