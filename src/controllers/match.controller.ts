@@ -508,7 +508,7 @@ export const getMatchDetailLive = async (
     try {
       const apiPromise = matchDetailLiveService.getMatchDetailLive(params);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('API timeout')), 3000)
+        setTimeout(() => reject(new Error('API timeout')), 15000)
       );
       result = await Promise.race([apiPromise, timeoutPromise]);
     } catch (err: any) {
