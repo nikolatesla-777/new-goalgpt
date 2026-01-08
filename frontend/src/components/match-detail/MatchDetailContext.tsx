@@ -321,7 +321,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
         h2h: h2hResult.status === 'fulfilled' ? h2hResult.value : null,
         standings: standingsResult.status === 'fulfilled' ? standingsResult.value : null,
         lineup: null,
-        trend: null,
+        trend: trendResult.status === 'fulfilled' ? trendResult.value : null,
         ai: aiResult.status === 'fulfilled' ? aiResult.value : null,
       });
     } catch (err) {
