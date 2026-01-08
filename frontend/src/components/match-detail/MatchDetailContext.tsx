@@ -18,6 +18,7 @@ import {
   getLiveMatches,
   getMatchHalfStats,
   getMatchById,
+  getMatchDetailLive,
 } from '../../api/matches';
 import type { Match } from '../../api/matches';
 
@@ -241,7 +242,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
     try {
       // ALL fetches in PARALLEL - no sequential blocking!
-      const [statsResult, h2hResult, standingsResult, aiResult] = await Promise.allSettled([
+      const [statsResult, h2hResult, standingsResult, aiResult, eventsResult] = await Promise.allSettled([
         // Stats
         (async () => {
           const [liveStats, halfStats] = await Promise.allSettled([
@@ -284,12 +285,20 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
           }
           return { predictions: [] } as AIData;
         })(),
+
+        // Events
+        (async () => {
+          const eventsData = await fetchWithTimeout(getMatchDetailLive(matchId), 5000);
+          return {
+            incidents: eventsData?.incidents ?? [],
+          } as EventsData;
+        })(),
       ]);
 
       // Update state - all data fetched in parallel
       setTabData({
         stats: statsResult.status === 'fulfilled' ? statsResult.value : null,
-        events: null,
+        events: eventsResult.status === 'fulfilled' ? eventsResult.value : null,
         h2h: h2hResult.status === 'fulfilled' ? h2hResult.value : null,
         standings: standingsResult.status === 'fulfilled' ? standingsResult.value : null,
         lineup: null,
