@@ -9,7 +9,7 @@
  * This provides comprehensive match statistics similar to AIscore.
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
@@ -117,12 +117,13 @@ const FIELD_TO_ID_MAP: Record<string, number> = {
 };
 
 export class CombinedStatsService {
+  private client = theSportsAPI;
     private matchDetailLiveService: MatchDetailLiveService;
     private matchTeamStatsService: MatchTeamStatsService;
 
-    constructor(private client: any) {
-        this.matchDetailLiveService = new MatchDetailLiveService(client);
-        this.matchTeamStatsService = new MatchTeamStatsService(client);
+    constructor() {
+        this.matchDetailLiveService = new MatchDetailLiveService();
+        this.matchTeamStatsService = new MatchTeamStatsService();
     }
 
     /**

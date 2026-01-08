@@ -24,6 +24,7 @@ import { config } from '../config';
 import { withRetry, isRetryableError } from '../utils/providerResilience';
 import { CircuitBreaker, CircuitState } from '../utils/circuitBreaker';
 import { formatTheSportsError, logTheSportsError } from '../utils/thesports/error-handler';
+import { ITheSportsAPI } from '../types/api-client.interface';
 
 // ============================================================================
 // RATE LIMITER - Global Token Bucket
@@ -137,7 +138,7 @@ interface TheSportsClientConfig {
 // SINGLETON MANAGER
 // ============================================================================
 
-class TheSportsAPIManager {
+class TheSportsAPIManager implements ITheSportsAPI {
   private static instance: TheSportsAPIManager | null = null;
   private static initializationPromise: Promise<TheSportsAPIManager> | null = null;
 

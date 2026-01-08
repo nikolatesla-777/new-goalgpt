@@ -1,19 +1,21 @@
 
 /**
  * Match Analysis Service (H2H)
- * 
+ *
  * Handles business logic for /match/analysis endpoint
  * Returns historical confrontation, recent results, and goal distribution
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchAnalysisParams, MatchAnalysisResponse } from '../../../types/thesports/match';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 
 export class MatchAnalysisService {
-    constructor(private client: any) { }
+    private client = theSportsAPI;
+
+    constructor() { }
 
     /**
      * Get match analysis (H2H) with cache support

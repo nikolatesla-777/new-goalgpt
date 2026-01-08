@@ -11,15 +11,18 @@ import { useMatchDetail } from '../MatchDetailContext';
 
 interface Prediction {
   id: string;
-  match_external_id: string;
+  match_id: string;
+  prediction: string;
   prediction_type: string;
   prediction_value: string;
   overall_confidence: number;
   bot_name: string;
   minute_at_prediction: number;
   score_at_prediction: string;
+  result: string | null;
   prediction_result: string | null;
   created_at: string;
+  access_type?: 'VIP' | 'FREE';
 }
 
 export function AITab() {
@@ -30,15 +33,18 @@ export function AITab() {
     if (!tabData.ai?.predictions) return [];
     return tabData.ai.predictions.map((p: any) => ({
       id: p.id,
-      match_external_id: p.match_external_id || p.match_id,
-      prediction_type: p.prediction_type,
-      prediction_value: p.prediction_value,
-      overall_confidence: p.overall_confidence || p.confidence,
+      match_id: p.match_id,
+      prediction: p.prediction || p.prediction_value || p.prediction_type,
+      prediction_type: p.prediction_type || p.prediction,
+      prediction_value: p.prediction_value || p.prediction,
+      overall_confidence: p.overall_confidence || p.confidence || 80,
       bot_name: p.bot_name || p.canonical_bot_name,
       minute_at_prediction: p.minute_at_prediction,
       score_at_prediction: p.score_at_prediction,
+      result: p.result,
       prediction_result: p.prediction_result || (p.result === 'won' ? 'winner' : p.result === 'lost' ? 'loser' : null),
       created_at: p.created_at,
+      access_type: p.access_type,
     })) as Prediction[];
   }, [tabData.ai]);
 
@@ -132,9 +138,14 @@ export function AITab() {
                 <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 order-3 sm:order-2 w-full sm:w-auto justify-center sm:justify-start">
                   <div className="px-2 py-1 sm:px-3 sm:py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
                     <span className="text-xs sm:text-sm font-bold text-gray-800 whitespace-nowrap">
-                      {prediction.prediction_value || prediction.prediction_type}
+                      {prediction.prediction || prediction.prediction_value || prediction.prediction_type}
                     </span>
                   </div>
+                  {prediction.access_type && (
+                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${prediction.access_type === 'VIP' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {prediction.access_type}
+                    </span>
+                  )}
                 </div>
 
                 {/* Right Side: Status Badge */}

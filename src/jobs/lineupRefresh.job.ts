@@ -21,7 +21,7 @@ export class LineupRefreshJob {
   private static readonly CRON_TIMEZONE = 'Europe/Istanbul';
 
   constructor() {
-    this.matchLineupService = new MatchLineupService(this.client);
+    this.matchLineupService = new MatchLineupService();
   }
 
   /**

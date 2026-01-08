@@ -1,9 +1,9 @@
 
 /**
  * Match Trend Service
- * 
+ *
  * Handles business logic for /match/trend/live and /match/trend/detail endpoints
- * CRITICAL: 
+ * CRITICAL:
  * - Use /live endpoint for real-time matches (status IN (2,3,4,5,7))
  * - Use /detail endpoint for finished matches or when /live returns no data
  * According to TheSports API docs:
@@ -11,7 +11,7 @@
  * - Recommended request frequency: 1 minute/time
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchTrendParams, MatchTrendResponse, MatchTrendLiveResponse } from '../../../types/thesports/match';
 import { cacheService } from '../../../utils/cache/cache.service';
@@ -26,7 +26,9 @@ interface MatchTrendData {
 }
 
 export class MatchTrendService {
-    constructor(private client: any) { }
+    private client = theSportsAPI;
+
+    constructor() { }
 
     /**
      * Parse trend data from TheSports API format to frontend format

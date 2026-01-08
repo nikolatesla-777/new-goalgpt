@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 // SINGLETON: Use shared API client
 import { theSportsAPI } from '../core';
 
-const seasonStandingsService = new SeasonStandingsService(theSportsAPI as any);
+const seasonStandingsService = new SeasonStandingsService();
 
 /**
  * Get team by ID

@@ -1734,7 +1734,7 @@ export class WebSocketService {
       const { theSportsAPI } = await import('../../../core');
 
       // SINGLETON: Use shared API client with global rate limiting
-      const processor = new PostMatchProcessor(theSportsAPI as any);
+      const processor = new PostMatchProcessor();
 
       // Trigger post-match processing
       await processor.onMatchEnded(matchId);
@@ -1761,7 +1761,7 @@ export class WebSocketService {
       // Import CombinedStatsService dynamically to avoid circular dependencies
       const { CombinedStatsService } = await import('../match/combinedStats.service');
       // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
-      const combinedStatsService = new CombinedStatsService(this.client as any);
+      const combinedStatsService = new CombinedStatsService();
       
       const stats = await combinedStatsService.getCombinedMatchStats(matchId);
       if (stats && stats.allStats.length > 0) {
@@ -1791,7 +1791,7 @@ export class WebSocketService {
       // Import MatchTrendService dynamically
       const { MatchTrendService } = await import('../match/matchTrend.service');
       // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
-      const matchTrendService = new MatchTrendService(this.client as any);
+      const matchTrendService = new MatchTrendService();
       
       // Get trend data
       const trendData = await matchTrendService.getMatchTrend({ match_id: matchId }, matchStatus);
@@ -1830,7 +1830,7 @@ export class WebSocketService {
       // Import CombinedStatsService dynamically
       const { CombinedStatsService } = await import('../match/combinedStats.service');
       // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
-      const combinedStatsService = new CombinedStatsService(this.client as any);
+      const combinedStatsService = new CombinedStatsService();
       
       // Get existing stats and merge with incidents
       const existingStats = await combinedStatsService.getCombinedStatsFromDatabase(matchId);

@@ -6,7 +6,7 @@
  * Returns H2H, recent record, and historical compensation for upcoming matches
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
@@ -18,7 +18,9 @@ export interface CompensationResponse {
 }
 
 export class CompensationService {
-    constructor(private client: any) { }
+    private client = theSportsAPI;
+
+    constructor() { }
 
     /**
      * Get compensation list with pagination support

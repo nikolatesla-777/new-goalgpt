@@ -22,7 +22,7 @@ export class MatchDatabaseService {
 
   constructor() {
     // SINGLETON: Use shared API client with global rate limiting
-    this.matchRecentService = new MatchRecentService(theSportsAPI as any);
+    this.matchRecentService = new MatchRecentService();
   }
 
   /**

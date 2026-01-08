@@ -44,7 +44,7 @@ export class DataUpdateService {
     this.secret = config.thesports?.secret || '';
     this.teamSyncService = new TeamSyncService();
     // SINGLETON: Use shared API client with global rate limiting
-    this.teamDataService = new TeamDataService(theSportsAPI as any);
+    this.teamDataService = new TeamDataService();
     // Phase 4-2: Single circuit layer - circuit breaker is in singleton, not here
   }
 

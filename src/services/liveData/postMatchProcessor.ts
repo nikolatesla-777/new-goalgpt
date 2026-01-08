@@ -14,7 +14,6 @@
 
 import { pool } from '../../database/connection';
 import { logger } from '../../utils/logger';
-import { TheSportsClient } from '../thesports/client/thesports-client';
 import { CombinedStatsService } from '../thesports/match/combinedStats.service';
 import { MatchTrendService } from '../thesports/match/matchTrend.service';
 import { TableLiveService } from '../thesports/season/tableLive.service';
@@ -47,11 +46,11 @@ export class PostMatchProcessor {
   private tableLiveService: TableLiveService;
   private matchDetailLiveService: MatchDetailLiveService;
 
-  constructor(client: TheSportsClient | any) {
-    this.combinedStatsService = new CombinedStatsService(client);
-    this.matchTrendService = new MatchTrendService(client);
-    this.tableLiveService = new TableLiveService(client);
-    this.matchDetailLiveService = new MatchDetailLiveService(client);
+  constructor() {
+    this.combinedStatsService = new CombinedStatsService();
+    this.matchTrendService = new MatchTrendService();
+    this.tableLiveService = new TableLiveService();
+    this.matchDetailLiveService = new MatchDetailLiveService();
   }
 
   /**
@@ -416,12 +415,9 @@ export class PostMatchProcessor {
 // Export singleton for use across the application
 let postMatchProcessorInstance: PostMatchProcessor | null = null;
 
-export function getPostMatchProcessor(client?: TheSportsClient): PostMatchProcessor {
-  if (!postMatchProcessorInstance && client) {
-    postMatchProcessorInstance = new PostMatchProcessor(client);
-  }
+export function getPostMatchProcessor(): PostMatchProcessor {
   if (!postMatchProcessorInstance) {
-    throw new Error('PostMatchProcessor not initialized. Call with TheSportsClient first.');
+    postMatchProcessorInstance = new PostMatchProcessor();
   }
   return postMatchProcessorInstance;
 }

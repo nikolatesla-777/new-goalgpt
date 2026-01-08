@@ -6,7 +6,7 @@
  */
 
 import { TeamRepository } from '../../../repositories/implementations/TeamRepository';
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix } from '../../../utils/cache/types';
 import { logger } from '../../../utils/logger';
@@ -14,12 +14,11 @@ import axios from 'axios';
 import { config } from '../../../config';
 
 export class TeamLogoService {
+  private client = theSportsAPI;
   private repository: TeamRepository;
-  private client: any;
 
-  constructor(client: any) {
+  constructor() {
     this.repository = new TeamRepository();
-    this.client = client;
   }
 
   /**

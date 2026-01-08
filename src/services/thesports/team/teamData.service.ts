@@ -6,19 +6,18 @@
  */
 
 import { TeamRepository } from '../../../repositories/implementations/TeamRepository';
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { logger } from '../../../utils/logger';
 import { TeamData, ResultsExtraTeam } from '../../../types/thesports/team';
 
 export class TeamDataService {
+  private client = theSportsAPI;
   private repository: TeamRepository;
-  private client: any;
 
-  constructor(client: any) {
+  constructor() {
     this.repository = new TeamRepository();
-    this.client = client;
   }
 
   /**

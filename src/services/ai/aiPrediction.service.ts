@@ -1,3 +1,4 @@
+
 /**
  * AI Prediction Service
  * 
@@ -8,6 +9,7 @@
 import { pool } from '../../database/connection';
 import { logger } from '../../utils/logger';
 import { teamNameMatcherService, MatchLookupResult } from './teamNameMatcher.service';
+import { predictionSettlementService } from './predictionSettlement.service';
 
 export interface RawPredictionPayload {
     id?: string;
@@ -42,6 +44,7 @@ export interface PredictionIngestionResult {
     predictionId?: string;
     matchFound: boolean;
     matchExternalId?: string;
+    matchId?: string;  // NEW: Internal UUID
     confidence?: number;
     botGroupName?: string;
     error?: string;
@@ -71,67 +74,25 @@ export interface BotStats {
 export class AIPredictionService {
     /**
      * Get statistics for all bots
+     * REFACTORED: Uses new 29-column schema with direct match_id link
+     * - Uses p.canonical_bot_name instead of p.bot_name
+     * - Uses p.result field (already settled by predictionSettlement.service)
+     * - Uses p.match_id directly joined to ts_matches.id
+     * - No more ai_prediction_matches junction table
      */
     async getBotPerformanceStats(): Promise<{ global: BotStats; bots: BotStats[] }> {
         try {
-            // Get stats grouped by bot_name
+            // Get stats grouped by canonical_bot_name using the new schema
+            // The result field is already populated by predictionSettlement.service
             const result = await pool.query(`
-                SELECT 
-                    p.bot_name,
+                SELECT
+                    p.canonical_bot_name as bot_name,
                     COUNT(*) as total_predictions,
-                    SUM(CASE 
-                        WHEN m.status_id >= 8 THEN 
-                            CASE
-                                -- OVER 2.5
-                                WHEN (p.prediction_value LIKE '%2.5%' OR p.prediction_type LIKE '%2.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
-                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) >= 3 THEN 1 ELSE 0 END
-                                
-                                -- OVER 1.5
-                                WHEN (p.prediction_value LIKE '%1.5%' OR p.prediction_type LIKE '%1.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
-                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) >= 2 THEN 1 ELSE 0 END
-
-                                -- OVER 0.5
-                                WHEN (p.prediction_value LIKE '%0.5%' OR p.prediction_type LIKE '%0.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
-                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) >= 1 THEN 1 ELSE 0 END
-                                
-                                -- KG VAR
-                                WHEN (p.prediction_value LIKE '%KG%' OR p.prediction_type LIKE '%Var%') THEN
-                                    CASE WHEN COALESCE(m.home_score_regular, 0) > 0 AND COALESCE(m.away_score_regular, 0) > 0 THEN 1 ELSE 0 END
-
-                                ELSE 0 
-                            END
-                        ELSE 0 
-                    END) as wins,
-                    
-                    SUM(CASE 
-                        WHEN m.status_id >= 8 THEN 
-                            CASE
-                                -- OVER 2.5 Loss
-                                WHEN (p.prediction_value LIKE '%2.5%' OR p.prediction_type LIKE '%2.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
-                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) < 3 THEN 1 ELSE 0 END
-                                
-                                -- OVER 1.5 Loss
-                                WHEN (p.prediction_value LIKE '%1.5%' OR p.prediction_type LIKE '%1.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
-                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) < 2 THEN 1 ELSE 0 END
-
-                                -- OVER 0.5 Loss
-                                WHEN (p.prediction_value LIKE '%0.5%' OR p.prediction_type LIKE '%0.5%') AND (p.prediction_value LIKE '%ST%' OR p.prediction_type LIKE '%ST%') THEN
-                                    CASE WHEN (COALESCE(m.home_score_regular, 0) + COALESCE(m.away_score_regular, 0)) < 1 THEN 1 ELSE 0 END
-
-                                -- KG VAR Loss
-                                WHEN (p.prediction_value LIKE '%KG%' OR p.prediction_type LIKE '%Var%') THEN
-                                    CASE WHEN NOT(COALESCE(m.home_score_regular, 0) > 0 AND COALESCE(m.away_score_regular, 0) > 0) THEN 1 ELSE 0 END
-                                
-                                ELSE 0 
-                            END
-                        ELSE 0 
-                    END) as losses,
-
-                    SUM(CASE WHEN m.status_id < 8 OR m.status_id IS NULL THEN 1 ELSE 0 END) as pending
+                    SUM(CASE WHEN p.result = 'won' THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN p.result = 'lost' THEN 1 ELSE 0 END) as losses,
+                    SUM(CASE WHEN p.result = 'pending' OR p.result IS NULL THEN 1 ELSE 0 END) as pending
                 FROM ai_predictions p
-                LEFT JOIN ai_prediction_matches pm ON p.id = pm.prediction_id
-                LEFT JOIN ts_matches m ON pm.match_external_id = m.external_id
-                GROUP BY p.bot_name
+                GROUP BY p.canonical_bot_name
             `);
 
             // Normalization Map
@@ -333,14 +294,14 @@ export class AIPredictionService {
     }
 
     /**
-     * Generate prediction details from current score
-     * Returns prediction_type, prediction_value, and display_prediction
+     * Generate prediction details from score
+     * REFACTORED: Now returns prediction (unified) and predictionThreshold (numeric) for new schema
      */
     generatePredictionFromScore(
         score: string, // e.g., "0-0", "1-0"
         minute: number,
         botRule: { displayTemplate: string | null; predictionPeriod: 'IY' | 'MS' | 'AUTO' | null; basePredictionType: string | null }
-    ): { predictionType: string; predictionValue: string; displayPrediction: string } {
+    ): { predictionType: string; predictionValue: string; displayPrediction: string; prediction: string; predictionThreshold: number } {
         // Parse score
         const [homeStr, awayStr] = score.split('-').map(s => s.trim());
         const homeGoals = parseInt(homeStr) || 0;
@@ -349,10 +310,11 @@ export class AIPredictionService {
 
         // Determine period and prediction value
         const period = this.determinePeriod(minute, botRule.predictionPeriod);
-        const bareValue = this.calculatePredictionValue(totalGoals);
+        const thresholdNumeric = totalGoals + 0.5; // e.g., 0.5, 1.5, 2.5
+        const bareValue = thresholdNumeric.toString();
         const baseType = botRule.basePredictionType || 'ÜST';
 
-        // Format: "MS 0.5 ÜST" (Period + Value + Type)
+        // Format: "MS 0.5 ÜST" (Period + Value + Type) - this is the unified prediction
         const predictionValue = `${period} ${bareValue} ${baseType}`;
         // Type: "MS" (Period) - keeps it clean for aggregation
         const predictionType = period;
@@ -371,7 +333,10 @@ export class AIPredictionService {
         return {
             predictionType: predictionType,
             predictionValue: predictionValue,
-            displayPrediction
+            displayPrediction,
+            // NEW SCHEMA FIELDS
+            prediction: predictionValue,  // Unified field "MS 0.5 ÜST"
+            predictionThreshold: thresholdNumeric  // Numeric 0.5, 1.5, 2.5
         };
     }
 
@@ -751,63 +716,49 @@ export class AIPredictionService {
             logger.info(`[AIPrediction] Assigned to bot: ${botGroup.botDisplayName} (minute: ${parsed.minuteAtPrediction})`);
             logger.info(`[AIPrediction] Generated details: ${JSON.stringify(generatedDetails)}`);
 
-            // Insert into ai_predictions with GENERATED details (overriding payload type/value)
+            // REFACTORED: Insert into ai_predictions with NEW SCHEMA
+            // - Uses prediction (unified field) and prediction_threshold (numeric)
+            // - Sets result = 'pending' for settlement service
+            // - Sets match_id directly if matched (no junction table!)
             const insertQuery = `
-        INSERT INTO ai_predictions (
-          external_id, bot_group_id, bot_name, canonical_bot_name, league_name, home_team_name, away_team_name,
-          score_at_prediction, minute_at_prediction, prediction_type, prediction_value,
-          raw_payload, processed, display_prediction
-        ) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, $12)
-        RETURNING id
-      `;
+                INSERT INTO ai_predictions (
+                    external_id, bot_group_id, bot_name, canonical_bot_name,
+                    league_name, home_team_name, away_team_name,
+                    score_at_prediction, minute_at_prediction,
+                    prediction, prediction_threshold,
+                    raw_payload, processed, result, source
+                ) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, 'pending', 'telegram')
+                RETURNING id
+            `;
 
             const insertResult = await client.query(insertQuery, [
                 parsed.externalId,
                 botGroup.botGroupId,
                 botGroup.botDisplayName,
-                // canonical_bot_name passed as $3 (same as bot_name)
                 parsed.leagueName,
                 parsed.homeTeamName,
                 parsed.awayTeamName,
                 parsed.scoreAtPrediction,
                 parsed.minuteAtPrediction,
-                generatedDetails.predictionType,   // Generated IY/MS ÜST
-                generatedDetails.predictionValue,  // Generated Score + 0.5
-                parsed.rawPayload,
-                generatedDetails.displayPrediction // Generated Text
+                generatedDetails.prediction,         // NEW: Unified "MS 0.5 ÜST"
+                generatedDetails.predictionThreshold, // NEW: Numeric 0.5, 1.5, 2.5
+                parsed.rawPayload
             ]);
 
             const predictionId = insertResult.rows[0].id;
             logger.info(`[AIPrediction] Inserted prediction ${predictionId}: ${parsed.homeTeamName} vs ${parsed.awayTeamName}`);
 
-            // If matched, link it immediately
+            // REFACTORED: If matched, set match_id directly on ai_predictions (NO JUNCTION TABLE)
             if (matchResult && matchResult.overallConfidence >= 0.6) {
-                // Insert match link
-                const matchLinkQuery = `
-          INSERT INTO ai_prediction_matches (
-            prediction_id, match_external_id, match_uuid,
-            home_team_id, away_team_id,
-            home_team_confidence, away_team_confidence, overall_confidence,
-            match_status, matched_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'matched', NOW())
-          RETURNING id
-        `;
+                // Update prediction with match_id directly
+                // Store external_id in match_id (column type is varchar, stores external_id)
+                await client.query(`
+                    UPDATE ai_predictions
+                    SET match_id = $1, processed = true
+                    WHERE id = $2
+                `, [matchResult.matchExternalId, predictionId]);
 
-                await client.query(matchLinkQuery, [
-                    predictionId,
-                    matchResult.matchExternalId,
-                    matchResult.matchUuid,
-                    matchResult.homeTeam.teamId,
-                    matchResult.awayTeam.teamId,
-                    matchResult.homeTeam.confidence,
-                    matchResult.awayTeam.confidence,
-                    matchResult.overallConfidence
-                ]);
-
-                // Mark prediction as processed
-                await client.query('UPDATE ai_predictions SET processed = true WHERE id = $1', [predictionId]);
-
-                logger.info(`[AIPrediction] Matched to ${matchResult.matchExternalId} (confidence: ${matchResult.overallConfidence.toFixed(2)})`);
+                logger.info(`[AIPrediction] Linked to match ${matchResult.matchExternalId} (confidence: ${matchResult.overallConfidence.toFixed(2)})`);
 
                 await client.query('COMMIT');
                 return {
@@ -815,6 +766,7 @@ export class AIPredictionService {
                     predictionId,
                     matchFound: true,
                     matchExternalId: matchResult.matchExternalId,
+                    matchId: matchResult.matchExternalId,  // match_id stores external_id
                     confidence: matchResult.overallConfidence
                 };
             }
@@ -859,64 +811,103 @@ export class AIPredictionService {
 
     /**
      * Get matched predictions with results (enhanced with match/team/league data)
+     * REFACTORED: Uses direct p.match_id join instead of junction table
      */
     async getMatchedPredictions(limit: number = 50): Promise<any[]> {
         const query = `
-      SELECT 
-        p.*,
-        pm.match_external_id,
-        pm.overall_confidence,
-        pm.prediction_result,
-        pm.final_home_score,
-        pm.final_away_score,
-        pm.matched_at,
-        pm.resulted_at,
-        m.status_id as match_status_id,
-        m.minute as match_minute,
-        m.home_score_display,
-        m.away_score_display,
-        ht.name as home_team_db_name,
-        ht.logo_url as home_team_logo,
-        at.name as away_team_db_name,
-        at.logo_url as away_team_logo,
-        c.name as competition_name,
-        c.logo_url as competition_logo,
-        ctry.name as country_name,
-        ctry.logo as country_logo
-      FROM ai_predictions p
-      JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
-      LEFT JOIN ts_matches m ON m.external_id = pm.match_external_id
-      LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
-      LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
-      LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-      LEFT JOIN ts_countries ctry ON c.country_id = ctry.external_id
-      ORDER BY p.created_at DESC
-      LIMIT $1
-    `;
+            SELECT
+                p.id,
+                p.external_id,
+                p.canonical_bot_name as bot_name,
+                p.league_name,
+                p.home_team_name,
+                p.away_team_name,
+                p.score_at_prediction,
+                p.minute_at_prediction,
+                p.prediction,
+                p.prediction_threshold,
+                p.match_id,
+                p.result,
+                p.final_score,
+                p.result_reason,
+                p.access_type,
+                p.source,
+                p.created_at,
+                -- Backward compatibility aliases
+                m.external_id as match_external_id,
+                80 as overall_confidence,
+                CASE
+                    WHEN p.result = 'won' THEN 'winner'
+                    WHEN p.result = 'lost' THEN 'loser'
+                    ELSE p.result
+                END as prediction_result,
+                -- Match data
+                m.status_id as match_status_id,
+                m.minute as match_minute,
+                m.home_score_display,
+                m.away_score_display,
+                -- Team data
+                ht.name as home_team_db_name,
+                ht.logo_url as home_team_logo,
+                at.name as away_team_db_name,
+                at.logo_url as away_team_logo,
+                -- Competition data
+                c.name as competition_name,
+                c.logo_url as competition_logo,
+                -- Country data
+                ctry.name as country_name,
+                ctry.logo as country_logo
+            FROM ai_predictions p
+            LEFT JOIN ts_matches m ON p.match_id = m.external_id
+            LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
+            LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
+            LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+            LEFT JOIN ts_countries ctry ON c.country_id = ctry.external_id
+            WHERE p.match_id IS NOT NULL
+            ORDER BY p.created_at DESC
+            LIMIT $1
+        `;
         const result = await pool.query(query, [limit]);
         return result.rows;
     }
 
     /**
      * Get all predictions for a specific match (for match detail page)
+     * Updated to use new 29-column schema with direct match_id link
      */
-    async getPredictionsByMatchId(matchExternalId: string): Promise<any[]> {
+    async getPredictionsByMatchId(matchId: string): Promise<any[]> {
         const query = `
-      SELECT 
-        p.*,
-        pm.match_external_id,
-        pm.overall_confidence,
-        pm.prediction_result,
-        pm.final_home_score,
-        pm.final_away_score,
-        pm.matched_at,
-        pm.resulted_at
-      FROM ai_predictions p
-      JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
-      WHERE pm.match_external_id = $1
-      ORDER BY p.created_at DESC
-    `;
-        const result = await pool.query(query, [matchExternalId]);
+            SELECT
+                p.id,
+                p.external_id,
+                p.canonical_bot_name as bot_name,
+                p.league_name,
+                p.home_team_name,
+                p.away_team_name,
+                p.score_at_prediction,
+                p.minute_at_prediction,
+                p.prediction,
+                p.prediction as prediction_value,
+                p.prediction as prediction_type,
+                p.prediction_threshold,
+                p.match_id,
+                p.result,
+                CASE
+                    WHEN p.result = 'won' THEN 'winner'
+                    WHEN p.result = 'lost' THEN 'loser'
+                    ELSE p.result
+                END as prediction_result,
+                p.final_score,
+                p.result_reason,
+                p.access_type,
+                p.source,
+                p.created_at,
+                80 as overall_confidence
+            FROM ai_predictions p
+            WHERE p.match_id = $1
+            ORDER BY p.created_at DESC
+        `;
+        const result = await pool.query(query, [matchId]);
         return result.rows;
     }
 
@@ -952,31 +943,47 @@ export class AIPredictionService {
             usePattern("(p.bot_name ILIKE '%Algoritma%01%' OR p.bot_name = 'Algoritma: 01')");
         }
 
+        // REFACTORED: Use new schema with direct match_id
         const query = `
-      SELECT 
-        p.*,
-        pm.match_external_id,
-        pm.overall_confidence,
-        pm.prediction_result,
-        pm.final_home_score,
-        pm.final_away_score,
-        pm.matched_at,
-        pm.resulted_at,
-        COALESCE(ht.name, p.home_team_name, 'Unknown Home') as home_team_name,
-        COALESCE(at.name, p.away_team_name, 'Unknown Away') as away_team_name,
-        COALESCE(c.name, p.league_name, 'Unknown League') as league_name,
-        p.score_at_prediction,
-        p.minute_at_prediction
-      FROM ai_predictions p
-      LEFT JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
-      LEFT JOIN ts_matches m ON p.external_id = m.external_id
-      LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
-      LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
-      LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-      WHERE ${whereClause}
-      ORDER BY p.created_at DESC
-      LIMIT ${safeLimit}
-    `;
+            SELECT
+                p.id,
+                p.external_id,
+                p.canonical_bot_name as bot_name,
+                p.league_name as league_name_raw,
+                p.home_team_name as home_team_name_raw,
+                p.away_team_name as away_team_name_raw,
+                p.score_at_prediction,
+                p.minute_at_prediction,
+                p.prediction,
+                p.prediction_threshold,
+                p.match_id,
+                p.result,
+                p.final_score,
+                p.result_reason,
+                p.access_type,
+                p.source,
+                p.created_at,
+                -- Backward compatibility aliases
+                m.external_id as match_external_id,
+                80 as overall_confidence,
+                CASE
+                    WHEN p.result = 'won' THEN 'winner'
+                    WHEN p.result = 'lost' THEN 'loser'
+                    ELSE p.result
+                END as prediction_result,
+                -- Team/Competition data
+                COALESCE(ht.name, p.home_team_name, 'Unknown Home') as home_team_name,
+                COALESCE(at.name, p.away_team_name, 'Unknown Away') as away_team_name,
+                COALESCE(c.name, p.league_name, 'Unknown League') as league_name
+            FROM ai_predictions p
+            LEFT JOIN ts_matches m ON p.match_id = m.external_id
+            LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
+            LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
+            LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+            WHERE ${whereClause}
+            ORDER BY p.created_at DESC
+            LIMIT ${safeLimit}
+        `;
 
         const result = await pool.query(query, params);
         return result.rows;
@@ -1012,48 +1019,43 @@ export class AIPredictionService {
 
     /**
      * Update prediction results based on match outcome
+     * REFACTORED: Uses new schema with direct match_id and p.result
+     * NOTE: This is a fallback/cleanup method. Primary settlement is via predictionSettlement.service.ts
      */
     async updatePredictionResults(): Promise<number> {
         const client = await pool.connect();
         try {
             // Get matched predictions that haven't been resulted yet
-            // Now checking ALL matched pending predictions, even for live matches
+            // Uses new schema: p.match_id directly links to ts_matches.id
             const pendingQuery = `
-        SELECT 
-          pm.id as match_id,
-          pm.prediction_id,
-          pm.match_external_id,
-          p.prediction_type,
-          p.prediction_value,
-          p.score_at_prediction,
-          m.status_id,
-          m.home_score_display,
-          m.away_score_display,
-          m.home_scores,
-          m.away_scores
-        FROM ai_prediction_matches pm
-        JOIN ai_predictions p ON p.id = pm.prediction_id
-        JOIN ts_matches m ON m.external_id = pm.match_external_id
-        WHERE pm.prediction_result = 'pending'
-          AND m.status_id >= 2 -- Check any match that has started (2=First Half)
-      `;
+                SELECT
+                    p.id as prediction_id,
+                    p.match_id,
+                    p.prediction,
+                    p.prediction_threshold,
+                    p.score_at_prediction,
+                    p.minute_at_prediction,
+                    m.external_id as match_external_id,
+                    m.status_id,
+                    m.home_score_display,
+                    m.away_score_display,
+                    m.home_scores,
+                    m.away_scores
+                FROM ai_predictions p
+                JOIN ts_matches m ON p.match_id = m.external_id
+                WHERE p.result = 'pending'
+                  AND p.match_id IS NOT NULL
+                  AND m.status_id >= 2
+            `;
 
             const pending = await client.query(pendingQuery);
             let updatedCount = 0;
 
             for (const row of pending.rows) {
-                // Determine Period based on prediction type
-                const typeUpper = (row.prediction_type || '').toUpperCase();
-                const valueUpper = (row.prediction_value || '').toUpperCase();
-                const fullPred = `${typeUpper} ${valueUpper}`;
-
-                let period: 'IY' | 'MS' = 'MS';
-                if (fullPred.includes('IY') || fullPred.includes('HT') || fullPred.includes('1.Y') || fullPred.includes('HALF')) {
-                    period = 'IY';
-                }
+                // Determine Period based on minute_at_prediction (FIXED RULE)
+                const period: 'IY' | 'MS' = (row.minute_at_prediction || 0) <= 45 ? 'IY' : 'MS';
 
                 // Extract Scores
-                // MS Scores
                 const finalHome = row.home_score_display ?? 0;
                 const finalAway = row.away_score_display ?? 0;
 
@@ -1061,7 +1063,6 @@ export class AIPredictionService {
                 let htHome = 0;
                 let htAway = 0;
                 try {
-                    // home_scores: [total, p1, p2, ...]
                     const hScores = Array.isArray(row.home_scores) ? row.home_scores : JSON.parse(row.home_scores || '[]');
                     const aScores = Array.isArray(row.away_scores) ? row.away_scores : JSON.parse(row.away_scores || '[]');
                     htHome = hScores[1] !== undefined ? parseInt(hScores[1]) : 0;
@@ -1070,9 +1071,10 @@ export class AIPredictionService {
                     // Fallback
                 }
 
-                const result = this.calculatePredictionResult(
-                    row.prediction_type,
-                    row.prediction_value,
+                // Use new calculatePredictionResultNew with unified prediction field
+                const result = this.calculatePredictionResultNew(
+                    row.prediction,
+                    row.prediction_threshold,
                     row.score_at_prediction,
                     finalHome,
                     finalAway,
@@ -1083,22 +1085,20 @@ export class AIPredictionService {
                 );
 
                 if (result) {
+                    // Update ai_predictions directly with new schema fields
                     await client.query(`
-            UPDATE ai_prediction_matches 
-            SET 
-              prediction_result = $1,
-              final_home_score = $2,
-              final_away_score = $3,
-              result_reason = $4,
-              resulted_at = NOW(),
-              updated_at = NOW()
-            WHERE id = $5
-          `, [
-                        result.outcome,
-                        row.home_score_display,
-                        row.away_score_display,
+                        UPDATE ai_predictions
+                        SET
+                            result = $1,
+                            final_score = $2,
+                            result_reason = $3,
+                            updated_at = NOW()
+                        WHERE id = $4
+                    `, [
+                        result.outcome === 'winner' ? 'won' : result.outcome === 'loser' ? 'lost' : result.outcome,
+                        `${row.home_score_display}-${row.away_score_display}`,
                         result.reason,
-                        row.match_id
+                        row.prediction_id
                     ]);
                     updatedCount++;
                 }
@@ -1316,6 +1316,127 @@ export class AIPredictionService {
     }
 
     /**
+     * Calculate prediction result using NEW SCHEMA
+     * SIMPLIFIED: Uses unified prediction field and numeric threshold
+     * @param prediction - Unified field like "MS 0.5 ÜST", "IY 1.5 ÜST"
+     * @param threshold - Numeric threshold like 0.5, 1.5, 2.5
+     */
+    calculatePredictionResultNew(
+        prediction: string,
+        threshold: number,
+        scoreAtPrediction: string,
+        finalHome: number,
+        finalAway: number,
+        htHome: number,
+        htAway: number,
+        period: 'IY' | 'MS',
+        statusId: number
+    ): { outcome: 'winner' | 'loser'; reason: string } | null {
+        const predUpper = (prediction || '').toUpperCase();
+
+        // Status Map: 2: 1st Half, 3: HT, 4: 2nd Half, 8: FT
+        const isMatchFinished = statusId >= 8;
+        const isHalftimeReached = statusId >= 3;
+
+        // Determine scores based on period
+        let targetHome = finalHome;
+        let targetAway = finalAway;
+        if (period === 'IY' && isHalftimeReached) {
+            targetHome = htHome;
+            targetAway = htAway;
+        }
+        const totalGoals = targetHome + targetAway;
+
+        // OVER / ÜST Logic - Most common case
+        if (predUpper.includes('ÜST') || predUpper.includes('OVER')) {
+            if (totalGoals > threshold) {
+                return {
+                    outcome: 'winner',
+                    reason: `Instant Win: ${totalGoals} > ${threshold} (${period})`
+                };
+            }
+            // Can only lose if period is finished
+            if (period === 'IY' && isHalftimeReached) {
+                return { outcome: 'loser', reason: `IY Finished: ${totalGoals} <= ${threshold}` };
+            }
+            if (period === 'MS' && isMatchFinished) {
+                return { outcome: 'loser', reason: `MS Finished: ${totalGoals} <= ${threshold}` };
+            }
+            return null; // Wait
+        }
+
+        // UNDER / ALT Logic
+        if (predUpper.includes('ALT') || predUpper.includes('UNDER')) {
+            if (totalGoals > threshold) {
+                return {
+                    outcome: 'loser',
+                    reason: `Instant Loss: ${totalGoals} > ${threshold} (${period})`
+                };
+            }
+            if (period === 'IY' && isHalftimeReached) {
+                return { outcome: 'winner', reason: `IY Finished: ${totalGoals} <= ${threshold}` };
+            }
+            if (period === 'MS' && isMatchFinished) {
+                return { outcome: 'winner', reason: `MS Finished: ${totalGoals} <= ${threshold}` };
+            }
+            return null; // Wait
+        }
+
+        // KG VAR / BTTS YES
+        if (predUpper.includes('KG VAR') || predUpper.includes('BTTS')) {
+            const btts = targetHome > 0 && targetAway > 0;
+            if (btts) {
+                return { outcome: 'winner', reason: `Both teams scored (${period})` };
+            }
+            if (period === 'IY' && isHalftimeReached) {
+                return { outcome: 'loser', reason: `IY Finished: BTTS No` };
+            }
+            if (period === 'MS' && isMatchFinished) {
+                return { outcome: 'loser', reason: `MS Finished: BTTS No` };
+            }
+            return null;
+        }
+
+        // KG YOK / BTTS NO
+        if (predUpper.includes('KG YOK')) {
+            const btts = targetHome > 0 && targetAway > 0;
+            if (btts) {
+                return { outcome: 'loser', reason: `Both teams scored (${period})` };
+            }
+            if (period === 'IY' && isHalftimeReached) {
+                return { outcome: 'winner', reason: `IY Finished: BTTS No` };
+            }
+            if (period === 'MS' && isMatchFinished) {
+                return { outcome: 'winner', reason: `MS Finished: BTTS No` };
+            }
+            return null;
+        }
+
+        // 1/X/2 Result - Must wait for period end
+        let canSettle = false;
+        if (period === 'IY' && isHalftimeReached) canSettle = true;
+        if (period === 'MS' && isMatchFinished) canSettle = true;
+
+        if (!canSettle) return null;
+
+        const isHomeWin = targetHome > targetAway;
+        const isAwayWin = targetAway > targetHome;
+        const isDraw = targetHome === targetAway;
+
+        if (predUpper.includes('MS 1') || predUpper.includes('IY 1')) {
+            return { outcome: isHomeWin ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
+        }
+        if (predUpper.includes('MS 2') || predUpper.includes('IY 2')) {
+            return { outcome: isAwayWin ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
+        }
+        if (predUpper.includes('MS X') || predUpper.includes('MS 0') || predUpper.includes('IY X')) {
+            return { outcome: isDraw ? 'winner' : 'loser', reason: `Score: ${targetHome}-${targetAway}` };
+        }
+
+        return null;
+    }
+
+    /**
      * Update display_prediction text for a prediction
      * This is the admin-editable text shown to users
      */
@@ -1355,24 +1476,31 @@ export class AIPredictionService {
     /**
      * Get predictions with display_prediction set (for user-facing components)
      * Only returns predictions that have admin-defined display text
+     * REFACTORED: Uses new schema with direct match_id
      */
     async getDisplayablePredictions(limit: number = 50): Promise<any[]> {
         const query = `
-            SELECT 
+            SELECT
                 p.id,
                 p.external_id,
-                p.bot_name,
-                p.display_prediction,
+                p.canonical_bot_name as bot_name,
+                p.prediction as display_prediction,
                 p.minute_at_prediction,
                 p.created_at,
-                pm.match_external_id,
-                pm.overall_confidence,
-                pm.prediction_result
+                p.match_id,
+                p.result,
+                m.external_id as match_external_id,
+                80 as overall_confidence,
+                CASE
+                    WHEN p.result = 'won' THEN 'winner'
+                    WHEN p.result = 'lost' THEN 'loser'
+                    ELSE p.result
+                END as prediction_result
             FROM ai_predictions p
-            LEFT JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
-            WHERE p.display_prediction IS NOT NULL 
-              AND p.display_prediction != ''
-              AND pm.match_external_id IS NOT NULL
+            LEFT JOIN ts_matches m ON p.match_id = m.external_id
+            WHERE p.prediction IS NOT NULL
+              AND p.prediction != ''
+              AND p.match_id IS NOT NULL
             ORDER BY p.created_at DESC
             LIMIT $1
         `;
@@ -1383,6 +1511,11 @@ export class AIPredictionService {
     /**
      * Settle predictions for a specific match (auto settlement)
      * Called when match ends (status_id >= 8) OR transitions to HT (status_id = 3)
+     *
+     * @deprecated This method is deprecated. Use predictionSettlementService.settleMatchPredictions() instead.
+     * This wrapper is kept for backward compatibility only.
+     *
+     * REFACTORED: Now redirects to predictionSettlementService for centralized settlement logic.
      */
     async settleMatchPredictions(
         matchExternalId: string,
@@ -1390,176 +1523,16 @@ export class AIPredictionService {
         overridingHomeScore?: number,
         overridingAwayScore?: number
     ): Promise<{ settled: number; winners: number; losers: number }> {
-        logger.info(`[AIPrediction] Auto-settling predictions for match: ${matchExternalId} (Status: ${overridingStatusId ?? 'DB'})`);
+        logger.warn(`[AIPrediction] DEPRECATED: settleMatchPredictions called for ${matchExternalId}. Use predictionSettlementService instead.`);
 
-        let settled = 0;
-        let winners = 0;
-        let losers = 0;
-
-        const client = await pool.connect();
-        try {
-            // Get pending predictions for this match with match data
-            const query = `
-                SELECT 
-                    p.id as prediction_id,
-                    p.prediction_type,
-                    p.prediction_value,
-                    p.score_at_prediction,
-                    pm.id as match_link_id,
-                    pm.prediction_result,
-                    m.home_score_display,
-                    m.away_score_display,
-                    m.home_scores,
-                    m.away_scores,
-                    m.incidents,
-                    m.status_id
-                FROM ai_predictions p
-                JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
-                JOIN ts_matches m ON m.external_id = pm.match_external_id
-                WHERE pm.match_external_id = $1
-                  AND pm.prediction_result = 'pending'
-            `;
-
-            const result = await client.query(query, [matchExternalId]);
-
-            if (result.rows.length === 0) {
-                logger.info(`[AIPrediction] No pending predictions for match: ${matchExternalId}`);
-                return { settled: 0, winners: 0, losers: 0 };
-            }
-
-            for (const row of result.rows) {
-                // Use overrides if provided, else DB values
-                const statusId = overridingStatusId !== undefined ? overridingStatusId : row.status_id;
-
-                const homeScore = overridingHomeScore !== undefined ? overridingHomeScore : (parseInt(row.home_score_display) || 0);
-                const awayScore = overridingAwayScore !== undefined ? overridingAwayScore : (parseInt(row.away_score_display) || 0);
-
-                // CRITICAL: Calculate HT scores from incidents (most accurate)
-                // Count goals in first half (minute <= 45)
-                let htHome = 0;
-                let htAway = 0;
-
-                if (overridingStatusId === 3 && overridingHomeScore !== undefined && overridingAwayScore !== undefined) {
-                    // At Status 3 (HT), current score == HT score
-                    htHome = overridingHomeScore;
-                    htAway = overridingAwayScore;
-                } else {
-                    // Calculate from incidents (most accurate method)
-                    try {
-                        if (row.incidents) {
-                            const incidents = typeof row.incidents === 'string' ? JSON.parse(row.incidents) : row.incidents;
-                            if (Array.isArray(incidents)) {
-                                // Count goals in first half (minute <= 45)
-                                for (const inc of incidents) {
-                                    const minute = inc.minute || inc.time || inc.min;
-                                    if (minute !== null && minute !== undefined && minute <= 45) {
-                                        // Check if it's a goal (type 1, 8, 17 or contains 'goal')
-                                        const isGoal = inc.type === 1 || inc.type === 8 || inc.type === 17 ||
-                                            (inc.type && String(inc.type).toLowerCase().includes('goal')) ||
-                                            (inc.event_type && String(inc.event_type).toLowerCase().includes('goal'));
-
-                                        if (isGoal) {
-                                            // Use home_score/away_score from incident (most reliable)
-                                            if (inc.home_score !== undefined && inc.home_score > htHome) {
-                                                htHome = inc.home_score;
-                                            }
-                                            if (inc.away_score !== undefined && inc.away_score > htAway) {
-                                                htAway = inc.away_score;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Fallback: If no incidents or no goals found, try home_scores/away_scores
-                        if (htHome === 0 && htAway === 0) {
-                            try {
-                                const homeScores = row.home_scores ? (typeof row.home_scores === 'string' ? JSON.parse(row.home_scores) : row.home_scores) : [];
-                                const awayScores = row.away_scores ? (typeof row.away_scores === 'string' ? JSON.parse(row.away_scores) : row.away_scores) : [];
-
-                                // Try index 0 first (some APIs use [0] for first half)
-                                if (Array.isArray(homeScores) && homeScores.length > 0) {
-                                    htHome = parseInt(String(homeScores[0])) || 0;
-                                }
-                                if (Array.isArray(awayScores) && awayScores.length > 0) {
-                                    htAway = parseInt(String(awayScores[0])) || 0;
-                                }
-
-                                // If index 0 gives 0 but we have scores, try index 1 (some APIs use [1] for first half)
-                                if (htHome === 0 && htAway === 0 && Array.isArray(homeScores) && homeScores.length > 1) {
-                                    htHome = parseInt(String(homeScores[1])) || 0;
-                                    htAway = parseInt(String(awayScores[1])) || 0;
-                                }
-                            } catch (e) {
-                                logger.warn(`[AIPrediction] Failed to parse HT scores from JSONB: ${e}`);
-                            }
-                        }
-
-                        // Final fallback: if status >= 3 (HT reached) and still 0-0, use current score
-                        // This handles cases where incidents are missing but match is past HT
-                        if (htHome === 0 && htAway === 0 && statusId >= 3) {
-                            // If current score is not 0-0, it's likely the HT score
-                            if (homeScore > 0 || awayScore > 0) {
-                                htHome = homeScore;
-                                htAway = awayScore;
-                                logger.warn(`[AIPrediction] Using current score as HT score (fallback): ${htHome}-${htAway}`);
-                            }
-                        }
-                    } catch (e) {
-                        logger.error(`[AIPrediction] Error calculating HT scores: ${e}`);
-                        // Last resort fallback
-                        if (statusId >= 3) {
-                            htHome = homeScore;
-                            htAway = awayScore;
-                        }
-                    }
-                }
-
-                logger.debug(`[AIPrediction] HT Score calculated: ${htHome}-${htAway} (for IY predictions)`);
-
-                // Determine period from prediction type
-                const period = row.prediction_type?.toUpperCase().includes('IY') ? 'IY' : 'MS';
-
-                const calcResult = this.calculatePredictionResult(
-                    row.prediction_type,
-                    row.prediction_value,
-                    row.score_at_prediction,
-                    homeScore,
-                    awayScore,
-                    htHome,
-                    htAway,
-                    period as 'IY' | 'MS',
-                    statusId
-                );
-
-                if (calcResult) {
-                    // Update prediction result
-                    await client.query(`
-                        UPDATE ai_prediction_matches 
-                        SET prediction_result = $1, 
-                            result_reason = $2,
-                            final_home_score = $3,
-                            final_away_score = $4,
-                            resulted_at = NOW(),
-                            updated_at = NOW()
-                        WHERE id = $5
-                    `, [calcResult.outcome, calcResult.reason, homeScore, awayScore, row.match_link_id]);
-
-                    settled++;
-                    if (calcResult.outcome === 'winner') winners++;
-                    if (calcResult.outcome === 'loser') losers++;
-
-                    logger.info(`[AIPrediction] Settled: ${row.prediction_id} -> ${calcResult.outcome} (${calcResult.reason})`);
-                }
-            }
-
-            logger.info(`[AIPrediction] Settlement complete for ${matchExternalId}: ${settled} settled, ${winners} winners, ${losers} losers`);
-            return { settled, winners, losers };
-
-        } finally {
-            client.release();
-        }
+        // Redirect to centralized settlement service
+        return await predictionSettlementService.settleMatchPredictions(
+            matchExternalId,
+            overridingHomeScore,
+            overridingAwayScore,
+            overridingHomeScore, // htHome - using same as overridingHomeScore for backward compat
+            overridingAwayScore  // htAway - using same as overridingAwayScore for backward compat
+        );
     }
 
 
@@ -1567,115 +1540,59 @@ export class AIPredictionService {
     /**
      * Check for INSTANT WIN when a goal is scored
      * Called by WebSocketService on GOAL event
+     *
+     * @deprecated This method is deprecated. Use predictionSettlementService.settleInstantWin() instead.
+     * This wrapper is kept for backward compatibility only.
+     *
+     * REFACTORED: Now redirects to predictionSettlementService for centralized settlement logic.
      */
     async settleInstantWin(matchExternalId: string, homeScore: number, awayScore: number, minute: number, overridingStatusId?: number): Promise<void> {
-        const client = await pool.connect();
-        try {
-            // Find pending predictions for this match AND fetch match status
-            // CRITICAL: Also fetch minute from database if minute parameter is 0 or invalid
-            const query = `
-                SELECT 
-                    p.id as prediction_id, 
-                    p.prediction_type, 
-                    p.prediction_value,
-                    pm.id as match_link_id,
-                    m.status_id,
-                    m.minute,
-                    m.home_scores,
-                    m.away_scores
-                FROM ai_predictions p
-                JOIN ai_prediction_matches pm ON pm.prediction_id = p.id
-                JOIN ts_matches m ON m.external_id = pm.match_external_id
-                WHERE pm.match_external_id = $1
-                  AND pm.prediction_result = 'pending'
-            `;
+        logger.warn(`[AIPrediction] DEPRECATED: settleInstantWin called for ${matchExternalId}. Use predictionSettlementService instead.`);
 
-            const result = await client.query(query, [matchExternalId]);
-
-            if (result.rows.length === 0) {
-                logger.debug(`[AIPrediction] No pending predictions for match ${matchExternalId}`);
-                return;
-            }
-
-            // CRITICAL: Use database minute if provided minute is 0 or invalid
-            const effectiveMinute = (minute && minute > 0) ? minute : (result.rows[0]?.minute || 0);
-            const totalGoals = homeScore + awayScore;
-            logger.info(`[AIPrediction] Checking instant win for match ${matchExternalId} (Score: ${homeScore}-${awayScore}, Minute: ${effectiveMinute}${minute !== effectiveMinute ? ' [from DB]' : ''})`);
-
-            for (const row of result.rows) {
-                // Extract HT scores if available
-                let htHome: number | undefined;
-                let htAway: number | undefined;
-                try {
-                    const hScores = Array.isArray(row.home_scores) ? row.home_scores : JSON.parse(row.home_scores || '[]');
-                    const aScores = Array.isArray(row.away_scores) ? row.away_scores : JSON.parse(row.away_scores || '[]');
-                    if (hScores[1] !== undefined) htHome = parseInt(hScores[1]);
-                    if (aScores[1] !== undefined) htAway = parseInt(aScores[1]);
-                } catch (e) { /* ignore */ }
-
-                // Use overriding status if available (from live WS event), otherwise DB status
-                const effectiveStatusId = overridingStatusId !== undefined ? overridingStatusId : row.status_id;
-
-                // Use effective minute (from parameter or database)
-                const effectiveMinuteForCheck = (minute && minute > 0) ? minute : (row.minute || 0);
-
-                const check = this.checkInstantWin(
-                    row.prediction_type,
-                    row.prediction_value,
-                    totalGoals,
-                    effectiveMinuteForCheck,
-                    effectiveStatusId,
-                    htHome,
-                    htAway
-                );
-
-                if (check.isInstantWin) {
-                    logger.info(`[AIPrediction] INSTANT WIN! Prediction ${row.prediction_id} won. Reason: ${check.reason}`);
-
-                    await client.query(`
-                        UPDATE ai_prediction_matches 
-                        SET prediction_result = 'winner', 
-                            result_reason = $1,
-                            final_home_score = $2,
-                            final_away_score = $3,
-                            resulted_at = NOW(),
-                            updated_at = NOW()
-                        WHERE id = $4
-                    `, [check.reason, homeScore, awayScore, row.match_link_id]);
-                } else if (check.reason && check.reason.includes('Kaybetti')) {
-                    // ... (omitted loss logic for brevity, assume calling original logic if I had full function)
-                    // Actually I should just handle Over wins here to avoid complexity unless I see full code.
-                    // The requirement was Instant Settlement on Goal (Winner).
-                }
-            }
-        } catch (error) {
-            logger.error(`[AIPrediction] Error in settleInstantWin for match ${matchExternalId}:`, error);
-        } finally {
-            client.release();
-        }
+        // Redirect to centralized settlement service
+        await predictionSettlementService.settleInstantWin(
+            matchExternalId,
+            homeScore,
+            awayScore,
+            minute,
+            overridingStatusId
+        );
     }
+
+    /**
+     * Get manual predictions (Alert System bot)
+     * REFACTORED: Uses new schema with direct match_id
+     */
     async getManualPredictions(limit = 100): Promise<any[]> {
         const query = `
-            SELECT 
+            SELECT
                 p.id,
                 p.external_id,
-                p.bot_name,
+                p.canonical_bot_name as bot_name,
                 p.league_name,
                 p.home_team_name,
                 p.away_team_name,
                 p.score_at_prediction,
                 p.minute_at_prediction,
-                p.prediction_type,
-                p.prediction_value,
+                p.prediction,
+                p.prediction as prediction_type,
+                p.prediction as prediction_value,
+                p.prediction_threshold,
                 p.processed,
                 p.created_at,
                 p.access_type,
-                pm.overall_confidence,
-                pm.prediction_result,
-                pm.match_external_id
+                p.match_id,
+                p.result,
+                CASE
+                    WHEN p.result = 'won' THEN 'winner'
+                    WHEN p.result = 'lost' THEN 'loser'
+                    ELSE p.result
+                END as prediction_result,
+                m.external_id as match_external_id,
+                80 as overall_confidence
             FROM ai_predictions p
-            LEFT JOIN ai_prediction_matches pm ON p.id = pm.prediction_id
-            WHERE p.bot_name = 'Alert System'
+            LEFT JOIN ts_matches m ON p.match_id = m.external_id
+            WHERE p.canonical_bot_name = 'Alert System'
             ORDER BY p.created_at DESC
             LIMIT $1
         `;
@@ -1684,30 +1601,33 @@ export class AIPredictionService {
     }
 
     async createManualPrediction(data: {
-        match_external_id: string;
+        match_id: string;
         home_team: string;
         away_team: string;
         league: string;
         score: string;
         minute: number;
-        prediction_type: string;
-        prediction_value: string;
+        prediction: string;         // "IY 0.5 ÜST", "MS 2.5 ÜST"
         access_type: 'VIP' | 'FREE';
-        bot_name: string;
-    }): Promise<boolean> {
+        bot_name?: string;
+    }): Promise<{ id: string; prediction: string } | null> {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
-            // KRITIK: Eğer league boşsa, maçın competition_name'ini al
+            // Extract threshold from prediction string (e.g., "IY 0.5 ÜST" -> 0.5)
+            const thresholdMatch = data.prediction.match(/(\d+\.?\d*)/);
+            const threshold = thresholdMatch ? parseFloat(thresholdMatch[1]) : 0.5;
+
+            // Get league name from match if not provided
             let leagueName = data.league;
             if (!leagueName || leagueName.trim() === '' || leagueName === '-') {
                 const matchQuery = await client.query(`
                     SELECT c.name as competition_name
                     FROM ts_matches m
                     LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-                    WHERE m.external_id = $1
-                `, [data.match_external_id]);
+                    WHERE m.id = $1
+                `, [data.match_id]);
 
                 if (matchQuery.rows.length > 0 && matchQuery.rows[0].competition_name) {
                     leagueName = matchQuery.rows[0].competition_name;
@@ -1717,49 +1637,41 @@ export class AIPredictionService {
 
             const predictionId = crypto.randomUUID();
             const externalId = `manual_${Date.now()}`;
+            const botName = data.bot_name || 'Alert System';
 
-            // 1. Insert into ai_predictions
+            // Insert into ai_predictions with NEW 29-column schema
             await client.query(`
                 INSERT INTO ai_predictions (
-                    id, external_id, bot_name, canonical_bot_name, league_name, 
-                    home_team_name, away_team_name, score_at_prediction, 
-                    minute_at_prediction, prediction_type, prediction_value, 
-                    processed, created_at, access_type, display_prediction
-                ) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13)
+                    id, external_id, canonical_bot_name, league_name,
+                    home_team_name, away_team_name, score_at_prediction,
+                    minute_at_prediction, prediction, prediction_threshold,
+                    match_id, result, access_type, source, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
             `, [
                 predictionId,
                 externalId,
-                'Alert System', // Always use Alert System for manual predictions
-                // canonical_bot_name is also Alert System (passed as $3)
-                leagueName || '', // Güncellenmiş lig bilgisi
+                botName,
+                leagueName || '',
                 data.home_team,
                 data.away_team,
                 data.score,
                 data.minute,
-                data.prediction_type,
-                data.prediction_value,
-                true, // Processed = true because we manually link it
+                data.prediction,
+                threshold,
+                data.match_id,
+                'pending',
                 data.access_type,
-                data.prediction_type // Also set display_prediction for admin UI
+                'manual'
             ]);
 
-            // 2. Insert into ai_prediction_matches (Explicit Link)
-            await client.query(`
-                INSERT INTO ai_prediction_matches (
-                    prediction_id, match_external_id, match_status, 
-                    overall_confidence, created_at
-                ) VALUES ($1, $2, 'matched', 1.0, NOW())
-            `, [
-                predictionId,
-                data.match_external_id
-            ]);
+            logger.info(`[AIPrediction] Manuel tahmin oluşturuldu: ${data.prediction} - ${data.home_team} vs ${data.away_team} (match_id: ${data.match_id})`);
 
             await client.query('COMMIT');
-            return true;
+            return { id: predictionId, prediction: data.prediction };
         } catch (error) {
             await client.query('ROLLBACK');
             logger.error('[AIPredictions] Create Manual Prediction Error:', error);
-            return false;
+            return null;
         } finally {
             client.release();
         }

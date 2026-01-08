@@ -1,3 +1,4 @@
+
 /**
  * Prediction Settlement Service
  *
@@ -205,9 +206,10 @@ class PredictionSettlementService {
           // IY tahminleri için: Sadece 1. yarıda gol atılmışsa kontrol et
           if (period === 'IY') {
             if (currentMinute <= 45) {
-              await this.markWon(client, row.id, 'instant_win_iy', currentScore);
+              // INSTANT WIN: final_score'u kaydetme - maç bittiğinde güncellenecek
+              await this.markWon(client, row.id, 'instant_win_iy', undefined);
               settled++;
-              logger.info(`[Settlement] INSTANT WIN (IY): ${row.id} - ${totalGoals} goals > ${threshold} threshold`);
+              logger.info(`[Settlement] INSTANT WIN (IY): ${row.id} - ${totalGoals} goals > ${threshold} threshold (score at win: ${currentScore})`);
 
               // Phase 3: WebSocket broadcast
               this.broadcastSettlement({
@@ -219,16 +221,17 @@ class PredictionSettlementService {
                 resultReason: 'instant_win_iy',
                 homeTeam: row.home_team_name,
                 awayTeam: row.away_team_name,
-                finalScore: currentScore,
+                finalScore: currentScore, // UI için geçici skor
                 timestamp: Date.now(),
               });
             }
           }
           // MS tahminleri için: Her gol sonrası kontrol et
           else if (period === 'MS') {
-            await this.markWon(client, row.id, 'instant_win_ms', currentScore);
+            // INSTANT WIN: final_score'u kaydetme - maç bittiğinde güncellenecek
+            await this.markWon(client, row.id, 'instant_win_ms', undefined);
             settled++;
-            logger.info(`[Settlement] INSTANT WIN (MS): ${row.id} - ${totalGoals} goals > ${threshold} threshold`);
+            logger.info(`[Settlement] INSTANT WIN (MS): ${row.id} - ${totalGoals} goals > ${threshold} threshold (score at win: ${currentScore})`);
 
             // Phase 3: WebSocket broadcast
             this.broadcastSettlement({
@@ -240,7 +243,7 @@ class PredictionSettlementService {
               resultReason: 'instant_win_ms',
               homeTeam: row.home_team_name,
               awayTeam: row.away_team_name,
-              finalScore: currentScore,
+              finalScore: currentScore, // UI için geçici skor
               timestamp: Date.now(),
             });
           }
@@ -373,6 +376,24 @@ class PredictionSettlementService {
     try {
       await client.query('BEGIN');
 
+      // Veritabanından gerçek final skorunu al (COALESCE ile NULL kontrolü)
+      const matchResult = await client.query(`
+        SELECT
+          COALESCE(home_score_display, home_score_regular, $2) as home_final,
+          COALESCE(away_score_display, away_score_regular, $3) as away_final
+        FROM ts_matches
+        WHERE external_id = $1
+      `, [event.matchId, event.homeScore, event.awayScore]);
+
+      // Veritabanından skor alınamazsa event'ten gelen skoru kullan
+      let homeScore = event.homeScore;
+      let awayScore = event.awayScore;
+
+      if (matchResult.rows.length > 0) {
+        homeScore = matchResult.rows[0].home_final ?? event.homeScore;
+        awayScore = matchResult.rows[0].away_final ?? event.awayScore;
+      }
+
       // Sadece MS tahminlerini al (minute > 45)
       // Phase 2: prediction_threshold kolonunu direkt kullan
       const pending = await client.query<PendingPrediction>(`
@@ -392,9 +413,9 @@ class PredictionSettlementService {
         return { settled: 0, winners: 0, losers: 0 };
       }
 
-      const finalTotal = event.homeScore + event.awayScore;
-      const finalScore = `${event.homeScore}-${event.awayScore}`;
-      logger.info(`[Settlement] FT Settlement for ${event.matchId}: Final Score ${finalScore}, ${pending.rows.length} MS predictions`);
+      const finalTotal = homeScore + awayScore;
+      const finalScore = `${homeScore}-${awayScore}`;
+      logger.info(`[Settlement] FT Settlement for ${event.matchId}: Final Score ${finalScore} (from DB), ${pending.rows.length} MS predictions`);
 
       for (const row of pending.rows) {
         // Phase 2: prediction_threshold kolonunu kullan
@@ -439,6 +460,9 @@ class PredictionSettlementService {
         }
       }
 
+      // Maç bittiğinde TÜM tahminlerin (instant win dahil) final_score'unu güncelle
+      await this.updateAllFinalScores(client, event.matchId, finalScore);
+
       await client.query('COMMIT');
 
       // Stats view'ları güncelle
@@ -453,6 +477,25 @@ class PredictionSettlementService {
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Maç bittiğinde tüm tahminlerin final_score'unu güncelle
+   * Bu, instant win ile kazanmış tahminlerin gerçek final skorunu almasını sağlar
+   */
+  private async updateAllFinalScores(client: any, matchId: string, finalScore: string): Promise<void> {
+    const result = await client.query(`
+      UPDATE ai_predictions
+      SET final_score = $2,
+          updated_at = NOW()
+      WHERE match_id = $1
+        AND result IN ('won', 'lost')
+        AND (final_score IS NULL OR final_score != $2)
+    `, [matchId, finalScore]);
+
+    if (result.rowCount > 0) {
+      logger.info(`[Settlement] Updated final_score to ${finalScore} for ${result.rowCount} predictions of match ${matchId}`);
     }
   }
 

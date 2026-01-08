@@ -29,9 +29,9 @@ export class MatchDataSyncWorker {
   private isRunning: boolean = false;
 
   constructor() {
-    this.combinedStatsService = new CombinedStatsService(this.apiClient);
-    this.matchDetailLiveService = new MatchDetailLiveService(this.apiClient);
-    this.matchTrendService = new MatchTrendService(this.apiClient);
+    this.combinedStatsService = new CombinedStatsService();
+    this.matchDetailLiveService = new MatchDetailLiveService();
+    this.matchTrendService = new MatchTrendService();
     this.matchDatabaseService = new MatchDatabaseService();
     this.aiPredictionService = new AIPredictionService();
   }

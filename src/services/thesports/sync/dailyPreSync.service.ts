@@ -9,7 +9,7 @@
  * - Compensation from /compensation/list
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { MatchAnalysisService } from '../match/matchAnalysis.service';
 import { MatchLineupService } from '../match/matchLineup.service';
 import { SeasonStandingsService } from '../season/standings.service';
@@ -29,18 +29,19 @@ export interface PreSyncResult {
 }
 
 export class DailyPreSyncService {
+  private client = theSportsAPI;
     private matchAnalysisService: MatchAnalysisService;
     private matchLineupService: MatchLineupService;
     private seasonStandingsService: SeasonStandingsService;
     private compensationService: CompensationService;
     private tableLiveService: TableLiveService;
 
-    constructor(private client: any) {
-        this.matchAnalysisService = new MatchAnalysisService(client);
-        this.matchLineupService = new MatchLineupService(client);
-        this.seasonStandingsService = new SeasonStandingsService(client);
-        this.compensationService = new CompensationService(client);
-        this.tableLiveService = new TableLiveService(client);
+    constructor() {
+        this.matchAnalysisService = new MatchAnalysisService();
+        this.matchLineupService = new MatchLineupService();
+        this.seasonStandingsService = new SeasonStandingsService();
+        this.compensationService = new CompensationService();
+        this.tableLiveService = new TableLiveService();
     }
 
     /**

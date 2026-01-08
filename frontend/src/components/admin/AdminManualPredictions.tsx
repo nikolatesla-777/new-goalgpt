@@ -8,21 +8,19 @@ import './admin.css';
 
 interface ManualPrediction {
     id: string;
-    match_external_id: string;
-    bot_name: string;
+    match_id: string | null;
+    canonical_bot_name: string;
     league_name: string;
     home_team_name: string;
     away_team_name: string;
     score_at_prediction: string;
     minute_at_prediction: number;
-    prediction_type: string;
-    prediction_value: string;
-    prediction_result: string | null;
+    prediction: string;             // "IY 0.5 ÜST"
+    prediction_threshold: number;
+    result: 'pending' | 'won' | 'lost' | 'cancelled';
     created_at: string;
-    access_type?: 'VIP' | 'FREE';
-    // Match Status
-    match_status_id?: number;
-    match_minute?: number;
+    access_type: 'VIP' | 'FREE';
+    source: string;
 }
 
 interface LiveMatch {
@@ -100,7 +98,7 @@ export function AdminManualPredictions() {
     };
 
     const handleMatchSelect = (matchId: string) => {
-        const match = liveMatches.find(m => m.external_id === matchId);
+        const match = liveMatches.find(m => m.id === matchId);
         if (match) {
             setSelectedMatch(match);
             setMinute(match.minute); // Auto-fill minute
@@ -116,15 +114,13 @@ export function AdminManualPredictions() {
             const finalPrediction = predictionType === 'OTHER' ? customPrediction : predictionType;
 
             const payload = {
-                match_external_id: selectedMatch.external_id,
+                match_id: selectedMatch.id,  // Internal UUID
                 home_team: selectedMatch.home_team_name,
                 away_team: selectedMatch.away_team_name,
                 league: selectedMatch.league_name || selectedMatch.competition?.name || selectedMatch.competition_name || '',
                 score: `${selectedMatch.home_score}-${selectedMatch.away_score}`,
                 minute: minute,
-                prediction: finalPrediction, // For display
-                prediction_type: finalPrediction,
-                prediction_value: finalPrediction, // Simplified
+                prediction: finalPrediction,  // "IY 0.5 ÜST", "MS 2.5 ÜST"
                 access_type: accessType,
                 bot_name: 'Alert System'
             };
@@ -246,7 +242,7 @@ export function AdminManualPredictions() {
                                                 <span className="minute-badge">{p.minute_at_prediction}'</span>
                                             </td>
                                             <td>
-                                                <span className="prediction-badge">{p.prediction_type}</span>
+                                                <span className="prediction-badge">{p.prediction}</span>
                                             </td>
                                             <td>
                                                 <span className={`status-badge ${p.access_type === 'VIP' ? 'vip' : 'free'}`}>
@@ -257,9 +253,9 @@ export function AdminManualPredictions() {
                                                 {new Date(p.created_at).toLocaleString('tr-TR')}
                                             </td>
                                             <td>
-                                                <span className={`status-tag ${p.prediction_result || 'pending'}`}>
-                                                    {p.prediction_result === 'winner' ? 'KAZANDI' :
-                                                        p.prediction_result === 'loser' ? 'KAYBETTİ' : 'BEKLİYOR'}
+                                                <span className={`status-tag ${p.result || 'pending'}`}>
+                                                    {p.result === 'won' ? 'KAZANDI' :
+                                                        p.result === 'lost' ? 'KAYBETTİ' : 'BEKLİYOR'}
                                                 </span>
                                             </td>
                                             <td>
@@ -304,7 +300,7 @@ export function AdminManualPredictions() {
                                     >
                                         <option value="">Maç Seçiniz...</option>
                                         {liveMatches.map(m => (
-                                            <option key={m.external_id} value={m.external_id}>
+                                            <option key={m.id} value={m.id}>
                                                 {m.home_team_name} {m.home_score}-{m.away_score} {m.away_team_name} ({m.minute}') • {m.league_name || m.competition_name}
                                             </option>
                                         ))}

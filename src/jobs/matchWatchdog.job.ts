@@ -30,7 +30,7 @@ export class MatchWatchdogWorker {
     this.matchWatchdogService = new MatchWatchdogService();
     this.matchDetailLiveService = matchDetailLiveService;
     this.matchRecentService = matchRecentService;
-    this.matchDiaryService = new MatchDiaryService((matchDetailLiveService as any).client);
+    this.matchDiaryService = new MatchDiaryService();
   }
 
   /**
@@ -253,7 +253,7 @@ export class MatchWatchdogWorker {
                       const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
                       const { theSportsAPI } = await import('../core');
                       // SINGLETON: Use shared API client with global rate limiting
-                      const processor = new PostMatchProcessor(theSportsAPI as any);
+                      const processor = new PostMatchProcessor();
                       await processor.onMatchEnded(stale.matchId);
                       logger.info(`[Watchdog] ✅ Post-match persistence completed for ${stale.matchId}`);
                     } catch (postMatchErr: any) {
@@ -816,7 +816,7 @@ export class MatchWatchdogWorker {
               try {
                 const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
                 const { theSportsAPI } = await import('../core');
-                const processor = new PostMatchProcessor(theSportsAPI as any);
+                const processor = new PostMatchProcessor();
                 await processor.onMatchEnded(overdue.matchId);
                 logger.info(`[Watchdog] ✅ Post-match persistence completed for overdue match ${overdue.matchId}`);
               } catch (postMatchErr: any) {
@@ -871,7 +871,7 @@ export class MatchWatchdogWorker {
               try {
                 const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
                 const { theSportsAPI } = await import('../core');
-                const processor = new PostMatchProcessor(theSportsAPI as any);
+                const processor = new PostMatchProcessor();
                 await processor.onMatchEnded(overdue.matchId);
               } catch (postMatchErr: any) {
                 logger.warn(`[Watchdog] Failed to trigger post-match persistence for force-ended ${overdue.matchId}:`, postMatchErr.message);

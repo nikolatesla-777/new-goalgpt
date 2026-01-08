@@ -19,7 +19,7 @@ export class TeamDataSyncWorker {
   private client = theSportsAPI; // Phase 3A: Use singleton
 
   constructor() {
-    this.teamDataService = new TeamDataService(this.client);
+    this.teamDataService = new TeamDataService();
     this.teamRepository = new TeamRepository();
   }
 

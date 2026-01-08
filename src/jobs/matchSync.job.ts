@@ -55,12 +55,12 @@ export class MatchSyncWorker {
 
   constructor() {
     // Initialize MatchSyncService for RecentSyncService
-    const teamDataService = new TeamDataService(this.client);
-    const competitionService = new CompetitionService(this.client);
+    const teamDataService = new TeamDataService();
+    const competitionService = new CompetitionService();
     const matchSyncService = new MatchSyncService(teamDataService, competitionService);
 
-    this.recentSyncService = new RecentSyncService(this.client, matchSyncService);
-    this.matchDetailLiveService = new MatchDetailLiveService(this.client);
+    this.recentSyncService = new RecentSyncService(matchSyncService);
+    this.matchDetailLiveService = new MatchDetailLiveService();
     this.aiPredictionService = new AIPredictionService();
   }
 

@@ -1,3 +1,4 @@
+
 /**
  * Bootstrap Service
  * 
@@ -36,10 +37,10 @@ export class BootstrapService {
     this.competitionSyncWorker = new CompetitionSyncWorker();
     this.teamSyncWorker = new TeamSyncWorker();
 
-    this.teamDataService = new TeamDataService(theSportsAPI as any);
-    this.competitionService = new CompetitionService(theSportsAPI as any);
+    this.teamDataService = new TeamDataService();
+    this.competitionService = new CompetitionService();
     this.matchSyncService = new MatchSyncService(this.teamDataService, this.competitionService);
-    this.matchDiaryService = new MatchDiaryService(theSportsAPI as any);
+    this.matchDiaryService = new MatchDiaryService();
   }
 
   /**

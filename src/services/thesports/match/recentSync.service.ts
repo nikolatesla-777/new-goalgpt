@@ -6,7 +6,7 @@
  * CRITICAL: Uses time parameter (Last Sync Timestamp + 1) to fetch only changed records
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchRecentResponse, MatchRecentParams } from '../../../types/thesports/match';
 import { withSyncLock, SyncType } from '../sync/sync-strategy';
@@ -17,21 +17,19 @@ import { TeamDataService } from '../team/teamData.service';
 import { CompetitionService } from '../competition/competition.service';
 
 export class RecentSyncService {
+  private client = theSportsAPI;
   private syncStateRepository: SyncStateRepository;
   private matchSyncService: MatchSyncService;
 
-  constructor(
-    private client: any,
-    matchSyncService?: MatchSyncService
-  ) {
+  constructor(matchSyncService?: MatchSyncService) {
     this.syncStateRepository = new SyncStateRepository();
-    
+
     // Initialize MatchSyncService if not provided
     if (matchSyncService) {
       this.matchSyncService = matchSyncService;
     } else {
-      const teamDataService = new TeamDataService(client);
-      const competitionService = new CompetitionService(client);
+      const teamDataService = new TeamDataService();
+      const competitionService = new CompetitionService();
       this.matchSyncService = new MatchSyncService(teamDataService, competitionService);
     }
   }

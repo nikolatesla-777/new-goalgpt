@@ -5,7 +5,6 @@
  */
 
 import dotenv from 'dotenv';
-import { TheSportsClient } from '../client/thesports-client';
 import { TeamDataService } from '../team/teamData.service';
 import { TeamLogoService } from '../team/teamLogo.service';
 import { CompetitionService } from '../competition/competition.service';
@@ -20,10 +19,9 @@ async function testMatchEnricher() {
   try {
     logger.info('Testing Match Enricher Service...');
 
-    const client = new TheSportsClient();
-    const teamDataService = new TeamDataService(client);
-    const teamLogoService = new TeamLogoService(client);
-    const competitionService = new CompetitionService(client);
+    const teamDataService = new TeamDataService();
+    const teamLogoService = new TeamLogoService();
+    const competitionService = new CompetitionService();
     const matchEnricher = new MatchEnricherService(teamDataService, teamLogoService, competitionService);
 
     // Create test matches

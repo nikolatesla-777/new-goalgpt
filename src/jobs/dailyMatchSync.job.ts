@@ -42,10 +42,10 @@ export class DailyMatchSyncWorker {
   private client = theSportsAPI; // Phase 3A: Use singleton
 
   constructor() {
-    this.teamDataService = new TeamDataService(this.client);
-    this.competitionService = new CompetitionService(this.client);
-    this.matchRecentService = new MatchRecentService(this.client);
-    this.matchDiaryService = new MatchDiaryService(this.client);
+    this.teamDataService = new TeamDataService();
+    this.competitionService = new CompetitionService();
+    this.matchRecentService = new MatchRecentService();
+    this.matchDiaryService = new MatchDiaryService();
     this.matchSyncService = new MatchSyncService(this.teamDataService, this.competitionService);
   }
 
@@ -401,7 +401,7 @@ export class DailyMatchSyncWorker {
         const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
         const { theSportsAPI } = await import('../core');
         // SINGLETON: Use shared API client with global rate limiting
-        const preSyncService = new DailyPreSyncService(theSportsAPI as any);
+        const preSyncService = new DailyPreSyncService();
 
         // Get NOT_STARTED matches from database for this date
         const client = await pool.connect();

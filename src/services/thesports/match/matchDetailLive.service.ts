@@ -5,7 +5,7 @@
  * Handles business logic for /match/detail_live endpoint
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { logEvent } from '../../../utils/obsLogger';
 import { CircuitOpenError } from '../../../utils/circuitBreaker';
@@ -15,7 +15,8 @@ import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { getWithCacheFallback } from '../../../utils/cache/cache-fallback.util';
 
 export class MatchDetailLiveService {
-  constructor(private client: any) {
+  private client = theSportsAPI;
+  constructor() {
     // Phase 4-2: Single circuit layer - circuit breaker is in TheSportsClient, not here
   }
 
@@ -1003,7 +1004,7 @@ export class MatchDetailLiveService {
     try {
       // Import CombinedStatsService dynamically to avoid circular dependency
       const { CombinedStatsService } = await import('./combinedStats.service');
-      const combinedStatsService = new CombinedStatsService(this.client);
+      const combinedStatsService = new CombinedStatsService();
       
       // Check if first_half_stats already exists
       const hasStats = await combinedStatsService.hasFirstHalfStats(matchId);

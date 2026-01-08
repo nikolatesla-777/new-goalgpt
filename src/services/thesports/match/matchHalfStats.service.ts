@@ -6,14 +6,16 @@
  * CRITICAL: Uses /detail endpoint (not /list) for specific match data
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchHalfStatsParams, MatchHalfStatsResponse } from '../../../types/thesports/match';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 
 export class MatchHalfStatsService {
-    constructor(private client: any) { }
+    private client = theSportsAPI;
+
+    constructor() { }
 
     /**
      * Get match half stats detail (for specific match)

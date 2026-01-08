@@ -5,7 +5,6 @@
  */
 
 import dotenv from 'dotenv';
-import { TheSportsClient } from '../client/thesports-client';
 import { TeamDataService } from './teamData.service';
 import { TeamLogoService } from './teamLogo.service';
 import { logger } from '../../../utils/logger';
@@ -16,9 +15,8 @@ async function testTeamServices() {
   try {
     logger.info('Testing Team Services...');
 
-    const client = new TheSportsClient();
-    const teamDataService = new TeamDataService(client);
-    const teamLogoService = new TeamLogoService(client);
+    const teamDataService = new TeamDataService();
+    const teamLogoService = new TeamLogoService();
 
     // Test 1: Test getTeamById (will return null if not in DB/cache)
     logger.info('Testing getTeamById...');

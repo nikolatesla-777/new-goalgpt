@@ -5,7 +5,7 @@
  * Handles competition data retrieval
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { logger } from '../../../utils/logger';
@@ -32,9 +32,10 @@ export interface CompetitionListResponse {
 }
 
 export class CompetitionService {
+  private client = theSportsAPI;
   private repository: CompetitionRepository;
 
-  constructor(private client: any) {
+  constructor() {
     this.repository = new CompetitionRepository();
   }
 

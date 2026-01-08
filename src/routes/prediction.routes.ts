@@ -683,6 +683,60 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     });
 
     /**
+     * PUT /api/predictions/:id/access
+     * Toggle access_type between VIP and FREE
+     */
+    fastify.put('/api/predictions/:id/access', async (request: FastifyRequest<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>, reply: FastifyReply) => {
+        try {
+            const { id } = request.params;
+            const { access_type } = request.body;
+
+            if (!id) {
+                return reply.status(400).send({
+                    success: false,
+                    error: 'Prediction ID required'
+                });
+            }
+
+            if (!access_type || !['VIP', 'FREE'].includes(access_type)) {
+                return reply.status(400).send({
+                    success: false,
+                    error: 'Valid access_type (VIP or FREE) required'
+                });
+            }
+
+            const result = await pool.query(`
+                UPDATE ai_predictions
+                SET access_type = $1, updated_at = NOW()
+                WHERE id = $2
+                RETURNING id, access_type
+            `, [access_type, id]);
+
+            if (result.rowCount === 0) {
+                return reply.status(404).send({
+                    success: false,
+                    error: 'Prediction not found'
+                });
+            }
+
+            logger.info(`[Predictions] Access type updated: ${id} -> ${access_type}`);
+
+            return reply.status(200).send({
+                success: true,
+                message: 'Access type updated',
+                prediction_id: id,
+                access_type: access_type
+            });
+        } catch (error) {
+            logger.error('[Predictions] Update access type error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
      * GET /api/predictions/displayable
      * Get predictions with display_prediction set (for user-facing components)
      * Only returns predictions that have admin-defined display text
@@ -730,26 +784,25 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
 
     /**
      * POST /api/predictions/manual
-     * Create a new manual prediction
+     * Create a new manual prediction (New 29-column schema)
      */
     interface ManualPredictionBody {
-        match_external_id: string;
+        match_id: string;           // ts_matches.id
         home_team: string;
         away_team: string;
         league: string;
-        score: string;
-        minute: number;
-        prediction_type: string;
-        prediction_value: string;
+        score: string;              // "0-0"
+        minute: number;             // 15
+        prediction: string;         // "IY 0.5 ÜST", "MS 2.5 ÜST"
         access_type: 'VIP' | 'FREE';
-        bot_name: string;
+        bot_name?: string;          // Optional, defaults to "Manual"
     }
 
     fastify.post('/api/predictions/manual', async (request: FastifyRequest<{ Body: ManualPredictionBody }>, reply: FastifyReply) => {
         try {
             const result = await aiPredictionService.createManualPrediction(request.body);
             if (result) {
-                return reply.status(200).send({ success: true, message: 'Prediction created' });
+                return reply.status(200).send({ success: true, message: 'Prediction created', prediction: result });
             } else {
                 return reply.status(500).send({ success: false, error: 'Failed to create prediction' });
             }

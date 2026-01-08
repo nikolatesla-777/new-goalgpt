@@ -19,7 +19,7 @@ export class TeamLogoSyncWorker {
   private client = theSportsAPI; // Phase 3A: Use singleton
 
   constructor() {
-    this.teamLogoService = new TeamLogoService(this.client);
+    this.teamLogoService = new TeamLogoService();
     this.teamRepository = new TeamRepository();
   }
 

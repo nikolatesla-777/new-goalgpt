@@ -27,9 +27,9 @@ export class DataUpdateWorker {
   constructor() {
     this.dataUpdateService = new DataUpdateService();
     // SINGLETON: All services share the same API client with global rate limiting
-    this.matchDetailLiveService = new MatchDetailLiveService(theSportsAPI as any);
-    this.combinedStatsService = new CombinedStatsService(theSportsAPI as any);
-    this.matchTrendService = new MatchTrendService(theSportsAPI as any);
+    this.matchDetailLiveService = new MatchDetailLiveService();
+    this.combinedStatsService = new CombinedStatsService();
+    this.matchTrendService = new MatchTrendService();
   }
 
   /**

@@ -127,8 +127,8 @@ const start = async () => {
     matchDataSyncWorker.start();
 
     // Match Watchdog Worker (for should-be-live matches)
-    const matchDetailLiveService = new MatchDetailLiveService(theSportsAPI);
-    const matchRecentService = new MatchRecentService(theSportsAPI);
+    const matchDetailLiveService = new MatchDetailLiveService();
+    const matchRecentService = new MatchRecentService();
     matchWatchdogWorker = new MatchWatchdogWorker(matchDetailLiveService, matchRecentService);
     matchWatchdogWorker.start();
 

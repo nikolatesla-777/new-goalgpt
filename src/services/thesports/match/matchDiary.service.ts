@@ -5,7 +5,7 @@
  * Handles business logic for /match/diary endpoint
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchDiaryResponse, MatchDiaryParams } from '../../../types/thesports/match';
 import { cacheService } from '../../../utils/cache/cache.service';
@@ -17,15 +17,16 @@ import { CompetitionService } from '../competition/competition.service';
 import { formatTheSportsDate } from '../../../utils/thesports/timestamp.util';
 
 export class MatchDiaryService {
+  private client = theSportsAPI;
   private teamDataService: TeamDataService;
   private teamLogoService: TeamLogoService;
   private matchEnricher: MatchEnricherService;
   private competitionService: CompetitionService;
 
-  constructor(private client: any) {
-    this.teamDataService = new TeamDataService(client);
-    this.teamLogoService = new TeamLogoService(client);
-    this.competitionService = new CompetitionService(client);
+  constructor() {
+    this.teamDataService = new TeamDataService();
+    this.teamLogoService = new TeamLogoService();
+    this.competitionService = new CompetitionService();
     this.matchEnricher = new MatchEnricherService(this.teamDataService, this.teamLogoService, this.competitionService);
   }
 

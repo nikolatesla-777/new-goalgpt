@@ -25,7 +25,7 @@ export class PostMatchProcessorJob {
   private static readonly CRON_TIMEZONE = 'Europe/Istanbul';
 
   constructor() {
-    this.processor = new PostMatchProcessor(this.client);
+    this.processor = new PostMatchProcessor();
   }
 
   /**

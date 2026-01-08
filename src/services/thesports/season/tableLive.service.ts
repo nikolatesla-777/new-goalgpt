@@ -6,7 +6,7 @@
  * Note: /table/live returns ALL live league standings, then we filter by season_id
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
@@ -18,7 +18,9 @@ export interface TableLiveResponse {
 }
 
 export class TableLiveService {
-    constructor(private client: any) { }
+    private client = theSportsAPI;
+
+    constructor() { }
 
     /**
      * Get real-time standings with cache support

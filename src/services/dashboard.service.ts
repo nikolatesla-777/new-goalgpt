@@ -1,3 +1,4 @@
+
 /**
  * Dashboard Service
  * Business logic for calculating dashboard metrics

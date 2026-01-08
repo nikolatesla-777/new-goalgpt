@@ -5,14 +5,16 @@
  * Handles daily bulk sync - fetches all matches for a specific date
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchDiaryResponse, MatchDiaryParams } from '../../../types/thesports/match';
 import { withSyncLock, SyncType } from '../sync/sync-strategy';
 import { formatTheSportsDate } from '../../../utils/thesports/timestamp.util';
 
 export class ScheduleSyncService {
-  constructor(private client: any) {}
+    private client = theSportsAPI;
+
+  constructor() {}
 
   /**
    * Daily bulk sync: Fetch all matches for a specific date

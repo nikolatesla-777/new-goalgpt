@@ -6,7 +6,7 @@
  * Falls back to database cache when API returns no data
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { SeasonStandingsParams, SeasonStandingsResponse } from '../../../types/thesports/season/seasonStandings.types';
 import { cacheService } from '../../../utils/cache/cache.service';
@@ -14,7 +14,9 @@ import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { pool } from '../../../database/connection';
 
 export class SeasonStandingsService {
-    constructor(private client: any) { }
+    private client = theSportsAPI;
+
+    constructor() { }
 
     /**
      * Get season standings - tries API first, falls back to DB

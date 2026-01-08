@@ -31,23 +31,23 @@ import { liveMatchCache } from '../services/thesports/match/liveMatchCache.servi
 import { theSportsAPI } from '../core';
 
 // Initialize services with SINGLETON API client
-// This ensures global rate limiting and circuit breaker protection
-const matchRecentService = new MatchRecentService(theSportsAPI as any);
-const matchDiaryService = new MatchDiaryService(theSportsAPI as any);
+// Services now use theSportsAPI singleton internally
+const matchRecentService = new MatchRecentService();
+const matchDiaryService = new MatchDiaryService();
 const matchDatabaseService = new MatchDatabaseService();
-const matchDetailLiveService = new MatchDetailLiveService(theSportsAPI as any);
-const matchSeasonRecentService = new MatchSeasonRecentService(theSportsAPI as any);
-const matchLineupService = new MatchLineupService(theSportsAPI as any);
-const matchTeamStatsService = new MatchTeamStatsService(theSportsAPI as any);
-const matchPlayerStatsService = new MatchPlayerStatsService(theSportsAPI as any);
-const matchAnalysisService = new MatchAnalysisService(theSportsAPI as any);
-const matchTrendService = new MatchTrendService(theSportsAPI as any);
-const matchHalfStatsService = new MatchHalfStatsService(theSportsAPI as any);
-const seasonStandingsService = new SeasonStandingsService(theSportsAPI as any);
-const teamDataService = new TeamDataService(theSportsAPI as any);
-const competitionService = new CompetitionService(theSportsAPI as any);
+const matchDetailLiveService = new MatchDetailLiveService();
+const matchSeasonRecentService = new MatchSeasonRecentService();
+const matchLineupService = new MatchLineupService();
+const matchTeamStatsService = new MatchTeamStatsService();
+const matchPlayerStatsService = new MatchPlayerStatsService();
+const matchAnalysisService = new MatchAnalysisService();
+const matchTrendService = new MatchTrendService();
+const matchHalfStatsService = new MatchHalfStatsService();
+const seasonStandingsService = new SeasonStandingsService();
+const teamDataService = new TeamDataService();
+const competitionService = new CompetitionService();
 const matchSyncService = new MatchSyncService(teamDataService, competitionService);
-const combinedStatsService = new CombinedStatsService(theSportsAPI as any);
+const combinedStatsService = new CombinedStatsService();
 
 // --- Date helpers (TSİ bulletin) ---
 const TSI_OFFSET_SECONDS = 3 * 3600;
@@ -610,7 +610,7 @@ export const getMatchLineup = async (
 
     // Try database first
     const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
-    const preSyncService = new DailyPreSyncService(theSportsAPI as any);
+    const preSyncService = new DailyPreSyncService();
 
     let lineupData = await preSyncService.getLineupFromDb(match_id);
 
@@ -1377,7 +1377,7 @@ export const triggerPreSync = async (
 ): Promise<void> => {
   try {
     const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
-    const preSyncService = new DailyPreSyncService(theSportsAPI as any);
+    const preSyncService = new DailyPreSyncService();
 
     // Get today's matches from database
     const today = new Date().toISOString().split('T')[0];
@@ -1418,7 +1418,7 @@ export const getMatchH2H = async (
 
     // Try database first
     const { DailyPreSyncService } = await import('../services/thesports/sync/dailyPreSync.service');
-    const preSyncService = new DailyPreSyncService(theSportsAPI as any);
+    const preSyncService = new DailyPreSyncService();
 
     let h2hData = await preSyncService.getH2HFromDb(match_id);
     logger.info(`[getMatchH2H] Database query result for ${match_id}: ${h2hData ? 'FOUND' : 'NOT FOUND'}`);

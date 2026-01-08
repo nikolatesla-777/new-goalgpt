@@ -10,7 +10,7 @@
 
 import { pool } from '../../../database/connection';
 import { logger } from '../../../utils/logger';
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 
 interface PlayerMatchStats {
   player_id: string;
@@ -66,10 +66,9 @@ interface SeasonStatsEntry {
 }
 
 export class PlayerStatsService {
-  private client: any;
+  private client = theSportsAPI;
 
-  constructor(client?: TheSportsClient) {
-    this.client = client || new TheSportsClient();
+  constructor() {
   }
 
   /**

@@ -5,7 +5,7 @@
  * Handles business logic for /match/season/recent endpoint
  */
 
-import { TheSportsClient } from '../client/thesports-client';
+import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchSeasonRecentResponse, MatchSeasonRecentParams } from '../../../types/thesports/match';
 import { cacheService } from '../../../utils/cache/cache.service';
@@ -16,12 +16,13 @@ import { TeamLogoService } from '../team/teamLogo.service';
 import { CompetitionService } from '../competition/competition.service';
 
 export class MatchSeasonRecentService {
+  private client = theSportsAPI;
   private matchEnricher: MatchEnricherService;
 
-  constructor(private client: any) {
-    const teamDataService = new TeamDataService(client);
-    const teamLogoService = new TeamLogoService(client);
-    const competitionService = new CompetitionService(client);
+  constructor() {
+    const teamDataService = new TeamDataService();
+    const teamLogoService = new TeamLogoService();
+    const competitionService = new CompetitionService();
     this.matchEnricher = new MatchEnricherService(teamDataService, teamLogoService, competitionService);
   }
 

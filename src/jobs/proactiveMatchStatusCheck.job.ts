@@ -29,7 +29,7 @@ export class ProactiveMatchStatusCheckWorker {
   private client = theSportsAPI; // Phase 3A: Use singleton
 
   constructor() {
-    this.matchDetailLiveService = new MatchDetailLiveService(this.client);
+    this.matchDetailLiveService = new MatchDetailLiveService();
   }
 
   /**
