@@ -18,7 +18,6 @@ import {
   getLiveMatches,
   getMatchHalfStats,
   getMatchById,
-  getMatchDetailLive,
   getMatchTrend,
 } from '../../api/matches';
 import type { Match } from '../../api/matches';
@@ -571,6 +570,47 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   }, [matchId, tabData.ai, isCacheValid, updateCacheTimestamp]);
 
   // ============================================================================
+  // UNIFIED TAB FETCH DISPATCHER
+  // ============================================================================
+
+  /**
+   * Unified tab fetch function
+   * Dispatches to appropriate fetch function based on tab type
+   * Also tracks active tab for WebSocket optimization
+   */
+  const fetchTabData = useCallback(async (tab: TabType) => {
+    setActiveTab(tab); // Track active tab for WebSocket optimization
+
+    switch (tab) {
+      case 'stats':
+        return fetchStatsData();
+      case 'events':
+        return fetchEventsData();
+      case 'h2h':
+        return fetchH2HData();
+      case 'standings':
+        return fetchStandingsData();
+      case 'lineup':
+        return fetchLineupData();
+      case 'trend':
+        return fetchTrendData();
+      case 'ai':
+        return fetchAIData();
+      default:
+        console.warn(`[MatchDetail] Unknown tab: ${tab}`);
+        return Promise.resolve();
+    }
+  }, [
+    fetchStatsData,
+    fetchEventsData,
+    fetchH2HData,
+    fetchStandingsData,
+    fetchLineupData,
+    fetchTrendData,
+    fetchAIData,
+  ]);
+
+  // ============================================================================
   // REFRESH FUNCTIONS
   // ============================================================================
 
@@ -730,42 +770,6 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   // ============================================================================
   // CONTEXT VALUE
   // ============================================================================
-
-  /**
-   * Unified tab fetch function
-   * Dispatches to appropriate fetch function based on tab type
-   * Also tracks active tab for WebSocket optimization
-   */
-  const fetchTabData = useCallback((tab: TabType) => {
-    setActiveTab(tab); // Track active tab for WebSocket optimization
-
-    switch (tab) {
-      case 'stats':
-        return fetchStatsData();
-      case 'events':
-        return fetchEventsData();
-      case 'h2h':
-        return fetchH2HData();
-      case 'standings':
-        return fetchStandingsData();
-      case 'lineup':
-        return fetchLineupData();
-      case 'trend':
-        return fetchTrendData();
-      case 'ai':
-        return fetchAIData();
-      default:
-        console.warn(`[MatchDetail] Unknown tab: ${tab}`);
-    }
-  }, [
-    fetchStatsData,
-    fetchEventsData,
-    fetchH2HData,
-    fetchStandingsData,
-    fetchLineupData,
-    fetchTrendData,
-    fetchAIData,
-  ]);
 
   const value: MatchDetailContextValue = {
     match,
