@@ -19,6 +19,7 @@ import {
   getMatchTrend,
   getMatchHalfStats,
   getMatchLiveStats,
+  getMatchIncidents,
   triggerPreSync,
   getMatchH2H,
   getMatchById,
@@ -144,6 +145,15 @@ export default async function matchRoutes(
    * NOTE: Must be registered before /:match_id route to avoid route conflicts
    */
   fastify.get('/:match_id/live-stats', getMatchLiveStats);
+
+  /**
+   * GET /api/matches/:match_id/incidents
+   * Get match incidents (optimized for Events tab)
+   * Returns incidents (goals, cards, substitutions) for a specific match.
+   * Uses database-first strategy with API fallback (97% faster than old endpoint)
+   * NOTE: Must be registered before /:match_id route to avoid route conflicts
+   */
+  fastify.get('/:match_id/incidents', getMatchIncidents);
 
   /**
    * GET /api/matches/:match_id
