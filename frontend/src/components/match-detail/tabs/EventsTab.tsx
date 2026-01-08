@@ -28,6 +28,8 @@ export function EventsTab() {
   }
 
   const incidents = events?.incidents || [];
+  console.log('[EventsTab Render] incidents:', incidents);
+  console.log('[EventsTab Render] incidents.length:', incidents.length);
   const matchStatusId = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
 
   return (
