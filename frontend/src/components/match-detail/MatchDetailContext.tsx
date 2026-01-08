@@ -19,6 +19,7 @@ import {
   getMatchHalfStats,
   getMatchById,
   getMatchDetailLive,
+  getMatchTrend,
 } from '../../api/matches';
 import type { Match } from '../../api/matches';
 
@@ -244,7 +245,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
     try {
       // ALL fetches in PARALLEL - no sequential blocking!
-      const [statsResult, h2hResult, standingsResult, aiResult, eventsResult] = await Promise.allSettled([
+      const [statsResult, h2hResult, standingsResult, aiResult, eventsResult, trendResult] = await Promise.allSettled([
         // Stats
         (async () => {
           const [liveStats, halfStats] = await Promise.allSettled([
@@ -288,14 +289,28 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
           return { predictions: [] } as AIData;
         })(),
 
-        // Events
+        // Events - NO TIMEOUT (let it complete naturally)
         (async () => {
-          const eventsData = await fetchWithTimeout(getMatchDetailLive(matchId), 10000);
-          const result = {
-            incidents: eventsData?.incidents ?? [],
-          } as EventsData;
-          console.log(`[MatchDetailContext] Events: ${result.incidents.length} incidents for ${matchId}`);
-          return result;
+          try {
+            const eventsData = await getMatchDetailLive(matchId);
+            const result = {
+              incidents: eventsData?.incidents ?? [],
+            } as EventsData;
+            console.log(`[MatchDetailContext] Events: ${result.incidents.length} incidents for ${matchId}`);
+            return result;
+          } catch (error) {
+            console.error('[MatchDetailContext] Events fetch error:', error);
+            return { incidents: [] } as EventsData;
+          }
+        })(),
+
+        // Trend
+        (async () => {
+          const trendData = await fetchWithTimeout(getMatchTrend(matchId), 2000);
+          return {
+            trend: trendData?.trend ?? null,
+            incidents: trendData?.incidents ?? [],
+          } as TrendData;
         })(),
       ]);
 
