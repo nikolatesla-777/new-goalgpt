@@ -304,12 +304,12 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   const fetchStatsData = useCallback(async () => {
     // Check cache
     if (tabData.stats !== null && isCacheValid('stats')) {
-      
+      // console.log(`[MatchDetail] ✓ Using cached stats`);
       return;
     }
 
     setTabLoadingStates(prev => ({ ...prev, stats: true }));
-    
+    // console.log(`[MatchDetail] → Fetching stats for ${matchId}`);
 
     try {
       const [liveStats, halfStats] = await Promise.allSettled([
@@ -328,7 +328,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
       setTabData(prev => ({ ...prev, stats: statsData }));
       updateCacheTimestamp('stats');
-      
+      // console.log(`[MatchDetail] ✓ Stats loaded`);
     } catch (error) {
       console.error('[MatchDetail] Failed to fetch stats:', error);
       setTabData(prev => ({ ...prev, stats: { fullTime: null, halfTime: null, firstHalfStats: null } }));
@@ -344,12 +344,12 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
    */
   const fetchEventsData = useCallback(async () => {
     if (tabData.events !== null && isCacheValid('events')) {
-      
+      // console.log(`[MatchDetail] ✓ Using cached events`);
       return;
     }
 
     setTabLoadingStates(prev => ({ ...prev, events: true }));
-    
+    // console.log(`[MatchDetail] → Fetching events for ${matchId}`);
 
     try {
       // NEW: Use optimized incidents endpoint
@@ -363,7 +363,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
       setTabData(prev => ({ ...prev, events: eventsData }));
       updateCacheTimestamp('events');
-      `);
+      // console.log(`[MatchDetail] ✓ Events loaded (${eventsData.incidents.length} incidents)`);
     } catch (error) {
       console.error('[MatchDetail] Failed to fetch events:', error);
       setTabData(prev => ({ ...prev, events: { incidents: [] } }));
@@ -379,12 +379,12 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
    */
   const fetchH2HData = useCallback(async () => {
     if (tabData.h2h !== null && isCacheValid('h2h')) {
-      
+      // console.log(`[MatchDetail] ✓ Using cached H2H`);
       return;
     }
 
     setTabLoadingStates(prev => ({ ...prev, h2h: true }));
-    
+    // console.log(`[MatchDetail] → Fetching H2H for ${matchId}`);
 
     try {
       const h2h = await fetchWithTimeout(getMatchH2H(matchId), 3000);
@@ -398,7 +398,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
       setTabData(prev => ({ ...prev, h2h: h2hData }));
       updateCacheTimestamp('h2h');
-      
+      // console.log(`[MatchDetail] ✓ H2H loaded`);
     } catch (error) {
       console.error('[MatchDetail] Failed to fetch H2H:', error);
       setTabData(prev => ({
@@ -417,17 +417,17 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
    */
   const fetchStandingsData = useCallback(async () => {
     if (!match?.season_id) {
-      
+      // console.warn('[MatchDetail] Cannot fetch standings - no season_id');
       return;
     }
 
     if (tabData.standings !== null && isCacheValid('standings')) {
-      
+      // console.log(`[MatchDetail] ✓ Using cached standings`);
       return;
     }
 
     setTabLoadingStates(prev => ({ ...prev, standings: true }));
-    
+    // console.log(`[MatchDetail] → Fetching standings for season ${match.season_id}`);
 
     try {
       const standings = await fetchWithTimeout(getSeasonStandings(match.season_id), 3000);
@@ -438,7 +438,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
       setTabData(prev => ({ ...prev, standings: standingsData }));
       updateCacheTimestamp('standings');
-      `);
+      // console.log(`[MatchDetail] ✓ Standings loaded (${standingsData.results.length} teams)`);
     } catch (error) {
       console.error('[MatchDetail] Failed to fetch standings:', error);
       setTabData(prev => ({ ...prev, standings: { results: [] } }));
@@ -454,12 +454,12 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
    */
   const fetchLineupData = useCallback(async () => {
     if (tabData.lineup !== null && isCacheValid('lineup')) {
-      
+      // console.log(`[MatchDetail] ✓ Using cached lineup`);
       return;
     }
 
     setTabLoadingStates(prev => ({ ...prev, lineup: true }));
-    
+    // console.log(`[MatchDetail] → Fetching lineup for ${matchId}`);
 
     try {
       const response = await fetch(`${API_BASE_URL}/matches/${matchId}/lineup`);
@@ -477,7 +477,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
       setTabData(prev => ({ ...prev, lineup: lineupData }));
       updateCacheTimestamp('lineup');
-      
+      // console.log(`[MatchDetail] ✓ Lineup loaded`);
     } catch (error) {
       console.error('[MatchDetail] Failed to fetch lineup:', error);
       setTabData(prev => ({
@@ -503,12 +503,12 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
    */
   const fetchTrendData = useCallback(async () => {
     if (tabData.trend !== null && isCacheValid('trend')) {
-      
+      // console.log(`[MatchDetail] ✓ Using cached trend`);
       return;
     }
 
     setTabLoadingStates(prev => ({ ...prev, trend: true }));
-    
+    // console.log(`[MatchDetail] → Fetching trend for ${matchId}`);
 
     try {
       const trendResponse = await fetchWithTimeout(getMatchTrend(matchId), 3000);
@@ -520,7 +520,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
       setTabData(prev => ({ ...prev, trend: trendData }));
       updateCacheTimestamp('trend');
-      
+      // console.log(`[MatchDetail] ✓ Trend loaded`);
     } catch (error) {
       console.error('[MatchDetail] Failed to fetch trend:', error);
       setTabData(prev => ({ ...prev, trend: { trend: null, incidents: [] } }));
@@ -536,12 +536,12 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
    */
   const fetchAIData = useCallback(async () => {
     if (tabData.ai !== null && isCacheValid('ai')) {
-      
+      // console.log(`[MatchDetail] ✓ Using cached AI predictions`);
       return;
     }
 
     setTabLoadingStates(prev => ({ ...prev, ai: true }));
-    
+    // console.log(`[MatchDetail] → Fetching AI predictions for ${matchId}`);
 
     try {
       const response = await fetchWithTimeout(
@@ -557,7 +557,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
         setTabData(prev => ({ ...prev, ai: aiData }));
         updateCacheTimestamp('ai');
-        `);
+        // console.log(`[MatchDetail] ✓ AI predictions loaded (${aiData.predictions.length} predictions)`);
       } else {
         setTabData(prev => ({ ...prev, ai: { predictions: [] } }));
       }
@@ -597,7 +597,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
       case 'ai':
         return fetchAIData();
       default:
-        
+        // console.warn(`[MatchDetail] Unknown tab: ${tab}`);
         return Promise.resolve();
     }
   }, [
@@ -621,7 +621,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   // Debounced refresh for ACTIVE TAB ONLY (WebSocket optimization)
   const debouncedRefreshActiveTab = useCallback(() => {
     if (!activeTab) {
-      
+      // console.log('[MatchDetail] No active tab, skipping refresh');
       return;
     }
 
@@ -630,7 +630,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      
+      // console.log(`[MatchDetail] WebSocket refresh for active tab: ${activeTab}`);
 
       // Invalidate cache for active tab
       invalidateCache(activeTab);
@@ -675,7 +675,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
           // totalGoals > threshold → INSTANT WIN!
           if (totalGoals > threshold) {
-            `);
+            // console.log(`🎉 AITab INSTANT WIN: ${p.prediction_value} (${totalGoals} > ${threshold})`);
             return {
               ...p,
               result: 'won',
@@ -723,13 +723,13 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
             // Status 3 (Devre arası): IY tahminleri lose
             if (event.statusId === 3 && isFirstHalf) {
-              : ${p.prediction_value}`);
+              // console.log(`❌ AITab INSTANT LOSE (HT): ${p.prediction_value}`);
               return { ...p, result: 'lost', prediction_result: 'loser' };
             }
 
             // Status 8 (Maç sonu): MS tahminleri lose
             if (event.statusId === 8 && !isFirstHalf) {
-              : ${p.prediction_value}`);
+              // console.log(`❌ AITab INSTANT LOSE (FT): ${p.prediction_value}`);
               return { ...p, result: 'lost', prediction_result: 'loser' };
             }
 
