@@ -112,22 +112,32 @@ export function MatchDetailPage() {
     const fetchTabData = useCallback(async (forceRefresh: boolean = false) => {
         if (!matchId) return;
 
+        console.log('[MatchDetailPage Debug] fetchTabData called:', { activeTab, matchId, forceRefresh });
+        console.log('[MatchDetailPage Debug] tabDataLoadedRef:', tabDataLoadedRef.current);
+
         // CRITICAL FIX: Check if this exact tab+matchId combination has already been loaded
         if (!forceRefresh && tabDataLoadedRef.current?.tab === activeTab && tabDataLoadedRef.current?.matchId === matchId) {
+            console.log('[MatchDetailPage Debug] Skipping fetch - already loaded');
             return;
         }
 
         // For standings tab, we need match.season_id
         if (activeTab === 'standings' && !match?.season_id) {
+            console.log('[MatchDetailPage Debug] Skipping standings - no season_id');
             return;
         }
 
         // Prevent overlapping requests
-        if (isFetchingRef.current) return;
+        if (isFetchingRef.current) {
+            console.log('[MatchDetailPage Debug] Skipping fetch - already fetching');
+            return;
+        }
         isFetchingRef.current = true;
 
         setTabLoading(true);
         setError(null);
+
+        console.log('[MatchDetailPage Debug] Starting fetch for activeTab:', activeTab);
 
         try {
             let result;
