@@ -12,8 +12,7 @@ export function EventsTab() {
 
   if (!match) return null;
 
-  const events = tabData.events;
-  const hasData = events !== null && events !== undefined;
+  const hasData = tabData.incidents !== null && tabData.incidents !== undefined;
 
   if (!hasData) {
     return (
@@ -23,7 +22,7 @@ export function EventsTab() {
     );
   }
 
-  const incidents = events?.incidents || [];
+  const incidents = tabData.incidents || [];
   const matchStatusId = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
 
   return (
