@@ -2,10 +2,10 @@
  * AI Tab
  *
  * Displays AI predictions for the match.
- * Uses MatchDetailContext for data - no duplicate fetch.
+ * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Robot, Trophy, WarningCircle } from '@phosphor-icons/react';
 import { useMatchDetail } from '../MatchDetailContext';
 
@@ -26,9 +26,14 @@ interface Prediction {
 }
 
 export function AITab() {
-  const { tabData, tabDataLoading } = useMatchDetail();
+  const { tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
 
-  // Use predictions from MatchDetailContext (already fetched via eager loading)
+  // LAZY LOADING: Trigger fetch on mount
+  useEffect(() => {
+    fetchTabData('ai');
+  }, [fetchTabData]);
+
+  // Use predictions from MatchDetailContext (fetched via lazy loading)
   const predictions = useMemo(() => {
     if (!tabData.ai?.predictions) return [];
     return tabData.ai.predictions.map((p: any) => ({
@@ -48,7 +53,7 @@ export function AITab() {
     })) as Prediction[];
   }, [tabData.ai]);
 
-  const loading = tabDataLoading;
+  const loading = tabLoadingStates.ai;
 
   if (loading) {
     return (

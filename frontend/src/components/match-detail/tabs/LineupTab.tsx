@@ -2,20 +2,38 @@
  * Lineup Tab
  *
  * Displays team lineups for home and away teams.
+ * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
  */
 
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchDetail } from '../MatchDetailContext';
 
 export function LineupTab() {
   const navigate = useNavigate();
-  const { match, tabData } = useMatchDetail();
+  const { match, tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
+
+  // LAZY LOADING: Trigger fetch on mount
+  useEffect(() => {
+    fetchTabData('lineup');
+  }, [fetchTabData]);
 
   if (!match) return null;
 
+  const loading = tabLoadingStates.lineup;
   const lineup = tabData.lineup;
   const homeLineup = lineup?.home_lineup || [];
   const awayLineup = lineup?.away_lineup || [];
+
+  // Show loading state while fetching
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-10">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+        <span className="ml-3 text-gray-600">Kadro yükleniyor...</span>
+      </div>
+    );
+  }
 
   if (!homeLineup.length && !awayLineup.length) {
     return (

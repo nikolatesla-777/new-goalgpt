@@ -3,9 +3,10 @@
  *
  * Displays match statistics with period tabs (TÜMÜ, 1. YARI, 2. YARI).
  * Most complex tab component with period-based stat filtering.
+ * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMatchDetail } from '../MatchDetailContext';
 import { getStatName, sortStats } from '../utils/statHelpers';
 
@@ -36,10 +37,27 @@ function StatRow({ label, home, away }: { label: string; home: any; away: any })
 }
 
 export function StatsTab() {
-  const { match, tabData } = useMatchDetail();
+  const { match, tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
   const [activePeriod, setActivePeriod] = useState<StatsPeriod>('full');
 
+  // LAZY LOADING: Trigger fetch on mount
+  useEffect(() => {
+    fetchTabData('stats');
+  }, [fetchTabData]);
+
   if (!match) return null;
+
+  const loading = tabLoadingStates.stats;
+
+  // Show loading state while fetching
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-10">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <span className="ml-3 text-gray-600">İstatistikler yükleniyor...</span>
+      </div>
+    );
+  }
 
   const data = tabData.stats;
   const hasData = data !== null && data !== undefined;

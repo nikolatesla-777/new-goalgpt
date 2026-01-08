@@ -2,13 +2,32 @@
  * H2H Tab
  *
  * Displays head-to-head statistics and previous matches between teams.
+ * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
  */
 
+import { useEffect } from 'react';
 import { useMatchDetail } from '../MatchDetailContext';
 
 export function H2HTab() {
-  const { tabData } = useMatchDetail();
+  const { tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
+
+  // LAZY LOADING: Trigger fetch on mount
+  useEffect(() => {
+    fetchTabData('h2h');
+  }, [fetchTabData]);
+
+  const loading = tabLoadingStates.h2h;
   const data = tabData.h2h;
+
+  // Show loading state while fetching
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-10">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+        <span className="ml-3 text-gray-600">Karşılıklı maçlar yükleniyor...</span>
+      </div>
+    );
+  }
 
   if (!data) {
     return (

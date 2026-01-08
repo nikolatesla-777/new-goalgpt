@@ -2,23 +2,32 @@
  * Events Tab
  *
  * Displays match events timeline using MatchEventsTimeline component.
+ * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
  */
 
+import { useEffect } from 'react';
 import { useMatchDetail } from '../MatchDetailContext';
 import { MatchEventsTimeline } from '../MatchEventsTimeline';
 
 export function EventsTab() {
-  const { match, tabData } = useMatchDetail();
+  const { match, tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
+
+  // LAZY LOADING: Trigger fetch on mount
+  useEffect(() => {
+    fetchTabData('events');
+  }, [fetchTabData]);
 
   if (!match) return null;
 
+  const loading = tabLoadingStates.events;
   const events = tabData.events;
-  const hasData = events !== null && events !== undefined;
 
-  if (!hasData) {
+  // Show loading state while fetching
+  if (loading) {
     return (
-      <div className="text-center p-10 text-gray-600">
-        Yükleniyor...
+      <div className="flex items-center justify-center p-10">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+        <span className="ml-3 text-gray-600">Olaylar yükleniyor...</span>
       </div>
     );
   }

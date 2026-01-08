@@ -2,15 +2,34 @@
  * Trend Tab
  *
  * Displays match trend chart for live matches.
+ * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
  */
 
+import { useEffect } from 'react';
 import { useMatchDetail } from '../MatchDetailContext';
 import { MatchTrendChart } from '../MatchTrendChart';
 
 export function TrendTab() {
-  const { match, tabData } = useMatchDetail();
+  const { match, tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
+
+  // LAZY LOADING: Trigger fetch on mount
+  useEffect(() => {
+    fetchTabData('trend');
+  }, [fetchTabData]);
 
   if (!match) return null;
+
+  const loading = tabLoadingStates.trend;
+
+  // Show loading state while fetching
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-10">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+        <span className="ml-3 text-gray-600">Trend verisi yükleniyor...</span>
+      </div>
+    );
+  }
 
   const data = tabData.trend;
   const matchStatus = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;

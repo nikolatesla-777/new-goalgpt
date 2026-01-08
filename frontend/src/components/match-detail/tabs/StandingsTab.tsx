@@ -2,15 +2,34 @@
  * Standings Tab
  *
  * Displays league standings table with highlighted teams.
+ * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
  */
 
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchDetail } from '../MatchDetailContext';
 
 export function StandingsTab() {
   const navigate = useNavigate();
-  const { match, tabData } = useMatchDetail();
+  const { match, tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
+
+  // LAZY LOADING: Trigger fetch on mount
+  useEffect(() => {
+    fetchTabData('standings');
+  }, [fetchTabData]);
+
+  const loading = tabLoadingStates.standings;
   const standings = tabData.standings?.results || [];
+
+  // Show loading state while fetching
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-10">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-600"></div>
+        <span className="ml-3 text-gray-600">Puan durumu yükleniyor...</span>
+      </div>
+    );
+  }
 
   if (!standings.length) {
     return (
