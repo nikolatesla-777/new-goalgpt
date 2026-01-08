@@ -1,3 +1,4 @@
+
 /**
  * Table Live Service
  * 
@@ -17,7 +18,7 @@ export interface TableLiveResponse {
 }
 
 export class TableLiveService {
-    constructor(private client: TheSportsClient) { }
+    constructor(private client: any) { }
 
     /**
      * Get real-time standings with cache support

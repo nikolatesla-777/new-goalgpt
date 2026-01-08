@@ -7,7 +7,7 @@
  * CRITICAL: This prevents data loss when users visit match details the next day
  */
 
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
+import { theSportsAPI } from '../core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { CombinedStatsService } from '../services/thesports/match/combinedStats.service';
 import { MatchDetailLiveService } from '../services/thesports/match/matchDetailLive.service';
 import { MatchTrendService } from '../services/thesports/match/matchTrend.service';
@@ -19,7 +19,7 @@ import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 
 export class MatchDataSyncWorker {
-  private apiClient: TheSportsClient;
+  private apiClient = theSportsAPI; // Phase 3A: Use singleton
   private combinedStatsService: CombinedStatsService;
   private matchDetailLiveService: MatchDetailLiveService;
   private matchTrendService: MatchTrendService;
@@ -28,11 +28,10 @@ export class MatchDataSyncWorker {
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
-  constructor(apiClient: TheSportsClient) {
-    this.apiClient = apiClient;
-    this.combinedStatsService = new CombinedStatsService(apiClient);
-    this.matchDetailLiveService = new MatchDetailLiveService(apiClient);
-    this.matchTrendService = new MatchTrendService(apiClient);
+  constructor() {
+    this.combinedStatsService = new CombinedStatsService(this.apiClient);
+    this.matchDetailLiveService = new MatchDetailLiveService(this.apiClient);
+    this.matchTrendService = new MatchTrendService(this.apiClient);
     this.matchDatabaseService = new MatchDatabaseService();
     this.aiPredictionService = new AIPredictionService();
   }

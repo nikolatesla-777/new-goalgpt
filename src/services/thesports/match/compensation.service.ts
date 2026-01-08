@@ -1,3 +1,4 @@
+
 /**
  * Compensation Service
  * 
@@ -17,7 +18,7 @@ export interface CompensationResponse {
 }
 
 export class CompensationService {
-    constructor(private client: TheSportsClient) { }
+    constructor(private client: any) { }
 
     /**
      * Get compensation list with pagination support

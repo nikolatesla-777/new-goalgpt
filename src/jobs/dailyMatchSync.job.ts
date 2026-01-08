@@ -7,7 +7,7 @@
  */
 
 import * as cron from 'node-cron';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
+import { theSportsAPI } from '../core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { MatchRecentService } from '../services/thesports/match/matchRecent.service';
 import { MatchDiaryService } from '../services/thesports/match/matchDiary.service';
 import { MatchSyncService } from '../services/thesports/match/matchSync.service';
@@ -39,11 +39,13 @@ export class DailyMatchSyncWorker {
   // Observability: cache last sync stats per day (no DB queries required)
   private static readonly SYNC_STATE_CACHE_TTL_SECONDS = 2 * 24 * 3600; // keep 48h
 
-  constructor(client: TheSportsClient) {
-    this.teamDataService = new TeamDataService(client);
-    this.competitionService = new CompetitionService(client);
-    this.matchRecentService = new MatchRecentService(client);
-    this.matchDiaryService = new MatchDiaryService(client);
+  private client = theSportsAPI; // Phase 3A: Use singleton
+
+  constructor() {
+    this.teamDataService = new TeamDataService(this.client);
+    this.competitionService = new CompetitionService(this.client);
+    this.matchRecentService = new MatchRecentService(this.client);
+    this.matchDiaryService = new MatchDiaryService(this.client);
     this.matchSyncService = new MatchSyncService(this.teamDataService, this.competitionService);
   }
 

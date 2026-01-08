@@ -6,7 +6,7 @@
  */
 
 import cron from 'node-cron';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
+import { theSportsAPI } from '../core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { TeamDataService } from '../services/thesports/team/teamData.service';
 import { TeamRepository } from '../repositories/implementations/TeamRepository';
 import { logger } from '../utils/logger';
@@ -16,9 +16,10 @@ export class TeamDataSyncWorker {
   private teamDataService: TeamDataService;
   private teamRepository: TeamRepository;
   private cronJob: cron.ScheduledTask | null = null;
+  private client = theSportsAPI; // Phase 3A: Use singleton
 
-  constructor(client: TheSportsClient) {
-    this.teamDataService = new TeamDataService(client);
+  constructor() {
+    this.teamDataService = new TeamDataService(this.client);
     this.teamRepository = new TeamRepository();
   }
 

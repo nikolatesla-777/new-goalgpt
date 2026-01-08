@@ -12,7 +12,7 @@
  */
 
 import * as cron from 'node-cron';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
+import { theSportsAPI } from '../core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { PostMatchProcessor } from '../services/liveData/postMatchProcessor';
 import { logger } from '../utils/logger';
 
@@ -20,11 +20,12 @@ export class PostMatchProcessorJob {
   private cronJob: cron.ScheduledTask | null = null;
   private isRunning = false;
   private processor: PostMatchProcessor;
+  private client = theSportsAPI; // Phase 3A: Use singleton
 
   private static readonly CRON_TIMEZONE = 'Europe/Istanbul';
 
-  constructor(client: TheSportsClient) {
-    this.processor = new PostMatchProcessor(client);
+  constructor() {
+    this.processor = new PostMatchProcessor(this.client);
   }
 
   /**

@@ -1,3 +1,4 @@
+
 /**
  * Match Trend Service
  * 
@@ -25,7 +26,7 @@ interface MatchTrendData {
 }
 
 export class MatchTrendService {
-    constructor(private client: TheSportsClient) { }
+    constructor(private client: any) { }
 
     /**
      * Parse trend data from TheSports API format to frontend format

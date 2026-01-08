@@ -47,7 +47,7 @@ export class PostMatchProcessor {
   private tableLiveService: TableLiveService;
   private matchDetailLiveService: MatchDetailLiveService;
 
-  constructor(client: TheSportsClient) {
+  constructor(client: TheSportsClient | any) {
     this.combinedStatsService = new CombinedStatsService(client);
     this.matchTrendService = new MatchTrendService(client);
     this.tableLiveService = new TableLiveService(client);

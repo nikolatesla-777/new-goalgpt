@@ -1,3 +1,4 @@
+
 /**
  * Match Detail Live Service
  * 
@@ -14,7 +15,7 @@ import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { getWithCacheFallback } from '../../../utils/cache/cache-fallback.util';
 
 export class MatchDetailLiveService {
-  constructor(private client: TheSportsClient) {
+  constructor(private client: any) {
     // Phase 4-2: Single circuit layer - circuit breaker is in TheSportsClient, not here
   }
 

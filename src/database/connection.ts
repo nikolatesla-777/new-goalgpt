@@ -13,8 +13,8 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'goalgpt',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
-  max: parseInt(process.env.DB_MAX_CONNECTIONS || '10'), // Reduced for stability
-  min: 2, // Keep minimum connections alive
+  max: parseInt(process.env.DB_MAX_CONNECTIONS || '25'), // Increased for high load (Phase 1 Fix)
+  min: 5, // Keep more connections alive for better performance
   idleTimeoutMillis: 60000, // Increased to 60 seconds
   connectionTimeoutMillis: 15000, // Increased for Supabase stability
 

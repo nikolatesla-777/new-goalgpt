@@ -1,3 +1,4 @@
+
 /**
  * Daily Pre-Sync Service
  * 
@@ -34,7 +35,7 @@ export class DailyPreSyncService {
     private compensationService: CompensationService;
     private tableLiveService: TableLiveService;
 
-    constructor(private client: TheSportsClient) {
+    constructor(private client: any) {
         this.matchAnalysisService = new MatchAnalysisService(client);
         this.matchLineupService = new MatchLineupService(client);
         this.seasonStandingsService = new SeasonStandingsService(client);

@@ -1,3 +1,4 @@
+
 /**
  * Combined Stats Service
  * 
@@ -119,7 +120,7 @@ export class CombinedStatsService {
     private matchDetailLiveService: MatchDetailLiveService;
     private matchTeamStatsService: MatchTeamStatsService;
 
-    constructor(private client: TheSportsClient) {
+    constructor(private client: any) {
         this.matchDetailLiveService = new MatchDetailLiveService(client);
         this.matchTeamStatsService = new MatchTeamStatsService(client);
     }

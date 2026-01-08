@@ -1,3 +1,4 @@
+
 /**
  * Competition Service
  * 
@@ -33,7 +34,7 @@ export interface CompetitionListResponse {
 export class CompetitionService {
   private repository: CompetitionRepository;
 
-  constructor(private client: TheSportsClient) {
+  constructor(private client: any) {
     this.repository = new CompetitionRepository();
   }
 

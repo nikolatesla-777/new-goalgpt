@@ -1,3 +1,4 @@
+
 /**
  * Match Diary Service
  * 
@@ -21,7 +22,7 @@ export class MatchDiaryService {
   private matchEnricher: MatchEnricherService;
   private competitionService: CompetitionService;
 
-  constructor(private client: TheSportsClient) {
+  constructor(private client: any) {
     this.teamDataService = new TeamDataService(client);
     this.teamLogoService = new TeamLogoService(client);
     this.competitionService = new CompetitionService(client);

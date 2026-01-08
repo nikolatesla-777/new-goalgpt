@@ -1,3 +1,4 @@
+
 /**
  * Match Season Recent Service
  * 
@@ -17,7 +18,7 @@ import { CompetitionService } from '../competition/competition.service';
 export class MatchSeasonRecentService {
   private matchEnricher: MatchEnricherService;
 
-  constructor(private client: TheSportsClient) {
+  constructor(private client: any) {
     const teamDataService = new TeamDataService(client);
     const teamLogoService = new TeamLogoService(client);
     const competitionService = new CompetitionService(client);

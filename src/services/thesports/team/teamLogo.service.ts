@@ -1,3 +1,4 @@
+
 /**
  * Team Logo Service
  * 
@@ -14,9 +15,9 @@ import { config } from '../../../config';
 
 export class TeamLogoService {
   private repository: TeamRepository;
-  private client: TheSportsClient;
+  private client: any;
 
-  constructor(client: TheSportsClient) {
+  constructor(client: any) {
     this.repository = new TeamRepository();
     this.client = client;
   }

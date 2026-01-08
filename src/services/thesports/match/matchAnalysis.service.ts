@@ -1,3 +1,4 @@
+
 /**
  * Match Analysis Service (H2H)
  * 
@@ -12,7 +13,7 @@ import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 
 export class MatchAnalysisService {
-    constructor(private client: TheSportsClient) { }
+    constructor(private client: any) { }
 
     /**
      * Get match analysis (H2H) with cache support

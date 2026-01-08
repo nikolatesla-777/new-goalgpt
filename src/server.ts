@@ -28,7 +28,7 @@ import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
 import { config } from './config';
 import { WebSocketService } from './services/thesports/websocket/websocket.service';
-import { TheSportsClient } from './services/thesports/client/thesports-client';
+import { theSportsAPI } from './core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { MatchWatchdogWorker } from './jobs/matchWatchdog.job';
 import { MatchDetailLiveService } from './services/thesports/match/matchDetailLive.service';
 import { MatchRecentService } from './services/thesports/match/matchRecent.service';
@@ -94,25 +94,26 @@ const start = async () => {
     await fastify.listen({ port: PORT, host: HOST });
     logger.info(`🚀 Fastify server running on port ${PORT}`);
 
-    const theSportsClient = new TheSportsClient();
+    // Phase 3A: Using theSportsAPI singleton (global rate limiting enabled)
+    logger.info('[Migration] Using TheSportsAPIManager singleton for all workers');
 
-    // Start workers
-    teamDataSyncWorker = new TeamDataSyncWorker(theSportsClient);
+    // Start workers (all use singleton internally)
+    teamDataSyncWorker = new TeamDataSyncWorker();
     teamDataSyncWorker.start();
 
-    teamLogoSyncWorker = new TeamLogoSyncWorker(theSportsClient);
+    teamLogoSyncWorker = new TeamLogoSyncWorker();
     teamLogoSyncWorker.start();
 
-    matchSyncWorker = new MatchSyncWorker(theSportsClient);
+    matchSyncWorker = new MatchSyncWorker();
     matchSyncWorker.start();
 
-    dailyMatchSyncWorker = new DailyMatchSyncWorker(theSportsClient);
+    dailyMatchSyncWorker = new DailyMatchSyncWorker();
     dailyMatchSyncWorker.start();
 
-    lineupRefreshJob = new LineupRefreshJob(theSportsClient);
+    lineupRefreshJob = new LineupRefreshJob();
     lineupRefreshJob.start();
 
-    postMatchProcessorJob = new PostMatchProcessorJob(theSportsClient);
+    postMatchProcessorJob = new PostMatchProcessorJob();
     postMatchProcessorJob.start();
 
     dataUpdateWorker = new DataUpdateWorker();
@@ -122,12 +123,12 @@ const start = async () => {
     matchMinuteWorker.start();
 
     // Match Data Sync Worker (automatically saves statistics, incidents, trend for live matches)
-    matchDataSyncWorker = new MatchDataSyncWorker(theSportsClient);
+    matchDataSyncWorker = new MatchDataSyncWorker();
     matchDataSyncWorker.start();
 
     // Match Watchdog Worker (for should-be-live matches)
-    const matchDetailLiveService = new MatchDetailLiveService(theSportsClient);
-    const matchRecentService = new MatchRecentService(theSportsClient);
+    const matchDetailLiveService = new MatchDetailLiveService(theSportsAPI);
+    const matchRecentService = new MatchRecentService(theSportsAPI);
     matchWatchdogWorker = new MatchWatchdogWorker(matchDetailLiveService, matchRecentService);
     matchWatchdogWorker.start();
 

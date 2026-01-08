@@ -1,3 +1,4 @@
+
 /**
  * Schedule Sync Service
  * 
@@ -11,7 +12,7 @@ import { withSyncLock, SyncType } from '../sync/sync-strategy';
 import { formatTheSportsDate } from '../../../utils/thesports/timestamp.util';
 
 export class ScheduleSyncService {
-  constructor(private client: TheSportsClient) {}
+  constructor(private client: any) {}
 
   /**
    * Daily bulk sync: Fetch all matches for a specific date

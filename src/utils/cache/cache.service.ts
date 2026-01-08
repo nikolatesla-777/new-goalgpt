@@ -15,6 +15,49 @@ interface CacheEntry<T> {
 
 class CacheService {
   private cache = new Map<string, CacheEntry<any>>();
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
+  constructor() {
+    // Start active cleanup on instantiation (Phase 2 Fix)
+    this.startCleanup();
+  }
+
+  /**
+   * Start background cleanup task
+   * Runs every 60 seconds to remove expired entries
+   */
+  private startCleanup(): void {
+    this.cleanupInterval = setInterval(() => {
+      this.cleanup();
+    }, 60000); // 60 seconds
+
+    // Prevent Node.js from keeping process alive just for this
+    if (this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
+
+    logger.info('[Cache] Active cleanup started (60s interval)');
+  }
+
+  /**
+   * Clean up expired entries
+   * Called automatically every 60 seconds
+   */
+  private cleanup(): void {
+    const now = Date.now();
+    let removed = 0;
+
+    for (const [key, entry] of this.cache.entries()) {
+      if (now > entry.expiry) {
+        this.cache.delete(key);
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      logger.debug(`[Cache] Cleanup: removed ${removed} expired entries (${this.cache.size} remaining)`);
+    }
+  }
 
   /**
    * Get value from cache
@@ -65,6 +108,18 @@ class CacheService {
    */
   size(): number {
     return this.cache.size;
+  }
+
+  /**
+   * Stop cleanup (for graceful shutdown)
+   * Call this during application shutdown
+   */
+  stop(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+      logger.info('[Cache] Active cleanup stopped');
+    }
   }
 }
 

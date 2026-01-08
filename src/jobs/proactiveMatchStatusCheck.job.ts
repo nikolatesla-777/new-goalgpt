@@ -17,7 +17,7 @@
  */
 
 import { MatchDetailLiveService } from '../services/thesports/match/matchDetailLive.service';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
+import { theSportsAPI } from '../core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
@@ -26,9 +26,10 @@ export class ProactiveMatchStatusCheckWorker {
   private matchDetailLiveService: MatchDetailLiveService;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
+  private client = theSportsAPI; // Phase 3A: Use singleton
 
-  constructor(matchDetailLiveService: MatchDetailLiveService) {
-    this.matchDetailLiveService = matchDetailLiveService;
+  constructor() {
+    this.matchDetailLiveService = new MatchDetailLiveService(this.client);
   }
 
   /**

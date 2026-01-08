@@ -1,3 +1,4 @@
+
 /**
  * Match Player Stats Service
  * 
@@ -11,7 +12,7 @@ import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 
 export class MatchPlayerStatsService {
-  constructor(private client: TheSportsClient) {}
+  constructor(private client: any) {}
 
   /**
    * Get match player stats with cache support

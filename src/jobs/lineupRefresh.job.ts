@@ -7,7 +7,7 @@
  */
 
 import * as cron from 'node-cron';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
+import { theSportsAPI } from '../core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { MatchLineupService } from '../services/thesports/match/matchLineup.service';
 import { logger } from '../utils/logger';
 import { pool } from '../database/connection';
@@ -16,11 +16,12 @@ export class LineupRefreshJob {
   private cronJob: cron.ScheduledTask | null = null;
   private isRunning = false;
   private matchLineupService: MatchLineupService;
+  private client = theSportsAPI; // Phase 3A: Use singleton
 
   private static readonly CRON_TIMEZONE = 'Europe/Istanbul';
 
-  constructor(client: TheSportsClient) {
-    this.matchLineupService = new MatchLineupService(client);
+  constructor() {
+    this.matchLineupService = new MatchLineupService(this.client);
   }
 
   /**

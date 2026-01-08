@@ -1,3 +1,4 @@
+
 /**
  * Recent Sync Service
  * 
@@ -20,7 +21,7 @@ export class RecentSyncService {
   private matchSyncService: MatchSyncService;
 
   constructor(
-    private client: TheSportsClient,
+    private client: any,
     matchSyncService?: MatchSyncService
   ) {
     this.syncStateRepository = new SyncStateRepository();

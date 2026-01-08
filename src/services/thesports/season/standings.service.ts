@@ -1,3 +1,4 @@
+
 /**
  * Season Standings Service
  * 
@@ -13,7 +14,7 @@ import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { pool } from '../../../database/connection';
 
 export class SeasonStandingsService {
-    constructor(private client: TheSportsClient) { }
+    constructor(private client: any) { }
 
     /**
      * Get season standings - tries API first, falls back to DB

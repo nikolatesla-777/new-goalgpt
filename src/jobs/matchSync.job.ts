@@ -7,7 +7,7 @@
  */
 
 import cron from 'node-cron';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
+import { theSportsAPI } from '../core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { RecentSyncService } from '../services/thesports/match/recentSync.service';
 import { MatchSyncService } from '../services/thesports/match/matchSync.service';
 import { TeamDataService } from '../services/thesports/team/teamData.service';
@@ -51,15 +51,16 @@ export class MatchSyncWorker {
   private readonly SECOND_HALF_STATUS_IDS = [4];
   // FIRST_HALF matches need frequent checks for HALF_TIME transition (status 2 → 3)
   private readonly FIRST_HALF_STATUS_IDS = [2];
+  private client = theSportsAPI; // Phase 3A: Use singleton
 
-  constructor(client: TheSportsClient) {
+  constructor() {
     // Initialize MatchSyncService for RecentSyncService
-    const teamDataService = new TeamDataService(client);
-    const competitionService = new CompetitionService(client);
+    const teamDataService = new TeamDataService(this.client);
+    const competitionService = new CompetitionService(this.client);
     const matchSyncService = new MatchSyncService(teamDataService, competitionService);
 
-    this.recentSyncService = new RecentSyncService(client, matchSyncService);
-    this.matchDetailLiveService = new MatchDetailLiveService(client);
+    this.recentSyncService = new RecentSyncService(this.client, matchSyncService);
+    this.matchDetailLiveService = new MatchDetailLiveService(this.client);
     this.aiPredictionService = new AIPredictionService();
   }
 

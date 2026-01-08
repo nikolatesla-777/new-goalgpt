@@ -1,3 +1,4 @@
+
 /**
  * Player Statistics Service
  * 
@@ -65,7 +66,7 @@ interface SeasonStatsEntry {
 }
 
 export class PlayerStatsService {
-  private client: TheSportsClient;
+  private client: any;
 
   constructor(client?: TheSportsClient) {
     this.client = client || new TheSportsClient();
