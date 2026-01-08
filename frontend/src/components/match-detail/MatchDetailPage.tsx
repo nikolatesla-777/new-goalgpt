@@ -191,14 +191,19 @@ export function MatchDetailPage() {
                     // Fetch with timeout
                     let eventsData = await fetchWithTimeout(getMatchDetailLive(matchId), 5000);
                     let incidents = eventsData?.incidents || [];
+                    console.log('[EventsTab Debug] eventsData:', eventsData);
+                    console.log('[EventsTab Debug] incidents count:', incidents.length);
 
                     // If no incidents, try stats endpoint (faster fallback)
                     if (incidents.length === 0) {
+                        console.log('[EventsTab Debug] No incidents, trying stats endpoint...');
                         const statsData = await fetchWithTimeout(getMatchTeamStats(matchId), 3000);
                         incidents = statsData?.incidents || [];
+                        console.log('[EventsTab Debug] incidents from stats:', incidents.length);
                     }
 
                     result = { events: { incidents } };
+                    console.log('[EventsTab Debug] Final result:', result);
                     break;
             }
             // CRITICAL FIX: Only update data if we got a result

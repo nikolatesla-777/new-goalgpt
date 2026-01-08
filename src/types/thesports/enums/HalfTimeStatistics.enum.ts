@@ -51,6 +51,10 @@ export enum HalfTimeStatistics {
   FAST_BREAK_SHOT = 71,           // Fast break shot
   FAST_BREAK_GOAL = 72,           // Fast break goal
   LOST_THE_BALL = 78,             // Lost the ball
+  WIN_AERIAL_DUEL = 79,           // Win the aerial duel
+  LOSE_AERIAL_DUEL = 80,          // Lose the aerial duel
+  WIN_GROUND_DUEL = 81,           // Win the ground duel
+  LOSE_GROUND_DUEL = 82,          // Lose the ground duel
   SHOTS = 83                      // Shots
 }
 

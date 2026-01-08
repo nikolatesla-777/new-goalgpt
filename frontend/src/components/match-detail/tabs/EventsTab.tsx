@@ -15,6 +15,10 @@ export function EventsTab() {
   const events = tabData.events;
   const hasData = events !== null && events !== undefined;
 
+  console.log('[EventsTab Render] tabData:', tabData);
+  console.log('[EventsTab Render] events:', events);
+  console.log('[EventsTab Render] hasData:', hasData);
+
   if (!hasData) {
     return (
       <div className="text-center p-10 text-gray-600">
