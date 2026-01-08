@@ -295,10 +295,15 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
         // Events
         (async () => {
+          console.log('[MatchDetailContext] Fetching events for matchId:', matchId);
           const eventsData = await fetchWithTimeout(getMatchDetailLive(matchId), 5000);
-          return {
+          console.log('[MatchDetailContext] eventsData received:', eventsData);
+          console.log('[MatchDetailContext] incidents from eventsData:', eventsData?.incidents);
+          const result = {
             incidents: eventsData?.incidents ?? [],
           } as EventsData;
+          console.log('[MatchDetailContext] Returning events result:', result);
+          return result;
         })(),
       ]);
 
