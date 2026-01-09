@@ -205,14 +205,17 @@ export class MatchWatchdogWorker {
                 const matchTime = toSafeNum(match.match_time);
                 const firstHalfKickoff = toSafeNum(match.first_half_kickoff_ts);
 
-                // Calculate minimum time for match to be finished
-                // First half (45) + HT (15) + Second half (45) + margin (15) = 120 minutes
-                const minTimeForEnd = (firstHalfKickoff || matchTime || 0) + (120 * 60);
+                // CRITICAL FIX (2026-01-09): Reduced HALF_TIME threshold from 120 to 60 minutes
+                // Reason: HALF_TIME match without recent/list or detail_live data is anomaly
+                // 60 minutes is sufficient to determine match should have finished
+                // Normal match: 45 (first half) + 15 (HT) = 60 minutes minimum
+                // Previously 120 minutes was too conservative, causing 10+ matches to stay stuck in HALF_TIME
+                const minTimeForEnd = (firstHalfKickoff || matchTime || 0) + (60 * 60); // 60 minutes (was 120)
 
                 if (nowTs < minTimeForEnd) {
                   logger.warn(
                     `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list but match started ` +
-                    `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (<120 min). ` +
+                    `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (<60 min). ` +
                     `Skipping END transition. Will retry later.`
                   );
                   skippedCount++;
@@ -222,7 +225,7 @@ export class MatchWatchdogWorker {
                   // Match time is old enough, safe to transition to END
                   logger.info(
                     `[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list and match started ` +
-                    `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>120 min). Transitioning to END.`
+                    `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>60 min). Transitioning to END.`
                   );
 
                   const updateResult = await client.query(
@@ -956,19 +959,23 @@ export class MatchWatchdogWorker {
       return;
     }
 
-    logger.info('[Watchdog] Starting MatchWatchdogWorker for should-be-live matches');
+    logger.info('[Watchdog] Starting MatchWatchdogWorker for should-be-live and stale match detection');
     // Run immediately on start
     void this.tick();
-    // CRITICAL FIX: Run every 5 seconds to catch should-be-live matches faster (was 10 seconds)
-    // This reduces delay from match_time passing to status update (max 5s delay instead of 10s)
-    // More aggressive for critical "matches not starting" and status consistency issues
+
+    // CRITICAL FIX (2026-01-09): Run every 30 seconds (balanced approach)
+    // Reason: 5s was too aggressive (unnecessary API calls, 83% more frequent than needed)
+    //         60s (API docs) too conservative for catching anomalies
+    // 30s provides good balance: catches anomalies quickly without overwhelming API
+    // DataUpdate worker already handles real-time updates every 20s
     this.intervalId = setInterval(() => {
       void this.tick();
-    }, 5000); // 5 seconds (more aggressive)
+    }, 30000); // 30 seconds (balanced)
+
     logEvent('info', 'worker.started', {
       worker: 'MatchWatchdogWorker',
-      interval_sec: 5,
-      purpose: 'should_be_live_transitions',
+      interval_sec: 30,
+      purpose: 'should_be_live_and_stale_detection',
     });
   }
 
