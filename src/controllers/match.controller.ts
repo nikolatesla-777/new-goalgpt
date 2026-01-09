@@ -28,6 +28,7 @@ import { SeasonStandingsParams } from '../types/thesports/season/seasonStandings
 import { logger } from '../utils/logger';
 import { generateMinuteText } from '../utils/matchMinuteText';
 import { liveMatchCache } from '../services/thesports/match/liveMatchCache.service';
+import { getDiaryCache, setDiaryCache, getSmartTTL, getLiveMatchesCache, setLiveMatchesCache } from '../utils/matchCache';
 // SINGLETON: Use shared API client instead of creating new instances
 import { theSportsAPI } from '../core';
 
@@ -187,6 +188,21 @@ export const getMatchDiary = async (
       }
     }
 
+    // CACHE: Check cache first
+    const cachedData = getDiaryCache(dbDate, statusFilter);
+    if (cachedData) {
+      // Cache hit - add Cache-Control headers for browser caching
+      const ttl = getSmartTTL(dbDate);
+      reply.header('Cache-Control', `public, max-age=${ttl}, stale-while-revalidate=${ttl * 2}`);
+      reply.header('X-Cache', 'HIT');
+
+      reply.send({
+        success: true,
+        data: cachedData,
+      });
+      return;
+    }
+
     const normalizeDbMatch = (row: any) => {
       const externalId = row.external_id ?? row.match_id ?? row.id;
       const statusId = row.status_id ?? row.status ?? row.match_status ?? 1;
@@ -237,12 +253,23 @@ export const getMatchDiary = async (
 
     logger.info(`📊 [MatchDiary] Returning ${normalized.length} matches from database for ${dbDate} (DB-only mode, no API fallback)`);
 
+    // Prepare response data
+    const responseData = {
+      ...dbResult,
+      results: normalized,
+    };
+
+    // CACHE: Save to cache for future requests
+    setDiaryCache(dbDate, statusFilter, responseData);
+
+    // Add Cache-Control headers for browser caching
+    const ttl = getSmartTTL(dbDate);
+    reply.header('Cache-Control', `public, max-age=${ttl}, stale-while-revalidate=${ttl * 2}`);
+    reply.header('X-Cache', 'MISS');
+
     reply.send({
       success: true,
-      data: {
-        ...dbResult,
-        results: normalized,
-      },
+      data: responseData,
     });
   } catch (error: any) {
     reply.status(500).send({
@@ -800,6 +827,19 @@ export const getLiveMatches = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
+    // CACHE: Check cache first (30s TTL for live matches)
+    const cachedData = getLiveMatchesCache();
+    if (cachedData) {
+      reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+      reply.header('X-Cache', 'HIT');
+
+      reply.send({
+        success: true,
+        data: cachedData,
+      });
+      return;
+    }
+
     const normalizeDbMatch = (row: any) => {
       const externalId = row.external_id ?? row.match_id ?? row.id;
       const statusId = row.status_id ?? row.status ?? row.match_status ?? 1;
@@ -839,12 +879,22 @@ export const getLiveMatches = async (
     const dbResult = await matchDatabaseService.getLiveMatches();
     const normalized = dbResult.results.map(normalizeDbMatch);
 
+    // Prepare response data
+    const responseData = {
+      ...dbResult,
+      results: normalized,
+    };
+
+    // CACHE: Save to cache for future requests (30s TTL)
+    setLiveMatchesCache(responseData);
+
+    // Add Cache-Control headers for browser caching
+    reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    reply.header('X-Cache', 'MISS');
+
     reply.send({
       success: true,
-      data: {
-        ...dbResult,
-        results: normalized,
-      },
+      data: responseData,
     });
   } catch (error: any) {
     reply.status(500).send({

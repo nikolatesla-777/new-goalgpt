@@ -163,6 +163,24 @@ const start = async () => {
         unifiedPredictionService.processMatchEvent(event).catch(err => {
           logger.error('Error processing match event for predictions:', err);
         });
+
+        // CACHE INVALIDATION: Invalidate diary and live matches cache on score/state changes
+        // This ensures fresh data on next request after real-time events
+        if (event.type === 'GOAL' || event.type === 'SCORE_CHANGE' || event.type === 'MATCH_STATE_CHANGE') {
+          try {
+            const { invalidateDiaryCache, invalidateLiveMatchesCache } = require('./utils/matchCache');
+            const { getTodayInTurkey } = require('./utils/dateUtils');
+
+            // Invalidate today's diary cache (most common case)
+            const today = getTodayInTurkey();
+            invalidateDiaryCache(today);
+
+            // Invalidate live matches cache
+            invalidateLiveMatchesCache();
+          } catch (cacheErr: any) {
+            logger.warn('[Cache] Failed to invalidate cache:', cacheErr.message);
+          }
+        }
       });
 
       logger.info('✅ WebSocketService connected and event broadcasting enabled');
