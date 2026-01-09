@@ -741,7 +741,26 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
           })
         ) : (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-            {view === 'favorites' ? (
+            {loading ? (
+              // CRITICAL FIX: Show loading state instead of "No matches" while fetching
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  border: '3px solid #e5e7eb',
+                  borderTop: '3px solid #3b82f6',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }} />
+                <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Maçlar yükleniyor...</p>
+                <style>{`
+                  @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                  }
+                `}</style>
+              </div>
+            ) : view === 'favorites' ? (
               <>
                 <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>Henüz favori maçınız yok</p>
                 <p style={{ fontSize: '0.875rem' }}>
