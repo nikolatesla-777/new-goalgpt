@@ -594,6 +594,29 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
   }
 
   if (safeMatches.length === 0) {
+    // CRITICAL FIX: Show loading state instead of "No matches" while fetching
+    if (loading) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '3rem 0' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            border: '4px solid #e5e7eb',
+            borderTop: '4px solid #3b82f6',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <span style={{ marginLeft: '12px', color: '#4b5563' }}>Maçlar yükleniyor...</span>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      );
+    }
+
     return (
       <div style={{ padding: '1rem' }}>
         <div style={{
@@ -606,11 +629,9 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
           <span style={{ fontWeight: '600', color: '#1e40af', fontSize: '1rem' }}>
             TOTAL MATCHES IN DB: {safeMatches.length}
           </span>
-          {!loading && (
-            <span style={{ marginLeft: '12px', fontSize: '0.875rem', color: '#f59e0b' }}>
-              ⚠️ No matches found. Check API response.
-            </span>
-          )}
+          <span style={{ marginLeft: '12px', fontSize: '0.875rem', color: '#f59e0b' }}>
+            ⚠️ No matches found. Check API response.
+          </span>
         </div>
         <div style={{ textAlign: 'center', padding: '3rem 0' }}>
           <p style={{ color: '#6b7280', marginBottom: '12px' }}>Maç bulunamadı</p>
