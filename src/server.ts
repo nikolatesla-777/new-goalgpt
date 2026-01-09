@@ -211,6 +211,11 @@ const shutdown = async () => {
     if (matchMinuteWorker) matchMinuteWorker.stop();
     if (matchDataSyncWorker) matchDataSyncWorker.stop();
     if (matchWatchdogWorker) matchWatchdogWorker.stop();
+
+    // CRITICAL: Wait for in-flight operations to complete
+    // Workers stopped, but their reconcile queues/pending ops may still be running
+    logger.info('[Shutdown] Waiting 3s for in-flight operations to complete...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
     logger.info('[Shutdown] ✅ Workers stopped');
 
     // Step 3: Disconnect WebSocket
