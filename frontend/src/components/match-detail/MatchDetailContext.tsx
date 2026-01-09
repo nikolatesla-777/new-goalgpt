@@ -369,7 +369,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
         // If first element has 'incidents' property, it's likely a nested match object
         if (incidents[0] && typeof incidents[0] === 'object' && 'incidents' in incidents[0]) {
           // Find the object matching current matchId, or use the first one
-          const matchObj = incidents.find((m: any) =>
+          const matchObj = incidents.find((m: Record<string, unknown>) =>
             String(m.id) === String(matchId) || String(m.match_id) === String(matchId)
           ) || incidents[0];
 
@@ -387,7 +387,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 
       setTabData(prev => ({ ...prev, events: eventsData }));
       updateCacheTimestamp('events');
-      // console.log(`[MatchDetail] ✓ Events loaded (${eventsData.incidents.length} incidents)`);
+      console.log(`[MatchDetail] ✓ Events loaded (${eventsData.incidents.length} incidents)`);
     } catch (error) {
       console.error('[MatchDetail] Failed to fetch events:', error);
       setTabData(prev => ({ ...prev, events: { incidents: [] } }));

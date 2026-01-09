@@ -66,6 +66,8 @@ interface MatchEventsTimelineProps {
     homeTeamName?: string;
     awayTeamName?: string;
     matchStatusId?: number; // 1=NOT_STARTED, 2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5+=OVERTIME/END
+    homeScore?: number;
+    awayScore?: number;
 }
 
 // Get event styling and icon component
@@ -266,9 +268,10 @@ function getEventText(incident: Incident, label: string): string {
     }
 }
 
-export function MatchEventsTimeline({ incidents, matchStatusId }: MatchEventsTimelineProps) {
+export function MatchEventsTimeline({ incidents, matchStatusId, homeScore = 0, awayScore = 0 }: MatchEventsTimelineProps) {
     // Match has started if status_id >= 2
     const matchHasStarted = (matchStatusId ?? 0) >= 2;
+    const totalScore = (homeScore || 0) + (awayScore || 0);
 
     // Process and sort incidents
     const sortedIncidents = useMemo(() => {
@@ -288,20 +291,36 @@ export function MatchEventsTimeline({ incidents, matchStatusId }: MatchEventsTim
         return (
             <div className="text-center py-16 px-6 bg-white rounded-3xl border border-gray-100 shadow-sm">
                 {matchHasStarted ? (
-                    <div className="flex flex-col items-center gap-4">
-                        <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center animate-pulse">
-                            <SoccerBall size={48} weight="duotone" className="text-emerald-500" />
+                    totalScore > 0 ? (
+                        // Case: Match started, score exists, but NO incidents => Data Issue
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center">
+                                <Prohibit size={48} weight="duotone" className="text-amber-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-800">Olay Verilerine Erişilemiyor</h3>
+                                <p className="text-sm text-gray-500 mt-1 max-w-xs mx-auto">
+                                    Skor değişimi tespit edildi ({homeScore}-{awayScore}) ancak olay akışı yüklenemedi.
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-800">Maç Devam Ediyor</h3>
-                            <p className="text-sm text-gray-500 mt-1">Henüz önemli bir olay gerçekleşmedi.</p>
-                        </div>
+                    ) : (
+                        // Case: Match started, 0-0 => Genuine quiet match
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center animate-pulse">
+                                <SoccerBall size={48} weight="duotone" className="text-emerald-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-800">Maç Devam Ediyor</h3>
+                                <p className="text-sm text-gray-500 mt-1">Henüz önemli bir olay gerçekleşmedi.</p>
+                            </div>
 
-                        <div className="mt-6 px-6 py-2 bg-emerald-500 text-white rounded-full text-xs font-bold tracking-wider shadow-lg shadow-emerald-200 flex items-center gap-2">
-                            <PlayCircle size={16} weight="fill" />
-                            MAÇ BAŞLADI
+                            <div className="mt-6 px-6 py-2 bg-emerald-500 text-white rounded-full text-xs font-bold tracking-wider shadow-lg shadow-emerald-200 flex items-center gap-2">
+                                <PlayCircle size={16} weight="fill" />
+                                MAÇ BAŞLADI
+                            </div>
                         </div>
-                    </div>
+                    )
                 ) : (
                     <div className="flex flex-col items-center gap-4">
                         <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center">

@@ -43,6 +43,8 @@ export function EventsTab() {
         homeTeamName={match.home_team?.name}
         awayTeamName={match.away_team?.name}
         matchStatusId={matchStatusId}
+        homeScore={match.home_score}
+        awayScore={match.away_score}
       />
     </div>
   );
