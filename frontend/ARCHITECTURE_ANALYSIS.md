@@ -24,6 +24,11 @@ The current GoalGPT frontend suffers from inconsistent data states across differ
 - **`MatchDetailContext.tsx`**: Fetches specific match details.
   - *Issue:* If a goal happens while user is on the list view, and then clicks detail, they might see a flash of old data if the fetch isn't perfectly synced or cached.
 
+### C. Known Bugs & Backend Dependencies
+- **Missing Events Bug (2026-01-09):** The "Events" tab on match detail pages (e.g., `/match/23xmvkh6pl83qg8?tab=events`) is sometimes empty.
+  - **Diagnosis:** The backend service `MatchIncidentsService` incorrectly parses the TheSports API response. It treats the API response's `results` array (which contains match objects) as the incidents array itself.
+  - **Status:** Identified. Requires a backend fix in `src/services/thesports/match/matchIncidents.service.ts` to correctly extract the match object from `results` before accessing `incidents`. This cannot be fixed from the frontend alone.
+
 ## 3. Proposed Architecture: Single Source of Truth
 
 We will transition to a **Centralized Data Flow** pattern.
@@ -70,6 +75,7 @@ graph TD
 ### Phase 1: Cleanup (Done)
 - [x] Identify and remove unused Contexts (`UnifiedPredictionContext`).
 - [x] Document the current state.
+- [x] Diagnose the "Missing Events" bug.
 
 ### Phase 2: Type Hardening
 - [ ] Create a `types/` directory.

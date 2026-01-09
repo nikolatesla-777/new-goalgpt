@@ -361,8 +361,28 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const data = await response.json();
+      let incidents = data.data?.incidents || [];
+
+      // CRITICAL FIX: Backend might return nested match objects instead of incidents array
+      // Workaround for backend bug: Check if incidents array contains nested 'incidents'
+      if (Array.isArray(incidents) && incidents.length > 0) {
+        // If first element has 'incidents' property, it's likely a nested match object
+        if (incidents[0] && typeof incidents[0] === 'object' && 'incidents' in incidents[0]) {
+          // Find the object matching current matchId, or use the first one
+          const matchObj = incidents.find((m: any) =>
+            String(m.id) === String(matchId) || String(m.match_id) === String(matchId)
+          ) || incidents[0];
+
+          // Extract the actual incidents array
+          if (Array.isArray(matchObj.incidents)) {
+            // console.log(`[MatchDetail] Fixed nested incidents structure`);
+            incidents = matchObj.incidents;
+          }
+        }
+      }
+
       const eventsData: EventsData = {
-        incidents: data.data?.incidents || [],
+        incidents: incidents,
       };
 
       setTabData(prev => ({ ...prev, events: eventsData }));
