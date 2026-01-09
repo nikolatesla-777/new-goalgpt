@@ -300,15 +300,19 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
    * Fetch Stats tab data
    * API: GET /api/matches/:id/live-stats + /api/matches/:id/half-stats
    * Time: ~500ms
+   * @param silent - If true, don't show loading spinner (for background refresh)
    */
-  const fetchStatsData = useCallback(async () => {
+  const fetchStatsData = useCallback(async (silent = false) => {
     // Check cache
     if (tabData.stats !== null && isCacheValid('stats')) {
       // console.log(`[MatchDetail] ✓ Using cached stats`);
       return;
     }
 
-    setTabLoadingStates(prev => ({ ...prev, stats: true }));
+    // Only show loading if not silent (user-initiated)
+    if (!silent) {
+      setTabLoadingStates(prev => ({ ...prev, stats: true }));
+    }
     // console.log(`[MatchDetail] → Fetching stats for ${matchId}`);
 
     try {
@@ -619,6 +623,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   }, [fetchMatch]);
 
   // Debounced refresh for ACTIVE TAB ONLY (WebSocket optimization)
+  // CRITICAL: Silent refresh - no loading spinner to prevent page flicker
   const debouncedRefreshActiveTab = useCallback(() => {
     if (!activeTab) {
       // console.log('[MatchDetail] No active tab, skipping refresh');
@@ -629,16 +634,33 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
       clearTimeout(debounceTimerRef.current);
     }
 
-    debounceTimerRef.current = setTimeout(() => {
+    debounceTimerRef.current = setTimeout(async () => {
       // console.log(`[MatchDetail] WebSocket refresh for active tab: ${activeTab}`);
 
       // Invalidate cache for active tab
       invalidateCache(activeTab);
 
-      // Refetch active tab
-      fetchTabData(activeTab);
+      // CRITICAL FIX: Silent refresh (don't show loading spinner)
+      // This prevents the white screen flicker that users see
+      // We update data in background without disturbing the UI
+      try {
+        switch (activeTab) {
+          case 'stats':
+            await fetchStatsData(true); // silent=true
+            break;
+          case 'events':
+            // Events tab - just invalidate cache, will refetch on next render
+            break;
+          case 'trend':
+            // Trend tab - invalidate only
+            break;
+          // Other tabs don't need real-time refresh
+        }
+      } catch (err) {
+        // Silent failure - don't disturb user
+      }
     }, 500);
-  }, [activeTab, invalidateCache, fetchTabData]);
+  }, [activeTab, invalidateCache, fetchStatsData]);
 
   // ============================================================================
   // WEBSOCKET INTEGRATION
