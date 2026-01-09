@@ -17,7 +17,8 @@ module.exports = {
     },
     min_uptime: '10s',
     max_restarts: 10,
-    restart_delay: 4000
+    restart_delay: 8000,  // Increased from 4s to 8s for proper port cleanup
+    kill_timeout: 15000  // Allow 15s for graceful shutdown before SIGKILL
   }]
 };
 

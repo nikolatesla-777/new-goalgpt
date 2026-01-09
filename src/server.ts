@@ -181,24 +181,80 @@ const start = async () => {
 const shutdown = async () => {
   logger.info('Shutting down gracefully...');
 
-  if (teamDataSyncWorker) teamDataSyncWorker.stop();
-  if (teamLogoSyncWorker) teamLogoSyncWorker.stop();
-  if (matchSyncWorker) matchSyncWorker.stop();
-  if (dailyMatchSyncWorker) dailyMatchSyncWorker.stop();
-  if (lineupRefreshJob) lineupRefreshJob.stop();
-  if (postMatchProcessorJob) postMatchProcessorJob.stop();
-  if (dataUpdateWorker) dataUpdateWorker.stop();
-  if (matchMinuteWorker) matchMinuteWorker.stop();
-  if (matchDataSyncWorker) matchDataSyncWorker.stop();
+  // CRITICAL FIX: Proper shutdown sequence to prevent port conflicts and pool errors
+  // 1. Stop accepting new HTTP requests first (close Fastify server)
+  // 2. Stop workers (they may have pending database operations)
+  // 3. Disconnect WebSocket
+  // 4. Close database pool LAST (after all operations complete)
+  // 5. Use timeout to force exit if graceful shutdown hangs
 
-  if (websocketService) await websocketService.disconnect();
+  const shutdownTimeout = setTimeout(() => {
+    logger.error('Graceful shutdown timeout (10s) - forcing exit');
+    process.exit(1);
+  }, 10000); // 10 second timeout
 
-  await pool.end();
-  await fastify.close();
-  process.exit(0);
+  try {
+    // Step 1: Close Fastify (stop accepting new requests, release port immediately)
+    logger.info('[Shutdown] Closing Fastify server...');
+    await fastify.close();
+    logger.info('[Shutdown] ✅ Fastify closed');
+
+    // Step 2: Stop all workers (allow pending operations to complete)
+    logger.info('[Shutdown] Stopping workers...');
+    if (teamDataSyncWorker) teamDataSyncWorker.stop();
+    if (teamLogoSyncWorker) teamLogoSyncWorker.stop();
+    if (matchSyncWorker) matchSyncWorker.stop();
+    if (dailyMatchSyncWorker) dailyMatchSyncWorker.stop();
+    if (lineupRefreshJob) lineupRefreshJob.stop();
+    if (postMatchProcessorJob) postMatchProcessorJob.stop();
+    if (dataUpdateWorker) dataUpdateWorker.stop();
+    if (matchMinuteWorker) matchMinuteWorker.stop();
+    if (matchDataSyncWorker) matchDataSyncWorker.stop();
+    if (matchWatchdogWorker) matchWatchdogWorker.stop();
+    logger.info('[Shutdown] ✅ Workers stopped');
+
+    // Step 3: Disconnect WebSocket
+    logger.info('[Shutdown] Disconnecting WebSocket...');
+    if (websocketService) await websocketService.disconnect();
+    logger.info('[Shutdown] ✅ WebSocket disconnected');
+
+    // Step 4: Close database pool LAST (after all database operations complete)
+    logger.info('[Shutdown] Closing database pool...');
+    await pool.end();
+    logger.info('[Shutdown] ✅ Database pool closed');
+
+    clearTimeout(shutdownTimeout);
+    logger.info('[Shutdown] ✅ Graceful shutdown complete');
+    process.exit(0);
+  } catch (err: any) {
+    clearTimeout(shutdownTimeout);
+    logger.error('[Shutdown] Error during graceful shutdown:', err.message);
+    process.exit(1);
+  }
 };
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+// CRITICAL FIX: Handle uncaught exceptions and unhandled rejections
+// Log the error but DO NOT exit immediately - allow graceful shutdown
+process.on('uncaughtException', (err: Error) => {
+  logger.error('[CRITICAL] Uncaught Exception:', {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+  });
+  // Trigger graceful shutdown
+  shutdown().catch(() => process.exit(1));
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  logger.error('[CRITICAL] Unhandled Promise Rejection:', {
+    reason: reason?.message || reason,
+    stack: reason?.stack,
+    promise,
+  });
+  // DO NOT exit - log and continue (most unhandled rejections are not fatal)
+});
 
 start();
