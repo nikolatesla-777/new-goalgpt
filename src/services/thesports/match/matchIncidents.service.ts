@@ -30,13 +30,14 @@ export class MatchIncidentsService {
       // STEP 1: DATABASE FIRST (FAST - ~50ms)
       // ============================================================
 
+      // CRITICAL FIX: Query by external_id (TheSports ID), not UUID id
       const dbResult = await pool.query(
         `SELECT
            incidents,
            updated_at,
            status_id
          FROM ts_matches
-         WHERE id = $1`,
+         WHERE external_id = $1`,
         [matchId]
       );
 
