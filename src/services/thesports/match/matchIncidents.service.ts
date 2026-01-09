@@ -47,9 +47,9 @@ export class MatchIncidentsService {
         try {
           const apiData = await theSportsAPI.get<any>('/match/detail_live', { match_id: matchId });
 
-          // Extract incidents (can be in different properties)
-          const result = apiData?.results?.[0] || apiData?.result;
-          const incidents = result?.incidents || result?.events || result?.match_incidents || [];
+          // CRITICAL FIX: results IS the incidents array (not results[0].incidents)
+          // TheSports API returns: { "results": [{ "type": 1, "time": 5, ... }, ...] }
+          const incidents = Array.isArray(apiData?.results) ? apiData.results : [];
 
           if (incidents.length > 0) {
             logger.info(`[MatchIncidents] ✓ Fetched ${incidents.length} incidents from API for ${matchId}`);
@@ -98,9 +98,9 @@ export class MatchIncidentsService {
       try {
         const apiData = await theSportsAPI.get<any>('/match/detail_live', { match_id: matchId });
 
-        // Extract incidents (can be in different properties)
-        const result = apiData?.results?.[0] || apiData?.result;
-        const freshIncidents = result?.incidents || result?.events || result?.match_incidents || [];
+        // CRITICAL FIX: results IS the incidents array (not results[0].incidents)
+        // TheSports API returns: { "results": [{ "type": 1, "time": 5, ... }, ...] }
+        const freshIncidents = Array.isArray(apiData?.results) ? apiData.results : [];
 
         if (freshIncidents.length > 0) {
           logger.info(`[MatchIncidents] ✓ Fetched ${freshIncidents.length} fresh incidents from API for ${matchId}`);
