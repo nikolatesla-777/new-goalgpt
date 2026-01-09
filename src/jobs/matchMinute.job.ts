@@ -44,7 +44,7 @@ export class MatchMinuteWorker {
       const client = await pool.connect();
       try {
         const query = `
-          SELECT 
+          SELECT
             external_id,
             status_id,
             first_half_kickoff_ts,
@@ -52,7 +52,9 @@ export class MatchMinuteWorker {
             overtime_kickoff_ts,
             live_kickoff_time,
             match_time,
-            minute
+            minute,
+            provider_update_time,
+            last_event_ts
           FROM ts_matches
           WHERE status_id IN (2, 3, 4, 5, 7)
           ORDER BY match_time DESC
@@ -69,10 +71,31 @@ export class MatchMinuteWorker {
 
         let updatedCount = 0;
         let skippedCount = 0;
+        let skippedRecentlyUpdated = 0;
 
         for (const match of matches) {
           const matchId = match.external_id;
           const statusId = match.status_id;
+
+          // OPTIMIZATION: Skip minute calculation if DataUpdate recently updated this match
+          // DataUpdate worker (20s interval) fetches fresh minute from API
+          // If match was updated within last 25 seconds, API data is fresh enough
+          // This prevents duplicate calculations and reduces CPU load
+          const providerUpdateTime = match.provider_update_time ? Number(match.provider_update_time) : null;
+          const lastEventTs = match.last_event_ts ? Number(match.last_event_ts) : null;
+
+          // Use the most recent timestamp (provider_update_time or last_event_ts)
+          const lastApiUpdate = providerUpdateTime || lastEventTs;
+
+          if (lastApiUpdate && (nowTs - lastApiUpdate) < 25) {
+            const secondsAgo = nowTs - lastApiUpdate;
+            logger.debug(
+              `[MinuteEngine] skipped match_id=${matchId} reason=recently_updated_by_api (${secondsAgo}s ago) - using API minute`
+            );
+            skippedRecentlyUpdated++;
+            skippedCount++;
+            continue;
+          }
 
           // FALLBACK LOGIC: Use first_half_kickoff_ts, else live_kickoff_time, else match_time
           const firstHalfKickoffTs = match.first_half_kickoff_ts
@@ -121,9 +144,10 @@ export class MatchMinuteWorker {
         logEvent('debug', 'minute.tick', {
           processed_count: matches.length,
           updated_count: updatedCount,
+          skipped_recently_updated: skippedRecentlyUpdated,
         });
         logger.info(
-          `[MinuteEngine] tick: processed ${matches.length} matches, updated ${updatedCount}, skipped ${skippedCount} (${Date.now() - startedAt}ms)`
+          `[MinuteEngine] tick: processed ${matches.length} matches, updated ${updatedCount}, skipped ${skippedCount} (recently_updated: ${skippedRecentlyUpdated}) (${Date.now() - startedAt}ms)`
         );
         logger.info(`[MinuteEngine] NOTE: does NOT update updated_at; only minute + last_minute_update_ts`);
       } finally {

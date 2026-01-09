@@ -296,44 +296,58 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
               // Phase 6: Optimistic Update - Apply instantly if available
               if (message.optimistic && message.matchId) {
                 setAllMatches(prevMatches => {
-                  return prevMatches.map(match => {
-                    if (match.id === message.matchId) {
-                      // Apply optimistic updates instantly
-                      const updatedMatch = { ...match };
+                  // Find match index first
+                  const matchIndex = prevMatches.findIndex(m => m.id === message.matchId);
+                  if (matchIndex === -1) return prevMatches; // Match not found, don't update
 
-                      if (message.optimistic.homeScore !== undefined) {
-                        (updatedMatch as any).home_score = message.optimistic.homeScore;
-                      }
-                      if (message.optimistic.awayScore !== undefined) {
-                        (updatedMatch as any).away_score = message.optimistic.awayScore;
-                      }
-                      if (message.optimistic.statusId !== undefined) {
-                        (updatedMatch as any).status_id = message.optimistic.statusId;
-                        (updatedMatch as any).status = message.optimistic.statusId;
-                      }
-                      if (message.optimistic.minute !== undefined) {
-                        (updatedMatch as any).minute = message.optimistic.minute;
-                      }
-                      if (message.optimistic.minuteText !== undefined) {
-                        (updatedMatch as any).minute_text = message.optimistic.minuteText;
-                      }
+                  const match = prevMatches[matchIndex];
 
-                      return updatedMatch;
-                    }
-                    return match;
-                  });
+                  // Check if any value actually changed (avoid unnecessary updates)
+                  let hasChanges = false;
+                  const updatedMatch = { ...match };
+
+                  if (message.optimistic.homeScore !== undefined && (match as any).home_score !== message.optimistic.homeScore) {
+                    (updatedMatch as any).home_score = message.optimistic.homeScore;
+                    hasChanges = true;
+                  }
+                  if (message.optimistic.awayScore !== undefined && (match as any).away_score !== message.optimistic.awayScore) {
+                    (updatedMatch as any).away_score = message.optimistic.awayScore;
+                    hasChanges = true;
+                  }
+                  if (message.optimistic.statusId !== undefined && (match as any).status_id !== message.optimistic.statusId) {
+                    (updatedMatch as any).status_id = message.optimistic.statusId;
+                    (updatedMatch as any).status = message.optimistic.statusId;
+                    hasChanges = true;
+                  }
+                  if (message.optimistic.minute !== undefined && (match as any).minute !== message.optimistic.minute) {
+                    (updatedMatch as any).minute = message.optimistic.minute;
+                    hasChanges = true;
+                  }
+                  if (message.optimistic.minuteText !== undefined && (match as any).minute_text !== message.optimistic.minuteText) {
+                    (updatedMatch as any).minute_text = message.optimistic.minuteText;
+                    hasChanges = true;
+                  }
+
+                  // Only update if something actually changed
+                  if (!hasChanges) return prevMatches;
+
+                  // Create new array only with updated match
+                  const newMatches = [...prevMatches];
+                  newMatches[matchIndex] = updatedMatch;
+                  return newMatches;
                 });
                 setLastUpdate(new Date());
               }
 
-              // Debounced full refresh for eventual consistency (2 seconds)
+              // Debounced full refresh for eventual consistency (5 seconds)
               // Smart cache ensures this is fast (event-driven invalidation already cleared stale data)
+              // Increased to 5s to reduce unnecessary API calls since optimistic updates handle real-time feedback
               if (fetchTimerRef.current) {
                 clearTimeout(fetchTimerRef.current);
               }
               fetchTimerRef.current = setTimeout(() => {
                 fetchMatches();
-              }, 2000);  // Phase 6: Increased to 2s since optimistic update handles instant feedback
+              }, 5000);
             }
           } catch (e) {
             // Ignore parse errors
@@ -369,16 +383,27 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
     // Initial fetch
     refresh();
 
-    // Polling every 15 seconds
-    const pollInterval = setInterval(() => {
-      fetchMatches();
-    }, 15000);
+    // OPTIMIZATION: Polling only when WebSocket is disconnected
+    // When WebSocket is active, we get real-time updates via onmessage
+    // This prevents duplicate API calls and reduces server load
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    if (!isSocketConnected) {
+      pollInterval = setInterval(() => {
+        fetchMatches();
+      }, 15000);
+      console.log('[LivescoreContext] ⏱️ Polling ENABLED (WebSocket disconnected) - 15s interval');
+    } else {
+      console.log('[LivescoreContext] ✅ Polling DISABLED (WebSocket connected) - using real-time updates');
+    }
 
     return () => {
       mountedRef.current = false;
-      clearInterval(pollInterval);
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
     };
-  }, [selectedDate, refresh, fetchMatches]);
+  }, [selectedDate, refresh, fetchMatches, isSocketConnected]);
 
   // ============================================================================
   // CONTEXT VALUE
