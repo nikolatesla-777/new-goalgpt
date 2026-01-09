@@ -44,6 +44,8 @@ import { PostMatchProcessorJob } from './jobs/postMatchProcessor.job';
 import { DataUpdateWorker } from './jobs/dataUpdate.job';
 import { MatchMinuteWorker } from './jobs/matchMinute.job';
 import { MatchDataSyncWorker } from './jobs/matchDataSync.job';
+import { CompetitionSyncWorker } from './jobs/competitionSync.job';
+import { PlayerSyncWorker } from './jobs/playerSync.job';
 
 dotenv.config();
 
@@ -84,6 +86,8 @@ let dataUpdateWorker: DataUpdateWorker | null = null;
 let matchMinuteWorker: MatchMinuteWorker | null = null;
 let matchWatchdogWorker: MatchWatchdogWorker | null = null;
 let matchDataSyncWorker: MatchDataSyncWorker | null = null;
+let competitionSyncWorker: CompetitionSyncWorker | null = null;
+let playerSyncWorker: PlayerSyncWorker | null = null;
 let websocketService: WebSocketService | null = null;
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -131,6 +135,16 @@ const start = async () => {
     const matchRecentService = new MatchRecentService();
     matchWatchdogWorker = new MatchWatchdogWorker(matchDetailLiveService, matchRecentService);
     matchWatchdogWorker.start();
+
+    // Competition Sync Worker (syncs competition/league data)
+    competitionSyncWorker = new CompetitionSyncWorker();
+    competitionSyncWorker.start();
+    logger.info('✅ Competition Sync Worker started');
+
+    // Player Sync Worker (syncs player data)
+    playerSyncWorker = new PlayerSyncWorker();
+    playerSyncWorker.start();
+    logger.info('✅ Player Sync Worker started');
 
     // WebSocket Service
     websocketService = new WebSocketService();
@@ -229,6 +243,8 @@ const shutdown = async () => {
     if (matchMinuteWorker) matchMinuteWorker.stop();
     if (matchDataSyncWorker) matchDataSyncWorker.stop();
     if (matchWatchdogWorker) matchWatchdogWorker.stop();
+    if (competitionSyncWorker) competitionSyncWorker.stop();
+    if (playerSyncWorker) playerSyncWorker.stop();
 
     // CRITICAL: Wait for in-flight operations to complete
     // Workers stopped, but their reconcile queues/pending ops may still be running
