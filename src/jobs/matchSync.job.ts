@@ -226,14 +226,16 @@ export class MatchSyncWorker {
     this.predictionResultInterval = setInterval(async () => {
       try {
         // Find matches with pending predictions that have finished or are at halftime
+        // CRITICAL FIX: Use home_scores[1] and away_scores[1] for HT scores (array index 1)
+        // home_scores[0] = current/final, home_scores[1] = HT score
         const pendingResult = await pool.query(`
           SELECT DISTINCT
             p.match_id,
             m.status_id,
             m.home_score_display,
             m.away_score_display,
-            m.ht_home_score,
-            m.ht_away_score
+            (m.home_scores->1)::INTEGER as ht_home_score,
+            (m.away_scores->1)::INTEGER as ht_away_score
           FROM ai_predictions p
           JOIN ts_matches m ON p.match_id = m.external_id
           WHERE p.result = 'pending'
