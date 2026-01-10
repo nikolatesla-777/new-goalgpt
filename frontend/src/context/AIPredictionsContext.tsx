@@ -372,7 +372,7 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
         break;
 
       case 'MATCH_STATE_CHANGE':
-        // Update match status
+        // Update match status in predictions array
         setPredictions(prev => prev.map(p => {
           if (p.match_id === message.matchId) {
             return {
@@ -383,6 +383,20 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
           }
           return p;
         }));
+
+        // CRITICAL FIX: Also update predictionsByMatch Map (was missing!)
+        setPredictionsByMatch(prev => {
+          const next = new Map(prev);
+          const pred = next.get(message.matchId);
+          if (pred) {
+            next.set(message.matchId, {
+              ...pred,
+              live_match_status: message.optimistic?.statusId ?? message.newStatus ?? pred.live_match_status,
+              live_match_minute: message.optimistic?.minute ?? pred.live_match_minute,
+            });
+          }
+          return next;
+        });
 
         // If match ended, refresh after delay for final results
         if (message.newStatus === 8 || message.optimistic?.statusId === 8) {
