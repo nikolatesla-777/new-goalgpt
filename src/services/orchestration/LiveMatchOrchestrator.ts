@@ -407,15 +407,18 @@ export class LiveMatchOrchestrator extends EventEmitter {
       }
 
       // Rule 3: Timestamp check (optimistic locking)
+      // CRITICAL FIX: Only reject if BOTH timestamp is older AND value is the same
+      // If value changed, we should accept the update regardless of timestamp
+      // TheSports API sometimes returns older timestamps for newer data
       if (currentTimestamp && update.timestamp) {
-        if (update.timestamp <= currentTimestamp) {
+        if (update.timestamp <= currentTimestamp && currentValue === update.value) {
           logEvent('debug', 'orchestrator.stale_timestamp', {
             matchId: currentState.external_id,
             field: fieldName,
             currentTimestamp,
             incomingTimestamp: update.timestamp,
           });
-          continue; // Stale - skip
+          continue; // Stale AND same value - skip
         }
       }
 
