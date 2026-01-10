@@ -43,7 +43,6 @@ export function AITab({ match }: AITabProps) {
 
   // PHASE 6: Fallback API for old matches not in LivescoreContext
   const [fallbackPrediction, setFallbackPrediction] = useState<AIPredictionOnMatch | null>(null);
-  const [fallbackLoading, setFallbackLoading] = useState(false);
 
   useEffect(() => {
     // If match is in LivescoreContext, no need for fallback
@@ -54,7 +53,6 @@ export function AITab({ match }: AITabProps) {
 
     // If match is not in context, fetch from API
     if (!livescoreMatch && match.id) {
-      setFallbackLoading(true);
       fetch(`/api/predictions/match/${match.id}`)
         .then(res => res.json())
         .then(data => {
@@ -62,8 +60,7 @@ export function AITab({ match }: AITabProps) {
             setFallbackPrediction(data.predictions[0]);
           }
         })
-        .catch(err => console.error('[AITab] Fallback API error:', err))
-        .finally(() => setFallbackLoading(false));
+        .catch(err => console.error('[AITab] Fallback API error:', err));
     }
   }, [match.id, livescoreMatch]);
 

@@ -11,7 +11,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { getUnifiedMatches, getMatchedPredictions } from '../../api/matches';
+import { getUnifiedMatches } from '../../api/matches';
 import type { Match } from '../../api/matches';
 import { getTodayInTurkey } from '../../utils/dateUtils';
 
