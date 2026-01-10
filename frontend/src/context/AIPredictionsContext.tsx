@@ -484,9 +484,9 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
     fetchPredictions();
   }, [fetchPredictions]);
 
-  // Polling every 30 seconds
+  // Polling every 15 seconds (same as livescore for consistent minute updates)
   useEffect(() => {
-    const interval = setInterval(fetchPredictions, 30000);
+    const interval = setInterval(fetchPredictions, 15000);
     return () => clearInterval(interval);
   }, [fetchPredictions]);
 
