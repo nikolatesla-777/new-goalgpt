@@ -110,7 +110,7 @@ export class LiveMatchOrchestrator extends EventEmitter {
 
   private constructor() {
     super();
-    this.writeQueue = MatchWriteQueue.getInstance();
+    this.writeQueue = new MatchWriteQueue();
     logger.info('[Orchestrator] LiveMatchOrchestrator initialized');
   }
 
