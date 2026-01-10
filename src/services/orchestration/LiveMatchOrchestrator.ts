@@ -76,6 +76,15 @@ interface FieldRules {
 export class LiveMatchOrchestrator extends EventEmitter {
   private static instance: LiveMatchOrchestrator | null = null;
 
+  // Fields that have _source and _timestamp metadata columns in database
+  // (from add-field-metadata.ts migration)
+  private readonly fieldsWithMetadata = new Set([
+    'home_score_display',
+    'away_score_display',
+    'minute',
+    'status_id',
+  ]);
+
   // Field ownership rules
   private readonly fieldRules: Record<string, FieldRules> = {
     // Score fields: MQTT preferred (real-time), API fallback
@@ -294,10 +303,10 @@ export class LiveMatchOrchestrator extends EventEmitter {
           competition_id,
           season_id,
           last_minute_update_ts,
-          home_score_source,
-          home_score_timestamp,
-          away_score_source,
-          away_score_timestamp,
+          home_score_display_source,
+          home_score_display_timestamp,
+          away_score_display_source,
+          away_score_display_timestamp,
           minute_source,
           minute_timestamp,
           status_id_source,
@@ -418,8 +427,12 @@ export class LiveMatchOrchestrator extends EventEmitter {
 
       // Accept update
       resolved[fieldName] = update.value;
-      resolved[`${fieldName}_source`] = update.source;
-      resolved[`${fieldName}_timestamp`] = update.timestamp;
+
+      // Only add metadata columns if they exist in database
+      if (this.fieldsWithMetadata.has(fieldName)) {
+        resolved[`${fieldName}_source`] = update.source;
+        resolved[`${fieldName}_timestamp`] = update.timestamp;
+      }
     }
 
     return resolved;
