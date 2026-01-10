@@ -105,13 +105,13 @@ function App() {
             />
 
             {/* Redirects for old bookmarked URLs (backwards compatibility) */}
-            <Route path="/match/:matchId/stats" element={<Navigate to="../?tab=stats" replace />} />
-            <Route path="/match/:matchId/events" element={<Navigate to="../?tab=events" replace />} />
-            <Route path="/match/:matchId/h2h" element={<Navigate to="../?tab=h2h" replace />} />
-            <Route path="/match/:matchId/standings" element={<Navigate to="../?tab=standings" replace />} />
-            <Route path="/match/:matchId/lineup" element={<Navigate to="../?tab=lineup" replace />} />
-            <Route path="/match/:matchId/trend" element={<Navigate to="../?tab=trend" replace />} />
-            <Route path="/match/:matchId/ai" element={<Navigate to="../?tab=ai" replace />} />
+            <Route path="/match/:matchId/stats" element={<Navigate to="?tab=stats" replace />} />
+            <Route path="/match/:matchId/events" element={<Navigate to="?tab=events" replace />} />
+            <Route path="/match/:matchId/h2h" element={<Navigate to="?tab=h2h" replace />} />
+            <Route path="/match/:matchId/standings" element={<Navigate to="?tab=standings" replace />} />
+            <Route path="/match/:matchId/lineup" element={<Navigate to="?tab=lineup" replace />} />
+            <Route path="/match/:matchId/trend" element={<Navigate to="?tab=trend" replace />} />
+            <Route path="/match/:matchId/ai" element={<Navigate to="?tab=ai" replace />} />
 
             {/* Team Detail with Nested Routes for Tabs */}
             <Route path="/team/:teamId" element={
