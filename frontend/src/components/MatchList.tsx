@@ -33,6 +33,15 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
   // Collapsed state for league sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
+  // PERFORMANCE OPTIMIZATION: Lazy loading - only show first N leagues initially
+  const [displayedLeagueCount, setDisplayedLeagueCount] = useState(20); // Show 20 leagues initially
+  const LEAGUES_PER_PAGE = 20;
+
+  // Reset displayed count when date or matches change
+  useEffect(() => {
+    setDisplayedLeagueCount(20);
+  }, [date, view]);
+
   // CRITICAL FIX: Ensure matches is always an array (never null/undefined)
   // Priority: 1) favorites view → favoriteMatches, 2) prefetchedMatches, 3) internal matches state
   const safeMatches = view === 'favorites' && favoriteMatches
@@ -739,27 +748,75 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
 
       <div>
         {matchesByCountryAndCompetition.length > 0 ? (
-          matchesByCountryAndCompetition.map(([sectionKey, groupData]) => {
-            // CRITICAL FIX: Validate matches before passing to LeagueSection
-            if (!Array.isArray(groupData.matches)) {
-              return null;
-            }
+          <>
+            {/* PERFORMANCE: Only render first N leagues */}
+            {matchesByCountryAndCompetition.slice(0, displayedLeagueCount).map(([sectionKey, groupData]) => {
+              // CRITICAL FIX: Validate matches before passing to LeagueSection
+              if (!Array.isArray(groupData.matches)) {
+                return null;
+              }
 
-            const isCollapsed = collapsedSections.has(sectionKey);
+              const isCollapsed = collapsedSections.has(sectionKey);
 
-            return (
-              <LeagueSection
-                key={sectionKey || 'unknown'}
-                competition={groupData.competition}
-                matches={groupData.matches}
-                countryName={(groupData as any).countryName || null}
-                isTimeGroup={(groupData as any).isTimeGroup || false}
-                timeSlot={(groupData as any).timeSlot}
-                isCollapsed={isCollapsed}
-                onToggleCollapse={() => toggleSection(sectionKey)}
-              />
-            );
-          })
+              return (
+                <LeagueSection
+                  key={sectionKey || 'unknown'}
+                  competition={groupData.competition}
+                  matches={groupData.matches}
+                  countryName={(groupData as any).countryName || null}
+                  isTimeGroup={(groupData as any).isTimeGroup || false}
+                  timeSlot={(groupData as any).timeSlot}
+                  isCollapsed={isCollapsed}
+                  onToggleCollapse={() => toggleSection(sectionKey)}
+                />
+              );
+            })}
+
+            {/* PERFORMANCE: Load More button */}
+            {displayedLeagueCount < matchesByCountryAndCompetition.length && (
+              <div style={{
+                textAlign: 'center',
+                padding: '2rem 1rem',
+                borderTop: '2px dashed #e5e7eb',
+                marginTop: '1rem',
+              }}>
+                <button
+                  onClick={() => setDisplayedLeagueCount(prev => prev + LEAGUES_PER_PAGE)}
+                  style={{
+                    padding: '12px 32px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 6px rgba(59, 130, 246, 0.3)',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#2563eb';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 12px rgba(59, 130, 246, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#3b82f6';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 6px rgba(59, 130, 246, 0.3)';
+                  }}
+                >
+                  Daha Fazla Yükle ({displayedLeagueCount}/{matchesByCountryAndCompetition.length} lig)
+                </button>
+                <div style={{
+                  marginTop: '12px',
+                  fontSize: '0.875rem',
+                  color: '#6b7280',
+                }}>
+                  {matchesByCountryAndCompetition.length - displayedLeagueCount} lig daha var
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
             {loading ? (
