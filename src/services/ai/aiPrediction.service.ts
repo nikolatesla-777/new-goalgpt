@@ -720,28 +720,28 @@ export class AIPredictionService {
             // - Uses prediction (unified field) and prediction_threshold (numeric)
             // - Sets result = 'pending' for settlement service
             // - Sets match_id directly if matched (no junction table!)
+            // NOTE: bot_group_id and bot_name columns were removed - only canonical_bot_name exists
             const insertQuery = `
                 INSERT INTO ai_predictions (
-                    external_id, bot_group_id, bot_name, canonical_bot_name,
+                    external_id, canonical_bot_name,
                     league_name, home_team_name, away_team_name,
                     score_at_prediction, minute_at_prediction,
                     prediction, prediction_threshold,
                     raw_payload, processed, result, source
-                ) VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, 'pending', 'telegram')
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, 'pending', 'telegram')
                 RETURNING id
             `;
 
             const insertResult = await client.query(insertQuery, [
                 parsed.externalId,
-                botGroup.botGroupId,
-                botGroup.botDisplayName,
+                botGroup.botDisplayName,  // canonical_bot_name
                 parsed.leagueName,
                 parsed.homeTeamName,
                 parsed.awayTeamName,
                 parsed.scoreAtPrediction,
                 parsed.minuteAtPrediction,
-                generatedDetails.prediction,         // NEW: Unified "MS 0.5 ÜST"
-                generatedDetails.predictionThreshold, // NEW: Numeric 0.5, 1.5, 2.5
+                generatedDetails.prediction,         // Unified "MS 0.5 ÜST"
+                generatedDetails.predictionThreshold, // Numeric 0.5, 1.5, 2.5
                 parsed.rawPayload
             ]);
 
