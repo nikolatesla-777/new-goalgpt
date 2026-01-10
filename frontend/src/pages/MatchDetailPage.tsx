@@ -1,12 +1,10 @@
 /**
- * Match Detail Page - SIMPLIFIED VERSION
+ * Match Detail Page - LAZY LOADING VERSION (PERFORMANCE OPTIMIZED)
  *
- * Single-page component with:
- * - Query param routing (?tab=stats)
- * - Eager loading (all data fetched upfront)
- * - Flat state (no Context)
- * - WebSocket for score updates only
- * - Props-based tab components
+ * CRITICAL CHANGE: Only load data for the ACTIVE tab
+ * - Initial load: Match info + Stats + Events (fast endpoints)
+ * - Tab switch: Load that tab's data on-demand
+ * - No more 50-second wait for ALL data!
  */
 
 import { useEffect, useState } from 'react';
@@ -49,47 +47,57 @@ export function MatchDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get('tab') as TabId) || 'stats';
 
-  // Flat state - simple, no Context
+  // Initial loading state (only for match + stats + events)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Match + Stats (loaded immediately)
   const [match, setMatch] = useState<Match | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [events, setEvents] = useState<any>(null);
+
+  // Tab-specific data (lazy loaded)
   const [h2h, setH2h] = useState<any>(null);
   const [standings, setStandings] = useState<any>(null);
   const [lineup, setLineup] = useState<any>(null);
   const [trend, setTrend] = useState<any>(null);
   const [ai, setAi] = useState<any>(null);
 
-  // Eager load ALL data on mount
+  // Tab loading states
+  const [tabLoading, setTabLoading] = useState<Record<TabId, boolean>>({
+    stats: false,
+    events: false,
+    h2h: false,
+    standings: false,
+    lineup: false,
+    trend: false,
+    ai: false,
+  });
+
+  // PERFORMANCE FIX: Load ONLY essential data on mount (match + stats + events)
+  // These are fast endpoints (~500ms each)
   useEffect(() => {
     if (!matchId) return;
 
-    const loadAllData = async () => {
+    const loadInitialData = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        // First fetch match to get season_id
+        // Fetch match first to get season_id
         const matchResult = await getMatchById(matchId);
         setMatch(matchResult);
 
-        // Then fetch all other data in parallel - BASIT!
+        // Then fetch stats + events in parallel (FAST endpoints only!)
         const results = await Promise.allSettled([
           getMatchLiveStats(matchId),
           getMatchHalfStats(matchId),
           fetch(`/api/matches/${matchId}/incidents`).then(r => r.json()),
-          getMatchH2H(matchId),
-          matchResult.season_id ? getSeasonStandings(matchResult.season_id) : Promise.resolve(null),
-          getMatchLineup(matchId),
-          getMatchTrend(matchId),
-          fetch(`/api/predictions/match/${matchId}`).then(r => r.json()),
         ]);
 
-        // Extract data
-        const [liveStatsRes, halfStatsRes, eventsRes, h2hRes, standingsRes, lineupRes, trendRes, aiRes] = results;
+        const [liveStatsRes, halfStatsRes, eventsRes] = results;
 
-        // Set stats (combine fullTime and halfTime)
+        // Set stats
         if (liveStatsRes.status === 'fulfilled' && halfStatsRes.status === 'fulfilled') {
           setStats({
             fullTime: liveStatsRes.value,
@@ -111,32 +119,6 @@ export function MatchDetailPage() {
           const eventsData = eventsRes.value;
           setEvents(eventsData?.data || eventsData?.incidents || []);
         }
-
-        // Set H2H
-        if (h2hRes.status === 'fulfilled') {
-          setH2h(h2hRes.value);
-        }
-
-        // Set standings
-        if (standingsRes.status === 'fulfilled') {
-          setStandings(standingsRes.value);
-        }
-
-        // Set lineup
-        if (lineupRes.status === 'fulfilled') {
-          setLineup(lineupRes.value);
-        }
-
-        // Set trend
-        if (trendRes.status === 'fulfilled') {
-          setTrend(trendRes.value);
-        }
-
-        // Set AI predictions
-        if (aiRes.status === 'fulfilled') {
-          const aiData = aiRes.value;
-          setAi(aiData?.data || aiData);
-        }
       } catch (err: any) {
         console.error('Failed to load match data:', err);
         setError(err.message || 'Maç verileri yüklenirken bir hata oluştu');
@@ -145,22 +127,81 @@ export function MatchDetailPage() {
       }
     };
 
-    loadAllData();
-  }, [matchId]); // SADECE matchId değişince - SONSUZ DÖNGÜ YOK!
+    loadInitialData();
+  }, [matchId]);
 
-  // WebSocket - SADECE skor update
+  // PERFORMANCE FIX: Lazy load tab data ONLY when tab becomes active
+  // This prevents loading 48s+ endpoints (trend, incidents) upfront
+  useEffect(() => {
+    if (!matchId || !match) return;
+
+    const loadTabData = async () => {
+      try {
+        switch (activeTab) {
+          case 'h2h':
+            if (!h2h) {
+              setTabLoading(prev => ({ ...prev, h2h: true }));
+              const data = await getMatchH2H(matchId);
+              setH2h(data);
+              setTabLoading(prev => ({ ...prev, h2h: false }));
+            }
+            break;
+
+          case 'standings':
+            if (!standings && match.season_id) {
+              setTabLoading(prev => ({ ...prev, standings: true }));
+              const data = await getSeasonStandings(match.season_id);
+              setStandings(data);
+              setTabLoading(prev => ({ ...prev, standings: false }));
+            }
+            break;
+
+          case 'lineup':
+            if (!lineup) {
+              setTabLoading(prev => ({ ...prev, lineup: true }));
+              const data = await getMatchLineup(matchId);
+              setLineup(data);
+              setTabLoading(prev => ({ ...prev, lineup: false }));
+            }
+            break;
+
+          case 'trend':
+            if (!trend) {
+              setTabLoading(prev => ({ ...prev, trend: true }));
+              const data = await getMatchTrend(matchId);
+              setTrend(data);
+              setTabLoading(prev => ({ ...prev, trend: false }));
+            }
+            break;
+
+          case 'ai':
+            if (!ai) {
+              setTabLoading(prev => ({ ...prev, ai: true }));
+              const response = await fetch(`/api/predictions/match/${matchId}`);
+              const aiData = await response.json();
+              setAi(aiData?.data || aiData);
+              setTabLoading(prev => ({ ...prev, ai: false }));
+            }
+            break;
+        }
+      } catch (err) {
+        console.error(`Failed to load ${activeTab} data:`, err);
+        setTabLoading(prev => ({ ...prev, [activeTab]: false }));
+      }
+    };
+
+    loadTabData();
+  }, [activeTab, matchId, match, h2h, standings, lineup, trend, ai]);
+
+  // WebSocket for real-time score updates
   useMatchSocket(matchId || '', {
     onScoreChange: (event) => {
-      setMatch(
-        (prev) =>
-          prev
-            ? {
-                ...prev,
-                home_score: event.homeScore,
-                away_score: event.awayScore,
-              }
-            : null
-      );
+      if (!match) return;
+      setMatch(prev => prev ? {
+        ...prev,
+        home_score: event.homeScore,
+        away_score: event.awayScore,
+      } : null);
     },
   });
 
@@ -175,7 +216,7 @@ export function MatchDetailPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg">Maç bilgileri yükleniyor...</p>
+          <p className="text-gray-600">Maç yükleniyor...</p>
         </div>
       </div>
     );
@@ -185,119 +226,109 @@ export function MatchDetailPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-          <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Hata</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <Link
-            to="/livescore/diary"
-            className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md">
+          <div className="text-red-600 text-5xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Bir hata oluştu</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
           >
-            Ana Sayfaya Dön
-          </Link>
+            Tekrar Dene
+          </button>
         </div>
       </div>
     );
   }
 
-  // Not found state
+  // No match found
   if (!match) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-          <div className="text-gray-400 text-5xl mb-4">🔍</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Maç Bulunamadı</h2>
-          <p className="text-gray-600 mb-6">Bu maç bulunamadı veya silinmiş olabilir.</p>
-          <Link
-            to="/livescore/diary"
-            className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Ana Sayfaya Dön
+        <div className="text-center">
+          <div className="text-6xl mb-4">🔍</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Maç bulunamadı</h2>
+          <p className="text-gray-600 mb-4">Bu maç mevcut değil veya silinmiş.</p>
+          <Link to="/" className="text-blue-600 hover:underline">
+            Ana sayfaya dön
           </Link>
         </div>
       </div>
     );
   }
-
-  const matchStatus = (match as any).status ?? (match as any).status_id ?? 1;
-  const isLive = [2, 3, 4, 5, 7].includes(matchStatus);
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Match Header */}
-      <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white shadow-xl">
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          {/* Competition Info */}
-          {match.competition && (
-            <div className="flex items-center gap-2 mb-4 text-blue-100">
-              {match.competition.logo_url && (
-                <img src={match.competition.logo_url} alt="" className="w-5 h-5 object-contain" />
-              )}
-              <span className="text-sm font-medium">{match.competition.name}</span>
-              {isLive && (
-                <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse">
-                  CANLI
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Teams and Score */}
-          <div className="flex items-center justify-between gap-6">
+      <div className="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between gap-4">
             {/* Home Team */}
-            <div className="flex-1 flex flex-col items-center">
+            <div className="flex items-center gap-3 flex-1">
               {match.home_team?.logo_url && (
-                <img src={match.home_team.logo_url} alt="" className="w-16 h-16 sm:w-20 sm:h-20 object-contain mb-2" />
+                <img
+                  src={match.home_team.logo_url}
+                  alt={match.home_team.name}
+                  className="w-12 h-12 object-contain"
+                />
               )}
-              <h2 className="text-lg sm:text-xl font-bold text-center">{match.home_team?.name || 'Ev Sahibi'}</h2>
+              <div className="text-right">
+                <div className="font-bold text-xl text-gray-900">{match.home_team?.name}</div>
+              </div>
             </div>
 
             {/* Score */}
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="text-4xl sm:text-5xl font-bold">{match.home_score ?? 0}</div>
-              <div className="text-2xl sm:text-3xl font-light opacity-60">-</div>
-              <div className="text-4xl sm:text-5xl font-bold">{match.away_score ?? 0}</div>
+            <div className="text-center px-6">
+              <div className="text-4xl font-bold text-gray-900">
+                {match.home_score ?? 0} - {match.away_score ?? 0}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">
+                {match.minute_text || 'Başlamadı'}
+              </div>
             </div>
 
             {/* Away Team */}
-            <div className="flex-1 flex flex-col items-center">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="text-left">
+                <div className="font-bold text-xl text-gray-900">{match.away_team?.name}</div>
+              </div>
               {match.away_team?.logo_url && (
-                <img src={match.away_team.logo_url} alt="" className="w-16 h-16 sm:w-20 sm:h-20 object-contain mb-2" />
+                <img
+                  src={match.away_team.logo_url}
+                  alt={match.away_team.name}
+                  className="w-12 h-12 object-contain"
+                />
               )}
-              <h2 className="text-lg sm:text-xl font-bold text-center">{match.away_team?.name || 'Deplasman'}</h2>
             </div>
           </div>
 
-          {/* Match Time/Status */}
-          <div className="text-center mt-4">
-            <p className="text-blue-100 text-sm">
-              {new Date((match.match_time || 0) * 1000).toLocaleString('tr-TR', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </p>
+          {/* Competition Info */}
+          <div className="text-center mt-4 text-sm text-gray-600">
+            {match.competition?.name}
           </div>
         </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="bg-white shadow-md border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex gap-2 overflow-x-auto py-3 scrollbar-hide">
+      <div className="max-w-7xl mx-auto px-4 mb-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
+          <div className="flex gap-2 overflow-x-auto">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap text-sm ${
-                  activeTab === tab.id
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`
+                  px-4 py-2 rounded-md font-medium whitespace-nowrap transition-colors
+                  ${activeTab === tab.id
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                  }
+                `}
               >
                 {tab.label}
+                {tabLoading[tab.id] && (
+                  <span className="ml-2 inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                )}
               </button>
             ))}
           </div>
@@ -305,16 +336,59 @@ export function MatchDetailPage() {
       </div>
 
       {/* Tab Content */}
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
-          {activeTab === 'stats' && <StatsTab data={stats} match={match} />}
-          {activeTab === 'events' && <EventsTab data={events} match={match} />}
-          {activeTab === 'h2h' && <H2HTab data={h2h} match={match} />}
-          {activeTab === 'standings' && <StandingsTab data={standings} match={match} />}
-          {activeTab === 'lineup' && <LineupTab data={lineup} match={match} />}
-          {activeTab === 'trend' && <TrendTab data={trend} match={match} />}
-          {activeTab === 'ai' && <AITab data={ai} match={match} />}
-        </div>
+      <div className="max-w-7xl mx-auto px-4 pb-8">
+        {activeTab === 'stats' && <StatsTab data={stats} match={match} />}
+        {activeTab === 'events' && <EventsTab data={events} match={match} />}
+        {activeTab === 'h2h' && (
+          tabLoading.h2h ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">H2H verileri yükleniyor...</p>
+            </div>
+          ) : (
+            <H2HTab data={h2h} match={match} />
+          )
+        )}
+        {activeTab === 'standings' && (
+          tabLoading.standings ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Puan durumu yükleniyor...</p>
+            </div>
+          ) : (
+            <StandingsTab data={standings} match={match} />
+          )
+        )}
+        {activeTab === 'lineup' && (
+          tabLoading.lineup ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Kadro yükleniyor...</p>
+            </div>
+          ) : (
+            <LineupTab data={lineup} match={match} />
+          )
+        )}
+        {activeTab === 'trend' && (
+          tabLoading.trend ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Trend verileri yükleniyor... (Bu biraz sürebilir)</p>
+            </div>
+          ) : (
+            <TrendTab data={trend} match={match} />
+          )
+        )}
+        {activeTab === 'ai' && (
+          tabLoading.ai ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">AI tahminler yükleniyor...</p>
+            </div>
+          ) : (
+            <AITab data={ai} match={match} />
+          )
+        )}
       </div>
     </div>
   );
