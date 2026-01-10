@@ -1240,9 +1240,10 @@ export class WebSocketService {
           setClauses.push(`away_score_display = $${queryValues.length + 1}`);
           queryValues.push(parsedScore.away.score);
 
-          // Legacy arrays
-          setClauses.push(`home_scores = ARRAY[$${queryValues.length - 7}]`);
-          setClauses.push(`away_scores = ARRAY[$${queryValues.length - 3}]`);
+          // CRITICAL FIX: Update only index 0 of scores array, preserve HT/OT/penalty scores
+          // Use jsonb_set to update only the current score without overwriting HT scores etc.
+          setClauses.push(`home_scores = jsonb_set(COALESCE(home_scores, '[0,0,0,0,0,0,0]'::jsonb), '{0}', $${queryValues.length - 7}::text::jsonb)`);
+          setClauses.push(`away_scores = jsonb_set(COALESCE(away_scores, '[0,0,0,0,0,0,0]'::jsonb), '{0}', $${queryValues.length - 3}::text::jsonb)`);
 
           // Kickoff timestamps (write-once)
           if (kickoffClauses.length > 0) {
@@ -1348,9 +1349,10 @@ export class WebSocketService {
             queryValues.push(kickoffSeconds);
           }
 
-          setClauses.push(`home_scores = ARRAY[$${queryValues.length + 1}]`);
+          // CRITICAL FIX: Update only index 0, preserve HT/OT/penalty scores
+          setClauses.push(`home_scores = jsonb_set(COALESCE(home_scores, '[0,0,0,0,0,0,0]'::jsonb), '{0}', $${queryValues.length + 1}::text::jsonb)`);
           queryValues.push(parsedScore.home.score);
-          setClauses.push(`away_scores = ARRAY[$${queryValues.length + 1}]`);
+          setClauses.push(`away_scores = jsonb_set(COALESCE(away_scores, '[0,0,0,0,0,0,0]'::jsonb), '{0}', $${queryValues.length + 1}::text::jsonb)`);
           queryValues.push(parsedScore.away.score);
 
           // Add kickoff timestamps

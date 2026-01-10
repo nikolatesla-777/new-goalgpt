@@ -909,16 +909,19 @@ export class MatchDetailLiveService {
         }
       }
 
-      // CRITICAL FIX: home_scores is JSONB, not PostgreSQL array
+      // CRITICAL FIX: Update only index 0 of home_scores/away_scores, preserve other indices
+      // home_scores format: [current, ht, ot, penalty, corner, ...]
+      // We should only update index 0 (current score), not overwrite entire array
       if (live.homeScoreDisplay !== null) {
-        setParts.push(`home_scores = $${i++}::jsonb`);
-        values.push(JSON.stringify([live.homeScoreDisplay]));
+        // Use jsonb_set to update only index 0, preserving other values (HT, OT, etc.)
+        setParts.push(`home_scores = jsonb_set(COALESCE(home_scores, '[0,0,0,0,0,0,0]'::jsonb), '{0}', $${i++}::jsonb)`);
+        values.push(JSON.stringify(live.homeScoreDisplay));
       }
 
-      // CRITICAL FIX: away_scores is JSONB, not PostgreSQL array
+      // CRITICAL FIX: Same for away_scores
       if (live.awayScoreDisplay !== null) {
-        setParts.push(`away_scores = $${i++}::jsonb`);
-        values.push(JSON.stringify([live.awayScoreDisplay]));
+        setParts.push(`away_scores = jsonb_set(COALESCE(away_scores, '[0,0,0,0,0,0,0]'::jsonb), '{0}', $${i++}::jsonb)`);
+        values.push(JSON.stringify(live.awayScoreDisplay));
       }
 
       if (this.hasIncidentsColumn && live.incidents !== null) {

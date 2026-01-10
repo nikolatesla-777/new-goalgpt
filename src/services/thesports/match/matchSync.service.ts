@@ -579,9 +579,29 @@ export class MatchSyncService {
     paramIndex += 2;
 
     // Build update clause
+    // CRITICAL FIX: Use jsonb_set for home_scores/away_scores to only update index 0
+    // This prevents race conditions where different services overwrite each other's HT/OT scores
     const updateClause = columns
       .filter(col => col !== 'external_id')
-      .map((col) => `${col} = EXCLUDED.${col}`)
+      .map((col) => {
+        if (col === 'home_scores') {
+          // Only update index 0 (current score), preserve HT (index 1), OT (index 5), etc.
+          return `home_scores = CASE
+            WHEN EXCLUDED.home_scores IS NULL THEN ts_matches.home_scores
+            WHEN ts_matches.home_scores IS NULL THEN EXCLUDED.home_scores
+            ELSE jsonb_set(ts_matches.home_scores, '{0}', (EXCLUDED.home_scores->0))
+          END`;
+        }
+        if (col === 'away_scores') {
+          // Only update index 0 (current score), preserve HT (index 1), OT (index 5), etc.
+          return `away_scores = CASE
+            WHEN EXCLUDED.away_scores IS NULL THEN ts_matches.away_scores
+            WHEN ts_matches.away_scores IS NULL THEN EXCLUDED.away_scores
+            ELSE jsonb_set(ts_matches.away_scores, '{0}', (EXCLUDED.away_scores->0))
+          END`;
+        }
+        return `${col} = EXCLUDED.${col}`;
+      })
       .join(', ');
 
     // CRITICAL: id column now has DEFAULT gen_random_uuid() in database schema
