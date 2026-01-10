@@ -1,31 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { PlayerCardPage } from './components/player/PlayerCardPage';
-
-// New Modular Competition Detail Components
-import { CompetitionDetailLayout } from './components/competition-detail/CompetitionDetailLayout';
-import {
-  OverviewTab as CompOverviewTab,
-  FixturesTab as CompFixturesTab,
-  StandingsTab as CompStandingsTab,
-} from './components/competition-detail/tabs';
-
-// Admin Panel Components
-import {
-  AdminLayout,
-  AdminKomutaMerkezi,
-  AdminPredictions,
-  AdminLogs,
-  AdminBots,
-  AdminBotDetail,
-  AdminManualPredictions
-} from './components/admin';
-import { AIPredictionsPage } from './components/ai/AIPredictionsPage';
 import { AIPredictionsProvider } from './context/AIPredictionsContext';
 import { FavoritesProvider } from './context/FavoritesContext';
 import { PredictionToast } from './components/ui/PredictionToast';
 
-// New Livescore Components with Nested Routes
+// EAGER LOAD: Main layout (needed immediately)
+import { AdminLayout } from './components/admin';
 import {
   LivescoreLayout,
   DiaryTab,
@@ -36,18 +17,46 @@ import {
   FavoritesTab,
 } from './components/livescore';
 
-// New Simplified Match Detail Page (single component, no nested routes)
-import { MatchDetailPage } from './pages/MatchDetailPage';
+// LAZY LOAD: Heavy components (load on demand)
+const AdminKomutaMerkezi = lazy(() => import('./components/admin').then(m => ({ default: m.AdminKomutaMerkezi })));
+const AdminPredictions = lazy(() => import('./components/admin').then(m => ({ default: m.AdminPredictions })));
+const AdminLogs = lazy(() => import('./components/admin').then(m => ({ default: m.AdminLogs })));
+const AdminBots = lazy(() => import('./components/admin').then(m => ({ default: m.AdminBots })));
+const AdminBotDetail = lazy(() => import('./components/admin').then(m => ({ default: m.AdminBotDetail })));
+const AdminManualPredictions = lazy(() => import('./components/admin').then(m => ({ default: m.AdminManualPredictions })));
+const AIPredictionsPage = lazy(() => import('./components/ai/AIPredictionsPage').then(m => ({ default: m.AIPredictionsPage })));
 
-// New Modular Team Detail Components
-import { TeamDetailLayout } from './components/team-detail/TeamDetailLayout';
-import {
-  OverviewTab,
-  FixturesTab,
-  StandingsTab as TeamStandingsTab,
-  StageTab,
-  PlayersTab,
-} from './components/team-detail/tabs';
+// Match Detail (heavy page with charts)
+const MatchDetailPage = lazy(() => import('./pages/MatchDetailPage').then(m => ({ default: m.MatchDetailPage })));
+
+// Team Detail
+const TeamDetailLayout = lazy(() => import('./components/team-detail/TeamDetailLayout').then(m => ({ default: m.TeamDetailLayout })));
+const OverviewTab = lazy(() => import('./components/team-detail/tabs').then(m => ({ default: m.OverviewTab })));
+const FixturesTab = lazy(() => import('./components/team-detail/tabs').then(m => ({ default: m.FixturesTab })));
+const TeamStandingsTab = lazy(() => import('./components/team-detail/tabs').then(m => ({ default: m.StandingsTab })));
+const StageTab = lazy(() => import('./components/team-detail/tabs').then(m => ({ default: m.StageTab })));
+const PlayersTab = lazy(() => import('./components/team-detail/tabs').then(m => ({ default: m.PlayersTab })));
+
+// Competition Detail
+const CompetitionDetailLayout = lazy(() => import('./components/competition-detail/CompetitionDetailLayout').then(m => ({ default: m.CompetitionDetailLayout })));
+const CompOverviewTab = lazy(() => import('./components/competition-detail/tabs').then(m => ({ default: m.OverviewTab })));
+const CompFixturesTab = lazy(() => import('./components/competition-detail/tabs').then(m => ({ default: m.FixturesTab })));
+const CompStandingsTab = lazy(() => import('./components/competition-detail/tabs').then(m => ({ default: m.StandingsTab })));
+
+// Player Card
+const PlayerCardPage = lazy(() => import('./components/player/PlayerCardPage').then(m => ({ default: m.PlayerCardPage })));
+
+// Loading fallback component
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Yükleniyor...</p>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -58,7 +67,7 @@ function App() {
             {/* All routes now use AdminLayout with sidebar */}
             <Route element={<AdminLayout />}>
               {/* Komuta Merkezi (Dashboard) is now the homepage */}
-              <Route path="/" element={<AdminKomutaMerkezi />} />
+              <Route path="/" element={<Suspense fallback={<LoadingFallback />}><AdminKomutaMerkezi /></Suspense>} />
 
               {/* Livescore with Nested Routes for Tabs */}
               <Route path="/livescore" element={<LivescoreLayout />}>
@@ -74,21 +83,23 @@ function App() {
               </Route>
 
             {/* New Premium AI Page */}
-            <Route path="/ai-predictions" element={<AIPredictionsPage />} />
+            <Route path="/ai-predictions" element={<Suspense fallback={<LoadingFallback />}><AIPredictionsPage /></Suspense>} />
 
             {/* Admin Panel Routes */}
-            <Route path="/admin/predictions" element={<AdminPredictions />} />
-            <Route path="/admin/logs" element={<AdminLogs />} />
-            <Route path="/admin/bots" element={<AdminBots />} />
-            <Route path="/admin/bots/:botName" element={<AdminBotDetail />} />
-            <Route path="/admin/manual-predictions" element={<AdminManualPredictions />} />
+            <Route path="/admin/predictions" element={<Suspense fallback={<LoadingFallback />}><AdminPredictions /></Suspense>} />
+            <Route path="/admin/logs" element={<Suspense fallback={<LoadingFallback />}><AdminLogs /></Suspense>} />
+            <Route path="/admin/bots" element={<Suspense fallback={<LoadingFallback />}><AdminBots /></Suspense>} />
+            <Route path="/admin/bots/:botName" element={<Suspense fallback={<LoadingFallback />}><AdminBotDetail /></Suspense>} />
+            <Route path="/admin/manual-predictions" element={<Suspense fallback={<LoadingFallback />}><AdminManualPredictions /></Suspense>} />
 
             {/* Match Detail - Single route with query param tabs */}
             <Route
               path="/match/:matchId"
               element={
                 <ErrorBoundary>
-                  <MatchDetailPage />
+                  <Suspense fallback={<LoadingFallback />}>
+                    <MatchDetailPage />
+                  </Suspense>
                 </ErrorBoundary>
               }
             />
@@ -105,37 +116,43 @@ function App() {
             {/* Team Detail with Nested Routes for Tabs */}
             <Route path="/team/:teamId" element={
               <ErrorBoundary>
-                <TeamDetailLayout />
+                <Suspense fallback={<LoadingFallback />}>
+                  <TeamDetailLayout />
+                </Suspense>
               </ErrorBoundary>
             }>
               {/* Default redirect to overview tab */}
               <Route index element={<Navigate to="overview" replace />} />
               {/* Tab routes */}
-              <Route path="overview" element={<OverviewTab />} />
-              <Route path="fixtures" element={<FixturesTab />} />
-              <Route path="standings" element={<TeamStandingsTab />} />
-              <Route path="stage" element={<StageTab />} />
-              <Route path="players" element={<PlayersTab />} />
+              <Route path="overview" element={<Suspense fallback={<LoadingFallback />}><OverviewTab /></Suspense>} />
+              <Route path="fixtures" element={<Suspense fallback={<LoadingFallback />}><FixturesTab /></Suspense>} />
+              <Route path="standings" element={<Suspense fallback={<LoadingFallback />}><TeamStandingsTab /></Suspense>} />
+              <Route path="stage" element={<Suspense fallback={<LoadingFallback />}><StageTab /></Suspense>} />
+              <Route path="players" element={<Suspense fallback={<LoadingFallback />}><PlayersTab /></Suspense>} />
             </Route>
 
             <Route path="/player/:playerId" element={
               <ErrorBoundary>
-                <PlayerCardPage />
+                <Suspense fallback={<LoadingFallback />}>
+                  <PlayerCardPage />
+                </Suspense>
               </ErrorBoundary>
             } />
 
             {/* Competition Detail with Nested Routes for Tabs */}
             <Route path="/competition/:id" element={
               <ErrorBoundary>
-                <CompetitionDetailLayout />
+                <Suspense fallback={<LoadingFallback />}>
+                  <CompetitionDetailLayout />
+                </Suspense>
               </ErrorBoundary>
             }>
               {/* Default redirect to overview tab */}
               <Route index element={<Navigate to="overview" replace />} />
               {/* Tab routes */}
-              <Route path="overview" element={<CompOverviewTab />} />
-              <Route path="fixtures" element={<CompFixturesTab />} />
-              <Route path="standings" element={<CompStandingsTab />} />
+              <Route path="overview" element={<Suspense fallback={<LoadingFallback />}><CompOverviewTab /></Suspense>} />
+              <Route path="fixtures" element={<Suspense fallback={<LoadingFallback />}><CompFixturesTab /></Suspense>} />
+              <Route path="standings" element={<Suspense fallback={<LoadingFallback />}><CompStandingsTab /></Suspense>} />
             </Route>
           </Route>
         </Routes>

@@ -18,4 +18,25 @@ export default defineConfig({
   define: {
     'process.env': {},
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core - loaded on every page
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+
+          // Charts - only used in specific pages
+          'charts': ['recharts'],
+
+          // Icons - used everywhere
+          'icons': ['@phosphor-icons/react'],
+
+          // React window - only used in MatchList
+          'react-window': ['react-window'],
+        },
+      },
+    },
+    // Increase chunk size warning limit to 600kb
+    chunkSizeWarningLimit: 600,
+  },
 })
