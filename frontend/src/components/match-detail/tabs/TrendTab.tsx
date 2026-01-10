@@ -1,37 +1,20 @@
 /**
- * Trend Tab
+ * Trend Tab - SIMPLIFIED
  *
  * Displays match trend chart for live matches.
- * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
+ * Now receives data via props (no Context).
  */
 
-import { useEffect } from 'react';
-import { useMatchDetail } from '../MatchDetailContext';
 import { MatchTrendChart } from '../MatchTrendChart';
+import type { Match } from '../../../api/matches';
 
-export function TrendTab() {
-  const { match, tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
+interface TrendTabProps {
+  data: any;
+  match: Match;
+}
 
-  // LAZY LOADING: Trigger fetch on mount
-  useEffect(() => {
-    fetchTabData('trend');
-  }, [fetchTabData]);
-
+export function TrendTab({ data, match }: TrendTabProps) {
   if (!match) return null;
-
-  const loading = tabLoadingStates.trend;
-
-  // Show loading state while fetching
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-10">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
-        <span className="ml-3 text-gray-600">Trend verisi yükleniyor...</span>
-      </div>
-    );
-  }
-
-  const data = tabData.trend;
   const matchStatus = (match as any).status ?? (match as any).status_id ?? (match as any).match_status ?? 0;
   const isLiveMatch = matchStatus && [2, 3, 4, 5, 7].includes(matchStatus);
 

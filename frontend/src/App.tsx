@@ -36,17 +36,8 @@ import {
   FavoritesTab,
 } from './components/livescore';
 
-// New Modular Match Detail Components
-import { MatchDetailLayout } from './components/match-detail/MatchDetailLayout';
-import {
-  StatsTab,
-  EventsTab,
-  H2HTab,
-  StandingsTab as MatchStandingsTab,
-  LineupTab,
-  TrendTab,
-  AITab,
-} from './components/match-detail/tabs';
+// New Simplified Match Detail Page (single component, no nested routes)
+import { MatchDetailPage } from './pages/MatchDetailPage';
 
 // New Modular Team Detail Components
 import { TeamDetailLayout } from './components/team-detail/TeamDetailLayout';
@@ -92,23 +83,24 @@ function App() {
             <Route path="/admin/bots/:botName" element={<AdminBotDetail />} />
             <Route path="/admin/manual-predictions" element={<AdminManualPredictions />} />
 
-            {/* Match Detail with Nested Routes for Tabs */}
-            <Route path="/match/:matchId" element={
-              <ErrorBoundary>
-                <MatchDetailLayout />
-              </ErrorBoundary>
-            }>
-              {/* Default redirect to stats tab */}
-              <Route index element={<Navigate to="stats" replace />} />
-              {/* Tab routes */}
-              <Route path="ai" element={<AITab />} />
-              <Route path="stats" element={<StatsTab />} />
-              <Route path="events" element={<EventsTab />} />
-              <Route path="h2h" element={<H2HTab />} />
-              <Route path="standings" element={<MatchStandingsTab />} />
-              <Route path="lineup" element={<LineupTab />} />
-              <Route path="trend" element={<TrendTab />} />
-            </Route>
+            {/* Match Detail - Single route with query param tabs */}
+            <Route
+              path="/match/:matchId"
+              element={
+                <ErrorBoundary>
+                  <MatchDetailPage />
+                </ErrorBoundary>
+              }
+            />
+
+            {/* Redirects for old bookmarked URLs (backwards compatibility) */}
+            <Route path="/match/:matchId/stats" element={<Navigate to="../?tab=stats" replace />} />
+            <Route path="/match/:matchId/events" element={<Navigate to="../?tab=events" replace />} />
+            <Route path="/match/:matchId/h2h" element={<Navigate to="../?tab=h2h" replace />} />
+            <Route path="/match/:matchId/standings" element={<Navigate to="../?tab=standings" replace />} />
+            <Route path="/match/:matchId/lineup" element={<Navigate to="../?tab=lineup" replace />} />
+            <Route path="/match/:matchId/trend" element={<Navigate to="../?tab=trend" replace />} />
+            <Route path="/match/:matchId/ai" element={<Navigate to="../?tab=ai" replace />} />
 
             {/* Team Detail with Nested Routes for Tabs */}
             <Route path="/team/:teamId" element={

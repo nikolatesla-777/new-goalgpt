@@ -1,34 +1,17 @@
 /**
- * Match Detail Components - Barrel Export
+ * Match Detail Components - Barrel Export (SIMPLIFIED)
  *
- * Modular match detail page architecture with separate
- * components for layout and each tab.
+ * Simplified architecture - no Context, no Layout wrapper.
+ * Match detail page is now a single component at /pages/MatchDetailPage.tsx
  */
 
-// Context
-export { MatchDetailProvider, useMatchDetail } from './MatchDetailContext';
-export type {
-  TabType,
-  StatsData,
-  H2HData,
-  StandingsData,
-  LineupData,
-  TrendData,
-  EventsData,
-  AIData,
-  AllTabData,
-  MatchDetailContextValue,
-} from './MatchDetailContext';
-
-// Layout Components
-export { MatchDetailLayout } from './MatchDetailLayout';
-export { MatchDetailHeader } from './MatchDetailHeader';
-export { MatchScoreCard } from './MatchScoreCard';
-export { MatchTabNavigation } from './MatchTabNavigation';
-
-// Utils
+// Utils (still useful for tabs)
 export { getStatName, sortStats, processStats, filterKnownStats } from './utils/statHelpers';
 export type { StatItem } from './utils/statHelpers';
 
-// Tab Components
+// Tab Components (now Props-based, not Context-based)
 export * from './tabs';
+
+// UI Components (used by tabs)
+export { MatchEventsTimeline } from './MatchEventsTimeline';
+export { MatchTrendChart } from './MatchTrendChart';

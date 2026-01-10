@@ -182,8 +182,11 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     ai: false,
   });
 
-  // Cache metadata (5-minute TTL)
-  const [tabCacheMetadata, setTabCacheMetadata] = useState<Record<TabType, {
+  const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+  // CRITICAL FIX: Use ref instead of state to prevent cascade re-renders
+  // Cache metadata stored in ref - won't trigger useCallback dependencies
+  const tabCacheMetadataRef = useRef<Record<TabType, {
     loadedAt: number | null;
     expiresAt: number | null;
   }>>({
@@ -196,31 +199,23 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     ai: { loadedAt: null, expiresAt: null },
   });
 
-  const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
   // Active tab tracking (for WebSocket optimization)
   const [activeTab, setActiveTab] = useState<TabType | null>(null);
 
-  // Cache helper functions
+  // Cache helper functions (stable - no dependencies)
   const isCacheValid = useCallback((tab: TabType): boolean => {
-    const metadata = tabCacheMetadata[tab];
+    const metadata = tabCacheMetadataRef.current[tab];
     if (!metadata.expiresAt) return false;
     return Date.now() < metadata.expiresAt;
-  }, [tabCacheMetadata]);
+  }, []);
 
   const updateCacheTimestamp = useCallback((tab: TabType) => {
     const now = Date.now();
-    setTabCacheMetadata(prev => ({
-      ...prev,
-      [tab]: { loadedAt: now, expiresAt: now + CACHE_TTL_MS }
-    }));
-  }, [CACHE_TTL_MS]);
+    tabCacheMetadataRef.current[tab] = { loadedAt: now, expiresAt: now + CACHE_TTL_MS };
+  }, []);
 
   const invalidateCache = useCallback((tab: TabType) => {
-    setTabCacheMetadata(prev => ({
-      ...prev,
-      [tab]: { loadedAt: null, expiresAt: null }
-    }));
+    tabCacheMetadataRef.current[tab] = { loadedAt: null, expiresAt: null };
   }, []);
 
   // WebSocket state
@@ -304,7 +299,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
    */
   const fetchStatsData = useCallback(async (silent = false) => {
     // Check cache
-    if (tabData.stats !== null && isCacheValid('stats')) {
+    if (isCacheValid('stats')) {
       // console.log(`[MatchDetail] ✓ Using cached stats`);
       return;
     }
@@ -339,7 +334,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     } finally {
       setTabLoadingStates(prev => ({ ...prev, stats: false }));
     }
-  }, [matchId, tabData.stats, isCacheValid, updateCacheTimestamp]);
+  }, [matchId, isCacheValid, updateCacheTimestamp]);
 
   /**
    * Fetch Events tab data
@@ -374,7 +369,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     } finally {
       setTabLoadingStates(prev => ({ ...prev, events: false }));
     }
-  }, [matchId, tabData.events, isCacheValid, updateCacheTimestamp]);
+  }, [matchId, isCacheValid, updateCacheTimestamp]);
 
   /**
    * Fetch H2H tab data
@@ -412,7 +407,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     } finally {
       setTabLoadingStates(prev => ({ ...prev, h2h: false }));
     }
-  }, [matchId, tabData.h2h, isCacheValid, updateCacheTimestamp]);
+  }, [matchId, isCacheValid, updateCacheTimestamp]);
 
   /**
    * Fetch Standings tab data
@@ -498,7 +493,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     } finally {
       setTabLoadingStates(prev => ({ ...prev, lineup: false }));
     }
-  }, [matchId, tabData.lineup, isCacheValid, updateCacheTimestamp]);
+  }, [matchId, isCacheValid, updateCacheTimestamp]);
 
   /**
    * Fetch Trend tab data
@@ -517,8 +512,10 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     try {
       const trendResponse = await fetchWithTimeout(getMatchTrend(matchId), 3000);
 
+      // CRITICAL FIX: API returns 'results' not 'trend'
+      // API response: { data: { results: { first_half: [...], second_half: [...] } } }
       const trendData: TrendData = {
-        trend: trendResponse?.trend ?? null,
+        trend: trendResponse?.results ?? null,  // FIX: Use 'results' not 'trend'
         incidents: trendResponse?.incidents ?? [],
       };
 
@@ -531,7 +528,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     } finally {
       setTabLoadingStates(prev => ({ ...prev, trend: false }));
     }
-  }, [matchId, tabData.trend, isCacheValid, updateCacheTimestamp]);
+  }, [matchId, isCacheValid, updateCacheTimestamp]);
 
   /**
    * Fetch AI tab data
@@ -571,7 +568,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     } finally {
       setTabLoadingStates(prev => ({ ...prev, ai: false }));
     }
-  }, [matchId, tabData.ai, isCacheValid, updateCacheTimestamp]);
+  }, [matchId, isCacheValid, updateCacheTimestamp]);
 
   // ============================================================================
   // UNIFIED TAB FETCH DISPATCHER

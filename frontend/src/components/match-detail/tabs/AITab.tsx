@@ -1,13 +1,13 @@
 /**
- * AI Tab
+ * AI Tab - SIMPLIFIED
  *
  * Displays AI predictions for the match.
- * NOW WITH LAZY LOADING: Fetches data only when tab is clicked.
+ * Now receives data via props (no Context).
  */
 
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Robot, Trophy, WarningCircle } from '@phosphor-icons/react';
-import { useMatchDetail } from '../MatchDetailContext';
+import type { Match } from '../../../api/matches';
 
 interface Prediction {
   id: string;
@@ -25,18 +25,16 @@ interface Prediction {
   access_type?: 'VIP' | 'FREE';
 }
 
-export function AITab() {
-  const { tabData, tabLoadingStates, fetchTabData } = useMatchDetail();
+interface AITabProps {
+  data: any;
+  match: Match;
+}
 
-  // LAZY LOADING: Trigger fetch on mount
-  useEffect(() => {
-    fetchTabData('ai');
-  }, [fetchTabData]);
-
-  // Use predictions from MatchDetailContext (fetched via lazy loading)
+export function AITab({ data }: AITabProps) {
+  // Transform predictions from API format
   const predictions = useMemo(() => {
-    if (!tabData.ai?.predictions) return [];
-    return tabData.ai.predictions.map((p: any) => ({
+    if (!data?.predictions) return [];
+    return data.predictions.map((p: any) => ({
       id: p.id,
       match_id: p.match_id,
       prediction: p.prediction || p.prediction_value || p.prediction_type,
@@ -51,26 +49,7 @@ export function AITab() {
       created_at: p.created_at,
       access_type: p.access_type,
     })) as Prediction[];
-  }, [tabData.ai]);
-
-  const loading = tabLoadingStates.ai;
-
-  if (loading) {
-    return (
-      <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl p-12 text-center border border-gray-200/50 shadow-lg">
-        <div className="flex flex-col items-center justify-center gap-6">
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-            <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-purple-400 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
-          </div>
-          <div>
-            <p className="text-gray-700 font-semibold text-lg mb-1">Yapay zeka analizi yükleniyor...</p>
-            <p className="text-gray-500 text-sm">Tahminler hazırlanıyor</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  }, [data]);
 
   if (predictions.length === 0) {
     return (
