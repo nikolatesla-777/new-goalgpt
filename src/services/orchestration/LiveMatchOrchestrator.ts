@@ -17,7 +17,6 @@
 
 import { EventEmitter } from 'events';
 import { RedisManager } from '../../core/RedisManager';
-import { MatchWriteQueue } from '../thesports/websocket/matchWriteQueue';
 import { pool } from '../../database/connection';
 import { logger } from '../../utils/logger';
 import { logEvent } from '../../utils/obsLogger';
@@ -58,6 +57,7 @@ interface FieldRules {
   fallback?: 'api' | 'mqtt' | 'computed' | 'watchdog'; // Fallback source
   writeOnce?: boolean; // Once set, never overwrite
   nullable?: boolean; // Can be NULL
+  allowWatchdog?: boolean; // Allow watchdog to force-update (for anomaly recovery)
 }
 
 /**
@@ -75,7 +75,6 @@ interface FieldRules {
  */
 export class LiveMatchOrchestrator extends EventEmitter {
   private static instance: LiveMatchOrchestrator | null = null;
-  private writeQueue: MatchWriteQueue;
 
   // Field ownership rules
   private readonly fieldRules: Record<string, FieldRules> = {
@@ -83,8 +82,8 @@ export class LiveMatchOrchestrator extends EventEmitter {
     home_score: { source: 'mqtt', fallback: 'api', nullable: true },
     away_score: { source: 'mqtt', fallback: 'api', nullable: true },
 
-    // Status: API preferred (authoritative), MQTT fallback
-    status_id: { source: 'api', fallback: 'mqtt' },
+    // Status: API preferred (authoritative), MQTT fallback, watchdog can force-update for anomaly recovery
+    status_id: { source: 'api', fallback: 'mqtt', allowWatchdog: true },
 
     // Minute: API preferred, computed fallback
     minute: { source: 'api', fallback: 'computed', nullable: true },
@@ -93,9 +92,9 @@ export class LiveMatchOrchestrator extends EventEmitter {
     second_half_kickoff_ts: { writeOnce: true, nullable: true },
     overtime_kickoff_ts: { writeOnce: true, nullable: true },
 
-    // Provider data: API only
+    // Provider data: API only, watchdog can update last_event_ts for anomaly recovery
     provider_update_time: { source: 'api', nullable: true },
-    last_event_ts: { source: 'api', nullable: true },
+    last_event_ts: { source: 'api', nullable: true, allowWatchdog: true },
 
     // Match metadata: API only
     match_time: { source: 'api' },
@@ -106,11 +105,13 @@ export class LiveMatchOrchestrator extends EventEmitter {
 
     // Computed fields: Computed source only
     last_minute_update_ts: { source: 'computed', nullable: true },
+
+    // Match data sync fields: API only (background persistence)
+    trend_data: { source: 'api', nullable: true },
   };
 
   private constructor() {
     super();
-    this.writeQueue = new MatchWriteQueue();
     logger.info('[Orchestrator] LiveMatchOrchestrator initialized');
   }
 
@@ -194,11 +195,11 @@ export class LiveMatchOrchestrator extends EventEmitter {
         };
       }
 
-      // Step 4: Enqueue to write queue (batching + optimistic locking)
-      this.writeQueue.enqueue(matchId, resolvedUpdates);
+      // Step 4: Write to database
+      await this.writeToDatabase(matchId, resolvedUpdates);
 
       // Step 5: Emit success event
-      const fieldsUpdated = Object.keys(resolvedUpdates);
+      const fieldsUpdated = Object.keys(resolvedUpdates).filter(f => !f.endsWith('_source') && !f.endsWith('_timestamp'));
       this.emit('match:updated', { matchId, fields: fieldsUpdated, source });
 
       logEvent('info', 'orchestrator.update_success', {
@@ -226,6 +227,47 @@ export class LiveMatchOrchestrator extends EventEmitter {
         status: 'rejected',
         reason: `Internal error: ${error.message}`,
       };
+    }
+  }
+
+  /**
+   * Write resolved updates to database
+   */
+  private async writeToDatabase(matchId: string, updates: Record<string, any>): Promise<void> {
+    if (Object.keys(updates).length === 0) {
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      // Build SET clause dynamically
+      const setClause: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      for (const [field, value] of Object.entries(updates)) {
+        setClause.push(`${field} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+
+      // Always update updated_at
+      setClause.push('updated_at = NOW()');
+
+      // Add matchId as final parameter
+      values.push(matchId);
+
+      const query = `
+        UPDATE ts_matches
+        SET ${setClause.join(', ')}
+        WHERE external_id = $${paramIndex}
+      `;
+
+      await client.query(query, values);
+
+      logger.debug(`[Orchestrator] Wrote ${Object.keys(updates).length} fields to DB for ${matchId}`);
+    } finally {
+      client.release();
     }
   }
 
@@ -311,31 +353,42 @@ export class LiveMatchOrchestrator extends EventEmitter {
 
       // Rule 2: Source priority
       if (rules?.source) {
-        // If current value exists and comes from preferred source
-        if (currentValue !== null && currentSource === rules.source) {
-          // Incoming update is NOT from preferred source → reject
-          if (update.source !== rules.source) {
-            logEvent('debug', 'orchestrator.source_priority_skip', {
-              matchId: currentState.external_id,
-              field: fieldName,
-              currentSource,
-              incomingSource: update.source,
-              preferredSource: rules.source,
-            });
-            continue;
+        // SPECIAL CASE: Watchdog can force-update certain fields for anomaly recovery
+        if (update.source === 'watchdog' && rules.allowWatchdog) {
+          logEvent('debug', 'orchestrator.watchdog_override', {
+            matchId: currentState.external_id,
+            field: fieldName,
+            reason: 'Watchdog force-update for anomaly recovery',
+          });
+          // Allow watchdog to update - skip other source checks
+        } else {
+          // Normal source priority logic
+          // If current value exists and comes from preferred source
+          if (currentValue !== null && currentSource === rules.source) {
+            // Incoming update is NOT from preferred source → reject
+            if (update.source !== rules.source) {
+              logEvent('debug', 'orchestrator.source_priority_skip', {
+                matchId: currentState.external_id,
+                field: fieldName,
+                currentSource,
+                incomingSource: update.source,
+                preferredSource: rules.source,
+              });
+              continue;
+            }
           }
-        }
 
-        // If current value is NULL or from fallback source
-        if (currentValue === null || currentSource === rules.fallback) {
-          // Accept if incoming is from preferred source
-          if (update.source === rules.source) {
-            // Allow - preferred source wins
-          } else if (update.source === rules.fallback && currentValue === null) {
-            // Allow - fallback when NULL
-          } else {
-            // Reject - wrong source
-            continue;
+          // If current value is NULL or from fallback source
+          if (currentValue === null || currentSource === rules.fallback) {
+            // Accept if incoming is from preferred source
+            if (update.source === rules.source) {
+              // Allow - preferred source wins
+            } else if (update.source === rules.fallback && currentValue === null) {
+              // Allow - fallback when NULL
+            } else {
+              // Reject - wrong source
+              continue;
+            }
           }
         }
       }
@@ -452,14 +505,12 @@ export class LiveMatchOrchestrator extends EventEmitter {
   /**
    * Health check - verify orchestrator is operational
    */
-  async healthCheck(): Promise<{ healthy: boolean; redis: boolean; writeQueue: boolean }> {
+  async healthCheck(): Promise<{ healthy: boolean; redis: boolean }> {
     const redisHealthy = await RedisManager.healthCheck();
-    const writeQueueHealthy = this.writeQueue !== null;
 
     return {
-      healthy: redisHealthy && writeQueueHealthy,
+      healthy: redisHealthy,
       redis: redisHealthy,
-      writeQueue: writeQueueHealthy,
     };
   }
 

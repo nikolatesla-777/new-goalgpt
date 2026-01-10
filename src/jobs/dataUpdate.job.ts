@@ -14,6 +14,8 @@ import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 // SINGLETON: Use shared API client for global rate limiting
 import { theSportsAPI } from '../core';
+// PHASE C: Use LiveMatchOrchestrator for centralized write coordination
+import { LiveMatchOrchestrator, FieldUpdate } from '../services/orchestration/LiveMatchOrchestrator';
 
 
 export class DataUpdateWorker {
@@ -21,6 +23,7 @@ export class DataUpdateWorker {
   private matchDetailLiveService: MatchDetailLiveService;
   private combinedStatsService: CombinedStatsService;
   private matchTrendService: MatchTrendService;
+  private orchestrator: LiveMatchOrchestrator;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -30,6 +33,7 @@ export class DataUpdateWorker {
     this.matchDetailLiveService = new MatchDetailLiveService();
     this.combinedStatsService = new CombinedStatsService();
     this.matchTrendService = new MatchTrendService();
+    this.orchestrator = LiveMatchOrchestrator.getInstance();
   }
 
   /**
@@ -128,6 +132,141 @@ export class DataUpdateWorker {
   }
 
   /**
+   * PHASE C: Reconcile match via LiveMatchOrchestrator
+   *
+   * Fetches match detail_live from API and sends updates to orchestrator
+   * for centralized write coordination.
+   */
+  private async reconcileViaOrchestrator(matchId: string, providerUpdateTime: number | null): Promise<void> {
+    try {
+      // Step 1: Fetch match detail_live from API
+      const resp = await this.matchDetailLiveService.getMatchDetailLive(
+        { match_id: matchId },
+        { forceRefresh: true }
+      );
+
+      // Step 2: Extract fields from response
+      const results = (resp as any).results || (resp as any).result_list;
+      if (!results || !Array.isArray(results)) {
+        logger.warn(`[DataUpdate.orchestrator] No results for match ${matchId}`);
+        return;
+      }
+
+      const matchData = results.find((m: any) => String(m?.id || m?.match_id) === String(matchId));
+      if (!matchData) {
+        logger.warn(`[DataUpdate.orchestrator] Match ${matchId} not found in results`);
+        return;
+      }
+
+      // Step 3: Parse fields
+      const updates: FieldUpdate[] = [];
+      const now = Math.floor(Date.now() / 1000);
+
+      // Parse score array: [home_score, status_id, [home_display, ...], [away_display, ...]]
+      if (Array.isArray(matchData.score) && matchData.score.length >= 4) {
+        const homeScore = matchData.score[0];
+        const statusId = matchData.score[1];
+        const homeScoreDisplay = Array.isArray(matchData.score[2]) ? matchData.score[2][0] : null;
+        const awayScoreDisplay = Array.isArray(matchData.score[3]) ? matchData.score[3][0] : null;
+
+        if (homeScoreDisplay !== null) {
+          updates.push({
+            field: 'home_score',
+            value: homeScoreDisplay,
+            source: 'api',
+            priority: 2,
+            timestamp: matchData.update_time || providerUpdateTime || now,
+          });
+        }
+
+        if (awayScoreDisplay !== null) {
+          updates.push({
+            field: 'away_score',
+            value: awayScoreDisplay,
+            source: 'api',
+            priority: 2,
+            timestamp: matchData.update_time || providerUpdateTime || now,
+          });
+        }
+
+        if (statusId !== null && statusId !== undefined) {
+          updates.push({
+            field: 'status_id',
+            value: statusId,
+            source: 'api',
+            priority: 2,
+            timestamp: matchData.update_time || providerUpdateTime || now,
+          });
+        }
+      }
+
+      // Minute (if available)
+      if (matchData.minute !== null && matchData.minute !== undefined) {
+        updates.push({
+          field: 'minute',
+          value: matchData.minute,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time || providerUpdateTime || now,
+        });
+      }
+
+      // Provider timestamps
+      if (matchData.update_time) {
+        updates.push({
+          field: 'provider_update_time',
+          value: matchData.update_time,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time,
+        });
+      }
+
+      if (matchData.event_time) {
+        updates.push({
+          field: 'last_event_ts',
+          value: matchData.event_time,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time || providerUpdateTime || now,
+        });
+      }
+
+      // Second half kickoff (write-once)
+      if (matchData.second_half_kickoff_ts) {
+        updates.push({
+          field: 'second_half_kickoff_ts',
+          value: matchData.second_half_kickoff_ts,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time || providerUpdateTime || now,
+        });
+      }
+
+      // Step 4: Send to orchestrator
+      if (updates.length > 0) {
+        const result = await this.orchestrator.updateMatch(matchId, updates, 'dataUpdate');
+
+        if (result.status === 'success') {
+          logEvent('info', 'dataupdate.orchestrator.success', {
+            matchId,
+            fieldsUpdated: result.fieldsUpdated,
+          });
+        } else if (result.status === 'retry') {
+          logger.warn(`[DataUpdate.orchestrator] Retry needed for ${matchId}: ${result.reason}`);
+        } else {
+          logger.warn(`[DataUpdate.orchestrator] Rejected for ${matchId}: ${result.reason}`);
+        }
+
+        return; // Return the status_id for post-match processing
+      }
+    } catch (error: any) {
+      logger.error(`[DataUpdate.orchestrator] Error for match ${matchId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Check for updates
    */
   async checkUpdates(): Promise<void> {
@@ -215,22 +354,25 @@ export class DataUpdateWorker {
               run_id: runId,
             });
 
-            const result = await this.matchDetailLiveService.reconcileMatchToDatabase(
-              matchIdStr,
-              updateTime !== null ? updateTime : null
-            );
+            // PHASE C: Use orchestrator for centralized write coordination
+            await this.reconcileViaOrchestrator(matchIdStr, updateTime);
 
             const duration = Date.now() - t0;
             logEvent('info', 'dataupdate.reconcile.done', {
               match_id: matchIdStr,
               duration_ms: duration,
-              rowCount: result.rowCount,
               run_id: runId,
             });
 
             // PHASE 4+: On match end (status=8), sync final stats/trend to database
-            // This ensures data is persisted before API stops returning it
-            if (result.statusId === 8) {
+            // Check current status from database after orchestrator update
+            const statusResult = await dbClient.query(
+              'SELECT status_id FROM ts_matches WHERE external_id = $1',
+              [matchIdStr]
+            );
+            const currentStatusId = statusResult.rows[0]?.status_id;
+
+            if (currentStatusId === 8) {
               logger.info(`[DataUpdate:${runId}] Match ${matchIdStr} ended (status=8), syncing final stats/trend...`);
               try {
                 // Fetch and save final combined stats (includes incidents)

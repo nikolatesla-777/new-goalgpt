@@ -17,12 +17,15 @@ import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 import { CircuitOpenError } from '../utils/circuitBreaker';
+// PHASE C: Use LiveMatchOrchestrator for centralized write coordination
+import { LiveMatchOrchestrator, FieldUpdate } from '../services/orchestration/LiveMatchOrchestrator';
 
 export class MatchWatchdogWorker {
   private matchWatchdogService: MatchWatchdogService;
   private matchDetailLiveService: MatchDetailLiveService;
   private matchRecentService: MatchRecentService;
   private matchDiaryService: MatchDiaryService;
+  private orchestrator: LiveMatchOrchestrator;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -31,6 +34,141 @@ export class MatchWatchdogWorker {
     this.matchDetailLiveService = matchDetailLiveService;
     this.matchRecentService = matchRecentService;
     this.matchDiaryService = new MatchDiaryService();
+    this.orchestrator = LiveMatchOrchestrator.getInstance();
+  }
+
+  /**
+   * PHASE C: Reconcile match via LiveMatchOrchestrator
+   *
+   * Fetches match detail_live from API and sends updates to orchestrator
+   * for centralized write coordination.
+   */
+  private async reconcileViaOrchestrator(matchId: string): Promise<{ statusId?: number }> {
+    try {
+      // Step 1: Fetch match detail_live from API
+      const resp = await this.matchDetailLiveService.getMatchDetailLive(
+        { match_id: matchId },
+        { forceRefresh: true }
+      );
+
+      // Step 2: Extract fields from response
+      const results = (resp as any).results || (resp as any).result_list;
+      if (!results || !Array.isArray(results)) {
+        logger.warn(`[Watchdog.orchestrator] No results for match ${matchId}`);
+        return {};
+      }
+
+      const matchData = results.find((m: any) => String(m?.id || m?.match_id) === String(matchId));
+      if (!matchData) {
+        logger.warn(`[Watchdog.orchestrator] Match ${matchId} not found in results`);
+        return {};
+      }
+
+      // Step 3: Parse fields
+      const updates: FieldUpdate[] = [];
+      const now = Math.floor(Date.now() / 1000);
+
+      // Parse score array: [home_score, status_id, [home_display, ...], [away_display, ...]]
+      if (Array.isArray(matchData.score) && matchData.score.length >= 4) {
+        const statusId = matchData.score[1];
+        const homeScoreDisplay = Array.isArray(matchData.score[2]) ? matchData.score[2][0] : null;
+        const awayScoreDisplay = Array.isArray(matchData.score[3]) ? matchData.score[3][0] : null;
+
+        if (homeScoreDisplay !== null) {
+          updates.push({
+            field: 'home_score',
+            value: homeScoreDisplay,
+            source: 'api',
+            priority: 2,
+            timestamp: matchData.update_time || now,
+          });
+        }
+
+        if (awayScoreDisplay !== null) {
+          updates.push({
+            field: 'away_score',
+            value: awayScoreDisplay,
+            source: 'api',
+            priority: 2,
+            timestamp: matchData.update_time || now,
+          });
+        }
+
+        if (statusId !== null && statusId !== undefined) {
+          updates.push({
+            field: 'status_id',
+            value: statusId,
+            source: 'api',
+            priority: 2,
+            timestamp: matchData.update_time || now,
+          });
+        }
+      }
+
+      // Minute (if available)
+      if (matchData.minute !== null && matchData.minute !== undefined) {
+        updates.push({
+          field: 'minute',
+          value: matchData.minute,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time || now,
+        });
+      }
+
+      // Provider timestamps
+      if (matchData.update_time) {
+        updates.push({
+          field: 'provider_update_time',
+          value: matchData.update_time,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time,
+        });
+      }
+
+      if (matchData.event_time) {
+        updates.push({
+          field: 'last_event_ts',
+          value: matchData.event_time,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time || now,
+        });
+      }
+
+      // Second half kickoff (write-once)
+      if (matchData.second_half_kickoff_ts) {
+        updates.push({
+          field: 'second_half_kickoff_ts',
+          value: matchData.second_half_kickoff_ts,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time || now,
+        });
+      }
+
+      // Step 4: Send to orchestrator
+      if (updates.length > 0) {
+        const result = await this.orchestrator.updateMatch(matchId, updates, 'watchdog');
+
+        if (result.status === 'success') {
+          logEvent('info', 'watchdog.orchestrator.success', {
+            matchId,
+            fieldsUpdated: result.fieldsUpdated,
+          });
+        }
+
+        // Extract status_id for caller
+        const statusIdUpdate = updates.find(u => u.field === 'status_id');
+        return { statusId: statusIdUpdate?.value };
+      }
+
+      return {};
+    } catch (error: any) {
+      logger.error(`[Watchdog.orchestrator] Error for match ${matchId}:`, error);
+      throw error;
+    }
   }
 
   /**
@@ -156,10 +294,10 @@ export class MatchWatchdogWorker {
             const { pool } = await import('../database/connection');
             const client = await pool.connect();
             try {
-              // Önce detail_live çek - SECOND_HALF olabilir
-              const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(stale.matchId, null);
+              // PHASE C: Use orchestrator - check detail_live for SECOND_HALF transition
+              const reconcileResult = await this.reconcileViaOrchestrator(stale.matchId);
 
-              if (reconcileResult.updated && reconcileResult.rowCount > 0) {
+              if (reconcileResult.statusId !== undefined) {
                 // detail_live başarılı → status güncellendi (muhtemelen SECOND_HALF)
                 if (reconcileResult.statusId === 4) {
                   logger.info(
@@ -173,7 +311,6 @@ export class MatchWatchdogWorker {
                     result: 'success',
                     reason: 'half_time_to_second_half',
                     duration_ms: Date.now() - reconcileStartTime,
-                    row_count: reconcileResult.rowCount,
                     new_status_id: 4,
                   });
                   continue; // Success - skip further processing
@@ -228,14 +365,17 @@ export class MatchWatchdogWorker {
                     `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>60 min). Transitioning to END.`
                   );
 
-                  const updateResult = await client.query(
-                    `UPDATE ts_matches 
-                     SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
-                     WHERE external_id = $2 AND status_id = 3`,
-                    [nowTs, stale.matchId]
+                  // PHASE C: Use orchestrator for centralized write coordination
+                  const orchestratorResult = await this.orchestrator.updateMatch(
+                    stale.matchId,
+                    [
+                      { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+                      { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                    ],
+                    'watchdog'
                   );
 
-                  if (updateResult.rowCount && updateResult.rowCount > 0) {
+                  if (orchestratorResult.status === 'success') {
                     successCount++;
                     reasons['half_time_finished_safe'] = (reasons['half_time_finished_safe'] || 0) + 1;
 
@@ -244,7 +384,7 @@ export class MatchWatchdogWorker {
                       result: 'success',
                       reason: 'half_time_finished_safe',
                       duration_ms: Date.now() - reconcileStartTime,
-                      row_count: updateResult.rowCount,
+                      fields_updated: orchestratorResult.fieldsUpdated,
                       new_status_id: 8,
                       match_time: matchTime,
                       elapsed_minutes: Math.floor((nowTs - (matchTime ?? nowTs)) / 60),
@@ -334,14 +474,17 @@ export class MatchWatchdogWorker {
                   `is ${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>120 min). Transitioning to END.`
                 );
 
-                const updateResult = await client.query(
-                  `UPDATE ts_matches 
-                   SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
-                   WHERE external_id = $2 AND status_id IN (2, 3, 4, 5, 7)`,
-                  [nowTs, stale.matchId]
+                // PHASE C: Use orchestrator for centralized write coordination
+                const orchestratorResult = await this.orchestrator.updateMatch(
+                  stale.matchId,
+                  [
+                    { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+                    { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                  ],
+                  'watchdog'
                 );
 
-                if (updateResult.rowCount && updateResult.rowCount > 0) {
+                if (orchestratorResult.status === 'success') {
                   successCount++;
                   reasons['finished_not_in_recent_list_safe'] = (reasons['finished_not_in_recent_list_safe'] || 0) + 1;
 
@@ -350,7 +493,7 @@ export class MatchWatchdogWorker {
                     result: 'success',
                     reason: 'finished_not_in_recent_list_safe',
                     duration_ms: Date.now() - reconcileStartTime,
-                    row_count: updateResult.rowCount,
+                    fields_updated: orchestratorResult.fieldsUpdated,
                     new_status_id: 8,
                     match_time: matchTime,
                     elapsed_minutes: Math.floor((nowTs - (matchTime ?? nowTs)) / 60),
@@ -365,47 +508,41 @@ export class MatchWatchdogWorker {
             // Match is END in recent/list but LIVE in DB - transition to END
             logger.info(`[Watchdog] Match ${stale.matchId} is END (status ${recentListMatch.statusId}) in recent/list, transitioning DB to END`);
 
-            const { pool } = await import('../database/connection');
-            const client = await pool.connect();
-            try {
-              const updateResult = await client.query(
-                `UPDATE ts_matches 
-                 SET status_id = 8, updated_at = NOW(), 
-                     provider_update_time = GREATEST(COALESCE(provider_update_time, 0)::BIGINT, $1::BIGINT),
-                     last_event_ts = $2::BIGINT
-                 WHERE external_id = $3 AND status_id IN (2, 3, 4, 5, 7)`,
-                [
-                  recentListMatch.updateTime || Math.floor(Date.now() / 1000),
-                  Math.floor(Date.now() / 1000),
-                  stale.matchId
-                ]
-              );
+            const nowTs = Math.floor(Date.now() / 1000);
 
-              if (updateResult.rowCount && updateResult.rowCount > 0) {
+            // PHASE C: Use orchestrator for centralized write coordination
+            const orchestratorResult = await this.orchestrator.updateMatch(
+              stale.matchId,
+              [
+                { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+                { field: 'provider_update_time', value: recentListMatch.updateTime || nowTs, source: 'api', priority: 2, timestamp: nowTs },
+                { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+              ],
+              'watchdog'
+            );
+
+            if (orchestratorResult.status === 'success') {
                 successCount++;
                 reasons['finished_in_recent_list'] = (reasons['finished_in_recent_list'] || 0) + 1;
 
-                logEvent('info', 'watchdog.reconcile.done', {
-                  match_id: stale.matchId,
-                  result: 'success',
-                  reason: 'finished_in_recent_list',
-                  duration_ms: Date.now() - reconcileStartTime,
-                  row_count: updateResult.rowCount,
-                  new_status_id: 8,
-                  provider_status_id: recentListMatch.statusId,
-                });
+              logEvent('info', 'watchdog.reconcile.done', {
+                match_id: stale.matchId,
+                result: 'success',
+                reason: 'finished_in_recent_list',
+                duration_ms: Date.now() - reconcileStartTime,
+                fields_updated: orchestratorResult.fieldsUpdated,
+                new_status_id: 8,
+                provider_status_id: recentListMatch.statusId,
+              });
 
-                // HALF STATS PERSISTENCE: Save second half data when match transitions to END
-                halfStatsPersistenceService.saveSecondHalfData(stale.matchId)
-                  .then(res => {
-                    if (res.success) logger.info(`[Watchdog] Half stats saved for ${stale.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
-                  })
-                  .catch(err => logger.warn(`[Watchdog] Failed to save half stats for ${stale.matchId}:`, err.message));
+              // HALF STATS PERSISTENCE: Save second half data when match transitions to END
+              halfStatsPersistenceService.saveSecondHalfData(stale.matchId)
+                .then(res => {
+                  if (res.success) logger.info(`[Watchdog] Half stats saved for ${stale.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                })
+                .catch(err => logger.warn(`[Watchdog] Failed to save half stats for ${stale.matchId}:`, err.message));
 
-                continue; // Skip detail_live reconcile
-              }
-            } finally {
-              client.release();
+              continue; // Skip detail_live reconcile
             }
           }
 
@@ -417,12 +554,12 @@ export class MatchWatchdogWorker {
             reason: stale.reason,
           });
 
-          // Trigger reconcile (no update_time override - watchdog is for recovery)
-          const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(stale.matchId, null);
+          // PHASE C: Use orchestrator for centralized write coordination
+          const reconcileResult = await this.reconcileViaOrchestrator(stale.matchId);
           const duration = Date.now() - reconcileStartTime;
 
-          // Phase 5-S: Check if reconcile was successful (rowCount > 0)
-          if (reconcileResult.rowCount > 0) {
+          // Phase 5-S: Check if reconcile was successful (statusId returned)
+          if (reconcileResult.statusId !== undefined) {
             successCount++;
             const reasonKey = `success_${stale.reason}`;
             reasons[reasonKey] = (reasons[reasonKey] || 0) + 1;
@@ -433,8 +570,7 @@ export class MatchWatchdogWorker {
               result: 'success',
               reason: stale.reason,
               duration_ms: duration,
-              row_count: reconcileResult.rowCount,
-              provider_update_time: reconcileResult.providerUpdateTime || null,
+              new_status_id: reconcileResult.statusId,
             });
           } else {
             skippedCount++;
@@ -446,7 +582,6 @@ export class MatchWatchdogWorker {
               result: 'skip',
               reason: 'no_update',
               duration_ms: duration,
-              row_count: 0,
             });
           }
         } catch (error: any) {
@@ -506,10 +641,11 @@ export class MatchWatchdogWorker {
             });
 
             try {
-              const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(match.matchId, null);
+              // PHASE C: Use orchestrator for centralized write coordination
+              const reconcileResult = await this.reconcileViaOrchestrator(match.matchId);
               const duration = Date.now() - reconcileStartTime;
 
-              if (reconcileResult.updated && reconcileResult.rowCount > 0) {
+              if (reconcileResult.statusId !== undefined) {
                 successCount++;
                 reasons['should_be_live_detail_live_success'] = (reasons['should_be_live_detail_live_success'] || 0) + 1;
                 logEvent('info', 'watchdog.reconcile.done', {
@@ -517,7 +653,7 @@ export class MatchWatchdogWorker {
                   result: 'success',
                   reason: 'should_be_live_detail_live_success',
                   duration_ms: duration,
-                  row_count: reconcileResult.rowCount,
+                  new_status_id: reconcileResult.statusId,
                   source: 'detail_live_fallback',
                 });
                 continue;
@@ -535,31 +671,31 @@ export class MatchWatchdogWorker {
                   `with no detail_live data. Transitioning to END (status=8).`
                 );
 
-                const client = await pool.connect();
-                try {
-                  const updateResult = await client.query(
-                    `UPDATE ts_matches 
-                     SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
-                     WHERE external_id = $2 AND status_id = 1`,
-                    [Math.floor(Date.now() / 1000), match.matchId]
-                  );
+                const nowTs = Math.floor(Date.now() / 1000);
 
-                  if (updateResult.rowCount && updateResult.rowCount > 0) {
+                // PHASE C: Use orchestrator for centralized write coordination
+                const orchestratorResult = await this.orchestrator.updateMatch(
+                  match.matchId,
+                  [
+                    { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+                    { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                  ],
+                  'watchdog'
+                );
+
+                if (orchestratorResult.status === 'success') {
                     successCount++;
                     reasons['old_match_transition_to_end'] = (reasons['old_match_transition_to_end'] || 0) + 1;
 
-                    logEvent('info', 'watchdog.reconcile.done', {
-                      match_id: match.matchId,
-                      result: 'success',
-                      reason: 'old_match_transition_to_end',
-                      duration_ms: Date.now() - reconcileStartTime,
-                      row_count: updateResult.rowCount,
-                      match_age_minutes: matchAgeMinutes,
-                      new_status_id: 8,
-                    });
-                  }
-                } finally {
-                  client.release();
+                  logEvent('info', 'watchdog.reconcile.done', {
+                    match_id: match.matchId,
+                    result: 'success',
+                    reason: 'old_match_transition_to_end',
+                    duration_ms: Date.now() - reconcileStartTime,
+                    fields_updated: orchestratorResult.fieldsUpdated,
+                    match_age_minutes: matchAgeMinutes,
+                    new_status_id: 8,
+                  });
                 }
                 continue;
               }
@@ -648,25 +784,18 @@ export class MatchWatchdogWorker {
                 ? Math.max(existingProviderTime || 0, incomingProviderTime)
                 : ingestionTs;
 
-              const updateQuery = `
-                UPDATE ts_matches
-                SET 
-                  status_id = $1,
-                  provider_update_time = GREATEST(COALESCE(provider_update_time, 0)::BIGINT, $2::BIGINT),
-                  last_event_ts = $3::BIGINT,
-                  updated_at = NOW()
-                WHERE external_id = $4
-                  AND status_id = 1
-              `;
-
-              const updateResult = await client.query(updateQuery, [
-                recentListMatch.statusId,
-                providerTimeToWrite,
-                ingestionTs,
+              // PHASE C: Use orchestrator for centralized write coordination
+              const orchestratorResult = await this.orchestrator.updateMatch(
                 match.matchId,
-              ]);
+                [
+                  { field: 'status_id', value: recentListMatch.statusId, source: 'api', priority: 2, timestamp: providerTimeToWrite },
+                  { field: 'provider_update_time', value: providerTimeToWrite, source: 'api', priority: 2, timestamp: providerTimeToWrite },
+                  { field: 'last_event_ts', value: ingestionTs, source: 'api', priority: 2, timestamp: ingestionTs },
+                ],
+                'watchdog'
+              );
 
-              if (updateResult.rowCount && updateResult.rowCount > 0) {
+              if (orchestratorResult.status === 'success') {
                 statusUpdateSuccess = true;
                 logger.info(`[Watchdog] Updated status for ${match.matchId} from 1 to ${recentListMatch.statusId} (from recent/list)`);
               }
@@ -678,11 +807,12 @@ export class MatchWatchdogWorker {
           // Now call detail_live for events/score/minute (only if status update succeeded)
           if (statusUpdateSuccess) {
             try {
-              const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(match.matchId, recentListMatch.updateTime);
+              // PHASE C: Use orchestrator for centralized write coordination
+              const reconcileResult = await this.reconcileViaOrchestrator(match.matchId);
               const duration = Date.now() - reconcileStartTime;
 
               // Phase 5-S: Check if reconcile was successful
-              if (reconcileResult.rowCount > 0 || statusUpdateSuccess) {
+              if (reconcileResult.statusId !== undefined || statusUpdateSuccess) {
                 successCount++;
                 reasons['success_should_be_live'] = (reasons['success_should_be_live'] || 0) + 1;
 
@@ -691,8 +821,8 @@ export class MatchWatchdogWorker {
                   result: 'success',
                   reason: 'should_be_live',
                   duration_ms: duration,
-                  row_count: reconcileResult.rowCount || 1, // Status update counts as 1
-                  provider_update_time: reconcileResult.providerUpdateTime || recentListMatch.updateTime || null,
+                  new_status_id: reconcileResult.statusId || recentListMatch.statusId,
+                  provider_update_time: recentListMatch.updateTime || null,
                 });
               } else {
                 // Status updated but detail_live didn't update anything
@@ -704,7 +834,7 @@ export class MatchWatchdogWorker {
                   result: 'success',
                   reason: 'should_be_live_status_only',
                   duration_ms: duration,
-                  row_count: 1, // Status update
+                  new_status_id: recentListMatch.statusId,
                   provider_update_time: recentListMatch.updateTime || null,
                 });
               }
@@ -793,11 +923,11 @@ export class MatchWatchdogWorker {
         attemptedCount++;
 
         try {
-          // First try to reconcile via API to get correct status
-          const reconcileResult = await this.matchDetailLiveService.reconcileMatchToDatabase(overdue.matchId, null);
+          // PHASE C: Use orchestrator - try to reconcile via API to get correct status
+          const reconcileResult = await this.reconcileViaOrchestrator(overdue.matchId);
           const duration = Date.now() - reconcileStartTime;
 
-          if (reconcileResult.updated && reconcileResult.rowCount > 0) {
+          if (reconcileResult.statusId !== undefined) {
             // API returned updated data
             successCount++;
             reasons['overdue_reconciled'] = (reasons['overdue_reconciled'] || 0) + 1;
@@ -807,10 +937,9 @@ export class MatchWatchdogWorker {
               result: 'success',
               reason: 'overdue_reconciled',
               duration_ms: duration,
-              row_count: reconcileResult.rowCount,
               old_minute: overdue.minute,
               old_status: overdue.statusId,
-              new_status: reconcileResult.statusId || 'unknown',
+              new_status: reconcileResult.statusId,
             });
 
             // If match transitioned to END, trigger post-match persistence
@@ -844,54 +973,53 @@ export class MatchWatchdogWorker {
             `not updated by API. Force transitioning to END (status=8).`
           );
 
-          const client = await pool.connect();
-          try {
-            const nowTs = Math.floor(Date.now() / 1000);
-            const updateResult = await client.query(
-              `UPDATE ts_matches
-               SET status_id = 8, updated_at = NOW(), last_event_ts = $1::BIGINT
-               WHERE external_id = $2 AND status_id IN (2, 4, 5)`,
-              [nowTs, overdue.matchId]
-            );
+          const nowTs = Math.floor(Date.now() / 1000);
 
-            if (updateResult.rowCount && updateResult.rowCount > 0) {
+          // PHASE C: Use orchestrator for centralized write coordination
+          const orchestratorResult = await this.orchestrator.updateMatch(
+            overdue.matchId,
+            [
+              { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+              { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+            ],
+            'watchdog'
+          );
+
+          if (orchestratorResult.status === 'success') {
               successCount++;
               reasons['overdue_force_end'] = (reasons['overdue_force_end'] || 0) + 1;
 
-              logEvent('info', 'watchdog.reconcile.done', {
-                match_id: overdue.matchId,
-                result: 'success',
-                reason: 'overdue_force_end',
-                duration_ms: Date.now() - reconcileStartTime,
-                row_count: updateResult.rowCount,
-                old_minute: overdue.minute,
-                old_status: overdue.statusId,
-                new_status: 8,
-              });
+            logEvent('info', 'watchdog.reconcile.done', {
+              match_id: overdue.matchId,
+              result: 'success',
+              reason: 'overdue_force_end',
+              duration_ms: Date.now() - reconcileStartTime,
+              fields_updated: orchestratorResult.fieldsUpdated,
+              old_minute: overdue.minute,
+              old_status: overdue.statusId,
+              new_status: 8,
+            });
 
-              // Trigger post-match persistence
-              logger.info(`[Watchdog] Overdue match ${overdue.matchId} force-ended, triggering post-match persistence...`);
-              try {
-                const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
-                const { theSportsAPI } = await import('../core');
-                const processor = new PostMatchProcessor();
-                await processor.onMatchEnded(overdue.matchId);
-              } catch (postMatchErr: any) {
-                logger.warn(`[Watchdog] Failed to trigger post-match persistence for force-ended ${overdue.matchId}:`, postMatchErr.message);
-              }
-
-              // Save half stats
-              halfStatsPersistenceService.saveSecondHalfData(overdue.matchId)
-                .then(res => {
-                  if (res.success) logger.info(`[Watchdog] Half stats saved for force-ended ${overdue.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
-                })
-                .catch(err => logger.warn(`[Watchdog] Failed to save half stats for force-ended ${overdue.matchId}:`, err.message));
-            } else {
-              skippedCount++;
-              reasons['overdue_no_update'] = (reasons['overdue_no_update'] || 0) + 1;
+            // Trigger post-match persistence
+            logger.info(`[Watchdog] Overdue match ${overdue.matchId} force-ended, triggering post-match persistence...`);
+            try {
+              const { PostMatchProcessor } = await import('../services/liveData/postMatchProcessor');
+              const { theSportsAPI } = await import('../core');
+              const processor = new PostMatchProcessor();
+              await processor.onMatchEnded(overdue.matchId);
+            } catch (postMatchErr: any) {
+              logger.warn(`[Watchdog] Failed to trigger post-match persistence for force-ended ${overdue.matchId}:`, postMatchErr.message);
             }
-          } finally {
-            client.release();
+
+            // Save half stats
+            halfStatsPersistenceService.saveSecondHalfData(overdue.matchId)
+              .then(res => {
+                if (res.success) logger.info(`[Watchdog] Half stats saved for force-ended ${overdue.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+              })
+              .catch(err => logger.warn(`[Watchdog] Failed to save half stats for force-ended ${overdue.matchId}:`, err.message));
+          } else {
+            skippedCount++;
+            reasons['overdue_no_update'] = (reasons['overdue_no_update'] || 0) + 1;
           }
         } catch (error: any) {
           failCount++;

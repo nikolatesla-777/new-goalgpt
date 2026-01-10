@@ -17,6 +17,8 @@ import { predictionSettlementService } from '../services/ai/predictionSettlement
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
+// PHASE C: Use LiveMatchOrchestrator for centralized write coordination
+import { LiveMatchOrchestrator } from '../services/orchestration/LiveMatchOrchestrator';
 
 export class MatchDataSyncWorker {
   private apiClient = theSportsAPI; // Phase 3A: Use singleton
@@ -25,6 +27,7 @@ export class MatchDataSyncWorker {
   private matchTrendService: MatchTrendService;
   private matchDatabaseService: MatchDatabaseService;
   private aiPredictionService: AIPredictionService;
+  private orchestrator: LiveMatchOrchestrator;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -34,6 +37,7 @@ export class MatchDataSyncWorker {
     this.matchTrendService = new MatchTrendService();
     this.matchDatabaseService = new MatchDatabaseService();
     this.aiPredictionService = new AIPredictionService();
+    this.orchestrator = LiveMatchOrchestrator.getInstance();
   }
 
   /**
@@ -128,35 +132,49 @@ export class MatchDataSyncWorker {
    * Save trend data for a match
    */
   private async saveMatchTrend(matchId: string): Promise<boolean> {
-    const client = await pool.connect();
     try {
       // Get match status to determine which endpoint to use
-      const statusResult = await client.query(`
-        SELECT status_id FROM ts_matches WHERE external_id = $1
-      `, [matchId]);
-      
-      const matchStatus = statusResult.rows[0]?.status_id || 0;
-      
+      const client = await pool.connect();
+      let matchStatus = 0;
+      try {
+        const statusResult = await client.query(`
+          SELECT status_id FROM ts_matches WHERE external_id = $1
+        `, [matchId]);
+        matchStatus = statusResult.rows[0]?.status_id || 0;
+      } finally {
+        client.release();
+      }
+
       // For live matches, use getMatchTrend which automatically chooses live or detail endpoint
       const trendData = await this.matchTrendService.getMatchTrend({ match_id: matchId }, matchStatus);
-      
+
       if (trendData?.results) {
         // Check if results is array or object
         const results = Array.isArray(trendData.results) ? trendData.results[0] : trendData.results;
-        
+
         // Check if results has actual data
         if (results && typeof results === 'object' && !Array.isArray(results)) {
           if ((results.first_half?.length ?? 0) > 0 || (results.second_half?.length ?? 0) > 0 || (results.overtime?.length ?? 0) > 0) {
-            // Save to trend_data column
-            await client.query(`
-              UPDATE ts_matches
-              SET trend_data = $1::jsonb,
-                  updated_at = NOW()
-              WHERE external_id = $2
-            `, [JSON.stringify(trendData.results), matchId]);
-            
-            logger.debug(`[MatchDataSync] Saved trend data for ${matchId}`);
-            return true;
+            // PHASE C: Use orchestrator for centralized write coordination
+            const now = Math.floor(Date.now() / 1000);
+            const orchestratorResult = await this.orchestrator.updateMatch(
+              matchId,
+              [
+                {
+                  field: 'trend_data',
+                  value: JSON.stringify(trendData.results),
+                  source: 'api',
+                  priority: 2,
+                  timestamp: now,
+                },
+              ],
+              'matchDataSync'
+            );
+
+            if (orchestratorResult.status === 'success') {
+              logger.debug(`[MatchDataSync] Saved trend data for ${matchId}`);
+              return true;
+            }
           }
         }
       }
@@ -164,8 +182,6 @@ export class MatchDataSyncWorker {
     } catch (error: any) {
       logger.warn(`[MatchDataSync] Failed to save trend for ${matchId}: ${error.message}`);
       return false;
-    } finally {
-      client.release();
     }
   }
 
