@@ -363,6 +363,17 @@ export class MatchSyncService {
   /**
    * Upsert match to database
    */
+  /**
+   * Safely convert a value to integer, returning null if invalid
+   * CRITICAL FIX: Prevents "invalid input syntax for type integer: "NaN"" errors
+   */
+  private safeInt(val: any): number | null {
+    if (val === null || val === undefined || val === '') return null;
+    const num = Number(val);
+    if (isNaN(num) || !isFinite(num)) return null;
+    return Math.floor(num);
+  }
+
   private async upsertMatch(client: any, matchData: MatchSyncData): Promise<void> {
     await this.ensureMatchColumnSupport(client);
     const hasNewColumns = this.hasNewScoreColumns;
@@ -428,14 +439,14 @@ export class MatchSyncService {
       matchData.referee_id || null,
       matchData.neutral ?? null,
       matchData.note || null,
-      // CRITICAL FIX: Ensure integer fields are properly typed (null or number, never string/undefined)
-      matchData.home_position != null ? Number(matchData.home_position) : null,
-      matchData.away_position != null ? Number(matchData.away_position) : null,
+      // CRITICAL FIX: Use safeInt() to prevent NaN errors with integer fields
+      this.safeInt(matchData.home_position),
+      this.safeInt(matchData.away_position),
       matchData.coverage_mlive ?? null,
       matchData.coverage_lineup ?? null,
       matchData.stage_id || null,
-      matchData.group_num != null ? Number(matchData.group_num) : null,
-      matchData.round_num != null ? Number(matchData.round_num) : null,
+      this.safeInt(matchData.group_num),
+      this.safeInt(matchData.round_num),
       matchData.related_id || null,
       matchData.agg_score || null,
       matchData.environment_weather || null,
