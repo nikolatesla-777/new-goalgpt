@@ -138,7 +138,7 @@ export class MatchWatchdogService {
           minute
         FROM ts_matches
         WHERE
-          (status_id = 4 AND minute > 105)  -- SECOND_HALF exceeded max (90 + 15 injury)
+          (status_id = 4 AND minute > 100)  -- SECOND_HALF exceeded max (90 + 10 injury) - LOWERED FROM 105 FOR FASTER FT DETECTION
           OR (status_id = 5 AND minute > 130) -- OVERTIME exceeded max (120 + 10 injury)
           OR (status_id = 2 AND minute > 60)  -- FIRST_HALF exceeded max (45 + 15 injury - something is very wrong)
         ORDER BY minute DESC
@@ -149,8 +149,8 @@ export class MatchWatchdogService {
 
       return result.rows.map((row: any) => {
         let reason = '';
-        if (row.status_id === 4 && row.minute > 105) {
-          reason = `SECOND_HALF minute ${row.minute} > 105 (should have ended)`;
+        if (row.status_id === 4 && row.minute > 100) {
+          reason = `SECOND_HALF minute ${row.minute} > 100 (should have ended)`;
         } else if (row.status_id === 5 && row.minute > 130) {
           reason = `OVERTIME minute ${row.minute} > 130 (should have ended)`;
         } else if (row.status_id === 2 && row.minute > 60) {
