@@ -195,13 +195,33 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                         </span>
                     </div>
 
-                    {/* Score */}
-                    <div className="flex-shrink-0 px-2 flex flex-col items-center justify-center">
+                    {/* Score & Status Badge */}
+                    <div className="flex-shrink-0 px-2 flex flex-col items-center justify-center gap-2">
+                        {/* Status Badge */}
+                        {isFinished ? (
+                            <span className="px-3 py-1 rounded-full bg-gray-500/20 text-gray-400 text-[10px] font-black uppercase tracking-wider">
+                                MS
+                            </span>
+                        ) : isHalfTime ? (
+                            <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-wider border border-amber-500/30">
+                                DEVRE ARASI
+                            </span>
+                        ) : isLive ? (
+                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/20 border border-red-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                                <span className="text-red-400 text-[10px] font-black uppercase tracking-wider">
+                                    {currentMinute ? `${currentMinute}'` : 'CANLI'}
+                                </span>
+                            </div>
+                        ) : (
+                            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wide">
+                                v
+                            </span>
+                        )}
+
+                        {/* Score */}
                         <span className="text-3xl font-black text-white tracking-widest font-mono leading-none">
                             {displayScore}
-                        </span>
-                        <span className="text-[10px] text-gray-500 font-bold uppercase mt-2 tracking-wide">
-                            {isFinished ? 'MS' : (isHalfTime ? 'HT' : (isLive ? (currentMinute ? `${currentMinute}'` : 'LIVE') : 'v'))}
                         </span>
                     </div>
 
