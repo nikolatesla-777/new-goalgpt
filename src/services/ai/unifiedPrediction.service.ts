@@ -161,14 +161,15 @@ class UnifiedPredictionService {
         p.access_type, p.created_at, p.resulted_at,
         p.result, p.final_score, p.result_reason, p.source,
         -- Valid Live Data from Single Source of Truth (ts_matches)
-        -- If match is finished (8), use regular score. If live, use display score.
+        -- Priority: home_score_display > home_scores[0] > home_score_regular > 0
+        -- CRITICAL FIX: home_score_display can be NULL, fallback to home_scores[0]
         CASE
-            WHEN m.status_id = 8 THEN COALESCE(m.home_score_regular, 0)
-            ELSE m.home_score_display
+            WHEN m.status_id = 8 THEN COALESCE(m.home_score_regular, (m.home_scores->0)::INTEGER, 0)
+            ELSE COALESCE(m.home_score_display, (m.home_scores->0)::INTEGER, m.home_score_regular, 0)
         END as home_score_display,
         CASE
-            WHEN m.status_id = 8 THEN COALESCE(m.away_score_regular, 0)
-            ELSE m.away_score_display
+            WHEN m.status_id = 8 THEN COALESCE(m.away_score_regular, (m.away_scores->0)::INTEGER, 0)
+            ELSE COALESCE(m.away_score_display, (m.away_scores->0)::INTEGER, m.away_score_regular, 0)
         END as away_score_display,
         m.status_id as live_match_status, m.minute as live_match_minute,
         -- Competition & Country Data
