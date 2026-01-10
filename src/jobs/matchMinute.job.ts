@@ -12,14 +12,17 @@ import { pool } from '../database/connection';
 import { MatchMinuteService } from '../services/thesports/match/matchMinute.service';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
+import { LiveMatchOrchestrator } from '../services/orchestration/LiveMatchOrchestrator';
 
 export class MatchMinuteWorker {
   private matchMinuteService: MatchMinuteService;
+  private orchestrator: LiveMatchOrchestrator;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
   constructor() {
     this.matchMinuteService = new MatchMinuteService();
+    this.orchestrator = LiveMatchOrchestrator.getInstance();
   }
 
   /**
@@ -127,15 +130,35 @@ export class MatchMinuteWorker {
             continue;
           }
 
-          // Update only if minute changed
-          const updateResult = await this.matchMinuteService.updateMatchMinute(
-            matchId,
-            newMinute,
-            existingMinute
-          );
+          // PHASE C: Use orchestrator for coordinated writes
+          // Only send update if minute changed
+          if (newMinute !== existingMinute) {
+            const result = await this.orchestrator.updateMatch(
+              matchId,
+              [
+                {
+                  field: 'minute',
+                  value: newMinute,
+                  source: 'computed',
+                  priority: 1,
+                  timestamp: nowTs,
+                },
+                {
+                  field: 'last_minute_update_ts',
+                  value: nowTs,
+                  source: 'computed',
+                  priority: 1,
+                  timestamp: nowTs,
+                },
+              ],
+              'matchMinute'
+            );
 
-          if (updateResult.updated) {
-            updatedCount++;
+            if (result.status === 'success') {
+              updatedCount++;
+            } else {
+              skippedCount++;
+            }
           } else {
             skippedCount++;
           }
