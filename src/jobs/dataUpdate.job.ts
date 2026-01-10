@@ -171,7 +171,7 @@ export class DataUpdateWorker {
 
         if (homeScoreDisplay !== null) {
           updates.push({
-            field: 'home_score',
+            field: 'home_score_display',
             value: homeScoreDisplay,
             source: 'api',
             priority: 2,
@@ -181,7 +181,7 @@ export class DataUpdateWorker {
 
         if (awayScoreDisplay !== null) {
           updates.push({
-            field: 'away_score',
+            field: 'away_score_display',
             value: awayScoreDisplay,
             source: 'api',
             priority: 2,

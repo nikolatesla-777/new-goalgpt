@@ -69,7 +69,7 @@ interface FieldRules {
  *
  * // Job sends updates to orchestrator
  * await orchestrator.updateMatch('match-123', [
- *   { field: 'home_score', value: 2, source: 'mqtt', priority: 2, timestamp: Date.now() }
+ *   { field: 'home_score_display', value: 2, source: 'mqtt', priority: 2, timestamp: Date.now() }
  * ], 'dataUpdate');
  * ```
  */
@@ -79,8 +79,8 @@ export class LiveMatchOrchestrator extends EventEmitter {
   // Field ownership rules
   private readonly fieldRules: Record<string, FieldRules> = {
     // Score fields: MQTT preferred (real-time), API fallback
-    home_score: { source: 'mqtt', fallback: 'api', nullable: true },
-    away_score: { source: 'mqtt', fallback: 'api', nullable: true },
+    home_score_display: { source: 'mqtt', fallback: 'api', nullable: true },
+    away_score_display: { source: 'mqtt', fallback: 'api', nullable: true },
 
     // Status: API preferred (authoritative), MQTT fallback, watchdog can force-update for anomaly recovery
     status_id: { source: 'api', fallback: 'mqtt', allowWatchdog: true },
@@ -280,8 +280,8 @@ export class LiveMatchOrchestrator extends EventEmitter {
       const query = `
         SELECT
           external_id,
-          home_score,
-          away_score,
+          home_score_display,
+          away_score_display,
           status_id,
           minute,
           second_half_kickoff_ts,
