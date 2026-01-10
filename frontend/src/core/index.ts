@@ -1,6 +1,12 @@
 /**
- * Core module - placeholder for singleton imports
+ * Core Module - Application Foundation
  */
 
-// Placeholder export - not actually used in e74edbf
-export const theSportsAPI = {};
+export { theSportsAPI, TheSportsAPIManager } from './TheSportsAPIManager';
+export type { TheSportsClientConfig, RateLimitConfig } from './TheSportsAPIManager';
+
+// Placeholder ServiceContainer
+export const container = {};
+export const services = {};
+export class ServiceContainer {}
+export class TypedServiceAccessor {}
