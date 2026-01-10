@@ -77,13 +77,14 @@ export class LiveMatchOrchestrator extends EventEmitter {
   private static instance: LiveMatchOrchestrator | null = null;
 
   // Fields that have _source and _timestamp metadata columns in database
+  // Maps field name → metadata column prefix
   // (from add-field-metadata.ts migration)
-  private readonly fieldsWithMetadata = new Set([
-    'home_score_display',
-    'away_score_display',
-    'minute',
-    'status_id',
-  ]);
+  private readonly fieldMetadataMap: Record<string, string> = {
+    'home_score_display': 'home_score',      // home_score_source, home_score_timestamp
+    'away_score_display': 'away_score',      // away_score_source, away_score_timestamp
+    'minute': 'minute',                       // minute_source, minute_timestamp
+    'status_id': 'status_id',                // status_id_source, status_id_timestamp
+  };
 
   // Field ownership rules
   private readonly fieldRules: Record<string, FieldRules> = {
@@ -303,10 +304,10 @@ export class LiveMatchOrchestrator extends EventEmitter {
           competition_id,
           season_id,
           last_minute_update_ts,
-          home_score_display_source,
-          home_score_display_timestamp,
-          away_score_display_source,
-          away_score_display_timestamp,
+          home_score_source,
+          home_score_timestamp,
+          away_score_source,
+          away_score_timestamp,
           minute_source,
           minute_timestamp,
           status_id_source,
@@ -347,8 +348,11 @@ export class LiveMatchOrchestrator extends EventEmitter {
       const fieldName = update.field;
       const rules = this.fieldRules[fieldName];
       const currentValue = currentState[fieldName];
-      const currentSource = currentState[`${fieldName}_source`];
-      const currentTimestamp = currentState[`${fieldName}_timestamp`];
+
+      // Get metadata column prefix (e.g., home_score_display → home_score)
+      const metadataPrefix = this.fieldMetadataMap[fieldName] || fieldName;
+      const currentSource = currentState[`${metadataPrefix}_source`];
+      const currentTimestamp = currentState[`${metadataPrefix}_timestamp`];
 
       // Rule 1: Write-once fields (e.g., second_half_kickoff_ts)
       if (rules?.writeOnce && currentValue !== null) {
@@ -428,10 +432,11 @@ export class LiveMatchOrchestrator extends EventEmitter {
       // Accept update
       resolved[fieldName] = update.value;
 
-      // Only add metadata columns if they exist in database
-      if (this.fieldsWithMetadata.has(fieldName)) {
-        resolved[`${fieldName}_source`] = update.source;
-        resolved[`${fieldName}_timestamp`] = update.timestamp;
+      // Add metadata columns if field has them in database
+      if (this.fieldMetadataMap[fieldName]) {
+        const metadataPrefix = this.fieldMetadataMap[fieldName];
+        resolved[`${metadataPrefix}_source`] = update.source;
+        resolved[`${metadataPrefix}_timestamp`] = update.timestamp;
       }
     }
 
