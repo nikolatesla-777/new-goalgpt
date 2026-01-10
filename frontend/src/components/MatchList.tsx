@@ -15,14 +15,22 @@ interface MatchListProps {
   prefetchedMatches?: Match[];
   // Skip internal WebSocket and polling when parent handles it
   skipInternalUpdates?: boolean;
+  // CRITICAL FIX: External loading state from parent context
+  // When prefetchedMatches is used, parent should pass its loading state
+  isLoading?: boolean;
 }
 
-export function MatchList({ view, date, sortBy = 'league', favoriteMatches, prefetchedMatches, skipInternalUpdates = false }: MatchListProps) {
+export function MatchList({ view, date, sortBy = 'league', favoriteMatches, prefetchedMatches, skipInternalUpdates = false, isLoading: externalLoading }: MatchListProps) {
   // ============================================
   // STEP 1: ALL HOOKS MUST BE CALLED FIRST
   // ============================================
   const [matches, setMatches] = useState<Match[]>([]);
-  const [loading, setLoading] = useState(!prefetchedMatches); // Skip loading state if prefetched
+  const [internalLoading, setInternalLoading] = useState(!prefetchedMatches); // Skip loading state if prefetched
+
+  // CRITICAL FIX: Use external loading state if provided, otherwise use internal
+  // This ensures parent context's loading state is respected when using prefetchedMatches
+  const loading = externalLoading !== undefined ? externalLoading : internalLoading;
+  const setLoading = setInternalLoading; // Keep setter for internal use
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const hasLoadedRef = useRef(!!prefetchedMatches); // Already loaded if prefetched

@@ -11,7 +11,7 @@ import { useLivescore } from '../LivescoreContext';
 import { MatchList } from '../../MatchList';
 
 export function DiaryTab() {
-  const { selectedDate, sortBy, allMatches } = useLivescore();
+  const { selectedDate, sortBy, allMatches, loading } = useLivescore();
 
   return (
     <MatchList
@@ -20,6 +20,7 @@ export function DiaryTab() {
       sortBy={sortBy}
       prefetchedMatches={allMatches}
       skipInternalUpdates={true}
+      isLoading={loading}
     />
   );
 }

@@ -361,15 +361,20 @@ export class MatchSyncWorker {
     // Uses centralized PredictionSettlementService for proper IY/MS differentiation
     this.predictionResultInterval = setInterval(async () => {
       try {
-        // Find matches with pending predictions that have finished or are at halftime
+        // ============================================
+        // PART 1: HALFTIME & FULLTIME SETTLEMENT
+        // For status=3 (halftime) and status=8 (ended)
+        // ============================================
         const pendingResult = await pool.query(`
           SELECT DISTINCT
             p.match_id,
             m.status_id,
             m.home_score_display,
             m.away_score_display,
-            m.ht_home_score,
-            m.ht_away_score
+            (m.home_scores->0)::INTEGER as current_home_score,
+            (m.away_scores->0)::INTEGER as current_away_score,
+            (m.home_scores->1)::INTEGER as ht_home_score,
+            (m.away_scores->1)::INTEGER as ht_away_score
           FROM ai_predictions p
           JOIN ts_matches m ON p.match_id = m.external_id
           WHERE p.result = 'pending'
@@ -382,10 +387,10 @@ export class MatchSyncWorker {
           const eventType = row.status_id === 3 ? 'halftime' : 'fulltime';
           const homeScore = eventType === 'halftime'
             ? (parseInt(row.ht_home_score) || 0)
-            : (parseInt(row.home_score_display) || 0);
+            : (parseInt(row.home_score_display) || parseInt(row.current_home_score) || 0);
           const awayScore = eventType === 'halftime'
             ? (parseInt(row.ht_away_score) || 0)
-            : (parseInt(row.away_score_display) || 0);
+            : (parseInt(row.away_score_display) || parseInt(row.current_away_score) || 0);
 
           const result = await predictionSettlementService.processEvent({
             matchId: row.match_id,
@@ -402,7 +407,59 @@ export class MatchSyncWorker {
         }
 
         if (totalSettled > 0) {
-          logger.info(`[PredictionResulter] Settled ${totalSettled} prediction results`);
+          logger.info(`[PredictionResulter] Settled ${totalSettled} prediction results (HT/FT)`);
+        }
+
+        // ============================================
+        // PART 2: LIVE MATCH INSTANT WIN SETTLEMENT
+        // CRITICAL FIX: For status=2,4 (live matches)
+        // This catches matches where WebSocket/MQTT doesn't send score updates
+        // ============================================
+        const liveResult = await pool.query(`
+          SELECT DISTINCT
+            p.match_id,
+            m.status_id,
+            m.minute,
+            (m.home_scores->0)::INTEGER as current_home_score,
+            (m.away_scores->0)::INTEGER as current_away_score
+          FROM ai_predictions p
+          JOIN ts_matches m ON p.match_id = m.external_id
+          WHERE p.result = 'pending'
+            AND p.match_id IS NOT NULL
+            AND m.status_id IN (2, 4, 5, 7)
+        `);
+
+        let liveSettled = 0;
+        for (const row of liveResult.rows) {
+          const homeScore = parseInt(row.current_home_score) || 0;
+          const awayScore = parseInt(row.current_away_score) || 0;
+          const totalGoals = homeScore + awayScore;
+
+          // Only process if there are goals (instant win is only possible with goals)
+          if (totalGoals > 0) {
+            // Use proxy minute based on status for IY/MS determination
+            // Status 2 = 1st half, Status 4+ = 2nd half
+            const proxyMinute = row.status_id === 2 ? (row.minute || 1) : (row.minute || 46);
+
+            const result = await predictionSettlementService.processEvent({
+              matchId: row.match_id,
+              eventType: 'score_change',
+              homeScore,
+              awayScore,
+              minute: proxyMinute,
+              statusId: row.status_id,
+              timestamp: Date.now(),
+            });
+
+            if (result.settled > 0) {
+              liveSettled += result.settled;
+              logger.info(`[PredictionResulter] LIVE instant win for ${row.match_id}: ${homeScore}-${awayScore}, settled ${result.settled}`);
+            }
+          }
+        }
+
+        if (liveSettled > 0) {
+          logger.info(`[PredictionResulter] Settled ${liveSettled} LIVE instant win predictions`);
         }
       } catch (err) {
         logger.error('[PredictionResulter] Error updating prediction results:', err);

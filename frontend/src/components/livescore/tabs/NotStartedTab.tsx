@@ -11,7 +11,7 @@ import { useLivescore } from '../LivescoreContext';
 import { MatchList } from '../../MatchList';
 
 export function NotStartedTab() {
-  const { selectedDate, sortBy, notStartedMatches } = useLivescore();
+  const { selectedDate, sortBy, notStartedMatches, loading } = useLivescore();
 
   return (
     <MatchList
@@ -20,6 +20,7 @@ export function NotStartedTab() {
       sortBy={sortBy}
       prefetchedMatches={notStartedMatches}
       skipInternalUpdates={true}
+      isLoading={loading}
     />
   );
 }
