@@ -26,7 +26,7 @@ import { logEvent } from '../../utils/obsLogger';
 
 export interface SettlementEvent {
   matchId: string;
-  eventType: 'goal' | 'halftime' | 'fulltime' | 'score_change';
+  eventType: 'goal' | 'halftime' | 'fulltime' | 'score_change' | 'cancelled' | 'postponed';
   homeScore: number;
   awayScore: number;
   htHome?: number;
@@ -126,6 +126,10 @@ class PredictionSettlementService {
           break;
         case 'fulltime':
           result = await this.handleFulltime(event);
+          break;
+        case 'cancelled':
+        case 'postponed':
+          result = await this.handleCancelledOrPostponed(event);
           break;
         default:
           logger.warn(`[Settlement] Unknown event type: ${event.eventType}`);
@@ -481,6 +485,75 @@ class PredictionSettlementService {
   }
 
   /**
+   * Maç iptal/ertelendi handler - Tüm pending tahminleri cancelled olarak işaretle
+   *
+   * Status 9 (POSTPONED) veya 10 (CANCELLED) geldiğinde çağrılır
+   * Tüm pending tahminleri (IY ve MS) cancelled olarak işaretler
+   */
+  private async handleCancelledOrPostponed(event: SettlementEvent): Promise<SettlementResult> {
+    const client = await pool.connect();
+    let cancelled = 0;
+
+    try {
+      await client.query('BEGIN');
+
+      // Tüm pending tahminleri al
+      const pending = await client.query<PendingPrediction>(`
+        SELECT id, minute_at_prediction, score_at_prediction,
+               prediction, prediction_threshold,
+               canonical_bot_name, home_team_name, away_team_name
+        FROM ai_predictions
+        WHERE match_id = $1 AND result = 'pending'
+        FOR UPDATE
+      `, [event.matchId]);
+
+      if (pending.rows.length === 0) {
+        await client.query('COMMIT');
+        logger.debug(`[Settlement] Cancelled/Postponed: No pending predictions for ${event.matchId}`);
+        return { settled: 0, winners: 0, losers: 0 };
+      }
+
+      const reason = event.eventType === 'cancelled' ? 'match_cancelled' : 'match_postponed';
+      logger.info(`[Settlement] ${event.eventType.toUpperCase()} for ${event.matchId}: ${pending.rows.length} predictions to cancel`);
+
+      for (const row of pending.rows) {
+        await this.markCancelled(client, row.id, reason);
+        cancelled++;
+        logger.info(`[Settlement] CANCELLED: ${row.id} - ${reason}`);
+
+        // Phase 3: WebSocket broadcast
+        this.broadcastSettlement({
+          predictionId: row.id,
+          matchId: event.matchId,
+          botName: row.canonical_bot_name,
+          prediction: row.prediction,
+          result: 'lost', // UI'da cancelled gösterilecek ama result olarak lost gönderiyoruz
+          resultReason: reason,
+          homeTeam: row.home_team_name,
+          awayTeam: row.away_team_name,
+          finalScore: undefined,
+          timestamp: Date.now(),
+        });
+      }
+
+      await client.query('COMMIT');
+
+      // Stats view'ları güncelle
+      if (cancelled > 0) {
+        this.refreshStatsAsync();
+      }
+
+      return { settled: cancelled, winners: 0, losers: cancelled };
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Maç bittiğinde tüm tahminlerin final_score'unu güncelle
    * Bu, instant win ile kazanmış tahminlerin gerçek final skorunu almasını sağlar
    */
@@ -557,6 +630,26 @@ class PredictionSettlementService {
       prediction_id: predictionId,
       reason,
       score,
+    });
+  }
+
+  /**
+   * Tahmini CANCELLED olarak işaretle
+   * Maç iptal/erteleme durumlarında kullanılır
+   */
+  private async markCancelled(client: any, predictionId: string, reason: string): Promise<void> {
+    await client.query(`
+      UPDATE ai_predictions
+      SET result = 'cancelled',
+          resulted_at = NOW(),
+          updated_at = NOW(),
+          result_reason = $2
+      WHERE id = $1 AND result = 'pending'
+    `, [predictionId, reason]);
+
+    logEvent('info', 'settlement.cancelled', {
+      prediction_id: predictionId,
+      reason,
     });
   }
 

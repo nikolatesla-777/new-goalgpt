@@ -3,10 +3,10 @@
  * Matching AdminBots quality
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Robot, Trophy, XCircle, Clock, TrendUp, CheckCircle, Link as LinkIcon, LinkBreak } from '@phosphor-icons/react';
-import { useSocket } from '../../hooks/useSocket';
+import { useAIPredictions, type PredictionFilter } from '../../context/AIPredictionsContext';
 import './admin.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -52,56 +52,77 @@ interface PredictionStats {
     winRate: string;
 }
 
-interface BotStat {
-    name: string;
-    displayName: string;
-    total: number;
-    pending: number;
-    won: number;
-    lost: number;
-    winRate: string;
-}
+// BotStat interface - context'ten gelen botStats için kullanılıyor
 
 type FilterType = 'all' | 'pending' | 'won' | 'lost';
 
 export function AdminPredictions() {
     const navigate = useNavigate();
-    const [predictions, setPredictions] = useState<UnifiedPrediction[]>([]);
-    const [stats, setStats] = useState<PredictionStats | null>(null);
-    const [bots, setBots] = useState<BotStat[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState<FilterType>('all');
+
+    // ✅ TEK MERKEZİ KAYNAK - AIPredictionsContext kullan
+    const {
+        predictions: contextPredictions,
+        stats: contextStats,
+        botStats: bots,
+        loading,
+        setFilter: setContextFilter,
+        isConnected,
+        refresh
+    } = useAIPredictions();
+
+    const [localFilter, setLocalFilter] = useState<FilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams();
-            if (filter !== 'all') {
-                params.set('status', filter);
-            }
-            params.set('limit', '100');
-
-            const response = await fetch(`${API_BASE}/predictions/unified?${params.toString()}`);
-
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.data) {
-                    setPredictions(data.data.predictions || []);
-                    setStats(data.data.stats || null);
-                    setBots(data.data.bots || []);
-                }
-            }
-        } catch (err) {
-            console.error('Fetch predictions error:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [filter]);
-
+    // Context filter'ı local filter ile senkronize et
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        const newFilter: PredictionFilter = { limit: 100 };
+        if (localFilter !== 'all') {
+            newFilter.status = localFilter;
+        }
+        setContextFilter(newFilter);
+    }, [localFilter, setContextFilter]);
+
+    // Context'ten gelen predictions'ı UnifiedPrediction formatına dönüştür
+    const predictions: UnifiedPrediction[] = contextPredictions.map(p => ({
+        id: p.id,
+        external_id: p.external_id,
+        canonical_bot_name: p.canonical_bot_name,
+        league_name: p.league_name,
+        home_team_name: p.home_team_name,
+        away_team_name: p.away_team_name,
+        home_team_logo: p.home_team_logo,
+        away_team_logo: p.away_team_logo,
+        score_at_prediction: p.score_at_prediction,
+        minute_at_prediction: p.minute_at_prediction,
+        prediction: p.prediction,
+        prediction_threshold: p.prediction_threshold,
+        match_id: p.match_id,
+        result: p.result,
+        final_score: p.final_score,
+        result_reason: p.result_reason,
+        access_type: p.access_type,
+        source: p.source,
+        created_at: p.created_at,
+        country_name: p.country_name,
+        country_logo: p.country_logo,
+        competition_name: p.league_name,
+        competition_logo: p.competition_logo,
+        live_match_status: p.live_match_status,
+        live_match_minute: p.live_match_minute,
+        home_score_display: p.home_score_display,
+        away_score_display: p.away_score_display,
+        ht_home_score: undefined, // Context'te yok, ama endpoint'ten geliyor olabilir
+        ht_away_score: undefined,
+    }));
+
+    const stats: PredictionStats | null = contextStats ? {
+        total: contextStats.total,
+        pending: contextStats.pending,
+        matched: contextStats.matched,
+        won: contextStats.won,
+        lost: contextStats.lost,
+        winRate: contextStats.winRate,
+    } : null;
 
     const filteredPredictions = predictions.filter((p) => {
         if (!searchQuery) return true;
@@ -114,14 +135,6 @@ export function AdminPredictions() {
         );
     });
 
-    const { lastEvent } = useSocket();
-
-    useEffect(() => {
-        if (lastEvent) {
-            fetchData();
-        }
-    }, [lastEvent]);
-
     // Toggle access type
     const toggleAccessType = async (predictionId: string, currentType: 'VIP' | 'FREE') => {
         const newType = currentType === 'VIP' ? 'FREE' : 'VIP';
@@ -132,9 +145,8 @@ export function AdminPredictions() {
                 body: JSON.stringify({ access_type: newType })
             });
             if (res.ok) {
-                setPredictions(prev => prev.map(p =>
-                    p.id === predictionId ? { ...p, access_type: newType } : p
-                ));
+                // Context'i yenile - tüm sayfalar senkronize olur
+                await refresh();
             }
         } catch (err) {
             console.error('Toggle access error:', err);
@@ -220,7 +232,7 @@ export function AdminPredictions() {
                         <p className="text-gray-400">Tüm bot tahminleri ve performans takibi</p>
                     </div>
                     <button
-                        onClick={fetchData}
+                        onClick={refresh}
                         className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl text-white font-medium hover:shadow-lg hover:shadow-blue-500/20 transition-all flex items-center gap-2"
                     >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -282,9 +294,9 @@ export function AdminPredictions() {
                         {filters.map((f) => (
                             <button
                                 key={f.key}
-                                onClick={() => setFilter(f.key)}
+                                onClick={() => setLocalFilter(f.key)}
                                 className={`px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${
-                                    filter === f.key
+                                    localFilter === f.key
                                         ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
                                         : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10'
                                 }`}
@@ -292,13 +304,17 @@ export function AdminPredictions() {
                                 {f.label}
                                 {f.count !== undefined && (
                                     <span className={`px-2 py-0.5 rounded-full text-xs ${
-                                        filter === f.key ? 'bg-white/20' : 'bg-white/10'
+                                        localFilter === f.key ? 'bg-white/20' : 'bg-white/10'
                                     }`}>
                                         {f.count}
                                     </span>
                                 )}
                             </button>
                         ))}
+                        {/* WebSocket bağlantı durumu */}
+                        <span className={`ml-2 px-2 py-1 rounded-full text-xs ${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                            {isConnected ? '● Canlı' : '○ Bağlantı Yok'}
+                        </span>
                     </div>
 
                     <div className="flex items-center gap-3 bg-[#151515] border border-white/10 rounded-xl px-4 py-2.5 min-w-[300px]">

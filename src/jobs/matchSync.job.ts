@@ -325,6 +325,42 @@ export class MatchSyncWorker {
         if (liveSettled > 0) {
           logger.info(`[PredictionResulter] Settled ${liveSettled} LIVE instant win predictions`);
         }
+
+        // ============================================
+        // PART 3: CANCELLED/POSTPONED SETTLEMENT
+        // For status=9 (postponed) and status=10 (cancelled)
+        // Mark all pending predictions as cancelled
+        // ============================================
+        const cancelledResult = await pool.query(`
+          SELECT DISTINCT
+            p.match_id,
+            m.status_id
+          FROM ai_predictions p
+          JOIN ts_matches m ON p.match_id = m.external_id
+          WHERE p.result = 'pending'
+            AND p.match_id IS NOT NULL
+            AND m.status_id IN (9, 10, 11, 12)
+        `);
+
+        let cancelledSettled = 0;
+        for (const row of cancelledResult.rows) {
+          const eventType = row.status_id === 9 ? 'postponed' : 'cancelled';
+
+          const result = await predictionSettlementService.processEvent({
+            matchId: row.match_id,
+            eventType,
+            homeScore: 0,
+            awayScore: 0,
+            statusId: row.status_id,
+            timestamp: Date.now(),
+          });
+
+          cancelledSettled += result.settled;
+        }
+
+        if (cancelledSettled > 0) {
+          logger.info(`[PredictionResulter] Cancelled ${cancelledSettled} predictions due to match cancellation/postponement`);
+        }
       } catch (err) {
         logger.error('[PredictionResulter] Error updating prediction results:', err);
       }
