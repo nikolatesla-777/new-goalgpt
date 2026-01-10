@@ -19,14 +19,13 @@ async function migrate() {
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
-
+    // CRITICAL: CONCURRENTLY cannot run inside transaction - run without BEGIN/COMMIT
     console.log('=== PHASE 2: ADDING INDEXES TO ai_predictions TABLE ===\n');
 
     // Index 1: Match ID + Created (for LEFT JOIN LATERAL performance)
     console.log('Creating idx_ai_predictions_match_id_created...');
     await client.query(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ai_predictions_match_id_created
+      CREATE INDEX IF NOT EXISTS idx_ai_predictions_match_id_created
       ON ai_predictions(match_id, created_at DESC)
       WHERE match_id IS NOT NULL
     `);
@@ -35,7 +34,7 @@ async function migrate() {
     // Index 2: Result filtering (for pending/won/lost queries)
     console.log('Creating idx_ai_predictions_result...');
     await client.query(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ai_predictions_result
+      CREATE INDEX IF NOT EXISTS idx_ai_predictions_result
       ON ai_predictions(result)
       WHERE result IN ('pending', 'won', 'lost')
     `);
@@ -44,7 +43,7 @@ async function migrate() {
     // Index 3: Admin pages composite (date + bot + result)
     console.log('Creating idx_ai_predictions_date_bot...');
     await client.query(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ai_predictions_date_bot
+      CREATE INDEX IF NOT EXISTS idx_ai_predictions_date_bot
       ON ai_predictions(DATE(created_at), canonical_bot_name, result)
     `);
     console.log('✓ idx_ai_predictions_date_bot created');
@@ -81,12 +80,10 @@ async function migrate() {
       console.log(r['QUERY PLAN']);
     });
 
-    await client.query('COMMIT');
     console.log('\n✅ PHASE 2: Migration completed successfully!');
     console.log('Expected performance: <50ms for unified endpoint with AI predictions');
 
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('❌ Migration failed:', error);
     throw error;
   } finally {
