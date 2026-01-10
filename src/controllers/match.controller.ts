@@ -1598,6 +1598,11 @@ export const getUnifiedMatches = async (
     const cached = liveMatchCache.getUnified(dateStr, includeLive);
     if (cached && !statusFilter) { // Don't use cache if status filter is applied
       logger.debug(`[MatchController] Unified cache HIT for ${dateStr}`);
+
+      // Add browser cache headers (30s cache with 60s stale-while-revalidate)
+      reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+      reply.header('X-Cache', 'HIT');
+
       return reply.send({
         success: true,
         data: {
@@ -1689,6 +1694,10 @@ export const getUnifiedMatches = async (
     if (!statusFilter) {
       liveMatchCache.setUnified(dateStr, includeLive, response);
     }
+
+    // Add browser cache headers (30s cache with 60s stale-while-revalidate)
+    reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    reply.header('X-Cache', 'MISS');
 
     reply.send({
       success: true,

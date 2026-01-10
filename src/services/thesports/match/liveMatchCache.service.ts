@@ -50,7 +50,7 @@ class LiveMatchCacheService {
   // TTL configuration (milliseconds)
   private readonly LIVE_MATCHES_TTL_MS = 3000;    // 3 seconds for live matches
   private readonly DIARY_TTL_MS = 10000;          // 10 seconds for diary (less volatile)
-  private readonly UNIFIED_TTL_MS = 3000;         // 3 seconds for unified (includes live)
+  private readonly UNIFIED_TTL_MS = 30000;        // 30 seconds for unified (balances freshness with performance)
 
   // Statistics
   private stats = {
