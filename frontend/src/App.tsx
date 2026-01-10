@@ -1,9 +1,15 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AIPredictionsProvider } from './context/AIPredictionsContext';
 import { FavoritesProvider } from './context/FavoritesContext';
 import { PredictionToast } from './components/ui/PredictionToast';
+
+// Helper component for match tab redirects (absolute navigation)
+function MatchTabRedirect({ tab }: { tab: string }) {
+  const { matchId } = useParams<{ matchId: string }>();
+  return <Navigate to={`/match/${matchId}?tab=${tab}`} replace />;
+}
 
 // EAGER LOAD: Main layout (needed immediately)
 import { AdminLayout } from './components/admin';
@@ -105,13 +111,14 @@ function App() {
             />
 
             {/* Redirects for old bookmarked URLs (backwards compatibility) */}
-            <Route path="/match/:matchId/stats" element={<Navigate to="?tab=stats" replace />} />
-            <Route path="/match/:matchId/events" element={<Navigate to="?tab=events" replace />} />
-            <Route path="/match/:matchId/h2h" element={<Navigate to="?tab=h2h" replace />} />
-            <Route path="/match/:matchId/standings" element={<Navigate to="?tab=standings" replace />} />
-            <Route path="/match/:matchId/lineup" element={<Navigate to="?tab=lineup" replace />} />
-            <Route path="/match/:matchId/trend" element={<Navigate to="?tab=trend" replace />} />
-            <Route path="/match/:matchId/ai" element={<Navigate to="?tab=ai" replace />} />
+            {/* CRITICAL FIX: Use absolute navigation to avoid /match/ID/stats?tab=stats double path */}
+            <Route path="/match/:matchId/stats" element={<MatchTabRedirect tab="stats" />} />
+            <Route path="/match/:matchId/events" element={<MatchTabRedirect tab="events" />} />
+            <Route path="/match/:matchId/h2h" element={<MatchTabRedirect tab="h2h" />} />
+            <Route path="/match/:matchId/standings" element={<MatchTabRedirect tab="standings" />} />
+            <Route path="/match/:matchId/lineup" element={<MatchTabRedirect tab="lineup" />} />
+            <Route path="/match/:matchId/trend" element={<MatchTabRedirect tab="trend" />} />
+            <Route path="/match/:matchId/ai" element={<MatchTabRedirect tab="ai" />} />
 
             {/* Team Detail with Nested Routes for Tabs */}
             <Route path="/team/:teamId" element={
