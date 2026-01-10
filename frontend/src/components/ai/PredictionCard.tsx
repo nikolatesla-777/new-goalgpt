@@ -88,6 +88,7 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
     // Phase 5: Use live_match_status
     const isLive = (prediction.live_match_status || 0) >= 2 && (prediction.live_match_status || 0) <= 7;
     const isFinished = prediction.live_match_status === 8;
+    const isHalfTime = prediction.live_match_status === 3;
 
     return (
         <>
@@ -200,7 +201,7 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                             {displayScore}
                         </span>
                         <span className="text-[10px] text-gray-500 font-bold uppercase mt-2 tracking-wide">
-                            {isFinished ? 'MS' : (isLive ? (currentMinute ? `${currentMinute}'` : 'LIVE') : 'v')}
+                            {isFinished ? 'MS' : (isHalfTime ? 'HT' : (isLive ? (currentMinute ? `${currentMinute}'` : 'LIVE') : 'v'))}
                         </span>
                     </div>
 
