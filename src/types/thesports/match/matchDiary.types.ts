@@ -32,5 +32,6 @@ export interface MatchDiaryResponse {
 
 export interface MatchDiaryParams {
   date?: string; // YYYY-MM-DD format (default: today)
+  forceRefresh?: boolean; // Skip cache and fetch fresh data from API
 }
 

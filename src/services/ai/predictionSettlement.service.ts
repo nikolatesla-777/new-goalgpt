@@ -204,7 +204,7 @@ class PredictionSettlementService {
         const period = row.minute_at_prediction <= 45 ? 'IY' : 'MS';
         // Phase 2: prediction_threshold kolonunu kullan (hesaplama yok!)
         // CRITICAL FIX: parseFloat to ensure numeric comparison (DB returns string!)
-        const threshold = parseFloat(row.prediction_threshold) || 0.5;
+        const threshold = parseFloat(String(row.prediction_threshold)) || 0.5;
 
         // Instant win kontrolü - threshold aşıldı mı?
         if (totalGoals > threshold) {
@@ -311,7 +311,7 @@ class PredictionSettlementService {
       for (const row of pending.rows) {
         // Phase 2: prediction_threshold kolonunu kullan
         // CRITICAL FIX: parseFloat to ensure numeric comparison (DB returns string!)
-        const threshold = parseFloat(row.prediction_threshold) || 0.5;
+        const threshold = parseFloat(String(row.prediction_threshold)) || 0.5;
 
         if (htTotal > threshold) {
           await this.markWon(client, row.id, 'halftime_settlement', htScore);
@@ -426,7 +426,7 @@ class PredictionSettlementService {
       for (const row of pending.rows) {
         // Phase 2: prediction_threshold kolonunu kullan
         // CRITICAL FIX: parseFloat to ensure numeric comparison (DB returns string!)
-        const threshold = parseFloat(row.prediction_threshold) || 0.5;
+        const threshold = parseFloat(String(row.prediction_threshold)) || 0.5;
 
         if (finalTotal > threshold) {
           await this.markWon(client, row.id, 'fulltime_settlement', finalScore);

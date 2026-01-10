@@ -235,7 +235,9 @@ export class DailyMatchSyncWorker {
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          response = await this.matchDiaryService.getMatchDiary({ date: dateStr });
+          // CRITICAL FIX: Always forceRefresh to get latest status from API
+          // Cache was returning stale status=1 for matches that already started (status=2 in API)
+          response = await this.matchDiaryService.getMatchDiary({ date: dateStr, forceRefresh: true });
           if (response?.err) {
             lastErr = response.err;
             throw new Error(String(response.err));
