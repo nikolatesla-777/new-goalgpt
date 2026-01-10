@@ -1551,11 +1551,13 @@ export const getMatchH2H = async (
  * Query params:
  * - date: YYYY-MM-DD or YYYYMMDD (default: today)
  * - include_live: boolean (default: true) - include cross-day live matches
+ * - include_ai: boolean (default: true) - include AI predictions (PHASE 1)
  * - status: comma-separated status IDs (optional) - filter by status
  *
  * Features:
  * - Merges diary matches with live matches
  * - Handles cross-day matches (yesterday's match still live)
+ * - PHASE 1: Optional AI predictions enrichment via LEFT JOIN
  * - Uses smart cache with event-driven invalidation
  * - Single API call replaces frontend's multiple fetches
  */
@@ -1564,13 +1566,14 @@ export const getUnifiedMatches = async (
     Querystring: {
       date?: string;
       include_live?: string;
+      include_ai?: string;
       status?: string;
     };
   }>,
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const { date, include_live, status } = request.query;
+    const { date, include_live, include_ai, status } = request.query;
 
     // Parse date (default: today in TSİ timezone)
     const TSI_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -1588,15 +1591,18 @@ export const getUnifiedMatches = async (
     // Parse include_live (default: true)
     const includeLive = include_live !== 'false';
 
+    // PHASE 1: Parse include_ai (default: true)
+    const includeAI = include_ai !== 'false';
+
     // Parse status filter
     let statusFilter: number[] | undefined;
     if (status) {
       statusFilter = status.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
     }
 
-    // Check cache first
+    // PHASE 1: Cache doesn't support AI yet - skip cache if includeAI is true
     const cached = liveMatchCache.getUnified(dateStr, includeLive);
-    if (cached && !statusFilter) { // Don't use cache if status filter is applied
+    if (cached && !statusFilter && !includeAI) { // Don't use cache if status filter or AI is requested
       logger.debug(`[MatchController] Unified cache HIT for ${dateStr}`);
 
       // Add browser cache headers (30s cache with 60s stale-while-revalidate)
@@ -1615,7 +1621,7 @@ export const getUnifiedMatches = async (
       });
     }
 
-    logger.info(`[MatchController] Unified fetch for date=${dateStr}, includeLive=${includeLive}`);
+    logger.info(`[MatchController] Unified fetch for date=${dateStr}, includeLive=${includeLive}, includeAI=${includeAI}`);
 
     // Normalize match helper
     const normalizeMatch = (row: any) => {
@@ -1655,17 +1661,17 @@ export const getUnifiedMatches = async (
       };
     };
 
-    // Step 1: Fetch diary matches for selected date
-    const diaryResult = await matchDatabaseService.getMatchesByDate(dateStr, statusFilter);
+    // PHASE 1: Step 1: Fetch diary matches for selected date (with AI if requested)
+    const diaryResult = await matchDatabaseService.getMatchesByDate(dateStr, statusFilter, includeAI);
     const diaryMatches = (diaryResult.results || []).map(normalizeMatch);
     const diaryMatchIds = new Set(diaryMatches.map((m: any) => m.id));
 
     logger.debug(`[MatchController] Diary: ${diaryMatches.length} matches for ${dateStr}`);
 
-    // Step 2: Fetch live matches (if include_live is true)
+    // PHASE 1: Step 2: Fetch live matches (if include_live is true, with AI if requested)
     let crossDayLiveMatches: any[] = [];
     if (includeLive) {
-      const liveResult = await matchDatabaseService.getLiveMatches();
+      const liveResult = await matchDatabaseService.getLiveMatches(includeAI);
       const allLiveMatches = (liveResult.results || []).map(normalizeMatch);
 
       // Only include live matches NOT in diary (cross-day matches)
@@ -1685,13 +1691,18 @@ export const getUnifiedMatches = async (
       finalMatches = mergedMatches.filter((m: any) => statusFilter!.includes(m.status_id));
     }
 
+    // PHASE 1: Calculate AI predictions count
+    const aiPredictionsCount = includeAI
+      ? finalMatches.filter((m: any) => m.aiPrediction !== undefined).length
+      : undefined;
+
     // Build response
     const response = {
       results: finalMatches,
     };
 
-    // Cache the result (only if no status filter)
-    if (!statusFilter) {
+    // Cache the result (only if no status filter and no AI requested)
+    if (!statusFilter && !includeAI) {
       liveMatchCache.setUnified(dateStr, includeLive, response);
     }
 
@@ -1712,6 +1723,8 @@ export const getUnifiedMatches = async (
           live: finalMatches.filter((m: any) => [2, 3, 4, 5, 7].includes(m.status_id)).length,
           finished: finalMatches.filter((m: any) => m.status_id === 8).length,
           notStarted: finalMatches.filter((m: any) => m.status_id === 1).length,
+          // PHASE 1: Add AI predictions count to response
+          ...(aiPredictionsCount !== undefined ? { aiPredictions: aiPredictionsCount } : {}),
         },
         source: 'database',
         cacheStats: liveMatchCache.getStats(),

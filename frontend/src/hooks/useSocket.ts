@@ -1,12 +1,13 @@
 /**
  * useSocket Hook
- * 
+ *
  * Real-time WebSocket connection for live match updates
  * Connects to backend WebSocket and handles events:
  * - SCORE_CHANGE: Goal scored
  * - DANGER_ALERT: Goal position / dangerous attack
  * - GOAL_CANCELLED: VAR decision
  * - MATCH_STATE_CHANGE: Match status changed
+ * - PREDICTION_SETTLED: AI prediction result settled (PHASE 5)
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -48,13 +49,37 @@ export interface MatchStateChangeEvent {
   timestamp: number;
 }
 
-export type WebSocketEvent = ScoreChangeEvent | DangerAlertEvent | GoalCancelledEvent | MatchStateChangeEvent;
+/**
+ * PHASE 5: Prediction Settlement Event
+ * Broadcast when an AI prediction result is determined (won/lost)
+ */
+export interface PredictionSettledEvent {
+  type: 'PREDICTION_SETTLED';
+  predictionId: string;
+  matchId: string;
+  botName: string;
+  prediction: string;
+  result: 'won' | 'lost';
+  resultReason: string;
+  homeTeam: string;
+  awayTeam: string;
+  finalScore?: string;
+  timestamp: number;
+}
+
+export type WebSocketEvent =
+  | ScoreChangeEvent
+  | DangerAlertEvent
+  | GoalCancelledEvent
+  | MatchStateChangeEvent
+  | PredictionSettledEvent; // PHASE 5
 
 interface UseSocketOptions {
   onScoreChange?: (event: ScoreChangeEvent) => void;
   onDangerAlert?: (event: DangerAlertEvent) => void;
   onGoalCancelled?: (event: GoalCancelledEvent) => void;
   onMatchStateChange?: (event: MatchStateChangeEvent) => void;
+  onPredictionSettled?: (event: PredictionSettledEvent) => void; // PHASE 5
   onAnyEvent?: (event: WebSocketEvent) => void;
 }
 

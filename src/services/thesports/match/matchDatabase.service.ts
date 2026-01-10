@@ -29,8 +29,9 @@ export class MatchDatabaseService {
    * Get matches from database for a specific date
    * Date format: YYYY-MM-DD or YYYYMMDD
    * @param statusFilter Optional array of status IDs to filter (e.g., [8] for finished, [1] for not started)
+   * @param includeAI Optional flag to include AI predictions (default: false for backward compatibility)
    */
-  async getMatchesByDate(date: string, statusFilter?: number[]): Promise<MatchDiaryResponse> {
+  async getMatchesByDate(date: string, statusFilter?: number[], includeAI: boolean = false): Promise<MatchDiaryResponse> {
     try {
       // Convert date format to YYYYMMDD if needed
       let dateStr = date.replace(/-/g, '');
@@ -58,7 +59,7 @@ export class MatchDatabaseService {
       // Query matches with JOINs for teams and competitions
       // CRITICAL FIX: Use 'let' instead of 'const' because we modify query string
       let query = `
-        SELECT 
+        SELECT
           m.external_id as id,
           m.competition_id,
           m.season_id,
@@ -88,10 +89,10 @@ export class MatchDatabaseService {
           -- If live_kickoff_time is NULL or same as match_time, use match_time (match started on time)
           -- MQTT updates live_kickoff_time with the REAL kickoff time (Index 4)
           COALESCE(
-            CASE 
-              WHEN m.live_kickoff_time IS NOT NULL AND m.live_kickoff_time != m.match_time 
-              THEN m.live_kickoff_time 
-              ELSE m.match_time 
+            CASE
+              WHEN m.live_kickoff_time IS NOT NULL AND m.live_kickoff_time != m.match_time
+              THEN m.live_kickoff_time
+              ELSE m.match_time
             END,
             m.match_time
           ) as live_kickoff_time,
@@ -106,12 +107,35 @@ export class MatchDatabaseService {
           c.logo_url as competition_logo,
           c.country_id as competition_country_id,
           -- Country (via competition)
-          co.name as competition_country_name
+          co.name as competition_country_name${includeAI ? `,
+          -- AI Prediction (PHASE 1: Latest prediction per match)
+          p.id as ai_id,
+          p.canonical_bot_name,
+          p.prediction,
+          p.prediction_threshold,
+          p.result as ai_result,
+          p.result_reason,
+          p.final_score as ai_final_score,
+          p.access_type,
+          p.minute_at_prediction,
+          p.score_at_prediction,
+          p.created_at as ai_created_at,
+          p.resulted_at` : ''}
         FROM ts_matches m
         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-        LEFT JOIN ts_countries co ON c.country_id = co.external_id
+        LEFT JOIN ts_countries co ON c.country_id = co.external_id${includeAI ? `
+        -- PHASE 1: LEFT JOIN LATERAL for latest AI prediction per match
+        LEFT JOIN LATERAL (
+          SELECT id, canonical_bot_name, prediction, prediction_threshold, result,
+                 result_reason, final_score, access_type, minute_at_prediction,
+                 score_at_prediction, created_at, resulted_at
+          FROM ai_predictions
+          WHERE match_id = m.external_id
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) p ON true` : ''}
         WHERE m.match_time >= $1 AND m.match_time <= $2
       `;
 
@@ -148,6 +172,22 @@ export class MatchDatabaseService {
         // CRITICAL FIX: Generate minute_text from minute and status_id (same as getLiveMatches)
         const minute = (row.minute !== null && row.minute !== undefined) ? Number(row.minute) : null;
         const minuteText = generateMinuteText(minute, validatedStatus);
+
+        // PHASE 1: Map AI prediction fields if present
+        const aiPrediction = (includeAI && row.ai_id) ? {
+          id: row.ai_id,
+          canonical_bot_name: row.canonical_bot_name,
+          prediction: row.prediction,
+          prediction_threshold: row.prediction_threshold,
+          result: row.ai_result,
+          result_reason: row.result_reason,
+          final_score: row.ai_final_score,
+          access_type: row.access_type,
+          minute_at_prediction: row.minute_at_prediction,
+          score_at_prediction: row.score_at_prediction,
+          created_at: row.ai_created_at,
+          resulted_at: row.resulted_at,
+        } : undefined;
 
         return {
           id: row.id,
@@ -195,6 +235,8 @@ export class MatchDatabaseService {
           // Raw names for fallback
           home_team_name: row.home_team_name || null,
           away_team_name: row.away_team_name || null,
+          // PHASE 1: AI Prediction (optional field)
+          ...(aiPrediction ? { aiPrediction } : {}),
         };
       });
 
@@ -212,19 +254,21 @@ export class MatchDatabaseService {
 
   /**
    * Get matches in "now window" (time-window endpoint, NOT strict live-only)
-   * 
+   *
    * CRITICAL: Fetches from DATABASE (not API) because:
    * 1. MQTT/WebSocket updates DB in real-time when matches start
    * 2. DataUpdateWorker updates DB when matches change status
    * 3. DB is the single source of truth for live matches
-   * 
+   *
    * SEMANTICS: This is a TIME-WINDOW endpoint, not strict live-only:
    * - Returns matches with status_id IN (2, 3, 4, 5, 7) (explicitly live)
    * - ALSO returns matches with status_id = 1 (NOT_STARTED) if match_time has passed (within today's window)
    * - Purpose: Catch matches that should have started but status hasn't updated yet
    * - This allows frontend to show "upcoming" matches that are in the current time window
+   *
+   * @param includeAI Optional flag to include AI predictions (default: false for backward compatibility)
    */
-  async getLiveMatches(): Promise<MatchDiaryResponse> {
+  async getLiveMatches(includeAI: boolean = false): Promise<MatchDiaryResponse> {
     try {
       // Phase 6: Smart Cache - Check cache first (event-driven invalidation)
       const cached = liveMatchCache.getLiveMatches();
@@ -294,15 +338,38 @@ export class MatchDatabaseService {
           c.name as competition_name,
           c.logo_url as competition_logo,
           c.country_id as competition_country_id,
-          co.name as competition_country_name
+          co.name as competition_country_name${includeAI ? `,
+          -- AI Prediction (PHASE 1: Latest prediction per match)
+          p.id as ai_id,
+          p.canonical_bot_name,
+          p.prediction,
+          p.prediction_threshold,
+          p.result as ai_result,
+          p.result_reason,
+          p.final_score as ai_final_score,
+          p.access_type,
+          p.minute_at_prediction,
+          p.score_at_prediction,
+          p.created_at as ai_created_at,
+          p.resulted_at` : ''}
         FROM ts_matches m
         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-        LEFT JOIN ts_countries co ON c.country_id = co.external_id
+        LEFT JOIN ts_countries co ON c.country_id = co.external_id${includeAI ? `
+        -- PHASE 1: LEFT JOIN LATERAL for latest AI prediction per match
+        LEFT JOIN LATERAL (
+          SELECT id, canonical_bot_name, prediction, prediction_threshold, result,
+                 result_reason, final_score, access_type, minute_at_prediction,
+                 score_at_prediction, created_at, resulted_at
+          FROM ai_predictions
+          WHERE match_id = m.external_id
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) p ON true` : ''}
         WHERE m.status_id IN (2, 3, 4, 5, 7)  -- CRITICAL: ONLY strictly live matches (no finished/interrupted)
           AND m.match_time <= $1  -- CRITICAL: Exclude future matches (safeguard)
-        ORDER BY 
+        ORDER BY
           -- Live matches first (by minute descending), then by competition name
           CASE WHEN m.status_id IN (2, 3, 4, 5, 7) THEN COALESCE(m.minute, 0) ELSE 0 END DESC,
           c.name ASC,
@@ -339,6 +406,22 @@ export class MatchDatabaseService {
         // CRITICAL FIX: Generate minute_text from minute and status_id
         const minute = (row.minute !== null && row.minute !== undefined) ? Number(row.minute) : null;
         const minuteText = generateMinuteText(minute, validatedStatus);
+
+        // PHASE 1: Map AI prediction fields if present
+        const aiPrediction = (includeAI && row.ai_id) ? {
+          id: row.ai_id,
+          canonical_bot_name: row.canonical_bot_name,
+          prediction: row.prediction,
+          prediction_threshold: row.prediction_threshold,
+          result: row.ai_result,
+          result_reason: row.result_reason,
+          final_score: row.ai_final_score,
+          access_type: row.access_type,
+          minute_at_prediction: row.minute_at_prediction,
+          score_at_prediction: row.score_at_prediction,
+          created_at: row.ai_created_at,
+          resulted_at: row.resulted_at,
+        } : undefined;
 
         return {
           id: row.id,
@@ -383,6 +466,8 @@ export class MatchDatabaseService {
           } : null,
           home_team_name: row.home_team_name || null,
           away_team_name: row.away_team_name || null,
+          // PHASE 1: AI Prediction (optional field)
+          ...(aiPrediction ? { aiPrediction } : {}),
         };
       });
 

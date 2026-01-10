@@ -48,7 +48,7 @@ export interface LivescoreContextValue {
   liveMatches: Match[];
   finishedMatches: Match[];
   notStartedMatches: Match[];
-  aiMatches: Match[];
+  matchesWithAI: Match[]; // PHASE 4: Renamed from aiMatches, now filtered from allMatches.aiPrediction
 
   // Loading state
   loading: boolean;
@@ -127,7 +127,7 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
 
   // Match data state
   const [allMatches, setAllMatches] = useState<Match[]>([]);
-  const [aiMatches, setAiMatches] = useState<Match[]>([]);
+  // PHASE 4: REMOVED aiMatches state - now computed from allMatches.aiPrediction
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,22 +146,25 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
 
   /**
    * Phase 6: Unified Endpoint
+   * PHASE 4: AI Predictions Integration
    *
    * Single API call replaces separate diary + live fetches.
    * Server-side merging handles:
    * - Cross-day live matches
    * - Score updates from live data
    * - Deduplication
+   * - PHASE 4: AI predictions via LEFT JOIN LATERAL
    * - Smart cache with event-driven invalidation
    */
   const fetchMatches = useCallback(async () => {
     if (!mountedRef.current) return;
 
     try {
-      // Phase 6: Single unified endpoint call
+      // Phase 6 + PHASE 4: Single unified endpoint call with AI predictions
       const response = await getUnifiedMatches({
         date: selectedDate,
-        includeLive: true,  // Always include cross-day live matches
+        includeLive: true,   // Always include cross-day live matches
+        includeAI: true,     // PHASE 4: Include AI predictions via LEFT JOIN
       });
 
       const matches = response?.results || [];
@@ -183,21 +186,7 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
     }
   }, [selectedDate]);
 
-  const fetchAiMatches = useCallback(async () => {
-    if (!mountedRef.current) return;
-
-    try {
-      const response = await getMatchedPredictions(100);
-      if (mountedRef.current) {
-        // FIX: Extract predictions array from response object
-        // response format: { success: true, count: N, predictions: [...] }
-        const predictions = response?.predictions || [];
-        setAiMatches(predictions);
-      }
-    } catch (err) {
-      console.warn('[LivescoreContext] AI matches fetch failed:', err);
-    }
-  }, []);
+  // PHASE 4: REMOVED fetchAiMatches - AI predictions now included in fetchMatches via LEFT JOIN
 
   // ============================================================================
   // REFRESH FUNCTION
@@ -205,8 +194,8 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchMatches(), fetchAiMatches()]);
-  }, [fetchMatches, fetchAiMatches]);
+    await fetchMatches(); // PHASE 4: Single fetch includes AI predictions
+  }, [fetchMatches]);
 
   // ============================================================================
   // FILTERED MATCHES (Client-side filtering for instant tab switching)
@@ -227,24 +216,11 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
     [allMatches]
   );
 
-  // Filter AI matches by selected date (using created_at)
-  const filteredAiMatches = useMemo(() => {
-    if (!aiMatches || aiMatches.length === 0) return [];
-
-    // Parse selectedDate (YYYYMMDD format)
-    const year = parseInt(selectedDate.substring(0, 4));
-    const month = parseInt(selectedDate.substring(4, 6)) - 1;
-    const day = parseInt(selectedDate.substring(6, 8));
-
-    // Create date boundaries for the selected day (local time)
-    const dayStart = new Date(year, month, day, 0, 0, 0);
-    const dayEnd = new Date(year, month, day, 23, 59, 59);
-
-    return aiMatches.filter((p: any) => {
-      const predDate = new Date(p.created_at);
-      return predDate >= dayStart && predDate <= dayEnd;
-    });
-  }, [aiMatches, selectedDate]);
+  // PHASE 4: Compute matches with AI predictions (from aiPrediction field)
+  const matchesWithAI = useMemo(() =>
+    allMatches.filter(m => (m as any).aiPrediction !== undefined),
+    [allMatches]
+  );
 
   // ============================================================================
   // COUNTS FOR TAB BADGES
@@ -255,8 +231,8 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
     live: liveMatches.length,
     finished: finishedMatches.length,
     notStarted: notStartedMatches.length,
-    ai: filteredAiMatches.length,
-  }), [allMatches.length, liveMatches.length, finishedMatches.length, notStartedMatches.length, filteredAiMatches.length]);
+    ai: matchesWithAI.length, // PHASE 4: Updated to use matchesWithAI
+  }), [allMatches.length, liveMatches.length, finishedMatches.length, notStartedMatches.length, matchesWithAI.length]);
 
   // ============================================================================
   // WEBSOCKET CONNECTION
@@ -349,6 +325,44 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
                 fetchMatches();
               }, 5000);
             }
+
+            // PHASE 5: Handle PREDICTION_SETTLED event
+            if (message.type === 'PREDICTION_SETTLED') {
+              setAllMatches(prevMatches => {
+                const matchIndex = prevMatches.findIndex(m => m.id === message.matchId);
+                if (matchIndex === -1) return prevMatches;
+
+                const match = prevMatches[matchIndex];
+                // Check if this match has aiPrediction and it matches the predictionId
+                if (!(match as any).aiPrediction || (match as any).aiPrediction.id !== message.predictionId) {
+                  return prevMatches;
+                }
+
+                // Optimistic update: Update prediction result immediately
+                const updatedMatch = {
+                  ...match,
+                  aiPrediction: {
+                    ...(match as any).aiPrediction,
+                    result: message.result,
+                    result_reason: message.resultReason,
+                    final_score: message.finalScore || (match as any).aiPrediction.final_score,
+                    resulted_at: new Date().toISOString(),
+                  },
+                };
+
+                const newMatches = [...prevMatches];
+                newMatches[matchIndex] = updatedMatch as any;
+                return newMatches;
+              });
+
+              setLastUpdate(new Date());
+
+              // Debounced refresh (5s) for eventual consistency
+              if (fetchTimerRef.current) {
+                clearTimeout(fetchTimerRef.current);
+              }
+              fetchTimerRef.current = setTimeout(() => fetchMatches(), 5000);
+            }
           } catch (e) {
             // Ignore parse errors
           }
@@ -421,7 +435,7 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
     liveMatches,
     finishedMatches,
     notStartedMatches,
-    aiMatches,
+    matchesWithAI, // PHASE 4: Updated from aiMatches
     loading,
     error,
     isSocketConnected,

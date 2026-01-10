@@ -1,13 +1,14 @@
 /**
- * AI Tab - SIMPLIFIED
+ * AI Tab - PHASE 6 INTEGRATED
  *
  * Displays AI predictions for the match.
- * Now receives data via props (no Context).
+ * Uses LivescoreContext for instant updates, with API fallback for old matches.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Robot, Trophy, WarningCircle } from '@phosphor-icons/react';
-import type { Match } from '../../../api/matches';
+import type { Match, AIPredictionOnMatch } from '../../../api/matches';
+import { useLivescore } from '../../livescore/LivescoreContext';
 
 interface Prediction {
   id: string;
@@ -26,30 +27,68 @@ interface Prediction {
 }
 
 interface AITabProps {
-  data: any;
+  data: any; // DEPRECATED: Kept for backward compatibility
   match: Match;
 }
 
-export function AITab({ data }: AITabProps) {
-  // Transform predictions from API format
+export function AITab({ match }: AITabProps) {
+  // PHASE 6: Use LivescoreContext for instant prediction updates
+  const { allMatches } = useLivescore();
+
+  // Find this match in allMatches (if it's in today's data)
+  const livescoreMatch = useMemo(() =>
+    allMatches.find(m => m.id === match.id),
+    [allMatches, match.id]
+  );
+
+  // PHASE 6: Fallback API for old matches not in LivescoreContext
+  const [fallbackPrediction, setFallbackPrediction] = useState<AIPredictionOnMatch | null>(null);
+  const [fallbackLoading, setFallbackLoading] = useState(false);
+
+  useEffect(() => {
+    // If match is in LivescoreContext, no need for fallback
+    if (livescoreMatch?.aiPrediction) {
+      setFallbackPrediction(null);
+      return;
+    }
+
+    // If match is not in context, fetch from API
+    if (!livescoreMatch && match.id) {
+      setFallbackLoading(true);
+      fetch(`/api/predictions/match/${match.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.predictions && data.predictions.length > 0) {
+            setFallbackPrediction(data.predictions[0]);
+          }
+        })
+        .catch(err => console.error('[AITab] Fallback API error:', err))
+        .finally(() => setFallbackLoading(false));
+    }
+  }, [match.id, livescoreMatch]);
+
+  // PHASE 6: Final prediction - use Livescore if available, else fallback
+  const aiPrediction = livescoreMatch?.aiPrediction || fallbackPrediction;
+
+  // Transform to legacy Prediction format
   const predictions = useMemo(() => {
-    if (!data?.predictions) return [];
-    return data.predictions.map((p: any) => ({
-      id: p.id,
-      match_id: p.match_id,
-      prediction: p.prediction || p.prediction_value || p.prediction_type,
-      prediction_type: p.prediction_type || p.prediction,
-      prediction_value: p.prediction_value || p.prediction,
-      overall_confidence: p.overall_confidence || p.confidence || 80,
-      bot_name: p.bot_name || p.canonical_bot_name,
-      minute_at_prediction: p.minute_at_prediction,
-      score_at_prediction: p.score_at_prediction,
-      result: p.result,
-      prediction_result: p.prediction_result || (p.result === 'won' ? 'winner' : p.result === 'lost' ? 'loser' : null),
-      created_at: p.created_at,
-      access_type: p.access_type,
-    })) as Prediction[];
-  }, [data]);
+    if (!aiPrediction) return [];
+    return [{
+      id: aiPrediction.id,
+      match_id: match.id,
+      prediction: aiPrediction.prediction,
+      prediction_type: aiPrediction.prediction,
+      prediction_value: aiPrediction.prediction,
+      overall_confidence: (aiPrediction.prediction_threshold || 0.5) * 100,
+      bot_name: aiPrediction.canonical_bot_name,
+      minute_at_prediction: aiPrediction.minute_at_prediction,
+      score_at_prediction: aiPrediction.score_at_prediction,
+      result: aiPrediction.result,
+      prediction_result: aiPrediction.result === 'won' ? 'winner' : aiPrediction.result === 'lost' ? 'loser' : null,
+      created_at: aiPrediction.created_at,
+      access_type: aiPrediction.access_type,
+    }] as Prediction[];
+  }, [aiPrediction, match.id]);
 
   if (predictions.length === 0) {
     return (

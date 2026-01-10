@@ -12,6 +12,25 @@ export interface Competition {
   country_name?: string;
 }
 
+/**
+ * PHASE 3: AI Prediction on Match
+ * Embedded prediction data enriched via LEFT JOIN LATERAL
+ */
+export interface AIPredictionOnMatch {
+  id: string;
+  canonical_bot_name: string;
+  prediction: string;              // "IY 0.5 ÜST"
+  prediction_threshold: number;    // 0.5
+  result: 'pending' | 'won' | 'lost' | 'cancelled';
+  result_reason: string | null;
+  final_score: string | null;
+  access_type: 'VIP' | 'FREE';
+  minute_at_prediction: number;
+  score_at_prediction: string;
+  created_at: string;
+  resulted_at: string | null;
+}
+
 export interface MatchRecent {
   id: string;
   competition_id?: string;
@@ -54,6 +73,8 @@ export interface MatchRecent {
     logo_url: string | null;
   };
   competition?: Competition | null;
+  // PHASE 3: Optional AI prediction (enriched when include_ai=true)
+  aiPrediction?: AIPredictionOnMatch;
 }
 
 export interface MatchDiary {
@@ -98,6 +119,8 @@ export interface MatchDiary {
     logo_url: string | null;
   };
   competition?: Competition | null;
+  // PHASE 3: Optional AI prediction (enriched when include_ai=true)
+  aiPrediction?: AIPredictionOnMatch;
 }
 
 // Alias for compatibility
@@ -299,21 +322,26 @@ export async function getMatchDiary(date?: string, status?: string): Promise<Mat
  * Benefits:
  * - Server-side merging (consistent logic)
  * - Cross-day live matches handled automatically
+ * - PHASE 3: Optional AI predictions enrichment via LEFT JOIN
  * - Smart cache with event-driven invalidation
  * - Reduced network requests
  *
  * @param date Date in YYYY-MM-DD format (default: today)
  * @param includeLive Include cross-day live matches (default: true)
+ * @param includeAI Include AI predictions via LEFT JOIN (default: true) - PHASE 3
  * @param status Optional comma-separated status IDs filter
  */
 export async function getUnifiedMatches(params?: {
   date?: string;
   includeLive?: boolean;
+  includeAI?: boolean;
   status?: string;
-}): Promise<MatchDiaryResponse & { counts?: { total: number; diary: number; crossDayLive: number; live: number } }> {
+}): Promise<MatchDiaryResponse & { counts?: { total: number; diary: number; crossDayLive: number; live: number; aiPredictions?: number } }> {
   const queryParams = new URLSearchParams();
   if (params?.date) queryParams.append('date', params.date);
   if (params?.includeLive !== undefined) queryParams.append('include_live', String(params.includeLive));
+  // PHASE 3: Add includeAI parameter (default: true)
+  if (params?.includeAI !== undefined) queryParams.append('include_ai', String(params.includeAI));
   if (params?.status) queryParams.append('status', params.status);
 
   const url = `${API_BASE_URL}/matches/unified?${queryParams}`;

@@ -1,8 +1,8 @@
 /**
  * AI Matches Tab - Yapay Zeka
  *
- * Shows matches that have AI predictions (same as favorites logic).
- * Filters allMatches by matching with aiMatches match IDs.
+ * PHASE 4: Shows matches that have AI predictions embedded via LEFT JOIN.
+ * Now directly uses matchesWithAI from LivescoreContext (filtered from allMatches.aiPrediction).
  */
 
 import { useMemo } from 'react';
@@ -11,19 +11,8 @@ import { LeagueSection } from '../../LeagueSection';
 import type { Match, Competition } from '../../../api/matches';
 
 export function AIMatchesTab() {
-  const { allMatches, aiMatches, sortBy, loading } = useLivescore();
-
-  // Get match IDs that have AI predictions
-  const aiMatchIds = useMemo(() => {
-    if (!aiMatches || aiMatches.length === 0) return new Set<string>();
-    return new Set(aiMatches.map((p: any) => p.match_external_id || p.match_id).filter(Boolean));
-  }, [aiMatches]);
-
-  // Filter allMatches to only show matches with AI predictions
-  const matchesWithAI = useMemo(() => {
-    if (!allMatches || allMatches.length === 0) return [];
-    return allMatches.filter(m => aiMatchIds.has(m.id));
-  }, [allMatches, aiMatchIds]);
+  // PHASE 4: matchesWithAI now comes directly from context (no need to filter)
+  const { matchesWithAI, sortBy, loading } = useLivescore();
 
   // Group matches by competition (same as other tabs)
   const groupedMatches = useMemo(() => {
