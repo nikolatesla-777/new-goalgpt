@@ -33,13 +33,21 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
   // Collapsed state for league sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
-  // PERFORMANCE OPTIMIZATION: Lazy loading - only show first N leagues initially
-  const [displayedLeagueCount, setDisplayedLeagueCount] = useState(10); // Show 10 leagues initially (was 20)
-  const LEAGUES_PER_PAGE = 10; // Load 10 more at a time
+  // PERFORMANCE OPTIMIZATION: Progressive loading for instant first paint
+  // Show 5 leagues immediately, then auto-load +5 more after 500ms
+  const [displayedLeagueCount, setDisplayedLeagueCount] = useState(5); // Show 5 leagues immediately
+  const LEAGUES_PER_PAGE = 10; // Load 10 more at a time when user clicks
 
-  // Reset displayed count when date or matches change
+  // Progressive loading: Reset to 5, then auto-load +5 more
   useEffect(() => {
-    setDisplayedLeagueCount(10);
+    setDisplayedLeagueCount(5); // First paint: 5 leagues only
+
+    // Auto-load +5 more after 500ms (progressive enhancement)
+    const timer = setTimeout(() => {
+      setDisplayedLeagueCount(10);
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, [date, view]);
 
   // CRITICAL FIX: Ensure matches is always an array (never null/undefined)
