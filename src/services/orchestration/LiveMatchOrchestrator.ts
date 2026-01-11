@@ -396,8 +396,11 @@ export class LiveMatchOrchestrator extends EventEmitter {
             // Accept if incoming is from preferred source
             if (update.source === rules.source) {
               // Allow - preferred source wins
-            } else if (update.source === rules.fallback && currentValue === null) {
-              // Allow - fallback when NULL
+            } else if (update.source === rules.fallback) {
+              // CRITICAL FIX: Allow fallback to UPDATE itself!
+              // If field is already from fallback source, new fallback updates should be accepted
+              // Example: minute source='computed', new computed update with higher value should update
+              // Allow - fallback can update fallback
             } else {
               // Reject - wrong source
               continue;
