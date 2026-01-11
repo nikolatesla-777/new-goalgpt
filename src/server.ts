@@ -35,6 +35,8 @@ import { MatchRecentService } from './services/thesports/match/matchRecent.servi
 import { unifiedPredictionService } from './services/ai/unifiedPrediction.service';
 import { LiveMatchOrchestrator } from './services/orchestration/LiveMatchOrchestrator';
 import { OrchestratorSettlementListener } from './services/orchestration/settlementListener';
+import { PredictionOrchestrator } from './services/orchestration/PredictionOrchestrator';
+import type { PredictionCreatedEvent, PredictionUpdatedEvent, PredictionDeletedEvent } from './services/orchestration/predictionEvents';
 
 // Workers - Correct existing files from src/jobs
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
@@ -204,6 +206,61 @@ const start = async () => {
       }
     });
     logger.info('✅ Orchestrator Minute Broadcast Listener initialized');
+
+    // Initialize Prediction Orchestrator
+    // Event-driven CRUD for AI predictions (Phase 2)
+    const predictionOrchestrator = PredictionOrchestrator.getInstance();
+    logger.info('✅ Prediction Orchestrator initialized');
+
+    // Listener 1: Broadcast prediction events to WebSocket clients
+    predictionOrchestrator.on('prediction:created', async (event: PredictionCreatedEvent) => {
+      try {
+        const { broadcastEvent } = await import('./routes/websocket.routes');
+        broadcastEvent({
+          type: 'PREDICTION_CREATED',
+          predictionId: event.predictionId,
+          botName: event.botName,
+          matchId: event.matchId,
+          prediction: event.prediction,
+          accessType: event.accessType,
+          timestamp: event.timestamp,
+        });
+        logger.info(`[PredictionBroadcast] PREDICTION_CREATED: ${event.predictionId}`);
+      } catch (error: any) {
+        logger.error('[PredictionBroadcast] Error broadcasting prediction:created:', error);
+      }
+    });
+
+    predictionOrchestrator.on('prediction:updated', async (event: PredictionUpdatedEvent) => {
+      try {
+        const { broadcastEvent } = await import('./routes/websocket.routes');
+        broadcastEvent({
+          type: 'PREDICTION_UPDATED',
+          predictionId: event.predictionId,
+          fields: event.fields,
+          timestamp: event.timestamp,
+        });
+        logger.info(`[PredictionBroadcast] PREDICTION_UPDATED: ${event.predictionId} (${event.fields.join(', ')})`);
+      } catch (error: any) {
+        logger.error('[PredictionBroadcast] Error broadcasting prediction:updated:', error);
+      }
+    });
+
+    predictionOrchestrator.on('prediction:deleted', async (event: PredictionDeletedEvent) => {
+      try {
+        const { broadcastEvent } = await import('./routes/websocket.routes');
+        broadcastEvent({
+          type: 'PREDICTION_DELETED',
+          predictionId: event.predictionId,
+          timestamp: event.timestamp,
+        });
+        logger.info(`[PredictionBroadcast] PREDICTION_DELETED: ${event.predictionId}`);
+      } catch (error: any) {
+        logger.error('[PredictionBroadcast] Error broadcasting prediction:deleted:', error);
+      }
+    });
+
+    logger.info('✅ Prediction Orchestrator Broadcast Listeners initialized');
 
     // WebSocket Service
     websocketService = new WebSocketService();

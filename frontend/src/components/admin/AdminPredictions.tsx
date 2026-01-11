@@ -3,7 +3,7 @@
  * Matching AdminBots quality
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Robot, Trophy, XCircle, Clock, TrendUp, CheckCircle, Link as LinkIcon, LinkBreak } from '@phosphor-icons/react';
 import { useSocket } from '../../hooks/useSocket';
@@ -72,6 +72,7 @@ export function AdminPredictions() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<FilterType>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -103,6 +104,15 @@ export function AdminPredictions() {
         fetchData();
     }, [fetchData]);
 
+    // Cleanup refetch timer on unmount
+    useEffect(() => {
+        return () => {
+            if (refetchTimerRef.current) {
+                clearTimeout(refetchTimerRef.current);
+            }
+        };
+    }, []);
+
     const filteredPredictions = predictions.filter((p) => {
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
@@ -114,7 +124,7 @@ export function AdminPredictions() {
         );
     });
 
-    // Optimized WebSocket handling: only refetch on score/status changes
+    // Real-time WebSocket handling with optimistic updates
     useSocket({
         onMinuteUpdate: (event) => {
             // Optimistic minute update - no API refetch needed
@@ -124,8 +134,79 @@ export function AdminPredictions() {
                     : p
             ));
         },
-        onScoreChange: () => fetchData(), // Score changed - refetch for accuracy
-        onMatchStateChange: () => fetchData(), // Status changed - refetch for accuracy
+        onScoreChange: (event) => {
+            // Phase 1: Optimistic score update + debounced refetch
+            setPredictions(prev => prev.map(p =>
+                p.match_id === event.matchId
+                    ? {
+                        ...p,
+                        home_score_display: event.homeScore,
+                        away_score_display: event.awayScore,
+                    }
+                    : p
+            ));
+
+            // Debounced refetch for eventual consistency (2 seconds)
+            if (refetchTimerRef.current) {
+                clearTimeout(refetchTimerRef.current);
+            }
+            refetchTimerRef.current = setTimeout(() => {
+                fetchData();
+            }, 2000);
+        },
+        onMatchStateChange: (event) => {
+            // Optimistic status update + debounced refetch
+            setPredictions(prev => prev.map(p =>
+                p.match_id === event.matchId
+                    ? { ...p, live_match_status: event.statusId }
+                    : p
+            ));
+
+            // Debounced refetch (settlement might be triggered)
+            if (refetchTimerRef.current) {
+                clearTimeout(refetchTimerRef.current);
+            }
+            refetchTimerRef.current = setTimeout(() => {
+                fetchData();
+            }, 2000);
+        },
+        onPredictionSettled: (event) => {
+            // Phase 1: Instant settlement update (0ms latency)
+            setPredictions(prev => prev.map(p =>
+                p.id === event.predictionId
+                    ? {
+                        ...p,
+                        result: event.result,
+                        result_reason: event.resultReason,
+                        final_score: event.finalScore || p.final_score,
+                        resulted_at: new Date().toISOString(),
+                    }
+                    : p
+            ));
+
+            // Update stats bar in real-time
+            if (stats) {
+                const isWon = event.result === 'won';
+                const isLost = event.result === 'lost';
+
+                setStats(prev => {
+                    if (!prev) return prev;
+                    const newWon = prev.won + (isWon ? 1 : 0);
+                    const newLost = prev.lost + (isLost ? 1 : 0);
+                    const newPending = Math.max(0, prev.pending - 1);
+                    const total = newWon + newLost;
+                    const newWinRate = total > 0 ? ((newWon / total) * 100).toFixed(1) + '%' : 'N/A';
+
+                    return {
+                        ...prev,
+                        pending: newPending,
+                        won: newWon,
+                        lost: newLost,
+                        winRate: newWinRate,
+                    };
+                });
+            }
+        },
     });
 
     // Toggle access type

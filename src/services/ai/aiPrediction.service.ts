@@ -10,6 +10,8 @@ import { pool } from '../../database/connection';
 import { logger } from '../../utils/logger';
 import { teamNameMatcherService, MatchLookupResult } from './teamNameMatcher.service';
 import { predictionSettlementService } from './predictionSettlement.service';
+import { PredictionOrchestrator } from '../orchestration/PredictionOrchestrator';
+import type { PredictionCreateData } from '../orchestration/predictionEvents';
 
 export interface RawPredictionPayload {
     id?: string;
@@ -716,59 +718,71 @@ export class AIPredictionService {
             logger.info(`[AIPrediction] Assigned to bot: ${botGroup.botDisplayName} (minute: ${parsed.minuteAtPrediction})`);
             logger.info(`[AIPrediction] Generated details: ${JSON.stringify(generatedDetails)}`);
 
-            // REFACTORED: Insert into ai_predictions with NEW SCHEMA
-            // - Uses prediction (unified field) and prediction_threshold (numeric)
-            // - Sets result = 'pending' for settlement service
-            // - Sets match_id directly if matched (no junction table!)
-            // CRITICAL FIX: Removed bot_group_id and bot_name (columns don't exist in table)
-            const insertQuery = `
-                INSERT INTO ai_predictions (
-                    external_id, canonical_bot_name,
-                    league_name, home_team_name, away_team_name,
-                    score_at_prediction, minute_at_prediction,
-                    prediction, prediction_threshold,
-                    raw_payload, processed, result, source
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, 'pending', 'telegram')
-                RETURNING id
-            `;
+            // PHASE 2: Use PredictionOrchestrator for event-driven insert
+            const createData: PredictionCreateData = {
+                external_id: parsed.externalId,
+                canonical_bot_name: botGroup.botDisplayName,
+                league_name: parsed.leagueName,
+                home_team_name: parsed.homeTeamName,
+                away_team_name: parsed.awayTeamName,
+                score_at_prediction: parsed.scoreAtPrediction,
+                minute_at_prediction: parsed.minuteAtPrediction,
+                prediction: generatedDetails.prediction,
+                prediction_threshold: generatedDetails.predictionThreshold,
+                match_id: null,  // Will be set below if matched
+                match_time: null,
+                match_status: 1,
+                access_type: 'FREE',
+                source: 'external',
+            };
 
-            const insertResult = await client.query(insertQuery, [
-                parsed.externalId,
-                botGroup.botDisplayName,  // canonical_bot_name
-                parsed.leagueName,
-                parsed.homeTeamName,
-                parsed.awayTeamName,
-                parsed.scoreAtPrediction,
-                parsed.minuteAtPrediction,
-                generatedDetails.prediction,         // NEW: Unified "MS 0.5 ÜST"
-                generatedDetails.predictionThreshold, // NEW: Numeric 0.5, 1.5, 2.5
-                parsed.rawPayload
-            ]);
+            const orchestrator = PredictionOrchestrator.getInstance();
+            const createResult = await orchestrator.createPrediction(createData);
 
-            const predictionId = insertResult.rows[0].id;
-            logger.info(`[AIPrediction] Inserted prediction ${predictionId}: ${parsed.homeTeamName} vs ${parsed.awayTeamName}`);
-
-            // REFACTORED: If matched, set match_id directly on ai_predictions (NO JUNCTION TABLE)
-            if (matchResult && matchResult.overallConfidence >= 0.6) {
-                // Update prediction with match_id directly
-                // Store external_id in match_id (column type is varchar, stores external_id)
-                await client.query(`
-                    UPDATE ai_predictions
-                    SET match_id = $1, processed = true
-                    WHERE id = $2
-                `, [matchResult.matchExternalId, predictionId]);
-
-                logger.info(`[AIPrediction] Linked to match ${matchResult.matchExternalId} (confidence: ${matchResult.overallConfidence.toFixed(2)})`);
-
-                await client.query('COMMIT');
+            if (createResult.status === 'duplicate') {
+                await client.query('ROLLBACK');
                 return {
-                    success: true,
-                    predictionId,
-                    matchFound: true,
-                    matchExternalId: matchResult.matchExternalId,
-                    matchId: matchResult.matchExternalId,  // match_id stores external_id
-                    confidence: matchResult.overallConfidence
+                    success: false,
+                    matchFound: false,
+                    error: 'Duplicate prediction',
+                    predictionId: createResult.predictionId,
                 };
+            }
+
+            if (createResult.status === 'error') {
+                await client.query('ROLLBACK');
+                return {
+                    success: false,
+                    matchFound: false,
+                    error: createResult.reason || 'Failed to create prediction',
+                };
+            }
+
+            const predictionId = createResult.predictionId!;
+            logger.info(`[AIPrediction] Created prediction ${predictionId}: ${parsed.homeTeamName} vs ${parsed.awayTeamName}`);
+
+            // PHASE 2: If matched, use orchestrator to update match_id
+            if (matchResult && matchResult.overallConfidence >= 0.6) {
+                const updateResult = await orchestrator.updatePrediction(predictionId, {
+                    match_id: matchResult.matchExternalId,
+                    match_status: matchResult.matchStatusId || 1,
+                });
+
+                if (updateResult.status === 'success') {
+                    logger.info(`[AIPrediction] Linked to match ${matchResult.matchExternalId} (confidence: ${matchResult.overallConfidence.toFixed(2)})`);
+
+                    await client.query('COMMIT');
+                    return {
+                        success: true,
+                        predictionId,
+                        matchFound: true,
+                        matchExternalId: matchResult.matchExternalId,
+                        matchId: matchResult.matchExternalId,
+                        confidence: matchResult.overallConfidence
+                    };
+                } else {
+                    logger.warn(`[AIPrediction] Failed to link prediction ${predictionId} to match`);
+                }
             }
 
             // No match found or low confidence
