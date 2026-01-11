@@ -295,6 +295,7 @@ export class LiveMatchOrchestrator extends EventEmitter {
           away_score_display,
           status_id,
           minute,
+          first_half_kickoff_ts,
           second_half_kickoff_ts,
           overtime_kickoff_ts,
           provider_update_time,
