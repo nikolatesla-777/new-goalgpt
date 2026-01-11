@@ -205,9 +205,9 @@ export class WebSocketService {
             }, mqttReceivedTs);
 
             // AUTO SETTLEMENT: Trigger instant settlement on score change
-            // CRITICAL: Derive proxy minute from status since ParsedScore doesn't include minute
-            // Status 2 (1H) -> 1, Status 4 (2H) -> 46
-            const proxyMinute = parsedScore.statusId === 2 ? 1 : parsedScore.statusId === 4 ? 46 : 0;
+            // CRITICAL: Use calculated minute from ParsedScore (from MQTT messageTimestamp)
+            // ParsedScore.minute is calculated in websocket.parser.ts using kickoff_timestamp formula
+            const currentMinute = parsedScore.minute ?? (parsedScore.statusId === 2 ? 1 : parsedScore.statusId === 4 ? 46 : 0);
 
             // CRITICAL: Settlement MUST happen when score changes via WebSocket
             // This is the primary mechanism - if WebSocket updates score, settlement should work
@@ -217,18 +217,18 @@ export class WebSocketService {
               eventType: 'score_change',
               homeScore: parsedScore.home.score,
               awayScore: parsedScore.away.score,
-              minute: proxyMinute,
+              minute: currentMinute,
               statusId: parsedScore.statusId,
               timestamp: Date.now(),
             }).then((result) => {
               if (result.settled > 0) {
                 logger.info(`[AutoSettlement] Score change settlement for ${parsedScore.matchId}: ${result.settled} settled (${result.winners}W/${result.losers}L)`);
               } else {
-                logger.debug(`[AutoSettlement] Settlement check completed for ${parsedScore.matchId} (Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${proxyMinute})`);
+                logger.debug(`[AutoSettlement] Settlement check completed for ${parsedScore.matchId} (Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${currentMinute})`);
               }
             }).catch(err => {
               logger.error(`[AutoSettlement] CRITICAL ERROR in score change handler for ${parsedScore.matchId}: ${err.message}`);
-              logger.error(`[AutoSettlement] Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${proxyMinute}, Status: ${parsedScore.statusId}`);
+              logger.error(`[AutoSettlement] Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${currentMinute}, Status: ${parsedScore.statusId}`);
               logger.error(`[AutoSettlement] Stack: ${err.stack}`);
             });
 
@@ -897,12 +897,15 @@ export class WebSocketService {
       logger.info(`[WebSocket] Match ${matchId} reached Halftime (Status 3). Triggering AI Settlement + First Half Data Persistence...`);
 
       // For HT, current scores ARE the HT scores
+      // CRITICAL: Always set minute to 45 for halftime settlement
       // REFACTORED: Now using centralized PredictionSettlementService
       predictionSettlementService.processEvent({
         matchId,
         eventType: 'halftime',
         homeScore: homeScore ?? 0,
         awayScore: awayScore ?? 0,
+        minute: 45,
+        statusId: 3,
         timestamp: Date.now(),
       })
         .then(res => {
@@ -953,7 +956,8 @@ export class WebSocketService {
           const matchData = await pool.query(`
             SELECT home_score_display, away_score_display,
                    (home_scores->>1)::INTEGER as ht_home,
-                   (away_scores->>1)::INTEGER as ht_away
+                   (away_scores->>1)::INTEGER as ht_away,
+                   minute
             FROM ts_matches WHERE external_id = $1
           `, [matchId]);
 
@@ -961,7 +965,9 @@ export class WebSocketService {
           const finalAway = matchData.rows[0]?.away_score_display ?? 0;
           const htHome = matchData.rows[0]?.ht_home;
           const htAway = matchData.rows[0]?.ht_away;
+          const finalMinute = matchData.rows[0]?.minute ?? 90; // Default to 90 if not available
 
+          // CRITICAL: Include minute for fulltime settlement
           // REFACTORED: Now using centralized PredictionSettlementService
           const result = await predictionSettlementService.processEvent({
             matchId,
@@ -970,6 +976,8 @@ export class WebSocketService {
             awayScore: finalAway,
             htHome,
             htAway,
+            minute: finalMinute,
+            statusId: 8,
             timestamp: Date.now(),
           });
 
