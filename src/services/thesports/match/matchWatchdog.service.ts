@@ -141,6 +141,7 @@ export class MatchWatchdogService {
           (status_id = 4 AND minute > 100)  -- SECOND_HALF exceeded max (90 + 10 injury) - LOWERED FROM 105 FOR FASTER FT DETECTION
           OR (status_id = 5 AND minute > 130) -- OVERTIME exceeded max (120 + 10 injury)
           OR (status_id = 2 AND minute > 60)  -- FIRST_HALF exceeded max (45 + 15 injury - something is very wrong)
+          OR (status_id = 3 AND minute > 60)  -- CRITICAL FIX: HALF_TIME with minute > 60 is stuck (HT should be ~45-48 min)
         ORDER BY minute DESC
         LIMIT $1
       `;
@@ -155,6 +156,8 @@ export class MatchWatchdogService {
           reason = `OVERTIME minute ${row.minute} > 130 (should have ended)`;
         } else if (row.status_id === 2 && row.minute > 60) {
           reason = `FIRST_HALF minute ${row.minute} > 60 (abnormal)`;
+        } else if (row.status_id === 3 && row.minute > 60) {
+          reason = `HALF_TIME minute ${row.minute} > 60 (CRITICAL: HT stuck while minute advances)`;
         }
 
         return {
