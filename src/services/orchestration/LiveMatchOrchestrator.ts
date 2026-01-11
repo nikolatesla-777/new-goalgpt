@@ -75,6 +75,7 @@ interface FieldRules {
  */
 export class LiveMatchOrchestrator extends EventEmitter {
   private static instance: LiveMatchOrchestrator | null = null;
+  private memoryLocks: Map<string, number> = new Map(); // Fallback in-memory locks
 
   // Fields that have _source and _timestamp metadata columns in database
   // Maps field name → metadata column prefix
@@ -84,6 +85,15 @@ export class LiveMatchOrchestrator extends EventEmitter {
     'away_score_display': 'away_score',      // away_score_source, away_score_timestamp
     'minute': 'minute',                       // minute_source, minute_timestamp
     'status_id': 'status_id',                // status_id_source, status_id_timestamp
+  };
+
+  // Source Priority Map (Higher number = Higher Priority)
+  // Used to resolve conflicts when multiple sources compete
+  private readonly sourcePriority: Record<string, number> = {
+    'api': 3,
+    'mqtt': 2,
+    'computed': 1,
+    'watchdog': 0 // Watchdog usually lowest unless allowWatchdog=true
   };
 
   // Field ownership rules
@@ -99,6 +109,7 @@ export class LiveMatchOrchestrator extends EventEmitter {
     minute: { source: 'api', fallback: 'computed', nullable: true },
 
     // Critical timestamps: Write-once (never overwrite)
+    first_half_kickoff_ts: { writeOnce: true, nullable: true }, // ADDED: Critical for first half minutes
     second_half_kickoff_ts: { writeOnce: true, nullable: true },
     overtime_kickoff_ts: { writeOnce: true, nullable: true },
 
@@ -150,10 +161,32 @@ export class LiveMatchOrchestrator extends EventEmitter {
   ): Promise<UpdateResult> {
     const lockKey = `lock:match:${matchId}`;
     const lockTTL = 5; // 5 seconds
+    let usingMemoryLock = false;
 
     try {
-      // Step 1: Acquire distributed lock
-      const lockAcquired = await RedisManager.acquireLock(lockKey, source, lockTTL);
+      // Step 1: Acquire distributed lock (Fail-Safe Implementation)
+      let lockAcquired = false;
+      try {
+        lockAcquired = await RedisManager.acquireLock(lockKey, source, lockTTL);
+      } catch (redisError: any) {
+        // REDIS BYPASS: If Redis is down, fallback to memory lock
+        if (redisError.code === 'ECONNREFUSED' || redisError.message?.includes('connection')) {
+             logger.warn(`[Orchestrator] Redis unavailable (${redisError.message}). Using Memory Lock for ${matchId}`);
+             const now = Date.now();
+             const existingLock = this.memoryLocks.get(lockKey);
+             if (!existingLock || existingLock < now) {
+                 this.memoryLocks.set(lockKey, now + (lockTTL * 1000));
+                 lockAcquired = true;
+                 usingMemoryLock = true;
+             } else {
+                 lockAcquired = false;
+             }
+        } else {
+            // Other error -> assume failure but log
+             logger.error(`[Orchestrator] Redis acquire lock error: ${redisError}`);
+             lockAcquired = false;
+        }
+      }
 
       if (!lockAcquired) {
         // Another job is writing - retry later
@@ -178,7 +211,11 @@ export class LiveMatchOrchestrator extends EventEmitter {
       if (!currentState) {
         // Match not found in database
         logEvent('error', 'orchestrator.match_not_found', { matchId, source });
-        await RedisManager.releaseLock(lockKey);
+        if (usingMemoryLock) {
+            this.memoryLocks.delete(lockKey);
+        } else {
+            await RedisManager.releaseLock(lockKey);
+        }
 
         return {
           status: 'rejected',
@@ -197,7 +234,11 @@ export class LiveMatchOrchestrator extends EventEmitter {
           reason: 'All updates rejected by conflict resolution',
         });
 
-        await RedisManager.releaseLock(lockKey);
+        if (usingMemoryLock) {
+            this.memoryLocks.delete(lockKey);
+        } else {
+            await RedisManager.releaseLock(lockKey);
+        }
 
         return {
           status: 'rejected',
@@ -219,7 +260,11 @@ export class LiveMatchOrchestrator extends EventEmitter {
       });
 
       // Step 6: Release lock
-      await RedisManager.releaseLock(lockKey);
+      if (usingMemoryLock) {
+          this.memoryLocks.delete(lockKey);
+      } else {
+          await RedisManager.releaseLock(lockKey).catch(() => {});
+      }
 
       return {
         status: 'success',
@@ -229,9 +274,11 @@ export class LiveMatchOrchestrator extends EventEmitter {
       logger.error(`[Orchestrator] Error updating match ${matchId}:`, error);
 
       // Ensure lock is released on error
-      await RedisManager.releaseLock(lockKey).catch(() => {
-        // Ignore release error (lock will expire)
-      });
+      if (usingMemoryLock) {
+          this.memoryLocks.delete(lockKey);
+      } else {
+          await RedisManager.releaseLock(lockKey).catch(() => {});
+      }
 
       return {
         status: 'rejected',
@@ -294,6 +341,7 @@ export class LiveMatchOrchestrator extends EventEmitter {
           away_score_display,
           status_id,
           minute,
+          first_half_kickoff_ts,
           second_half_kickoff_ts,
           overtime_kickoff_ts,
           provider_update_time,
@@ -364,48 +412,31 @@ export class LiveMatchOrchestrator extends EventEmitter {
         continue; // Skip - already set
       }
 
-      // Rule 2: Source priority
+      // Rule 2: Source priority (IMPROVED LOGIC)
       if (rules?.source) {
         // SPECIAL CASE: Watchdog can force-update certain fields for anomaly recovery
         if (update.source === 'watchdog' && rules.allowWatchdog) {
-          logEvent('debug', 'orchestrator.watchdog_override', {
-            matchId: currentState.external_id,
-            field: fieldName,
-            reason: 'Watchdog force-update for anomaly recovery',
-          });
-          // Allow watchdog to update - skip other source checks
-        } else {
-          // Normal source priority logic
-          // If current value exists and comes from preferred source
-          if (currentValue !== null && currentSource === rules.source) {
-            // Incoming update is NOT from preferred source → reject
-            if (update.source !== rules.source) {
-              logEvent('debug', 'orchestrator.source_priority_skip', {
-                matchId: currentState.external_id,
-                field: fieldName,
-                currentSource,
-                incomingSource: update.source,
-                preferredSource: rules.source,
-              });
-              continue;
-            }
-          }
+            // Watchdog bypasses normal priority checks
+        } else if (currentValue !== null && currentSource) {
+            // Get priority values (default to 0 if unknown)
+            const currentPriority = this.sourcePriority[currentSource] || 0;
+            const updatePriority = this.sourcePriority[update.source] || 0;
 
-          // If current value is NULL or from fallback source
-          if (currentValue === null || currentSource === rules.fallback) {
-            // Accept if incoming is from preferred source
-            if (update.source === rules.source) {
-              // Allow - preferred source wins
-            } else if (update.source === rules.fallback) {
-              // CRITICAL FIX: Allow fallback to UPDATE itself!
-              // If field is already from fallback source, new fallback updates should be accepted
-              // Example: minute source='computed', new computed update with higher value should update
-              // Allow - fallback can update fallback
-            } else {
-              // Reject - wrong source
-              continue;
+            // CRITICAL FIX: Allow fallback to UPDATE itself
+            const isFallbackUpdatingSelf = (currentSource === rules.fallback && update.source === rules.fallback);
+
+            // If new update has lower priority AND is not the current source updating itself
+            if (updatePriority < currentPriority && !isFallbackUpdatingSelf) {
+                 logEvent('debug', 'orchestrator.source_priority_skip', {
+                    matchId: currentState.external_id,
+                    field: fieldName,
+                    currentSource,
+                    incomingSource: update.source,
+                    currentPriority,
+                    updatePriority
+                 });
+                 continue; // Reject lower priority
             }
-          }
         }
       }
 

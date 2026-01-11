@@ -162,12 +162,23 @@ export class DataUpdateWorker {
       const updates: FieldUpdate[] = [];
       const now = Math.floor(Date.now() / 1000);
 
-      // Parse score array: [home_score, status_id, [home_display, ...], [away_display, ...]]
+      // FIX: Use effective update time if provider doesn't send it
+      const effectiveUpdateTime = matchData.update_time || providerUpdateTime || now;
+
+      // Parse score array: [home_score, status_id, [home_display, ...], [away_display, ...], [kickoff_timestamps]]
+      // TheSports API Documentation: score[4] contains [first_half, second_half, overtime, penalties] kickoff timestamps
       if (Array.isArray(matchData.score) && matchData.score.length >= 4) {
         const homeScore = matchData.score[0];
         const statusId = matchData.score[1];
         const homeScoreDisplay = Array.isArray(matchData.score[2]) ? matchData.score[2][0] : null;
         const awayScoreDisplay = Array.isArray(matchData.score[3]) ? matchData.score[3][0] : null;
+
+        // KICKOFF TIMESTAMP EXTRACTION (Phase 2 Fix)
+        // score[4] is array of timestamps
+        const kickoffTimestamps = Array.isArray(matchData.score[4]) ? matchData.score[4] : [];
+        const firstHalfTs = kickoffTimestamps[0];
+        const secondHalfTs = kickoffTimestamps[1];
+        const overtimeTs = kickoffTimestamps[2];
 
         if (homeScoreDisplay !== null) {
           updates.push({
@@ -175,7 +186,7 @@ export class DataUpdateWorker {
             value: homeScoreDisplay,
             source: 'api',
             priority: 2,
-            timestamp: matchData.update_time || providerUpdateTime || now,
+            timestamp: effectiveUpdateTime,
           });
         }
 
@@ -185,7 +196,7 @@ export class DataUpdateWorker {
             value: awayScoreDisplay,
             source: 'api',
             priority: 2,
-            timestamp: matchData.update_time || providerUpdateTime || now,
+            timestamp: effectiveUpdateTime,
           });
         }
 
@@ -195,8 +206,39 @@ export class DataUpdateWorker {
             value: statusId,
             source: 'api',
             priority: 2,
-            timestamp: matchData.update_time || providerUpdateTime || now,
+            timestamp: effectiveUpdateTime,
           });
+
+          // Send Kickoff Timestamps based on status
+          if (statusId === 2 && firstHalfTs) {
+             updates.push({
+                field: 'first_half_kickoff_ts',
+                value: firstHalfTs,
+                source: 'api',
+                priority: 2,
+                timestamp: effectiveUpdateTime
+             });
+          }
+
+          if (statusId === 4 && secondHalfTs) {
+             updates.push({
+                field: 'second_half_kickoff_ts',
+                value: secondHalfTs,
+                source: 'api',
+                priority: 2,
+                timestamp: effectiveUpdateTime
+             });
+          }
+
+          if (statusId >= 5 && overtimeTs) {
+              updates.push({
+                field: 'overtime_kickoff_ts',
+                value: overtimeTs,
+                source: 'api',
+                priority: 2,
+                timestamp: effectiveUpdateTime
+             });
+          }
         }
       }
 
@@ -207,20 +249,18 @@ export class DataUpdateWorker {
           value: matchData.minute,
           source: 'api',
           priority: 2,
-          timestamp: matchData.update_time || providerUpdateTime || now,
+          timestamp: effectiveUpdateTime,
         });
       }
 
-      // Provider timestamps
-      if (matchData.update_time) {
-        updates.push({
-          field: 'provider_update_time',
-          value: matchData.update_time,
-          source: 'api',
-          priority: 2,
-          timestamp: matchData.update_time,
-        });
-      }
+      // Provider timestamps - ALWAYS send effective update time
+      updates.push({
+        field: 'provider_update_time',
+        value: effectiveUpdateTime,
+        source: 'api',
+        priority: 2,
+        timestamp: effectiveUpdateTime,
+      });
 
       if (matchData.event_time) {
         updates.push({
@@ -228,18 +268,27 @@ export class DataUpdateWorker {
           value: matchData.event_time,
           source: 'api',
           priority: 2,
-          timestamp: matchData.update_time || providerUpdateTime || now,
+          timestamp: effectiveUpdateTime,
+        });
+      } else {
+         // If no event time, update last_event_ts with update time to prevent staleness
+         updates.push({
+          field: 'last_event_ts',
+          value: effectiveUpdateTime,
+          source: 'api',
+          priority: 2,
+          timestamp: effectiveUpdateTime,
         });
       }
 
-      // Second half kickoff (write-once)
+      // Explicit Second Half Kickoff (if provided in main object, not just array)
       if (matchData.second_half_kickoff_ts) {
         updates.push({
           field: 'second_half_kickoff_ts',
           value: matchData.second_half_kickoff_ts,
           source: 'api',
           priority: 2,
-          timestamp: matchData.update_time || providerUpdateTime || now,
+          timestamp: effectiveUpdateTime,
         });
       }
 
