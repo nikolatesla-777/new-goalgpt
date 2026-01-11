@@ -121,6 +121,7 @@ export class LiveMatchOrchestrator extends EventEmitter {
 
     // Match data sync fields: API only (background persistence)
     trend_data: { source: 'api', nullable: true },
+    ended: { source: 'api', allowWatchdog: true }, // Added for terminal state enforcement
   };
 
   private constructor() {
@@ -481,6 +482,21 @@ export class LiveMatchOrchestrator extends EventEmitter {
         resolved[`${metadataPrefix}_source`] = update.source;
         resolved[`${metadataPrefix}_timestamp`] = update.timestamp;
       }
+    }
+
+    // GHOST MINUTE FIX: If status_id is changing to a Terminal State, FORCE minute = null and ended = true
+    if (resolved.status_id !== undefined && this.isTerminalStatus(resolved.status_id)) {
+      // 1. Force minute to NULL to prevent "90+" ghosting
+      resolved.minute = null;
+      if (this.fieldMetadataMap['minute']) {
+        resolved.minute_source = 'computed';
+        resolved.minute_timestamp = Date.now() / 1000;
+      }
+
+      // 2. Force ended = true (using 'ended' column as requested proxy for is_finalized)
+      resolved.ended = true;
+
+      logger.info(`[Orchestrator] Terminal Status ${resolved.status_id} detected for ${currentState.external_id}. Forcing minute=NULL, ended=TRUE.`);
     }
 
     return resolved;
