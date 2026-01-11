@@ -340,7 +340,10 @@ export class MatchDetailLiveService {
 
     // DEBUG: Log if update_time is missing (critical for provider_update_time tracking)
     if (updateTime === null && matchId) {
-      logger.warn(`[DetailLive] update_time NOT FOUND for match ${matchId}. Checked fields: update_time, updateTime, updated_at, match.update_time. Root keys: ${Object.keys(root || {}).join(', ')}`);
+      const tliveInfo = root?.tlive !== undefined
+        ? `tlive=${root.tlive} (type: ${typeof root.tlive})`
+        : 'tlive=undefined';
+      logger.warn(`[DetailLive] update_time NOT FOUND for match ${matchId}. ${tliveInfo}. Checked fields: tlive, update_time, updateTime, updated_at, match.update_time. Root keys: ${Object.keys(root || {}).join(', ')}`);
     }
 
     // Extract minute from provider (WebSocket/detail_live source)
