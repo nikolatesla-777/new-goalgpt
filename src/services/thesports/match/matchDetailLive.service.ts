@@ -140,7 +140,7 @@ export class MatchDetailLiveService {
     return null;
   }
 
-  private extractLiveFields(resp: any, matchId?: string): {
+  public extractLiveFields(resp: any, matchId?: string): {
     statusId: number | null;
     homeScoreDisplay: number | null;
     awayScoreDisplay: number | null;

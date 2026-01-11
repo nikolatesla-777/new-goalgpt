@@ -158,9 +158,12 @@ export class DataUpdateWorker {
         return;
       }
 
-      // Step 3: Parse fields
+      // Step 3: Parse fields using extractLiveFields() for proper field extraction
       const updates: FieldUpdate[] = [];
       const now = Math.floor(Date.now() / 1000);
+
+      // CRITICAL FIX: Use extractLiveFields() to handle various API field name variations
+      const live = this.matchDetailLiveService.extractLiveFields(resp, matchId);
 
       // Parse score array: [home_score, status_id, [home_display, ...], [away_display, ...]]
       if (Array.isArray(matchData.score) && matchData.score.length >= 4) {
@@ -175,7 +178,7 @@ export class DataUpdateWorker {
             value: homeScoreDisplay,
             source: 'api',
             priority: 2,
-            timestamp: matchData.update_time || providerUpdateTime || now,
+            timestamp: live.updateTime || providerUpdateTime || now,
           });
         }
 
@@ -185,7 +188,7 @@ export class DataUpdateWorker {
             value: awayScoreDisplay,
             source: 'api',
             priority: 2,
-            timestamp: matchData.update_time || providerUpdateTime || now,
+            timestamp: live.updateTime || providerUpdateTime || now,
           });
         }
 
@@ -195,7 +198,7 @@ export class DataUpdateWorker {
             value: statusId,
             source: 'api',
             priority: 2,
-            timestamp: matchData.update_time || providerUpdateTime || now,
+            timestamp: live.updateTime || providerUpdateTime || now,
           });
         }
       }
@@ -207,40 +210,58 @@ export class DataUpdateWorker {
           value: matchData.minute,
           source: 'api',
           priority: 2,
-          timestamp: matchData.update_time || providerUpdateTime || now,
+          timestamp: live.updateTime || providerUpdateTime || now,
         });
       }
 
-      // Provider timestamps
-      if (matchData.update_time) {
+      // CRITICAL FIX: Provider timestamps from extractLiveFields()
+      if (live.updateTime !== null) {
         updates.push({
           field: 'provider_update_time',
-          value: matchData.update_time,
+          value: live.updateTime,
           source: 'api',
           priority: 2,
-          timestamp: matchData.update_time,
+          timestamp: live.updateTime,
         });
-      }
 
-      if (matchData.event_time) {
+        // Also update last_event_ts when we get a provider update
+        // This indicates match data has changed
         updates.push({
           field: 'last_event_ts',
-          value: matchData.event_time,
+          value: live.updateTime,
           source: 'api',
           priority: 2,
-          timestamp: matchData.update_time || providerUpdateTime || now,
+          timestamp: live.updateTime,
         });
       }
 
-      // Second half kickoff (write-once)
-      if (matchData.second_half_kickoff_ts) {
-        updates.push({
-          field: 'second_half_kickoff_ts',
-          value: matchData.second_half_kickoff_ts,
-          source: 'api',
-          priority: 2,
-          timestamp: matchData.update_time || providerUpdateTime || now,
-        });
+      // CRITICAL FIX: Kickoff timestamps from extractLiveFields()
+      // Use liveKickoffTime from score[4] (most reliable source)
+      if (live.liveKickoffTime !== null) {
+        // Determine which kickoff field to update based on current status
+        if (Array.isArray(matchData.score) && matchData.score.length >= 2) {
+          const statusId = matchData.score[1];
+          // First half (status 2): update first_half_kickoff_ts
+          if (statusId === 2) {
+            updates.push({
+              field: 'first_half_kickoff_ts',
+              value: live.liveKickoffTime,
+              source: 'api',
+              priority: 2,
+              timestamp: live.updateTime || providerUpdateTime || now,
+            });
+          }
+          // Second half or beyond (status 4+): update second_half_kickoff_ts
+          else if (statusId >= 4) {
+            updates.push({
+              field: 'second_half_kickoff_ts',
+              value: live.liveKickoffTime,
+              source: 'api',
+              priority: 2,
+              timestamp: live.updateTime || providerUpdateTime || now,
+            });
+          }
+        }
       }
 
       // Step 4: Send to orchestrator
