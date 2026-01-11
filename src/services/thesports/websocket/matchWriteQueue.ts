@@ -197,6 +197,12 @@ export class MatchWriteQueue {
         setParts.push(`away_score_regular = $${paramIndex++}`);
         values.push(Number(score.away.regularScore));
       }
+
+      // CRITICAL: Update minute from ParsedScore (calculated from messageTimestamp)
+      if (score.minute !== undefined && score.minute !== null && !isNaN(Number(score.minute))) {
+        setParts.push(`minute = $${paramIndex++}`);
+        values.push(Number(score.minute));
+      }
     }
 
     // Incidents update

@@ -595,12 +595,42 @@ export class WebSocketParser {
     const homeDisplayScore = this.calculateDisplayScore(homeRegularScore, homeOvertimeScore, homePenaltyScore, statusId);
     const awayDisplayScore = this.calculateDisplayScore(awayRegularScore, awayOvertimeScore, awayPenaltyScore, statusId);
 
+    // CRITICAL: Calculate minute from messageTimestamp (kickoff_timestamp from TheSportsAPI)
+    // Per TheSportsAPI documentation:
+    // - First half: messageTimestamp = first half kickoff
+    // - Second half: messageTimestamp = second half kickoff (changes when half changes!)
+    // Formula:
+    // - First half: (now - first_half_kickoff) / 60 + 1
+    // - Second half: (now - second_half_kickoff) / 60 + 45 + 1
+    let minute: number | null = null;
+    if (messageTimestamp > 0) {
+      const now = Math.floor(Date.now() / 1000);
+
+      if (statusId === 2) {
+        // First half: (current - first_half_kickoff) / 60 + 1
+        const elapsedMinutes = Math.floor((now - messageTimestamp) / 60);
+        minute = Math.max(1, Math.min(45, elapsedMinutes + 1));
+      } else if (statusId === 3) {
+        // Half-time
+        minute = 45;
+      } else if (statusId === 4) {
+        // Second half: (current - second_half_kickoff) / 60 + 45 + 1
+        const elapsedFromSecondHalfKickoff = Math.floor((now - messageTimestamp) / 60);
+        minute = Math.max(46, Math.min(120, elapsedFromSecondHalfKickoff + 45 + 1));
+      } else if (statusId === 5 || statusId === 7) {
+        // Overtime/Penalties
+        const elapsedFromKickoff = Math.floor((now - messageTimestamp) / 60);
+        minute = Math.max(91, elapsedFromKickoff + 45 + 1);
+      }
+    }
+
     return {
       matchId,
       status: statusId as MatchState,
       statusId: statusId, // Raw status_id from Index 1
       messageTimestamp, // Index 4 from score tuple
       liveKickoffTime, // null here (do not derive from message timestamp)
+      minute, // Calculated match minute from messageTimestamp (kickoff)
       home: {
         score: homeDisplayScore, // Calculated display score
         regularScore: homeRegularScore, // Index 0

@@ -72,6 +72,7 @@ export interface ParsedScore {
   statusId: number; // Raw status_id from API (Index 1)
   messageTimestamp: number; // Score message timestamp (Index 4) - unix seconds
   liveKickoffTime: number | null; // Real 1st-half kickoff timestamp if known (DO NOT derive from score Index 4)
+  minute: number | null; // Calculated match minute from messageTimestamp
   home: {
     score: number; // Display score (calculated)
     regularScore: number; // Index 0: Regular time score (90 min)
