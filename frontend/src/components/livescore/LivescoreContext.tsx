@@ -267,8 +267,8 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
           try {
             const message = JSON.parse(event.data);
 
-            // Handle score changes and match state changes
-            if (message.type === 'GOAL' || message.type === 'SCORE_CHANGE' || message.type === 'MATCH_STATE_CHANGE') {
+            // Handle score changes, match state changes, and minute updates
+            if (message.type === 'GOAL' || message.type === 'SCORE_CHANGE' || message.type === 'MATCH_STATE_CHANGE' || message.type === 'MINUTE_UPDATE') {
               // Phase 6: Optimistic Update - Apply instantly if available
               if (message.optimistic && message.matchId) {
                 setAllMatches(prevMatches => {
