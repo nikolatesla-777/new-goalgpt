@@ -587,7 +587,61 @@ export class MatchDetailLiveService {
       );
 
       if (existingResult.rows.length === 0) {
-        logger.warn(`Match ${match_id} not found in DB during reconcile`);
+        // CRITICAL FIX: Auto-insert missing live match
+        // If match exists in API response but not in DB, insert it immediately to fix "missing live matches" issue
+        const results = (resp as any).results || (resp as any).result_list;
+        let apiMatch: any = null;
+
+        if (results && Array.isArray(results)) {
+          apiMatch = results.find((m: any) =>
+            String(m?.id || m?.match_id) === String(match_id)
+          );
+        }
+
+        // Only attempt insert if we have valid match data from API
+        if (apiMatch && apiMatch.home_team && apiMatch.away_team && apiMatch.competition) {
+          logger.info(`[DetailLive] Match ${match_id} not found in DB. Auto-inserting missing live match...`);
+
+          try {
+            // INSERT queries usually require Teams/Competition to exist. 
+            // We use ON CONFLICT DO NOTHING to avoid race conditions.
+            const insertRes = await client.query(`
+               INSERT INTO ts_matches (
+                 external_id, home_team_id, away_team_id, competition_id, 
+                 match_time, status_id, home_team_name, away_team_name, 
+                 home_score_display, away_score_display, created_at, updated_at
+               ) VALUES (
+                 $1, $2, $3, $4, 
+                 $5, $6, $7, $8, 
+                 $9, $10, NOW(), NOW()
+               )
+               ON CONFLICT (external_id) DO UPDATE SET updated_at = NOW()
+               RETURNING *
+             `, [
+              match_id,
+              apiMatch.home_team.id,
+              apiMatch.away_team.id,
+              apiMatch.competition.id,
+              apiMatch.match_time || Math.floor(Date.now() / 1000),
+              live.statusId || apiMatch.status_id || 1,
+              apiMatch.home_team.name,
+              apiMatch.away_team.name,
+              live.homeScoreDisplay ?? 0,
+              live.awayScoreDisplay ?? 0
+            ]);
+
+            if (insertRes.rowCount > 0) {
+              logger.info(`[DetailLive] ✅ Successfully auto-inserted match ${match_id}`);
+              return { updated: true, rowCount: 1, statusId: live.statusId, score: null, providerUpdateTime: null };
+            }
+          } catch (err: any) {
+            logger.error(`[DetailLive] Failed to auto-insert match ${match_id}: ${err.message}`);
+            // If FK failure, it means Team or Competition is missing. We can't fix that easily here without a deep sync.
+            return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
+          }
+        }
+
+        logger.warn(`Match ${match_id} not found in DB during reconcile and API data invalid for auto-insert`);
         return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
       }
 
