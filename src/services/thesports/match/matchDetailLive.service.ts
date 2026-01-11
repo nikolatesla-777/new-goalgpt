@@ -297,12 +297,15 @@ export class MatchDetailLiveService {
     // Extract provider update_time if available (NOT in score array - only in root object)
     // Score array format: [match_id, status_id, home_scores[], away_scores[], kick_off_timestamp, "Compatible ignore"]
     // update_time is NOT in score array, extract from root object fields
+    // CRITICAL FIX: TheSports API uses 'tlive' field for real-time update timestamp
     let updateTimeRaw: number | null = null;
     updateTimeRaw =
+      (typeof root?.tlive === 'number' ? root.tlive : null) ??
       (typeof root?.update_time === 'number' ? root.update_time : null) ??
       (typeof root?.updateTime === 'number' ? root.updateTime : null) ??
       (typeof root?.updated_at === 'number' ? root.updated_at : null) ??
       (typeof root?.match?.update_time === 'number' ? root.match.update_time : null) ??
+      (typeof root?.match?.tlive === 'number' ? root.match.tlive : null) ??
       null;
 
     // Provider-supplied "Kick-off timestamp" (epoch seconds)
