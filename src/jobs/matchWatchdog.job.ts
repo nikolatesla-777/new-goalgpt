@@ -64,15 +64,21 @@ export class MatchWatchdogWorker {
       // FALLBACK: If match not found in live results, check /match/detail (for finished matches)
       if (!matchData) {
         logger.info(`[Watchdog.orchestrator] Match ${matchId} not in detail_live, checking /match/detail fallback...`);
-        const detailResp = await this.matchDetailLiveService.getMatchDetail(matchId);
+        try {
+          // CRITICAL FIX: Wrap fallback in try-catch to handle "Unauthorized" errors gracefully
+          const detailResp = await this.matchDetailLiveService.getMatchDetail(matchId);
 
-        // Check if detail response has valid data
-        // detail endpoint usually returns the match object directly or wrapper
-        const detailMatch = detailResp?.results || detailResp;
+          // Check if detail response has valid data
+          // detail endpoint usually returns the match object directly or wrapper
+          const detailMatch = detailResp?.results || detailResp;
 
-        if (detailMatch && (String(detailMatch.id) === String(matchId) || String(detailMatch.match_id) === String(matchId))) {
-          matchData = detailMatch;
-          logger.info(`[Watchdog.orchestrator] Found match ${matchId} in /match/detail fallback. Status: ${matchData.status_id}`);
+          if (detailMatch && (String(detailMatch.id) === String(matchId) || String(detailMatch.match_id) === String(matchId))) {
+            matchData = detailMatch;
+            logger.info(`[Watchdog.orchestrator] Found match ${matchId} in /match/detail fallback. Status: ${matchData.status_id}`);
+          }
+        } catch (fallbackError: any) {
+          // Suppress "Unauthorized" or simple 403 errors to avoid noise
+          logger.warn(`[Watchdog.orchestrator] Fallback /match/detail failed for ${matchId}: ${fallbackError.message}`);
         }
       }
 
