@@ -208,6 +208,55 @@ export class MatchWatchdogWorker {
   }
 
   /**
+   * PHASE 4-2: Global Live Sweep
+   * Serves as the ultimate safety net for match visibility.
+   * Blindly fetches ALL currently live matches from the API and ensures 
+   * they exist and are updated in our DB, regardless of schedule or past status.
+   */
+  private async runGlobalSweep(): Promise<void> {
+    try {
+      // API call to get EVERYTHING that is currently live
+      const liveMatches = await this.matchDetailLiveService.getAllLiveStats();
+      if (!liveMatches || liveMatches.length === 0) return;
+
+      const count = liveMatches.length;
+      // Log occasionally to avoid spam, or log if high count
+      if (count > 0) {
+        logger.debug(`[Watchdog] Global Sweep: Processing ${count} active live matches.`);
+      }
+
+      // Process in chunks to prevent blocking the event loop
+      // This is critical for performance when feed is large (e.g. 100+ matches)
+      const chunk = 15;
+      for (let i = 0; i < count; i += chunk) {
+        const batch = liveMatches.slice(i, i + chunk);
+        await Promise.all(batch.map(async (m) => {
+          const matchId = m.id || m.match_id;
+          if (!matchId) return;
+
+          try {
+            // Reconcile logic now handles:
+            // 1. Auto-insert if missing
+            // 2. Status update if changed
+            // 3. Timestamp override
+            await this.matchDetailLiveService.reconcileMatchToDatabase(matchId);
+          } catch (err: any) {
+            // Log warning but continue sweep
+            logger.warn(`[Watchdog] Global Sweep failed for ${matchId}: ${err.message}`);
+          }
+        }));
+
+        // Tiny yield to let other events process
+        if (i + chunk < count) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+      }
+    } catch (error: any) {
+      logger.error('[Watchdog] Global Sweep Fatal Error:', error);
+    }
+  }
+
+  /**
    * Process stale matches and trigger reconcile
    */
   async tick(): Promise<void> {
@@ -220,6 +269,10 @@ export class MatchWatchdogWorker {
     const startedAt = Date.now();
 
     try {
+      // CRITICAL: Execute Global Live Sweep
+      // This ensures matches that "Start Late" or have "Wrong Schedule" are picked up INSTANTLY.
+      await this.runGlobalSweep();
+
       const nowTs = Math.floor(Date.now() / 1000);
 
       // CRITICAL FIX (2026-01-11): Use /match/diary instead of /match/recent/list
