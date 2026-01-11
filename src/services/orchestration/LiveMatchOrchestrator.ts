@@ -95,8 +95,9 @@ export class LiveMatchOrchestrator extends EventEmitter {
     // Status: API preferred (authoritative), MQTT fallback, watchdog can force-update for anomaly recovery
     status_id: { source: 'api', fallback: 'mqtt', allowWatchdog: true },
 
-    // Minute: API preferred, computed fallback
-    minute: { source: 'api', fallback: 'computed', nullable: true },
+    // Minute: CRITICAL FIX - computed preferred (per TheSports docs: calculate from kickoff)
+    // API minute can be stale/delayed, causing minute to jump backwards
+    minute: { source: 'computed', fallback: 'api', nullable: true },
 
     // Critical timestamps: Write-once (never overwrite)
     first_half_kickoff_ts: { writeOnce: true, nullable: true },

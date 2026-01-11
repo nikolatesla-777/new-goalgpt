@@ -207,17 +207,7 @@ export class MatchSyncWorker {
           });
         }
       }
-
-      // Minute (if available)
-      if (matchData.minute !== null && matchData.minute !== undefined) {
-        updates.push({
-          field: 'minute',
-          value: matchData.minute,
-          source: 'api',
-          priority: 2,
-          timestamp: matchData.update_time || now,
-        });
-      }
+      // REMOVED: API minute - calculated by MatchMinuteWorker per TheSports formula
 
       // Provider timestamps
       if (matchData.update_time) {

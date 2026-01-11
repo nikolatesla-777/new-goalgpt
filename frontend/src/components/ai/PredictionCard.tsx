@@ -89,6 +89,75 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
     const isLive = (prediction.live_match_status || 0) >= 2 && (prediction.live_match_status || 0) <= 7;
     const isFinished = prediction.live_match_status === 8;
 
+    // Match Status Badge - Professional UI/UX
+    const getMatchStatusBadge = () => {
+        const status = prediction.live_match_status;
+
+        // LIVE (First Half)
+        if (status === 2) {
+            return (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                    <span className="text-[11px] font-black tracking-wider">LIVE</span>
+                </div>
+            );
+        }
+
+        // HALF TIME
+        if (status === 3) {
+            return (
+                <div className="px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                    <span className="text-[11px] font-black tracking-wider">HT</span>
+                </div>
+            );
+        }
+
+        // LIVE (Second Half)
+        if (status === 4) {
+            return (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                    <span className="text-[11px] font-black tracking-wider">LIVE</span>
+                </div>
+            );
+        }
+
+        // OVERTIME (Extra Time)
+        if (status === 5) {
+            return (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-500 text-white shadow-lg shadow-purple-500/30">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    <span className="text-[11px] font-black tracking-wider">ET</span>
+                </div>
+            );
+        }
+
+        // PENALTY
+        if (status === 7) {
+            return (
+                <div className="px-2.5 py-1 rounded-md bg-yellow-500 text-black shadow-lg shadow-yellow-500/30">
+                    <span className="text-[11px] font-black tracking-wider">PEN</span>
+                </div>
+            );
+        }
+
+        // FINISHED (Full Time / Maç Sonu)
+        if (status === 8) {
+            return (
+                <div className="px-2.5 py-1 rounded-md bg-green-500/20 text-green-400 border border-green-500/30">
+                    <span className="text-[11px] font-black tracking-wider">FT</span>
+                </div>
+            );
+        }
+
+        // NOT STARTED or UNKNOWN (vs)
+        return (
+            <div className="px-2.5 py-1 rounded-md bg-white/5 text-gray-500 border border-white/10">
+                <span className="text-[11px] font-bold tracking-wider">vs</span>
+            </div>
+        );
+    };
+
     return (
         <>
             <div
@@ -194,14 +263,19 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                         </span>
                     </div>
 
-                    {/* Score */}
-                    <div className="flex-shrink-0 px-2 flex flex-col items-center justify-center">
+                    {/* Score & Status Badge */}
+                    <div className="flex-shrink-0 px-2 flex flex-col items-center justify-center gap-2">
                         <span className="text-3xl font-black text-white tracking-widest font-mono leading-none">
                             {displayScore}
                         </span>
-                        <span className="text-[10px] text-gray-500 font-bold uppercase mt-2 tracking-wide">
-                            {isFinished ? 'MS' : (isLive ? (currentMinute ? `${currentMinute}'` : 'LIVE') : 'v')}
-                        </span>
+                        {/* Professional Match Status Badge */}
+                        {getMatchStatusBadge()}
+                        {/* Show minute for live matches */}
+                        {isLive && currentMinute && (
+                            <span className="text-[10px] text-gray-400 font-bold tracking-wide">
+                                {currentMinute}'
+                            </span>
+                        )}
                     </div>
 
                     {/* Away Team */}

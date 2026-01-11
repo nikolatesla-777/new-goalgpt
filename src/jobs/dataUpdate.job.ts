@@ -203,16 +203,11 @@ export class DataUpdateWorker {
         }
       }
 
-      // Minute (if available)
-      if (matchData.minute !== null && matchData.minute !== undefined) {
-        updates.push({
-          field: 'minute',
-          value: matchData.minute,
-          source: 'api',
-          priority: 2,
-          timestamp: live.updateTime || providerUpdateTime || now,
-        });
-      }
+      // REMOVED: API minute - per TheSports docs, minute should be calculated from kickoff
+      // Minute is now calculated by MatchMinuteWorker using the official formula:
+      // First half: (current_timestamp - first_half_kickoff) / 60 + 1
+      // Second half: (current_timestamp - second_half_kickoff) / 60 + 45 + 1
+      // Using API minute caused minute to jump backwards when API was delayed
 
       // CRITICAL FIX: Provider timestamps from extractLiveFields()
       // If API doesn't provide update_time, use current timestamp (ingestion time)
