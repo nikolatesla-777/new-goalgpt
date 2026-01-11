@@ -630,7 +630,7 @@ export class MatchDetailLiveService {
               live.awayScoreDisplay ?? 0
             ]);
 
-            if (insertRes.rowCount > 0) {
+            if (insertRes.rowCount != null && insertRes.rowCount > 0) {
               logger.info(`[DetailLive] ✅ Successfully auto-inserted match ${match_id}`);
               return { updated: true, rowCount: 1, statusId: live.statusId, score: null, providerUpdateTime: null };
             }
