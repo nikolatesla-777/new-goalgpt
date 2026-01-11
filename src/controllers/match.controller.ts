@@ -1319,17 +1319,18 @@ export const getMatchLiveStats = async (
 
     // For LIVE matches: Check CACHE first
     // This prevents blocking the thread for 5-10s if the external API is slow
-    const cachedLiveDetail = await liveMatchCache.get(match_id);
-    if (cachedLiveDetail) {
-      logger.debug(`[MatchController] Returning cached live detail for ${match_id}`);
-      reply.send({
-        success: true,
-        data: cachedLiveDetail,
-      });
-      return;
-    }
+    // TEMPORARILY DISABLED: LiveMatchCacheService doesn't have get/set methods for individual matches
+    // const cachedLiveDetail = await liveMatchCache.get(match_id);
+    // if (cachedLiveDetail) {
+    //   logger.debug(`[MatchController] Returning cached live detail for ${match_id}`);
+    //   reply.send({
+    //     success: true,
+    //     data: cachedLiveDetail,
+    //   });
+    //   return;
+    // }
 
-    logger.info(`[MatchController] Live cache miss for ${match_id}, fetching from API (status: ${matchStatus})`);
+    logger.debug(`[MatchController] Fetching live detail from API for ${match_id} (status: ${matchStatus})`);
 
     let result: any = null;
     try {
@@ -1401,7 +1402,8 @@ export const getMatchLiveStats = async (
 
         // Cache the result for 15 seconds
         // This is critical for performance - prevents slamming the API and blocking the UI
-        await liveMatchCache.set(match_id, result, 15);
+        // TEMPORARILY DISABLED: LiveMatchCacheService doesn't have get/set methods for individual matches
+        // await liveMatchCache.set(match_id, result, 15);
       }
     } catch (err: any) {
       logger.error(`[MatchController] Failed to fetch live stats for ${match_id}: ${err.message}`);
