@@ -687,10 +687,11 @@ export class MatchWatchdogWorker {
                 continue;
               }
 
-              // detail_live returned no data - check if match is VERY OLD (>3 hours)
+              // detail_live returned no data - check if match is VERY OLD (>115 mins)
               // Old matches should be transitioned to END since they're clearly finished
               const matchAgeMinutes = match.minutesAgo;
-              const OLD_MATCH_THRESHOLD_MINUTES = 180; // 3 hours
+              // CRITICAL FIX: Reduced from 180 to 115 mins to clear 90+10 stuck matches faster
+              const OLD_MATCH_THRESHOLD_MINUTES = 115; // ~2 hours
 
               if (matchAgeMinutes > OLD_MATCH_THRESHOLD_MINUTES) {
                 // Match is >3 hours old with no live data - transition to END
