@@ -490,12 +490,10 @@ export class WebSocketService {
       return MatchState.SECOND_HALF as unknown as number;
     }
 
+    // Check for FINAL WHISTLE / MATCH END indicators
     if (recent.some((e) => {
       const dataStr = getDataStr(e);
-      // CRITICAL FIX: Use SPECIFIC keywords only to prevent false positives
-      // Removed generic 'end' (matches 'defending end', 'weekend', 'extend')
-      // Removed generic 'bitti' (too short, might match partial words)
-      // Only match explicit full-time indicators
+      // CRITICAL FIX: Robust keywords for match ending
       return dataStr.includes('full time') ||
         dataStr.includes('fulltime') ||
         dataStr.includes('final whistle') ||
@@ -504,13 +502,21 @@ export class WebSocketService {
         dataStr.includes('maç bitti') ||
         dataStr.includes('mac bitti') ||
         dataStr.includes('maç sona erdi') ||
-        // FT only if standalone (not part of other words)
+        dataStr.includes('ended') ||       // "Ended" is usually safe if it's the main verb
         dataStr === 'ft' ||
         dataStr.startsWith('ft ') ||
         dataStr.endsWith(' ft') ||
         dataStr.includes(' ft ');
     })) {
-      return MatchState.END as unknown as number;
+      // DOUBLE CHECK: Ensure it's not "First Half Ended" or "Second Half Started"
+      const isFalsePositive = recent.some(e => {
+        const s = getDataStr(e);
+        return (s.includes('first half') || s.includes('1st half') || s.includes('half time')) && s.includes('end');
+      });
+
+      if (!isFalsePositive) {
+        return MatchState.END as unknown as number;
+      }
     }
 
     if (recent.some((e) => {
@@ -1796,7 +1802,7 @@ export class WebSocketService {
       const { CombinedStatsService } = await import('../match/combinedStats.service');
       // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
       const combinedStatsService = new CombinedStatsService();
-      
+
       const stats = await combinedStatsService.getCombinedMatchStats(matchId);
       if (stats && stats.allStats.length > 0) {
         await combinedStatsService.saveCombinedStatsToDatabase(matchId, stats);
@@ -1819,17 +1825,17 @@ export class WebSocketService {
       const statusResult = await client.query(`
         SELECT status_id FROM ts_matches WHERE external_id = $1
       `, [matchId]);
-      
+
       const matchStatus = statusResult.rows[0]?.status_id || 0;
-      
+
       // Import MatchTrendService dynamically
       const { MatchTrendService } = await import('../match/matchTrend.service');
       // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
       const matchTrendService = new MatchTrendService();
-      
+
       // Get trend data
       const trendData = await matchTrendService.getMatchTrend({ match_id: matchId }, matchStatus);
-      
+
       if (trendData?.results) {
         // Check if results has actual data
         const results = Array.isArray(trendData.results) ? trendData.results[0] : trendData.results;
@@ -1842,7 +1848,7 @@ export class WebSocketService {
                   updated_at = NOW()
               WHERE external_id = $2
             `, [JSON.stringify(trendData.results), matchId]);
-            
+
             logger.debug(`[WebSocket] Saved trend data for ${matchId} from WebSocket event`);
           }
         }
@@ -1865,7 +1871,7 @@ export class WebSocketService {
       const { CombinedStatsService } = await import('../match/combinedStats.service');
       // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
       const combinedStatsService = new CombinedStatsService();
-      
+
       // Get existing stats and merge with incidents
       const existingStats = await combinedStatsService.getCombinedStatsFromDatabase(matchId);
       if (existingStats) {
