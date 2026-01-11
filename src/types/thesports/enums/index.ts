@@ -33,3 +33,6 @@ export * from './PreferredFoot.enum';
 
 // Coach
 export * from './CoachType.enum';
+
+// Weather
+export * from './Weather.enum';

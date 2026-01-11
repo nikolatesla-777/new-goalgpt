@@ -33,6 +33,8 @@ import { MatchWatchdogWorker } from './jobs/matchWatchdog.job';
 import { MatchDetailLiveService } from './services/thesports/match/matchDetailLive.service';
 import { MatchRecentService } from './services/thesports/match/matchRecent.service';
 import { unifiedPredictionService } from './services/ai/unifiedPrediction.service';
+import { LiveMatchOrchestrator } from './services/orchestration/LiveMatchOrchestrator';
+import { OrchestratorSettlementListener } from './services/orchestration/settlementListener';
 
 // Workers - Correct existing files from src/jobs
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
@@ -145,6 +147,12 @@ const start = async () => {
     playerSyncWorker = new PlayerSyncWorker();
     playerSyncWorker.start();
     logger.info('✅ Player Sync Worker started');
+
+    // Initialize Orchestrator Settlement Listener
+    // Connects orchestrator events to AI prediction settlement
+    const orchestrator = LiveMatchOrchestrator.getInstance();
+    const settlementListener = new OrchestratorSettlementListener(orchestrator);
+    logger.info('✅ Orchestrator Settlement Listener initialized');
 
     // WebSocket Service
     websocketService = new WebSocketService();
