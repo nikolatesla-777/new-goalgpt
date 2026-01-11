@@ -172,7 +172,24 @@ export class RedisManager {
   }
 
   /**
-   * Check if Redis is connected and healthy
+   * Check if Redis is available (synchronous status check)
+   * Returns true if Redis client is connected and ready
+   * Use this for quick availability checks without async ping
+   */
+  static isAvailable(): boolean {
+    try {
+      if (!this.instance) {
+        return false;
+      }
+      // Check connection status
+      return this.instance.status === 'ready' || this.instance.status === 'connecting';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Check if Redis is connected and healthy (async with PING)
    */
   static async healthCheck(): Promise<boolean> {
     try {
