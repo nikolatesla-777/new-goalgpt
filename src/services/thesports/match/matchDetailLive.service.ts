@@ -55,16 +55,41 @@ export class MatchDetailLiveService {
         throw circuitError;
       }
     }
+
+    // Normal cached fetch
     return getWithCacheFallback(
       cacheKey,
       async () => {
         logger.info(`Fetching match detail live: ${match_id}`);
         // Phase 4-2: Single circuit layer - circuit breaker is in TheSportsClient
         try {
-          return await this.client.get<MatchDetailLiveResponse>(
+          const response = await this.client.get<MatchDetailLiveResponse>(
             '/match/detail_live',
             { match_id }
           );
+
+          // CRITICAL FIX: If API returns empty results for specific ID, try fallback to GLOBAL live list
+          // This handles cases where API ID filtering is broken but match is in the global feed
+          const isResultEmpty = !response || !response.results ||
+            (Array.isArray(response.results) && response.results.length === 0) ||
+            (typeof response.results === 'object' && Object.keys(response.results).length === 0);
+
+          if (isResultEmpty) {
+            logger.warn(`[DetailLive] Direct fetch for ${match_id} returned empty. Falling back to global live list search.`);
+            const globalList = await this.getAllLiveStats();
+            const foundInGlobal = globalList.find((m: any) =>
+              String(m?.id || '') === String(match_id) ||
+              String(m?.match_id || '') === String(match_id)
+            );
+
+            if (foundInGlobal) {
+              logger.info(`[DetailLive] Found match ${match_id} in global live list fallback!`);
+              // Wrap in expected response structure
+              return { results: [foundInGlobal] } as unknown as MatchDetailLiveResponse;
+            }
+          }
+
+          return response;
         } catch (circuitError: any) {
           // Phase 4-2: Circuit breaker is OPEN - return "no usable data" (typed error check)
           if (circuitError instanceof CircuitOpenError) {
