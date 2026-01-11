@@ -2,13 +2,13 @@
  * AI Tab - PHASE 6 INTEGRATED
  *
  * Displays AI predictions for the match.
- * Uses LivescoreContext for instant updates, with API fallback for old matches.
+ * HOTFIX: Removed useLivescore dependency - Match Detail page lacks LivescoreProvider.
+ * Now uses direct API call only.
  */
 
 import { useMemo, useState, useEffect } from 'react';
 import { Robot, Trophy, WarningCircle } from '@phosphor-icons/react';
 import type { Match, AIPredictionOnMatch } from '../../../api/matches';
-import { useLivescore } from '../../livescore/LivescoreContext';
 
 interface Prediction {
   id: string;
@@ -32,40 +32,24 @@ interface AITabProps {
 }
 
 export function AITab({ match }: AITabProps) {
-  // PHASE 6: Use LivescoreContext for instant prediction updates
-  const { allMatches } = useLivescore();
-
-  // Find this match in allMatches (if it's in today's data)
-  const livescoreMatch = useMemo(() =>
-    allMatches.find(m => m.id === match.id),
-    [allMatches, match.id]
-  );
-
-  // PHASE 6: Fallback API for old matches not in LivescoreContext
-  const [fallbackPrediction, setFallbackPrediction] = useState<AIPredictionOnMatch | null>(null);
+  // HOTFIX: Direct API call only - removed useLivescore() which crashed outside LivescoreProvider
+  const [aiPrediction, setAiPrediction] = useState<AIPredictionOnMatch | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // If match is in LivescoreContext, no need for fallback
-    if (livescoreMatch?.aiPrediction) {
-      setFallbackPrediction(null);
-      return;
-    }
+    if (!match.id) return;
 
-    // If match is not in context, fetch from API
-    if (!livescoreMatch && match.id) {
-      fetch(`/api/predictions/match/${match.id}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.predictions && data.predictions.length > 0) {
-            setFallbackPrediction(data.predictions[0]);
-          }
-        })
-        .catch(err => console.error('[AITab] Fallback API error:', err));
-    }
-  }, [match.id, livescoreMatch]);
-
-  // PHASE 6: Final prediction - use Livescore if available, else fallback
-  const aiPrediction = livescoreMatch?.aiPrediction || fallbackPrediction;
+    setLoading(true);
+    fetch(`/api/predictions/match/${match.id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.predictions && data.predictions.length > 0) {
+          setAiPrediction(data.predictions[0]);
+        }
+      })
+      .catch(err => console.error('[AITab] API error:', err))
+      .finally(() => setLoading(false));
+  }, [match.id]);
 
   // Transform to legacy Prediction format
   const predictions = useMemo(() => {
