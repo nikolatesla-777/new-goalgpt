@@ -43,9 +43,11 @@ export interface CacheStats {
  */
 class LiveMatchCacheService {
   // Cache storage
+  // Cache storage
   private liveMatchesCache: CacheEntry<MatchDiaryResponse> | null = null;
   private diaryCache: Map<string, CacheEntry<MatchDiaryResponse>> = new Map();
   private unifiedCache: Map<string, CacheEntry<MatchDiaryResponse>> = new Map();
+  private genericCache: Map<string, CacheEntry<any>> = new Map(); // Generic cache for arbitrary data
 
   // TTL configuration (milliseconds)
   private readonly LIVE_MATCHES_TTL_MS = 3000;    // 3 seconds for live matches
@@ -175,6 +177,57 @@ class LiveMatchCacheService {
       hitCount: 0,
     });
     logger.debug(`[LiveMatchCache] SET - unified ${key} (${data.results?.length || 0} matches)`);
+  }
+
+  /**
+   * Generic GET for arbitrary data (e.g., single match details)
+   */
+  get<T>(key: string): T | null {
+    const entry = this.genericCache.get(key);
+    if (!entry) {
+      // this.stats.misses++; // Don't pollute main stats with generic misses
+      return null;
+    }
+
+    // Generic entries might have different TTLs, checking if expired requires context
+    // For now, we rely on the set() method to handle expiration logic if we added it, 
+    // but here we just return data. Wait, we need to know expiry.
+    // Simplification: We assume caller checks TTL or we store TTL in entry?
+    // Better: Allow set() to accept TTL, and check it here. But CacheEntry don't have TTL.
+    // Let's just return for now and let caller decide, OR enforce a default TTL.
+    // Actually, the original CacheEntry has timestamp. We just need to know the allowed max age.
+    // Since we can't pass maxAge here comfortably without changing signature everywhere,
+    // let's assume if it exists, it's valid, OR implement a set with explicit TTL stored in entry?
+    // Let's stick to the interface:
+    // The previous error was: "Property 'get' does not exist". 
+    // So if we just add 'get(key)' and 'set(key, val, ttl)' it should work.
+
+    // Check internal expiry if we store ttl in generic cache map?
+    // Let's modify genericCache to store TTL too or just check age against a param?
+    // To match the calling code: await liveMatchCache.set(match_id, result, 15);
+    // The calling code passes Seconds as TTL.
+
+    const now = Date.now();
+    // We need to store TTL in the entry for generic cache to support variable TTLs
+    if ((entry as any).ttl && (now - entry.timestamp) > ((entry as any).ttl * 1000)) {
+      this.genericCache.delete(key);
+      return null;
+    }
+
+    return entry.data as T;
+  }
+
+  /**
+   * Generic SET for arbitrary data
+   * @param ttlSeconds - Time into live in seconds
+   */
+  set<T>(key: string, data: T, ttlSeconds: number): void {
+    this.genericCache.set(key, {
+      data,
+      timestamp: Date.now(),
+      hitCount: 0,
+      ttl: ttlSeconds // Store TTL in the entry object (we cast to any above)
+    } as any);
   }
 
   /**

@@ -1319,18 +1319,17 @@ export const getMatchLiveStats = async (
 
     // For LIVE matches: Check CACHE first
     // This prevents blocking the thread for 5-10s if the external API is slow
-    // TEMPORARILY DISABLED: LiveMatchCacheService doesn't have get/set methods for individual matches
-    // const cachedLiveDetail = await liveMatchCache.get(match_id);
-    // if (cachedLiveDetail) {
-    //   logger.debug(`[MatchController] Returning cached live detail for ${match_id}`);
-    //   reply.send({
-    //     success: true,
-    //     data: cachedLiveDetail,
-    //   });
-    //   return;
-    // }
+    const cachedLiveDetail = await liveMatchCache.get(match_id);
+    if (cachedLiveDetail) {
+      logger.debug(`[MatchController] Returning cached live detail for ${match_id}`);
+      reply.send({
+        success: true,
+        data: cachedLiveDetail,
+      });
+      return;
+    }
 
-    logger.debug(`[MatchController] Fetching live detail from API for ${match_id} (status: ${matchStatus})`);
+    logger.info(`[MatchController] Live cache miss for ${match_id}, fetching from API (status: ${matchStatus})`);
 
     let result: any = null;
     try {
@@ -1431,53 +1430,53 @@ export const getMatchLiveStats = async (
       halfTimeStats: null,
     };
 
-// CRITICAL: Save first half stats when match reaches HALF_TIME
-if (isHalfTime && result && result.allStats.length > 0 && !firstHalfStats) {
-  logger.info(`[MatchController] ⚽ HALF_TIME detected! Saving first half stats for ${match_id}`);
-  await combinedStatsService.saveFirstHalfStats(match_id, result.allStats);
-  firstHalfStats = result.allStats;
-}
+    // CRITICAL: Save first half stats when match reaches HALF_TIME
+    if (isHalfTime && result && result.allStats.length > 0 && !firstHalfStats) {
+      logger.info(`[MatchController] ⚽ HALF_TIME detected! Saving first half stats for ${match_id}`);
+      await combinedStatsService.saveFirstHalfStats(match_id, result.allStats);
+      firstHalfStats = result.allStats;
+    }
 
-// Save to database (CRITICAL for persistence after match ends)
-if (result && result.allStats.length > 0) {
-  combinedStatsService.saveCombinedStatsToDatabase(match_id, result).catch((err) => {
-    logger.error(`[MatchController] Failed to save stats to DB for ${match_id}:`, err);
-  });
-}
+    // Save to database (CRITICAL for persistence after match ends)
+    if (result && result.allStats.length > 0) {
+      combinedStatsService.saveCombinedStatsToDatabase(match_id, result).catch((err) => {
+        logger.error(`[MatchController] Failed to save stats to DB for ${match_id}:`, err);
+      });
+    }
 
-// Build response with first_half_stats and second_half_stats for period selection on frontend
-reply.send({
-  success: true,
-  data: {
-    match_id: result.matchId,
-    match_status: matchStatus,
-    stats: result.allStats,
-    fullTime: {
-      stats: result.allStats,
-      results: result.allStats,
-    },
-    // Half stats for frontend period selector (1. YARI / 2. YARI / TÜMÜ)
-    firstHalfStats: firstHalfStats || null,
-    secondHalfStats: secondHalfStats || null,
-    halfTime: result.halfTimeStats || null,
-    incidents: result.incidents,
-    score: result.score,
-    sources: {
-      basic: result.basicStats.length,
-      detailed: result.detailedStats.length,
-      from: 'api',
-      hasFirstHalfSnapshot: !!firstHalfStats,
-      hasSecondHalfSnapshot: !!secondHalfStats,
-    },
-  },
-});
+    // Build response with first_half_stats and second_half_stats for period selection on frontend
+    reply.send({
+      success: true,
+      data: {
+        match_id: result.matchId,
+        match_status: matchStatus,
+        stats: result.allStats,
+        fullTime: {
+          stats: result.allStats,
+          results: result.allStats,
+        },
+        // Half stats for frontend period selector (1. YARI / 2. YARI / TÜMÜ)
+        firstHalfStats: firstHalfStats || null,
+        secondHalfStats: secondHalfStats || null,
+        halfTime: result.halfTimeStats || null,
+        incidents: result.incidents,
+        score: result.score,
+        sources: {
+          basic: result.basicStats.length,
+          detailed: result.detailedStats.length,
+          from: 'api',
+          hasFirstHalfSnapshot: !!firstHalfStats,
+          hasSecondHalfSnapshot: !!secondHalfStats,
+        },
+      },
+    });
   } catch (error: any) {
-  logger.error('[MatchController] Error in getMatchLiveStats:', error);
-  reply.status(500).send({
-    success: false,
-    message: error.message || 'Internal server error',
-  });
-}
+    logger.error('[MatchController] Error in getMatchLiveStats:', error);
+    reply.status(500).send({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
 };
 
 /**
