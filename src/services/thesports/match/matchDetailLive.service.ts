@@ -598,6 +598,25 @@ export class MatchDetailLiveService {
           );
         }
 
+        // If apiMatch exists but missing team names (common in reduced bandwidth feeds), fetch full details
+        if (apiMatch && (!apiMatch.home_team || !apiMatch.away_team || !apiMatch.competition)) {
+          logger.info(`[DetailLive] Match ${match_id} in live feed but missing metadata. Fetching full details from /match/detail...`);
+          try {
+            // Fetch full details to get names and league
+            const detailResp = await this.getMatchDetail(match_id);
+            // detailResp might be the match object itself or wrapped in results
+            const detailMatch = (detailResp as any)?.results || detailResp;
+
+            if (detailMatch && (detailMatch.home_team || detailMatch.home_team_id)) {
+              // Merge details into apiMatch
+              apiMatch = { ...apiMatch, ...detailMatch };
+              logger.info(`[DetailLive] Fetched metadata for ${match_id}: ${apiMatch.home_team?.name} vs ${apiMatch.away_team?.name}`);
+            }
+          } catch (fetchErr: any) {
+            logger.warn(`[DetailLive] Failed to fetch details for ${match_id}: ${fetchErr.message}`);
+          }
+        }
+
         // Only attempt insert if we have valid match data from API
         if (apiMatch && apiMatch.home_team && apiMatch.away_team && apiMatch.competition) {
           logger.info(`[DetailLive] Match ${match_id} not found in DB. Auto-inserting missing live match...`);
