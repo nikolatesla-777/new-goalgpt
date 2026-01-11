@@ -334,13 +334,29 @@ export class LiveMatchOrchestrator extends EventEmitter {
   }
 
   /**
+   * Check if status is terminal (Finished, Cancelled, etc.)
+   * Terminal statuses: 8 (FT), 9 (Kickoff), 10 (Pause), 11 (Deleted), 12 (TBD)
+   * TheSports API docs: 
+   * 8: Finished
+   * 9: Delayed
+   * 10: Postponed
+   * 11: Cut (Interrupted?)
+   * 12: Cancelled
+   */
+  private isTerminalStatus(statusId: number): boolean {
+    // 8=Finished, 9=Delayed, 10=Postponed, 11=Cut, 12=Cancelled, 13=Abandoned?
+    return [8, 9, 10, 11, 12, 13].includes(statusId);
+  }
+
+  /**
    * Conflict resolution - which updates should be applied?
    *
    * Rules:
    * 1. Write-once fields: Never overwrite if already set
-   * 2. Source priority: Preferred source wins over others
-   * 3. Timestamp: Newer timestamp wins (optimistic locking)
-   * 4. NULL handling: Respect nullable rules
+   * 2. Terminal State Protection: Matches cannot revert from Finished -> Live
+   * 3. Source priority: Preferred source wins over others
+   * 4. Timestamp: Newer timestamp wins (optimistic locking)
+   * 5. NULL handling: Respect nullable rules
    */
   private resolveConflicts(
     currentState: MatchState,
@@ -368,7 +384,24 @@ export class LiveMatchOrchestrator extends EventEmitter {
         continue; // Skip - already set
       }
 
-      // Rule 2: Source priority
+      // Rule 2: Terminal State Protection (Status Guard)
+      // IF current status is Terminal (e.g. 8 Finished)
+      // AND incoming status is NOT Terminal (e.g. 2 Live or 1 Not Started)
+      // THEN REJECT the update immediately.
+      if (fieldName === 'status_id' && currentState.status_id !== null) {
+        if (this.isTerminalStatus(currentState.status_id) && !this.isTerminalStatus(update.value)) {
+          logEvent('warn', 'orchestrator.terminal_state_protected', {
+            matchId: currentState.external_id,
+            currentStatus: currentState.status_id,
+            incomingStatus: update.value,
+            source: update.source,
+            reason: 'Cannot revert from terminal status to non-terminal',
+          });
+          continue; // REJECT
+        }
+      }
+
+      // Rule 3: Source priority
       if (rules?.source) {
         // SPECIAL CASE: Watchdog can force-update certain fields for anomaly recovery
         if (update.source === 'watchdog' && rules.allowWatchdog) {
