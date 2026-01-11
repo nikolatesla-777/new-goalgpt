@@ -51,6 +51,26 @@ export class MatchMinuteService {
         logger.warn(`[MinuteEngine] Cannot calculate minute for status 2: first_half_kickoff_ts is NULL`);
         return null;
       }
+
+      // DEFENSIVE: Validate kickoff timestamp is reasonable
+      const elapsed = nowTs - firstHalfTs;
+      const elapsedMinutes = Math.floor(elapsed / 60);
+
+      // Sanity check: First half should be 0-120 minutes elapsed
+      if (elapsed < 0) {
+        logger.error(`[MinuteEngine] INVALID first_half_kickoff_ts: ${firstHalfTs} is in the future! Refusing calculation.`);
+        return null;
+      }
+
+      if (elapsedMinutes > 120) {  // > 2 hours
+        logger.error(
+          `[MinuteEngine] SUSPICIOUS elapsed=${elapsedMinutes}min. ` +
+          `first_half_kickoff_ts=${firstHalfTs} may be corrupted (match_time instead of kickoff?). ` +
+          `Refusing calculation.`
+        );
+        return null;
+      }
+
       const calculated = Math.floor((nowTs - firstHalfTs) / 60) + 1;
       return Math.min(calculated, 45); // Clamp max 45
     }
@@ -78,6 +98,25 @@ export class MatchMinuteService {
         logger.warn(`[MinuteEngine] Cannot calculate minute for status 4: both second_half_kickoff_ts and first_half_kickoff_ts are NULL`);
         return null;
       }
+
+      // DEFENSIVE: Validate kickoff timestamp is reasonable
+      const elapsed = nowTs - secondHalfTs;
+      const elapsedMinutes = Math.floor(elapsed / 60);
+
+      // Sanity check: Second half should be 0-120 minutes elapsed
+      if (elapsed < 0) {
+        logger.error(`[MinuteEngine] INVALID second_half_kickoff_ts: ${secondHalfTs} is in the future! Refusing calculation.`);
+        return null;
+      }
+
+      if (elapsedMinutes > 120) {  // > 2 hours
+        logger.error(
+          `[MinuteEngine] SUSPICIOUS elapsed=${elapsedMinutes}min for second half. ` +
+          `second_half_kickoff_ts=${secondHalfTs} may be corrupted. Refusing calculation.`
+        );
+        return null;
+      }
+
       const calculated = 45 + Math.floor((nowTs - secondHalfTs) / 60) + 1;
       // CRITICAL FIX: Clamp between 46 and SECOND_HALF_MAX
       return Math.min(Math.max(calculated, 46), SECOND_HALF_MAX);

@@ -99,6 +99,7 @@ export class LiveMatchOrchestrator extends EventEmitter {
     minute: { source: 'api', fallback: 'computed', nullable: true },
 
     // Critical timestamps: Write-once (never overwrite)
+    first_half_kickoff_ts: { writeOnce: true, nullable: true },
     second_half_kickoff_ts: { writeOnce: true, nullable: true },
     overtime_kickoff_ts: { writeOnce: true, nullable: true },
 

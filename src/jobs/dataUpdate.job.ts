@@ -251,10 +251,20 @@ export class DataUpdateWorker {
               timestamp: live.updateTime || providerUpdateTime || now,
             });
           }
-          // Second half or beyond (status 4+): update second_half_kickoff_ts
-          else if (statusId >= 4) {
+          // Second half (status 4): update second_half_kickoff_ts
+          else if (statusId === 4) {
             updates.push({
               field: 'second_half_kickoff_ts',
+              value: live.liveKickoffTime,
+              source: 'api',
+              priority: 2,
+              timestamp: live.updateTime || providerUpdateTime || now,
+            });
+          }
+          // Overtime (status 5+): update overtime_kickoff_ts
+          else if (statusId >= 5) {
+            updates.push({
+              field: 'overtime_kickoff_ts',
               value: live.liveKickoffTime,
               source: 'api',
               priority: 2,
