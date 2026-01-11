@@ -173,7 +173,7 @@ export const getMatchDiary = async (
     }
 
     const { dbDate, apiDate } = normalizedDate;
-    
+
     // CRITICAL FIX: Parse status filter from query parameter
     // status can be a single number or comma-separated list (e.g., "8" or "1,2,3")
     let statusFilter: number[] | undefined;
@@ -293,12 +293,12 @@ export const getMatchById = async (
 ): Promise<void> => {
   try {
     const { match_id } = request.params;
-    
+
     // CRITICAL: Always fetch fresh from database (no cache)
     // Match status changes frequently, cache would cause inconsistencies
     const { pool } = await import('../database/connection');
     const client = await pool.connect();
-    
+
     try {
       // Query match with JOINs for teams and competitions (same format as getMatchesByDate)
       const query = `
@@ -351,7 +351,7 @@ export const getMatchById = async (
       `;
 
       const result = await client.query(query, [match_id]);
-      
+
       if (result.rows.length === 0) {
         reply.status(404).send({
           success: false,
@@ -362,7 +362,7 @@ export const getMatchById = async (
 
       const row = result.rows[0];
       const { generateMinuteText } = await import('../utils/matchMinuteText');
-      
+
       // CRITICAL FIX: Validate status and prevent regression
       let validatedStatus = row.status_id ?? 0;
       const now = Math.floor(Date.now() / 1000);
@@ -390,7 +390,7 @@ export const getMatchById = async (
       // This fixes the issue where header shows 0-0 but Events tab shows correct score from incidents
       let finalHomeScore = row.home_score ?? null;
       let finalAwayScore = row.away_score ?? null;
-      
+
       // If score is 0-0 or null, try to extract from incidents JSONB
       if ((finalHomeScore === null || finalHomeScore === 0) && (finalAwayScore === null || finalAwayScore === 0)) {
         try {
@@ -398,15 +398,15 @@ export const getMatchById = async (
             'SELECT incidents FROM ts_matches WHERE external_id = $1',
             [match_id]
           );
-          
+
           if (incidentsQuery.rows.length > 0 && incidentsQuery.rows[0].incidents) {
             const incidents = incidentsQuery.rows[0].incidents;
             if (Array.isArray(incidents) && incidents.length > 0) {
               // Find the last incident with score information
               for (let i = incidents.length - 1; i >= 0; i--) {
                 const incident = incidents[i];
-                if (incident && typeof incident === 'object' && 
-                    (incident.home_score !== undefined || incident.away_score !== undefined)) {
+                if (incident && typeof incident === 'object' &&
+                  (incident.home_score !== undefined || incident.away_score !== undefined)) {
                   finalHomeScore = incident.home_score ?? finalHomeScore;
                   finalAwayScore = incident.away_score ?? finalAwayScore;
                   logger.info(
@@ -496,11 +496,11 @@ export const getMatchDetailLive = async (
 
     // Check if match is finished
     const isFinished = await combinedStatsService.isMatchFinished(match_id);
-    
+
     // For FINISHED matches, return from database
     if (isFinished) {
       const dbResult = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
-      
+
       if (dbResult && (dbResult.incidents.length > 0 || dbResult.allStats.length > 0)) {
         logger.debug(`[MatchController] Match finished, returning detail-live from DB for ${match_id}`);
         reply.send({
@@ -659,7 +659,7 @@ export const getMatchLineup = async (
       logger.info(`Lineup still not in DB for ${match_id}, trying API directly`);
       const params: MatchLineupParams = { match_id };
       const apiResult = await matchLineupService.getMatchLineup(params);
-      
+
       reply.send({
         success: true,
         data: apiResult,
@@ -966,7 +966,7 @@ export const getMatchTrend = async (
     // For FINISHED matches, return from database first
     if (isFinished) {
       const dbTrend = await getTrendFromDatabase(match_id);
-      
+
       if (dbTrend && dbTrend.results && dbTrend.results.length > 0) {
         logger.debug(`[MatchController] Match finished, returning trend from DB for ${match_id}`);
         reply.send({
@@ -1024,7 +1024,7 @@ async function getTrendFromDatabase(matchId: string): Promise<any | null> {
     // trend_data formatını MatchTrendResponse formatına çevir
     // trend_data is already an array or object, wrap it in results format
     const trendData = result.rows[0].trend_data;
-    
+
     // If it's already in the correct format, return it
     if (trendData && typeof trendData === 'object') {
       // Check if it's already wrapped in results
@@ -1057,7 +1057,7 @@ async function saveTrendToDatabase(matchId: string, trendData: any): Promise<voi
     const existingResult = await client.query(`
       SELECT statistics FROM ts_matches WHERE external_id = $1
     `, [matchId]);
-    
+
     const existingStats = existingResult.rows[0]?.statistics || {};
 
     // Update only trend field
@@ -1098,11 +1098,11 @@ export const getMatchHalfStats = async (
 
     // Check if match is finished
     const isFinished = await combinedStatsService.isMatchFinished(match_id);
-    
+
     // For FINISHED matches, ALWAYS try database first
     if (isFinished) {
       const dbHalfStats = await combinedStatsService.getHalfTimeStatsFromDatabase(match_id);
-      
+
       if (dbHalfStats) {
         logger.debug(`[MatchController] Match finished, returning half-stats from DB for ${match_id}`);
         reply.send({
@@ -1118,7 +1118,7 @@ export const getMatchHalfStats = async (
         });
         return;
       }
-      
+
       logger.warn(`[MatchController] Match finished but no half-stats in DB for ${match_id}, trying API`);
     }
 
@@ -1157,7 +1157,7 @@ export const getMatchHalfStats = async (
 function convertStatsArrayToObject(stats: any[]): Record<string, any> {
   const result: Record<string, any> = {};
   if (!stats || !Array.isArray(stats)) return result;
-  
+
   for (const stat of stats) {
     if (stat.type !== undefined) {
       result[String(stat.type)] = [stat.home ?? 0, stat.away ?? 0];
@@ -1169,21 +1169,21 @@ function convertStatsArrayToObject(stats: any[]): Record<string, any> {
 // Helper function to parse half-time stats from API response
 function parseHalfTimeStatsFromApiResponse(results: any[]): { firstHalf: any[]; secondHalf: any[]; fullTime: any[] } | null {
   if (!results || !Array.isArray(results)) return null;
-  
+
   const firstHalf: any[] = [];
   const secondHalf: any[] = [];
   const fullTime: any[] = [];
-  
+
   for (const item of results) {
     const sign = item.Sign;
     if (!sign) continue;
-    
+
     const stats: any[] = [];
     for (const [key, value] of Object.entries(item)) {
       if (key === 'Sign') continue;
       const typeId = Number(key);
       if (isNaN(typeId)) continue;
-      
+
       const values = Array.isArray(value) ? value : [];
       if (values.length >= 2) {
         stats.push({
@@ -1193,7 +1193,7 @@ function parseHalfTimeStatsFromApiResponse(results: any[]): { firstHalf: any[]; 
         });
       }
     }
-    
+
     if (sign === 'p1') {
       firstHalf.push(...stats);
     } else if (sign === 'p2') {
@@ -1202,7 +1202,7 @@ function parseHalfTimeStatsFromApiResponse(results: any[]): { firstHalf: any[]; 
       fullTime.push(...stats);
     }
   }
-  
+
   return { firstHalf, secondHalf, fullTime };
 }
 
@@ -1251,7 +1251,7 @@ export const getMatchLiveStats = async (
 
     // Check if match is finished
     const isFinished = await combinedStatsService.isMatchFinished(match_id);
-    
+
     // For FINISHED matches, ALWAYS use database (API doesn't return data after match ends)
     if (isFinished) {
       const dbResult = await combinedStatsService.getCombinedStatsFromDatabase(match_id);
@@ -1286,7 +1286,7 @@ export const getMatchLiveStats = async (
         });
         return;
       }
-      
+
       // Finished but no DB data - return empty immediately (don't wait for API)
       // TheSportsAPI doesn't return data for finished matches anyway
       logger.warn(`[MatchController] Match finished but no DB data for ${match_id}, returning empty`);
@@ -1317,14 +1317,36 @@ export const getMatchLiveStats = async (
     let firstHalfStats = await combinedStatsService.getFirstHalfStats(match_id);
     let secondHalfStats = await combinedStatsService.getSecondHalfStats(match_id);
 
-    // For LIVE matches: ULTRA-FAST direct HTTP to TheSportsAPI (bypass all services)
-    logger.info(`[MatchController] ULTRA-FAST fetch for ${match_id} (status: ${matchStatus})`);
+    // For LIVE matches: Check CACHE first
+    // This prevents blocking the thread for 5-10s if the external API is slow
+    const cachedLiveDetail = await liveMatchCache.get(match_id);
+    if (cachedLiveDetail) {
+      logger.debug(`[MatchController] Returning cached live detail for ${match_id}`);
+      reply.send({
+        success: true,
+        data: cachedLiveDetail,
+      });
+      return;
+    }
+
+    logger.info(`[MatchController] Live cache miss for ${match_id}, fetching from API (status: ${matchStatus})`);
 
     let result: any = null;
     try {
-      // Direct HTTP call - no cache, no circuit breaker, no overhead
+      // Direct HTTP call - no overhead
       const apiUrl = `https://api.thesports.com/v1/football/match/detail_live?user=${process.env.THESPORTS_API_USER}&secret=${process.env.THESPORTS_API_SECRET}&id=${match_id}`;
-      const response = await fetch(apiUrl);
+
+      // Add timeout to prevent hanging forever
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+      const response = await fetch(apiUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
       const liveData = await response.json() as { results?: any[] };
       const matchData = liveData?.results?.find((r: any) => r.id === match_id) || liveData?.results?.[0];
 
@@ -1347,74 +1369,122 @@ export const getMatchLiveStats = async (
           type: s.type,
           home: s.home,
           away: s.away,
-          name: STAT_NAMES[s.type]?.name || `Stat ${s.type}`,
-          nameTr: STAT_NAMES[s.type]?.nameTr || `İstatistik ${s.type}`,
-          source: 'basic'
+          name: STAT_NAMES[s.type]?.name || 'Unknown',
+          nameTr: STAT_NAMES[s.type]?.nameTr || '',
         }));
 
+        // Merge with incidents if present
+        const incidents = matchData.incidents || [];
+        const score = matchData.score || null;
+
         result = {
-          matchId: match_id,
-          allStats,
-          basicStats: allStats,
-          detailedStats: [],
-          incidents: matchData.incidents || [],
-          score: matchData.score || null,
+          match_id,
+          match_status: matchStatus,
+          stats: allStats,
+          fullTime: {
+            stats: allStats,
+            results: allStats,
+          },
+          firstHalfStats: firstHalfStats || null,
+          secondHalfStats: secondHalfStats || null,
+          halfTime: null, // detail_live doesn't give half stats usually
+          incidents: incidents,
+          score: score,
+          sources: {
+            basic: allStats.length,
+            detailed: 0,
+            from: 'api (live)',
+            hasFirstHalfSnapshot: !!firstHalfStats,
+            hasSecondHalfSnapshot: !!secondHalfStats,
+          },
         };
-      } else {
-        result = { matchId: match_id, allStats: [], basicStats: [], detailedStats: [], incidents: [], score: null };
+
+        // Cache the result for 15 seconds
+        // This is critical for performance - prevents slamming the API and blocking the UI
+        await liveMatchCache.set(match_id, result, 15);
       }
     } catch (err: any) {
-      logger.warn(`[MatchController] Fast fetch error for ${match_id}: ${err.message}`);
-      result = { matchId: match_id, allStats: [], basicStats: [], detailedStats: [], incidents: [], score: null };
+      logger.error(`[MatchController] Failed to fetch live stats for ${match_id}: ${err.message}`);
+      // Return DB fallback if possible, or empty structure
     }
 
-    // CRITICAL: Save first half stats when match reaches HALF_TIME
-    if (isHalfTime && result && result.allStats.length > 0 && !firstHalfStats) {
-      logger.info(`[MatchController] ⚽ HALF_TIME detected! Saving first half stats for ${match_id}`);
-      await combinedStatsService.saveFirstHalfStats(match_id, result.allStats);
-      firstHalfStats = result.allStats;
-    }
-
-    // Save to database (CRITICAL for persistence after match ends)
-    if (result && result.allStats.length > 0) {
-      combinedStatsService.saveCombinedStatsToDatabase(match_id, result).catch((err) => {
-        logger.error(`[MatchController] Failed to save stats to DB for ${match_id}:`, err);
+    if (result) {
+      reply.send({
+        success: true,
+        data: result,
       });
+      return;
     }
+    home: s.home,
+      away: s.away,
+        name: STAT_NAMES[s.type]?.name || `Stat ${s.type}`,
+          nameTr: STAT_NAMES[s.type]?.nameTr || `İstatistik ${s.type}`,
+            source: 'basic'
+  }));
 
-    // Build response with first_half_stats and second_half_stats for period selection on frontend
-    reply.send({
-      success: true,
-      data: {
-        match_id: result.matchId,
-        match_status: matchStatus,
-        stats: result.allStats,
-        fullTime: {
-          stats: result.allStats,
-          results: result.allStats,
-        },
-        // Half stats for frontend period selector (1. YARI / 2. YARI / TÜMÜ)
-        firstHalfStats: firstHalfStats || null,
-        secondHalfStats: secondHalfStats || null,
-        halfTime: result.halfTimeStats || null,
-        incidents: result.incidents,
-        score: result.score,
-        sources: {
-          basic: result.basicStats.length,
-          detailed: result.detailedStats.length,
-          from: 'api',
-          hasFirstHalfSnapshot: !!firstHalfStats,
-          hasSecondHalfSnapshot: !!secondHalfStats,
-        },
-      },
-    });
+  result = {
+    matchId: match_id,
+    allStats,
+    basicStats: allStats,
+    detailedStats: [],
+    incidents: matchData.incidents || [],
+    score: matchData.score || null,
+  };
+} else {
+  result = { matchId: match_id, allStats: [], basicStats: [], detailedStats: [], incidents: [], score: null };
+      }
+    } catch (err: any) {
+  logger.warn(`[MatchController] Fast fetch error for ${match_id}: ${err.message}`);
+  result = { matchId: match_id, allStats: [], basicStats: [], detailedStats: [], incidents: [], score: null };
+}
+
+// CRITICAL: Save first half stats when match reaches HALF_TIME
+if (isHalfTime && result && result.allStats.length > 0 && !firstHalfStats) {
+  logger.info(`[MatchController] ⚽ HALF_TIME detected! Saving first half stats for ${match_id}`);
+  await combinedStatsService.saveFirstHalfStats(match_id, result.allStats);
+  firstHalfStats = result.allStats;
+}
+
+// Save to database (CRITICAL for persistence after match ends)
+if (result && result.allStats.length > 0) {
+  combinedStatsService.saveCombinedStatsToDatabase(match_id, result).catch((err) => {
+    logger.error(`[MatchController] Failed to save stats to DB for ${match_id}:`, err);
+  });
+}
+
+// Build response with first_half_stats and second_half_stats for period selection on frontend
+reply.send({
+  success: true,
+  data: {
+    match_id: result.matchId,
+    match_status: matchStatus,
+    stats: result.allStats,
+    fullTime: {
+      stats: result.allStats,
+      results: result.allStats,
+    },
+    // Half stats for frontend period selector (1. YARI / 2. YARI / TÜMÜ)
+    firstHalfStats: firstHalfStats || null,
+    secondHalfStats: secondHalfStats || null,
+    halfTime: result.halfTimeStats || null,
+    incidents: result.incidents,
+    score: result.score,
+    sources: {
+      basic: result.basicStats.length,
+      detailed: result.detailedStats.length,
+      from: 'api',
+      hasFirstHalfSnapshot: !!firstHalfStats,
+      hasSecondHalfSnapshot: !!secondHalfStats,
+    },
+  },
+});
   } catch (error: any) {
-    logger.error('[MatchController] Error in getMatchLiveStats:', error);
-    reply.status(500).send({
-      success: false,
-      message: error.message || 'Internal server error',
-    });
-  }
+  logger.error('[MatchController] Error in getMatchLiveStats:', error);
+  reply.status(500).send({
+    success: false,
+    message: error.message || 'Internal server error',
+  });
+}
 };
 
 /**

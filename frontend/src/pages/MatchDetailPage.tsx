@@ -80,15 +80,23 @@ export function MatchDetailPage() {
     if (!matchId) return;
 
     const loadInitialData = async () => {
-      setLoading(true);
+      // Step 1: Fetch BASIC match info first (render Header immediately)
+      // Do NOT set global loading=true here if we already have match data (e.g. from nav)
+      if (!match) setLoading(true);
       setError(null);
 
       try {
-        // Fetch match first to get season_id
+        // Fetch match first to get season_id and header info
         const matchResult = await getMatchById(matchId);
         setMatch(matchResult);
 
-        // Then fetch stats + events in parallel (FAST endpoints only!)
+        // Only turn off GLOBAL loading here - the page is now usable
+        setLoading(false);
+
+        // Step 2: Fetch Stats & Events in background (Lazy Load)
+        // These are heavy and shouldn't block the UI
+        setTabLoading(prev => ({ ...prev, stats: true, events: true }));
+
         const results = await Promise.allSettled([
           getMatchLiveStats(matchId),
           getMatchHalfStats(matchId),
@@ -106,6 +114,7 @@ export function MatchDetailPage() {
             secondHalfStats: halfStatsRes.value?.secondHalfStats || null,
           });
         } else if (liveStatsRes.status === 'fulfilled') {
+          // Fallback if half-stats fails
           setStats({
             fullTime: liveStatsRes.value,
             halfTime: null,
@@ -123,7 +132,8 @@ export function MatchDetailPage() {
         console.error('Failed to load match data:', err);
         setError(err.message || 'Maç verileri yüklenirken bir hata oluştu');
       } finally {
-        setLoading(false);
+        setLoading(false); // Ensure loading is off even if error
+        setTabLoading(prev => ({ ...prev, stats: false, events: false }));
       }
     };
 
