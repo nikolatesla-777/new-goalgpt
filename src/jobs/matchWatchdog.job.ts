@@ -186,24 +186,22 @@ export class MatchWatchdogWorker {
     try {
       const nowTs = Math.floor(Date.now() / 1000);
 
-      // Phase 5-S FIX: Fetch /match/recent/list FIRST (before processing stale/should-be-live)
-      // This is used for both:
-      // 1. Should-be-live matches -> transition to LIVE
-      // 2. Stale LIVE matches that are finished -> transition to END
-      // CRITICAL FIX: Use time parameter for incremental updates
-      // According to TheSports docs: "obtain new or changed data according to the time"
-      // For should-be-live matches (can be 7+ hours old), we need a wider time window
-      // Use last 24 hours to catch all should-be-live matches
+      // CRITICAL FIX (2026-01-11): Use /match/diary instead of /match/recent/list
+      // /match/recent/list only returns recently CHANGED matches (500 limit)
+      // This caused orphan matches: if a match finished but wasn't in the 500-limit window,
+      // it would stay "live" in DB forever
+      // /match/diary returns ALL today's matches with CURRENT status - this is the correct source
       let recentListAllMatches: Map<string, { statusId: number; updateTime: number | null }> = new Map();
       try {
-        // CRITICAL FIX: Use wider time window (24 hours) to catch should-be-live matches
-        // Previous 30-second window was too restrictive and missed matches that started hours ago
-        const timeParam = nowTs - (24 * 60 * 60); // Last 24 hours
-        const recentListResponse = await this.matchRecentService.getMatchRecentList({ time: timeParam, limit: 500 }, true); // forceRefresh = true
-        const recentListResults = recentListResponse?.results ?? [];
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date().toISOString().split('T')[0];
 
-        // Build map of ALL matches from recent/list (including END status=8)
-        for (const match of recentListResults) {
+        // Fetch ALL today's matches from /match/diary
+        const diaryResponse = await this.matchDiaryService.getMatchDiary({ date: today });
+        const diaryMatches = diaryResponse?.results ?? [];
+
+        // Build map of ALL matches from diary (not just changed ones)
+        for (const match of diaryMatches) {
           const status = (match as any).status_id ?? (match as any).status ?? 0;
           const matchId = (match as any).id ?? (match as any).match_id ?? (match as any).external_id;
           if (matchId) {
@@ -215,9 +213,9 @@ export class MatchWatchdogWorker {
         const liveCount = Array.from(recentListAllMatches.values()).filter(m => [2, 3, 4, 5, 7].includes(m.statusId)).length;
         const endCount = Array.from(recentListAllMatches.values()).filter(m => [8, 9, 10, 12].includes(m.statusId)).length;
         // Always log (even if empty) for observability
-        logger.info(`[Watchdog] Fetched /match/recent/list: ${recentListAllMatches.size} total matches (${liveCount} live, ${endCount} finished)`);
+        logger.info(`[Watchdog] Fetched /match/diary: ${recentListAllMatches.size} total matches (${liveCount} live, ${endCount} finished)`);
       } catch (error: any) {
-        logger.error('[Watchdog] Error fetching /match/recent/list:', error);
+        logger.error('[Watchdog] Error fetching /match/diary:', error);
         // Continue processing, but reconciliation will fall back to detail_live only
       }
 
@@ -522,8 +520,8 @@ export class MatchWatchdogWorker {
             );
 
             if (orchestratorResult.status === 'success') {
-                successCount++;
-                reasons['finished_in_recent_list'] = (reasons['finished_in_recent_list'] || 0) + 1;
+              successCount++;
+              reasons['finished_in_recent_list'] = (reasons['finished_in_recent_list'] || 0) + 1;
 
               logEvent('info', 'watchdog.reconcile.done', {
                 match_id: stale.matchId,
@@ -684,8 +682,8 @@ export class MatchWatchdogWorker {
                 );
 
                 if (orchestratorResult.status === 'success') {
-                    successCount++;
-                    reasons['old_match_transition_to_end'] = (reasons['old_match_transition_to_end'] || 0) + 1;
+                  successCount++;
+                  reasons['old_match_transition_to_end'] = (reasons['old_match_transition_to_end'] || 0) + 1;
 
                   logEvent('info', 'watchdog.reconcile.done', {
                     match_id: match.matchId,
@@ -986,8 +984,8 @@ export class MatchWatchdogWorker {
           );
 
           if (orchestratorResult.status === 'success') {
-              successCount++;
-              reasons['overdue_force_end'] = (reasons['overdue_force_end'] || 0) + 1;
+            successCount++;
+            reasons['overdue_force_end'] = (reasons['overdue_force_end'] || 0) + 1;
 
             logEvent('info', 'watchdog.reconcile.done', {
               match_id: overdue.matchId,
