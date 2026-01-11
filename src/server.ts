@@ -125,8 +125,13 @@ const start = async () => {
     dataUpdateWorker = new DataUpdateWorker();
     dataUpdateWorker.start();
 
-    matchMinuteWorker = new MatchMinuteWorker();
-    matchMinuteWorker.start();
+    try {
+      matchMinuteWorker = new MatchMinuteWorker();
+      matchMinuteWorker.start();
+      logger.info('✅ Match Minute Worker started');
+    } catch (err: any) {
+      logger.error('❌ Failed to start Match Minute Worker:', err);
+    }
 
     // Match Data Sync Worker (automatically saves statistics, incidents, trend for live matches)
     matchDataSyncWorker = new MatchDataSyncWorker();
