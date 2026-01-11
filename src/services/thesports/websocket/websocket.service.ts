@@ -138,13 +138,26 @@ export class WebSocketService {
             if (statusChanged) {
               await this.updateMatchStatusInDatabase(parsedScore.matchId, parsedScore.statusId, providerUpdateTime);
 
+              // CRITICAL: Track first half kickoff when status changes to 2 (1H)
+              if (nextState === 2 && (previousState === null || previousState === 1)) {
+                const firstHalfKickoffTs = Math.floor(Date.now() / 1000);
+                logger.info(`[WebSocket] Match ${parsedScore.matchId}: First half started! Recording kickoff timestamp: ${firstHalfKickoffTs}`);
+
+                await pool.query(
+                  'UPDATE ts_matches SET first_half_kickoff_ts = $1 WHERE external_id = $2 AND first_half_kickoff_ts IS NULL',
+                  [firstHalfKickoffTs, parsedScore.matchId]
+                ).catch(err => {
+                  logger.error(`[WebSocket] Failed to record first_half_kickoff_ts for ${parsedScore.matchId}:`, err);
+                });
+              }
+
               // CRITICAL: Track second half kickoff when status changes from 3 (HT) to 4 (2H)
               if (previousState === 3 && nextState === 4) {
                 const secondHalfKickoffTs = Math.floor(Date.now() / 1000);
                 logger.info(`[WebSocket] Match ${parsedScore.matchId}: Second half started! Recording kickoff timestamp: ${secondHalfKickoffTs}`);
 
                 await pool.query(
-                  'UPDATE ts_matches SET second_half_kickoff_ts = $1 WHERE external_id = $2',
+                  'UPDATE ts_matches SET second_half_kickoff_ts = $1 WHERE external_id = $2 AND second_half_kickoff_ts IS NULL',
                   [secondHalfKickoffTs, parsedScore.matchId]
                 ).catch(err => {
                   logger.error(`[WebSocket] Failed to record second_half_kickoff_ts for ${parsedScore.matchId}:`, err);
