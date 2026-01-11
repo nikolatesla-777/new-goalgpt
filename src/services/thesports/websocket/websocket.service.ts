@@ -138,6 +138,19 @@ export class WebSocketService {
             if (statusChanged) {
               await this.updateMatchStatusInDatabase(parsedScore.matchId, parsedScore.statusId, providerUpdateTime);
 
+              // CRITICAL: Track second half kickoff when status changes from 3 (HT) to 4 (2H)
+              if (previousState === 3 && nextState === 4) {
+                const secondHalfKickoffTs = Math.floor(Date.now() / 1000);
+                logger.info(`[WebSocket] Match ${parsedScore.matchId}: Second half started! Recording kickoff timestamp: ${secondHalfKickoffTs}`);
+
+                await pool.query(
+                  'UPDATE ts_matches SET second_half_kickoff_ts = $1 WHERE external_id = $2',
+                  [secondHalfKickoffTs, parsedScore.matchId]
+                ).catch(err => {
+                  logger.error(`[WebSocket] Failed to record second_half_kickoff_ts for ${parsedScore.matchId}:`, err);
+                });
+              }
+
               // LATENCY MONITORING: Store mqttReceivedTs for this event
               const eventKey = `${parsedScore.matchId}:MATCH_STATE_CHANGE`;
               this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
