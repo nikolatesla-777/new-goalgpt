@@ -215,25 +215,25 @@ export class DataUpdateWorker {
       }
 
       // CRITICAL FIX: Provider timestamps from extractLiveFields()
-      if (live.updateTime !== null) {
-        updates.push({
-          field: 'provider_update_time',
-          value: live.updateTime,
-          source: 'api',
-          priority: 2,
-          timestamp: live.updateTime,
-        });
+      // If API doesn't provide update_time, use current timestamp (ingestion time)
+      // The fact that we're processing this match means API returned fresh data
+      const effectiveUpdateTime = live.updateTime !== null ? live.updateTime : now;
 
-        // Also update last_event_ts when we get a provider update
-        // This indicates match data has changed
-        updates.push({
-          field: 'last_event_ts',
-          value: live.updateTime,
-          source: 'api',
-          priority: 2,
-          timestamp: live.updateTime,
-        });
-      }
+      updates.push({
+        field: 'provider_update_time',
+        value: effectiveUpdateTime,
+        source: 'api',
+        priority: 2,
+        timestamp: effectiveUpdateTime,
+      });
+
+      updates.push({
+        field: 'last_event_ts',
+        value: effectiveUpdateTime,
+        source: 'api',
+        priority: 2,
+        timestamp: effectiveUpdateTime,
+      });
 
       // CRITICAL FIX: Kickoff timestamps from extractLiveFields()
       // Use liveKickoffTime from score[4] (most reliable source)
