@@ -85,8 +85,6 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
 
     const displayScore = getDisplayScore();
     const currentMinute = getCurrentMinute();
-    // Phase 5: Use live_match_status
-    const isLive = (prediction.live_match_status || 0) >= 2 && (prediction.live_match_status || 0) <= 7;
 
     // Match Status Badge - Professional UI/UX
     const getMatchStatusBadge = () => {
@@ -97,7 +95,9 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
             return (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse">
                     <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                    <span className="text-[11px] font-black tracking-wider">LIVE</span>
+                    <span className="text-[11px] font-black tracking-wider">
+                        LIVE {currentMinute ? `${currentMinute}'` : ''}
+                    </span>
                 </div>
             );
         }
@@ -116,7 +116,9 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
             return (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse">
                     <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                    <span className="text-[11px] font-black tracking-wider">LIVE</span>
+                    <span className="text-[11px] font-black tracking-wider">
+                        LIVE {currentMinute ? `${currentMinute}'` : ''}
+                    </span>
                 </div>
             );
         }
@@ -126,7 +128,9 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
             return (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-500 text-white shadow-lg shadow-purple-500/30">
                     <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                    <span className="text-[11px] font-black tracking-wider">ET</span>
+                    <span className="text-[11px] font-black tracking-wider">
+                        ET {currentMinute ? `${currentMinute}'` : ''}
+                    </span>
                 </div>
             );
         }
@@ -267,14 +271,8 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                         <span className="text-3xl font-black text-white tracking-widest font-mono leading-none">
                             {displayScore}
                         </span>
-                        {/* Professional Match Status Badge */}
+                        {/* Professional Match Status Badge (includes minute for LIVE) */}
                         {getMatchStatusBadge()}
-                        {/* Show minute for live matches */}
-                        {isLive && currentMinute && (
-                            <span className="text-[10px] text-gray-400 font-bold tracking-wide">
-                                {currentMinute}'
-                            </span>
-                        )}
                     </div>
 
                     {/* Away Team */}
