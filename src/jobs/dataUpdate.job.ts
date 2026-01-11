@@ -235,41 +235,52 @@ export class DataUpdateWorker {
         timestamp: effectiveUpdateTime,
       });
 
-      // CRITICAL FIX: Kickoff timestamps from extractLiveFields()
-      // Use liveKickoffTime from score[4] (most reliable source)
-      if (live.liveKickoffTime !== null) {
-        // Determine which kickoff field to update based on current status
-        if (Array.isArray(matchData.score) && matchData.score.length >= 2) {
-          const statusId = matchData.score[1];
-          // First half (status 2): update first_half_kickoff_ts
-          if (statusId === 2) {
-            updates.push({
-              field: 'first_half_kickoff_ts',
-              value: live.liveKickoffTime,
-              source: 'api',
-              priority: 2,
-              timestamp: live.updateTime || providerUpdateTime || now,
-            });
+      // CRITICAL FIX: Kickoff timestamps with fallback to current time
+      // When API doesn't provide liveKickoffTime, use current time as fallback
+      // This ensures minute calculation can proceed even with incomplete API data
+      if (Array.isArray(matchData.score) && matchData.score.length >= 2) {
+        const statusId = matchData.score[1];
+
+        // Use API kickoff time if available, otherwise use current timestamp as fallback
+        const kickoffTime = live.liveKickoffTime !== null ? live.liveKickoffTime : now;
+
+        // First half (status 2): update first_half_kickoff_ts
+        if (statusId === 2) {
+          updates.push({
+            field: 'first_half_kickoff_ts',
+            value: kickoffTime,
+            source: 'api',
+            priority: 2,
+            timestamp: live.updateTime || providerUpdateTime || now,
+          });
+          if (live.liveKickoffTime === null) {
+            logger.warn(`[DataUpdate.orchestrator] Using fallback kickoff time (now) for first_half of ${matchId}`);
           }
-          // Second half (status 4): update second_half_kickoff_ts
-          else if (statusId === 4) {
-            updates.push({
-              field: 'second_half_kickoff_ts',
-              value: live.liveKickoffTime,
-              source: 'api',
-              priority: 2,
-              timestamp: live.updateTime || providerUpdateTime || now,
-            });
+        }
+        // Second half (status 4): update second_half_kickoff_ts
+        else if (statusId === 4) {
+          updates.push({
+            field: 'second_half_kickoff_ts',
+            value: kickoffTime,
+            source: 'api',
+            priority: 2,
+            timestamp: live.updateTime || providerUpdateTime || now,
+          });
+          if (live.liveKickoffTime === null) {
+            logger.warn(`[DataUpdate.orchestrator] Using fallback kickoff time (now) for second_half of ${matchId}`);
           }
-          // Overtime (status 5+): update overtime_kickoff_ts
-          else if (statusId >= 5) {
-            updates.push({
-              field: 'overtime_kickoff_ts',
-              value: live.liveKickoffTime,
-              source: 'api',
-              priority: 2,
-              timestamp: live.updateTime || providerUpdateTime || now,
-            });
+        }
+        // Overtime (status 5+): update overtime_kickoff_ts
+        else if (statusId >= 5) {
+          updates.push({
+            field: 'overtime_kickoff_ts',
+            value: kickoffTime,
+            source: 'api',
+            priority: 2,
+            timestamp: live.updateTime || providerUpdateTime || now,
+          });
+          if (live.liveKickoffTime === null) {
+            logger.warn(`[DataUpdate.orchestrator] Using fallback kickoff time (now) for overtime of ${matchId}`);
           }
         }
       }

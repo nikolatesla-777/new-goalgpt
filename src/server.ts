@@ -162,8 +162,8 @@ const start = async () => {
     // Initialize Orchestrator Minute Broadcast Listener
     // Connects orchestrator minute updates to WebSocket broadcast for live frontend updates
     orchestrator.on('match:updated', async (data: any) => {
-      // DEBUG: Log all match:updated events
-      logger.debug(`[MinuteBroadcast] match:updated event received: matchId=${data.matchId}, fields=${JSON.stringify(data.fields)}, source=${data.source}`);
+      // CRITICAL FIX: Changed from debug to info for production visibility
+      logger.info(`[MinuteBroadcast] match:updated event received: matchId=${data.matchId}, fields=${JSON.stringify(data.fields)}, source=${data.source}`);
 
       // Only broadcast minute updates (not score/status - those come via MQTT)
       const hasMinuteField = data.fields.includes('minute');
@@ -195,7 +195,8 @@ const start = async () => {
               timestamp: Date.now(),
             });
 
-            logger.debug(`[MinuteBroadcast] Sent MINUTE_UPDATE for ${data.matchId}: minute=${minute}`);
+            // CRITICAL FIX: Changed from debug to info for production visibility
+            logger.info(`[MinuteBroadcast] ✅ Sent MINUTE_UPDATE for ${data.matchId}: minute=${minute}`);
           }
         } catch (error: any) {
           logger.error(`[MinuteBroadcast] Error broadcasting minute update for ${data.matchId}:`, error);

@@ -93,19 +93,33 @@ export class RedisManager {
   /**
    * Acquire distributed lock with timeout
    *
+   * CRITICAL FIX: Graceful degradation when Redis unavailable.
+   * If Redis is not connected, returns true to allow writes (single-node fallback).
+   * This prevents complete system failure when Redis is down.
+   *
    * @param key - Lock key (e.g., 'lock:match:123')
    * @param value - Lock value (e.g., job name)
    * @param ttl - Time to live in seconds (default: 5s)
-   * @returns true if lock acquired, false otherwise
+   * @returns true if lock acquired OR Redis unavailable (graceful degradation)
    */
   static async acquireLock(key: string, value: string, ttl: number = 5): Promise<boolean> {
     try {
+      // GRACEFUL DEGRADATION: If Redis not connected, allow writes without lock
+      // This is a single-node fallback - no distributed coordination but at least writes proceed
+      if (!this.instance || this.instance.status !== 'ready') {
+        logger.warn(`[Redis] Not connected (status=${this.instance?.status}), bypassing lock for ${key} - GRACEFUL DEGRADATION`);
+        return true; // Allow write without lock
+      }
+
       const redis = this.getInstance();
       const result = await redis.set(key, value, 'EX', ttl, 'NX');
       return result === 'OK';
     } catch (error) {
+      // GRACEFUL DEGRADATION: On error, allow writes to proceed
+      // Better to have potential race conditions than complete system failure
       logger.error(`[Redis] Failed to acquire lock for ${key}:`, error);
-      return false;
+      logger.warn(`[Redis] GRACEFUL DEGRADATION: Allowing write without lock for ${key}`);
+      return true; // Allow write on error
     }
   }
 
