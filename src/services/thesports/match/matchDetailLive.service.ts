@@ -335,6 +335,11 @@ export class MatchDetailLiveService {
         ? updateTimeRaw
         : null;
 
+    // DEBUG: Log if update_time is missing (critical for provider_update_time tracking)
+    if (updateTime === null && matchId) {
+      logger.warn(`[DetailLive] update_time NOT FOUND for match ${matchId}. Checked fields: update_time, updateTime, updated_at, match.update_time. Root keys: ${Object.keys(root || {}).join(', ')}`);
+    }
+
     // Extract minute from provider (WebSocket/detail_live source)
     const minuteRaw =
       (typeof root?.minute === 'number' ? root.minute : null) ??
