@@ -71,7 +71,7 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
   }
 
   // Phase 6: Cache Invalidation - Invalidate on score-related events
-  const cacheInvalidatingEvents = ['SCORE_CHANGE', 'GOAL', 'GOAL_CANCELLED', 'MATCH_STATE_CHANGE'];
+  const cacheInvalidatingEvents = ['SCORE_CHANGE', 'GOAL', 'GOAL_CANCELLED', 'MATCH_STATE_CHANGE', 'MINUTE_UPDATE'];
   if (cacheInvalidatingEvents.includes(event.type)) {
     liveMatchCache.invalidateMatch(event.matchId, event.type);
     logger.debug(`[WebSocket Route] Cache invalidated for ${event.matchId} (${event.type})`);
@@ -104,6 +104,13 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
         minuteText: generateMinuteText(minute, eventData.newStatus),
       };
     }
+  } else if (event.type === 'MINUTE_UPDATE') {
+    const eventData = event as any;
+    optimisticData = {
+      minute: eventData.minute,
+      minuteText: generateMinuteText(eventData.minute, eventData.statusId),
+      statusId: eventData.statusId,
+    };
   }
 
   // Spread event first, then override with explicit properties to avoid duplicates

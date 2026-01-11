@@ -50,6 +50,18 @@ export interface MatchStateChangeEvent {
 }
 
 /**
+ * Minute Update Event
+ * Broadcast every 30s when match minute changes (backend-calculated)
+ */
+export interface MinuteUpdateEvent {
+  type: 'MINUTE_UPDATE';
+  matchId: string;
+  minute: number;
+  statusId: number;
+  timestamp: number;
+}
+
+/**
  * PHASE 5: Prediction Settlement Event
  * Broadcast when an AI prediction result is determined (won/lost)
  */
@@ -72,6 +84,7 @@ export type WebSocketEvent =
   | DangerAlertEvent
   | GoalCancelledEvent
   | MatchStateChangeEvent
+  | MinuteUpdateEvent
   | PredictionSettledEvent; // PHASE 5
 
 interface UseSocketOptions {
@@ -79,6 +92,7 @@ interface UseSocketOptions {
   onDangerAlert?: (event: DangerAlertEvent) => void;
   onGoalCancelled?: (event: GoalCancelledEvent) => void;
   onMatchStateChange?: (event: MatchStateChangeEvent) => void;
+  onMinuteUpdate?: (event: MinuteUpdateEvent) => void;
   onPredictionSettled?: (event: PredictionSettledEvent) => void; // PHASE 5
   onAnyEvent?: (event: WebSocketEvent) => void;
 }
@@ -108,6 +122,8 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     onDangerAlert,
     onGoalCancelled,
     onMatchStateChange,
+    onMinuteUpdate,
+    onPredictionSettled,
     onAnyEvent,
   } = options;
 
@@ -126,6 +142,8 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     onDangerAlert,
     onGoalCancelled,
     onMatchStateChange,
+    onMinuteUpdate,
+    onPredictionSettled,
     onAnyEvent,
   });
 
@@ -136,9 +154,11 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
       onDangerAlert,
       onGoalCancelled,
       onMatchStateChange,
+      onMinuteUpdate,
+      onPredictionSettled,
       onAnyEvent,
     };
-  }, [onScoreChange, onDangerAlert, onGoalCancelled, onMatchStateChange, onAnyEvent]);
+  }, [onScoreChange, onDangerAlert, onGoalCancelled, onMatchStateChange, onMinuteUpdate, onPredictionSettled, onAnyEvent]);
 
   // Clear danger alert after 10 seconds (they're time-sensitive)
   const clearDangerAlertTimeout = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -197,6 +217,14 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
 
         case 'MATCH_STATE_CHANGE':
           callbacksRef.current.onMatchStateChange?.(wsEvent as MatchStateChangeEvent);
+          break;
+
+        case 'MINUTE_UPDATE':
+          callbacksRef.current.onMinuteUpdate?.(wsEvent as MinuteUpdateEvent);
+          break;
+
+        case 'PREDICTION_SETTLED':
+          callbacksRef.current.onPredictionSettled?.(wsEvent as PredictionSettledEvent);
           break;
       }
     } catch {

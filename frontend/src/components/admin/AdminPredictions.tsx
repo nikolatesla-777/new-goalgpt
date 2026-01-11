@@ -114,13 +114,19 @@ export function AdminPredictions() {
         );
     });
 
-    const { lastEvent } = useSocket();
-
-    useEffect(() => {
-        if (lastEvent) {
-            fetchData();
-        }
-    }, [lastEvent]);
+    // Optimized WebSocket handling: only refetch on score/status changes
+    useSocket({
+        onMinuteUpdate: (event) => {
+            // Optimistic minute update - no API refetch needed
+            setPredictions(prev => prev.map(p =>
+                p.match_id === event.matchId
+                    ? { ...p, live_match_minute: event.minute }
+                    : p
+            ));
+        },
+        onScoreChange: () => fetchData(), // Score changed - refetch for accuracy
+        onMatchStateChange: () => fetchData(), // Status changed - refetch for accuracy
+    });
 
     // Toggle access type
     const toggleAccessType = async (predictionId: string, currentType: 'VIP' | 'FREE') => {

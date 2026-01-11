@@ -154,6 +154,43 @@ const start = async () => {
     const settlementListener = new OrchestratorSettlementListener(orchestrator);
     logger.info('✅ Orchestrator Settlement Listener initialized');
 
+    // Initialize Orchestrator Minute Broadcast Listener
+    // Connects orchestrator minute updates to WebSocket broadcast for live frontend updates
+    orchestrator.on('match:updated', async (data: any) => {
+      // Only broadcast minute updates (not score/status - those come via MQTT)
+      if (data.fields.includes('minute') && data.source === 'matchMinute') {
+        try {
+          // Fetch current match state for broadcast
+          const matchState = await pool.query(`
+            SELECT minute, status_id
+            FROM ts_matches
+            WHERE external_id = $1
+          `, [data.matchId]);
+
+          if (matchState.rows.length > 0) {
+            const { minute, status_id } = matchState.rows[0];
+
+            // Import broadcastEvent dynamically (after WebSocket service initializes)
+            const { broadcastEvent } = await import('./routes/websocket.routes');
+
+            // Broadcast MINUTE_UPDATE to all WebSocket clients
+            broadcastEvent({
+              type: 'MINUTE_UPDATE',
+              matchId: data.matchId,
+              minute: minute,
+              statusId: status_id,
+              timestamp: Date.now(),
+            });
+
+            logger.debug(`[MinuteBroadcast] Sent MINUTE_UPDATE for ${data.matchId}: minute=${minute}`);
+          }
+        } catch (error: any) {
+          logger.error(`[MinuteBroadcast] Error broadcasting minute update for ${data.matchId}:`, error);
+        }
+      }
+    });
+    logger.info('✅ Orchestrator Minute Broadcast Listener initialized');
+
     // WebSocket Service
     websocketService = new WebSocketService();
     try {

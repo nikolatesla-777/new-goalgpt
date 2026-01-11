@@ -77,8 +77,8 @@ export class MatchDatabaseService {
           m.away_score_overtime,
           m.home_score_penalties,
           m.away_score_penalties,
-          m.home_score_display,
-          m.away_score_display,
+          COALESCE(m.home_score_display, m.home_score_regular, 0) as home_score_display,
+          COALESCE(m.away_score_display, m.away_score_regular, 0) as away_score_display,
           COALESCE(m.home_red_cards, (m.home_scores->>2)::INTEGER, 0) as home_red_cards,
           COALESCE(m.away_red_cards, (m.away_scores->>2)::INTEGER, 0) as away_red_cards,
           COALESCE(m.home_yellow_cards, (m.home_scores->>3)::INTEGER, 0) as home_yellow_cards,
@@ -315,8 +315,8 @@ export class MatchDatabaseService {
           m.away_score_overtime,
           m.home_score_penalties,
           m.away_score_penalties,
-          m.home_score_display,
-          m.away_score_display,
+          COALESCE(m.home_score_display, m.home_score_regular, 0) as home_score_display,
+          COALESCE(m.away_score_display, m.away_score_regular, 0) as away_score_display,
           COALESCE(
             CASE
               WHEN m.live_kickoff_time IS NOT NULL AND m.live_kickoff_time != m.match_time
@@ -548,8 +548,8 @@ export class MatchDatabaseService {
           m.away_score_overtime,
           m.home_score_penalties,
           m.away_score_penalties,
-          m.home_score_display,
-          m.away_score_display,
+          COALESCE(m.home_score_display, m.home_score_regular, 0) as home_score_display,
+          COALESCE(m.away_score_display, m.away_score_regular, 0) as away_score_display,
           COALESCE(
             CASE
               WHEN m.live_kickoff_time IS NOT NULL AND m.live_kickoff_time != m.match_time

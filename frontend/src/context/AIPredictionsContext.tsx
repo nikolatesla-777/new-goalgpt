@@ -390,6 +390,31 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
         }
         break;
 
+      case 'MINUTE_UPDATE':
+        // Update match minute only (no score change, no refetch)
+        setPredictions(prev => prev.map(p => {
+          if (p.match_id === message.matchId) {
+            return {
+              ...p,
+              live_match_minute: message.optimistic?.minute ?? message.minute ?? p.live_match_minute,
+            };
+          }
+          return p;
+        }));
+
+        setPredictionsByMatch(prev => {
+          const next = new Map(prev);
+          const pred = next.get(message.matchId);
+          if (pred) {
+            next.set(message.matchId, {
+              ...pred,
+              live_match_minute: message.optimistic?.minute ?? message.minute ?? pred.live_match_minute,
+            });
+          }
+          return next;
+        });
+        break;
+
       case 'PREDICTION_SETTLED':
         // Phase 5: Real-time prediction result update
         const settlementEvent = message as PredictionSettledEvent;

@@ -844,8 +844,8 @@ export class AIPredictionService {
                 -- Match data
                 m.status_id as match_status_id,
                 m.minute as match_minute,
-                m.home_score_display,
-                m.away_score_display,
+                COALESCE(m.home_score_display, 0) as home_score_display,
+                COALESCE(m.away_score_display, 0) as away_score_display,
                 -- Team data
                 ht.name as home_team_db_name,
                 ht.logo_url as home_team_logo,

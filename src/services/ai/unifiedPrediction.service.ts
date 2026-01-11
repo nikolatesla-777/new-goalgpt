@@ -164,11 +164,11 @@ class UnifiedPredictionService {
         -- If match is finished (8), use regular score. If live, use display score.
         CASE
             WHEN m.status_id = 8 THEN COALESCE(m.home_score_regular, 0)
-            ELSE m.home_score_display
+            ELSE COALESCE(m.home_score_display, 0)
         END as home_score_display,
         CASE
             WHEN m.status_id = 8 THEN COALESCE(m.away_score_regular, 0)
-            ELSE m.away_score_display
+            ELSE COALESCE(m.away_score_display, 0)
         END as away_score_display,
         m.status_id as live_match_status, m.minute as live_match_minute,
         -- Competition & Country Data

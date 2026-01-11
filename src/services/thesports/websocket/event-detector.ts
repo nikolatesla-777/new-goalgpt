@@ -77,7 +77,15 @@ export interface MatchStateChangeEvent {
   timestamp: number;
 }
 
-export type MatchEvent = GoalEvent | CardEvent | SubstitutionEvent | GoalCancelledEvent | ScoreChangeEvent | DangerAlertEvent | MatchStateChangeEvent;
+export interface MinuteUpdateEvent {
+  type: 'MINUTE_UPDATE';
+  matchId: string;
+  minute: number;
+  statusId: number;
+  timestamp: number;
+}
+
+export type MatchEvent = GoalEvent | CardEvent | SubstitutionEvent | GoalCancelledEvent | ScoreChangeEvent | DangerAlertEvent | MatchStateChangeEvent | MinuteUpdateEvent;
 
 export class EventDetector {
   private processedEvents = new Map<string, number>(); // Event ID -> timestamp
