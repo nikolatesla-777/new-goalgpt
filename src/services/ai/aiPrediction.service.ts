@@ -765,7 +765,7 @@ export class AIPredictionService {
             if (matchResult && matchResult.overallConfidence >= 0.6) {
                 const updateResult = await orchestrator.updatePrediction(predictionId, {
                     match_id: matchResult.matchExternalId,
-                    match_status: matchResult.matchStatusId || 1,
+                    match_status: matchResult.statusId || 1,
                 });
 
                 if (updateResult.status === 'success') {

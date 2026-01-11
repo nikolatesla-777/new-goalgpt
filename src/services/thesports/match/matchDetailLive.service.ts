@@ -86,6 +86,21 @@ export class MatchDetailLiveService {
   }
 
   /**
+   * Get match detail (non-live) - used as fallback when match is not in detail_live
+   * This endpoint returns data for finished matches (status 8)
+   */
+  async getMatchDetail(matchId: string): Promise<any> {
+    try {
+      // Direct call to /match/detail
+      const response = await this.client.get<any>('/match/detail', { match_id: matchId });
+      return response;
+    } catch (error: any) {
+      logger.warn(`[MatchDetailLive] Failed to fetch /match/detail for ${matchId}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
    * Get ALL live match stats (no match_id parameter)
    * Returns stats, incidents, score for all currently live matches
    * Cached for 30 seconds
@@ -718,7 +733,7 @@ export class MatchDetailLiveService {
           `status ${existingStatusId} → ${live.statusId}, score ${live.homeScoreDisplay}-${live.awayScoreDisplay}. ` +
           `Bypassing timestamp check (existingEventTime=${existingEventTime}, existingProviderTime=${existingProviderTime}).`
         );
-        
+
         // CRITICAL: Save first half stats when transitioning to HALF_TIME
         if (existingStatusId === 2 && live.statusId === 3) {
           logger.info(`[DetailLive] ⚽ HALF_TIME TRANSITION! Saving first half stats for ${match_id}`);
@@ -1019,17 +1034,17 @@ export class MatchDetailLiveService {
       // Import CombinedStatsService dynamically to avoid circular dependency
       const { CombinedStatsService } = await import('./combinedStats.service');
       const combinedStatsService = new CombinedStatsService();
-      
+
       // Check if first_half_stats already exists
       const hasStats = await combinedStatsService.hasFirstHalfStats(matchId);
       if (hasStats) {
         logger.debug(`[DetailLive] First half stats already saved for ${matchId}, skipping`);
         return;
       }
-      
+
       // Fetch current stats from API
       const result = await combinedStatsService.getCombinedMatchStats(matchId);
-      
+
       if (result && result.allStats && result.allStats.length > 0) {
         await combinedStatsService.saveFirstHalfStats(matchId, result.allStats);
         logger.info(`[DetailLive] ✅ Saved first half stats for ${matchId} (${result.allStats.length} stats)`);

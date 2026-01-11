@@ -16,6 +16,9 @@ import { logEvent } from '../utils/obsLogger';
 import { theSportsAPI } from '../core';
 // PHASE C: Use LiveMatchOrchestrator for centralized write coordination
 import { LiveMatchOrchestrator, FieldUpdate } from '../services/orchestration/LiveMatchOrchestrator';
+import { MatchSyncService, MatchSyncData } from '../services/thesports/match/matchSync.service';
+import { TeamDataService } from '../services/thesports/team/teamData.service';
+import { CompetitionService } from '../services/thesports/competition/competition.service';
 
 
 export class DataUpdateWorker {
@@ -24,6 +27,9 @@ export class DataUpdateWorker {
   private combinedStatsService: CombinedStatsService;
   private matchTrendService: MatchTrendService;
   private orchestrator: LiveMatchOrchestrator;
+  private matchSyncService: MatchSyncService;
+  private teamDataService: TeamDataService;
+  private competitionService: CompetitionService;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -33,7 +39,14 @@ export class DataUpdateWorker {
     this.matchDetailLiveService = new MatchDetailLiveService();
     this.combinedStatsService = new CombinedStatsService();
     this.matchTrendService = new MatchTrendService();
+    this.combinedStatsService = new CombinedStatsService();
+    this.matchTrendService = new MatchTrendService();
     this.orchestrator = LiveMatchOrchestrator.getInstance();
+
+    // Services for on-the-fly ingestion
+    this.teamDataService = new TeamDataService();
+    this.competitionService = new CompetitionService();
+    this.matchSyncService = new MatchSyncService(this.teamDataService, this.competitionService);
   }
 
   /**
@@ -132,6 +145,33 @@ export class DataUpdateWorker {
   }
 
   /**
+   * Helper to map API match object to MatchSyncData
+   */
+  private mapToSyncData(match: any): MatchSyncData {
+    const homeScores = Array.isArray(match.home_scores) ? match.home_scores : [];
+    const awayScores = Array.isArray(match.away_scores) ? match.away_scores : [];
+
+    return {
+      external_id: String(match.id || match.match_id),
+      competition_id: match.competition_id,
+      season_id: match.season_id,
+      match_time: match.match_time as any,
+      status_id: Number(match.status_id ?? match.status ?? 1),
+      home_team_id: match.home_team_id,
+      away_team_id: match.away_team_id,
+      home_scores: homeScores,
+      away_scores: awayScores,
+      home_score_regular: homeScores[0] || match.home_score || null,
+      away_score_regular: awayScores[0] || match.away_score || null,
+      venue_id: match.venue_id || null,
+      referee_id: match.referee_id || null,
+      stage_id: match.stage_id || null,
+      round_num: match.round_num != null ? Number(match.round_num) : null,
+      group_num: match.group_num != null ? Number(match.group_num) : null,
+    };
+  }
+
+  /**
    * PHASE C: Reconcile match via LiveMatchOrchestrator
    *
    * Fetches match detail_live from API and sends updates to orchestrator
@@ -147,28 +187,50 @@ export class DataUpdateWorker {
 
       // Step 2: Extract fields from response
       const results = (resp as any).results || (resp as any).result_list;
-      if (!results || !Array.isArray(results)) {
-        logger.warn(`[DataUpdate.orchestrator] No results for match ${matchId}`);
-        return;
+
+      let matchData;
+
+      // Check if match exists in live results
+      if (results && Array.isArray(results)) {
+        matchData = results.find((m: any) => String(m?.id || m?.match_id) === String(matchId));
       }
 
-      const matchData = results.find((m: any) => String(m?.id || m?.match_id) === String(matchId));
+      // FALLBACK: If match not found in live results, check /match/detail (for finished matches)
+      // This is CRITICAL for DataUpdateWorker because it receives "changed" events for finished matches
+      // but those matches are immediately removed from detail_live by the provider
       if (!matchData) {
-        logger.warn(`[DataUpdate.orchestrator] Match ${matchId} not found in results`);
+        logger.info(`[DataUpdate.orchestrator] Match ${matchId} not in detail_live, checking /match/detail fallback...`);
+        const detailResp = await this.matchDetailLiveService.getMatchDetail(matchId);
+
+        // Check if detail response has valid data
+        const detailMatch = detailResp?.results || detailResp;
+
+        if (detailMatch && (String(detailMatch.id) === String(matchId) || String(detailMatch.match_id) === String(matchId))) {
+          matchData = detailMatch;
+          logger.info(`[DataUpdate.orchestrator] Found match ${matchId} in /match/detail fallback. Status: ${matchData.status_id}`);
+        }
+      }
+
+      if (!matchData) {
+        logger.warn(`[DataUpdate.orchestrator] Match ${matchId} not found in detail_live OR detail fallback`);
         return;
       }
 
-      // Step 3: Parse fields using extractLiveFields() for proper field extraction
+      // Step 3: Parse fields using extractLiveFields() behavior manually because extractLiveFields 
+      // is designed for detail_live response structure, but we might have a detail response.
+      // We will use manual extraction similar to MatchWatchdog to be safe and consistent.
+
       const updates: FieldUpdate[] = [];
       const now = Math.floor(Date.now() / 1000);
 
-      // CRITICAL FIX: Use extractLiveFields() to handle various API field name variations
-      const live = this.matchDetailLiveService.extractLiveFields(resp, matchId);
+      // Helper to determine status ID
+      let statusId = matchData.status_id;
+      if (Array.isArray(matchData.score) && matchData.score.length >= 2) {
+        statusId = matchData.score[1];
+      }
 
       // Parse score array: [home_score, status_id, [home_display, ...], [away_display, ...]]
       if (Array.isArray(matchData.score) && matchData.score.length >= 4) {
-        const homeScore = matchData.score[0];
-        const statusId = matchData.score[1];
         const homeScoreDisplay = Array.isArray(matchData.score[2]) ? matchData.score[2][0] : null;
         const awayScoreDisplay = Array.isArray(matchData.score[3]) ? matchData.score[3][0] : null;
 
@@ -178,7 +240,7 @@ export class DataUpdateWorker {
             value: homeScoreDisplay,
             source: 'api',
             priority: 2,
-            timestamp: live.updateTime || providerUpdateTime || now,
+            timestamp: matchData.update_time || providerUpdateTime || now,
           });
         }
 
@@ -188,31 +250,31 @@ export class DataUpdateWorker {
             value: awayScoreDisplay,
             source: 'api',
             priority: 2,
-            timestamp: live.updateTime || providerUpdateTime || now,
+            timestamp: matchData.update_time || providerUpdateTime || now,
           });
         }
-
-        if (statusId !== null && statusId !== undefined) {
-          updates.push({
-            field: 'status_id',
-            value: statusId,
-            source: 'api',
-            priority: 2,
-            timestamp: live.updateTime || providerUpdateTime || now,
-          });
+      } else {
+        // Try standard fields if score array not present (e.g. /match/detail format)
+        if (matchData.home_score !== undefined) {
+          updates.push({ field: 'home_score_display', value: matchData.home_score, source: 'api', priority: 2, timestamp: matchData.update_time || providerUpdateTime || now });
+        }
+        if (matchData.away_score !== undefined) {
+          updates.push({ field: 'away_score_display', value: matchData.away_score, source: 'api', priority: 2, timestamp: matchData.update_time || providerUpdateTime || now });
         }
       }
 
-      // REMOVED: API minute - per TheSports docs, minute should be calculated from kickoff
-      // Minute is now calculated by MatchMinuteWorker using the official formula:
-      // First half: (current_timestamp - first_half_kickoff) / 60 + 1
-      // Second half: (current_timestamp - second_half_kickoff) / 60 + 45 + 1
-      // Using API minute caused minute to jump backwards when API was delayed
+      if (statusId !== null && statusId !== undefined) {
+        updates.push({
+          field: 'status_id',
+          value: statusId,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time || providerUpdateTime || now,
+        });
+      }
 
-      // CRITICAL FIX: Provider timestamps from extractLiveFields()
-      // If API doesn't provide update_time, use current timestamp (ingestion time)
-      // The fact that we're processing this match means API returned fresh data
-      const effectiveUpdateTime = live.updateTime !== null ? live.updateTime : now;
+      // Provider timestamps
+      const effectiveUpdateTime = matchData.update_time || providerUpdateTime || now;
 
       updates.push({
         field: 'provider_update_time',
@@ -230,48 +292,43 @@ export class DataUpdateWorker {
         timestamp: effectiveUpdateTime,
       });
 
-      // CRITICAL FIX: Kickoff timestamps with fallback to current time
-      // When API doesn't provide liveKickoffTime, use current time as fallback
-      // This ensures minute calculation can proceed even with incomplete API data
-      if (Array.isArray(matchData.score) && matchData.score.length >= 2) {
-        const statusId = matchData.score[1];
+      // Kickoff timestamps
+      // Use API kickoff time if available (liveKickoffTime logic)
 
-        // Use API kickoff time if available, otherwise use current timestamp as fallback
-        // kick-off timestamp from provider (or null)
-        // CRITICAL FIX: Do NOT use 'now' as fallback. If API doesn't provide it, don't write it.
-        // Using 'now' corrupts the write-once field if API temporarily sends null.
-        const kickoffTime = live.liveKickoffTime;
+      let liveKickoffTime = null;
+      if (matchData.live_kickoff_time) liveKickoffTime = matchData.live_kickoff_time;
+      else if (matchData.liveKickoffTime) liveKickoffTime = matchData.liveKickoffTime;
+      else if (Array.isArray(matchData.score) && matchData.score.length >= 5) liveKickoffTime = matchData.score[4];
 
-        // First half (status 2): update first_half_kickoff_ts
-        if (statusId === 2 && kickoffTime !== null) {
+      if (statusId && liveKickoffTime) {
+        // First half (status 2)
+        if (statusId === 2) {
           updates.push({
             field: 'first_half_kickoff_ts',
-            value: kickoffTime,
+            value: liveKickoffTime,
             source: 'api',
             priority: 2,
-            timestamp: live.updateTime || providerUpdateTime || now,
+            timestamp: effectiveUpdateTime,
           });
         }
-
-        // Second half (status 4): update second_half_kickoff_ts
-        else if (statusId === 4 && kickoffTime !== null) {
+        // Second half (status 4)
+        else if (statusId === 4) {
           updates.push({
             field: 'second_half_kickoff_ts',
-            value: kickoffTime,
+            value: liveKickoffTime,
             source: 'api',
             priority: 2,
-            timestamp: live.updateTime || providerUpdateTime || now,
+            timestamp: effectiveUpdateTime,
           });
         }
-
-        // Overtime (status 5+): update overtime_kickoff_ts
-        else if (statusId >= 5 && kickoffTime !== null) {
+        // Overtime (status 5+)
+        else if (statusId >= 5) {
           updates.push({
             field: 'overtime_kickoff_ts',
-            value: kickoffTime,
+            value: liveKickoffTime,
             source: 'api',
             priority: 2,
-            timestamp: live.updateTime || providerUpdateTime || now,
+            timestamp: effectiveUpdateTime,
           });
         }
       }
@@ -291,7 +348,7 @@ export class DataUpdateWorker {
           logger.warn(`[DataUpdate.orchestrator] Rejected for ${matchId}: ${result.reason}`);
         }
 
-        return; // Return the status_id for post-match processing
+        return;
       }
     } catch (error: any) {
       logger.error(`[DataUpdate.orchestrator] Error for match ${matchId}:`, error);
@@ -375,9 +432,30 @@ export class DataUpdateWorker {
 
             if (exists.rows.length === 0) {
               logger.warn(
-                `[DataUpdate:${runId}] Changed match ${matchIdStr} NOT in DB. Skipping reconcile.`
+                `[DataUpdate:${runId}] Changed match ${matchIdStr} NOT in DB. Attempting on-the-fly ingestion...`
               );
-              continue;
+
+              // On-the-fly ingestion for missing match
+              try {
+                // Fetch full stats from detail fallback (which returns full match object)
+                const detailResp = await this.matchDetailLiveService.getMatchDetail(matchIdStr);
+                const detailMatch = detailResp?.results || detailResp;
+
+                if (detailMatch && (String(detailMatch.id) === String(matchIdStr) || String(detailMatch.match_id) === String(matchIdStr))) {
+                  logger.info(`[DataUpdate] Retrieved details for missing match ${matchIdStr}, syncing...`);
+                  const syncData = this.mapToSyncData(detailMatch);
+
+                  // Sync match (this will ensure teams/competition exist)
+                  await this.matchSyncService.syncMatch(syncData);
+                  logger.info(`[DataUpdate] ✅ Successfully ingested missing match ${matchIdStr}`);
+                } else {
+                  logger.warn(`[DataUpdate] Failed to retrieve details for missing match ${matchIdStr}, skipping.`);
+                  continue;
+                }
+              } catch (ingestError: any) {
+                logger.error(`[DataUpdate] Error ingesting missing match ${matchIdStr}:`, ingestError.message);
+                continue;
+              }
             }
 
             const t0 = Date.now();

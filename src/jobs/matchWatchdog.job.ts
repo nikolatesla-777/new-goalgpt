@@ -53,14 +53,31 @@ export class MatchWatchdogWorker {
 
       // Step 2: Extract fields from response
       const results = (resp as any).results || (resp as any).result_list;
-      if (!results || !Array.isArray(results)) {
-        logger.warn(`[Watchdog.orchestrator] No results for match ${matchId}`);
-        return {};
+
+      let matchData;
+
+      // Check if match exists in live results
+      if (results && Array.isArray(results)) {
+        matchData = results.find((m: any) => String(m?.id || m?.match_id) === String(matchId));
       }
 
-      const matchData = results.find((m: any) => String(m?.id || m?.match_id) === String(matchId));
+      // FALLBACK: If match not found in live results, check /match/detail (for finished matches)
       if (!matchData) {
-        logger.warn(`[Watchdog.orchestrator] Match ${matchId} not found in results`);
+        logger.info(`[Watchdog.orchestrator] Match ${matchId} not in detail_live, checking /match/detail fallback...`);
+        const detailResp = await this.matchDetailLiveService.getMatchDetail(matchId);
+
+        // Check if detail response has valid data
+        // detail endpoint usually returns the match object directly or wrapper
+        const detailMatch = detailResp?.results || detailResp;
+
+        if (detailMatch && (String(detailMatch.id) === String(matchId) || String(detailMatch.match_id) === String(matchId))) {
+          matchData = detailMatch;
+          logger.info(`[Watchdog.orchestrator] Found match ${matchId} in /match/detail fallback. Status: ${matchData.status_id}`);
+        }
+      }
+
+      if (!matchData) {
+        logger.warn(`[Watchdog.orchestrator] Match ${matchId} not found in detail_live OR detail fallback`);
         return {};
       }
 
@@ -68,9 +85,14 @@ export class MatchWatchdogWorker {
       const updates: FieldUpdate[] = [];
       const now = Math.floor(Date.now() / 1000);
 
+      // Helper to determine status ID safely
+      let statusId = matchData.status_id;
+      if (Array.isArray(matchData.score) && matchData.score.length >= 2) {
+        statusId = matchData.score[1];
+      }
+
       // Parse score array: [home_score, status_id, [home_display, ...], [away_display, ...]]
       if (Array.isArray(matchData.score) && matchData.score.length >= 4) {
-        const statusId = matchData.score[1];
         const homeScoreDisplay = Array.isArray(matchData.score[2]) ? matchData.score[2][0] : null;
         const awayScoreDisplay = Array.isArray(matchData.score[3]) ? matchData.score[3][0] : null;
 
@@ -93,16 +115,24 @@ export class MatchWatchdogWorker {
             timestamp: matchData.update_time || now,
           });
         }
-
-        if (statusId !== null && statusId !== undefined) {
-          updates.push({
-            field: 'status_id',
-            value: statusId,
-            source: 'api',
-            priority: 2,
-            timestamp: matchData.update_time || now,
-          });
+      } else {
+        // Try standard fields if score array not present (e.g. /match/detail format)
+        if (matchData.home_score !== undefined) {
+          updates.push({ field: 'home_score_display', value: matchData.home_score, source: 'api', priority: 2, timestamp: matchData.update_time || now });
         }
+        if (matchData.away_score !== undefined) {
+          updates.push({ field: 'away_score_display', value: matchData.away_score, source: 'api', priority: 2, timestamp: matchData.update_time || now });
+        }
+      }
+
+      if (statusId !== null && statusId !== undefined) {
+        updates.push({
+          field: 'status_id',
+          value: statusId,
+          source: 'api',
+          priority: 2,
+          timestamp: matchData.update_time || now,
+        });
       }
 
       // Minute (if available)

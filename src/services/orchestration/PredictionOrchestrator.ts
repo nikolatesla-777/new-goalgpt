@@ -118,7 +118,7 @@ export class PredictionOrchestrator extends EventEmitter {
         predictionId: prediction.id,
         externalId: prediction.external_id,
         botName: data.canonical_bot_name,
-        matchId: data.match_id || null,
+        matchId: data.match_id || '', // Empty string if not matched
         prediction: data.prediction,
         accessType: data.access_type || 'FREE',
         timestamp: Date.now(),
@@ -213,7 +213,7 @@ export class PredictionOrchestrator extends EventEmitter {
         UPDATE ai_predictions
         SET ${fields.join(', ')}
         WHERE id = $${paramIndex}
-        RETURNING id, external_id
+        RETURNING id, external_id, match_id
       `;
 
       const result = await pool.query(query, values);
@@ -225,9 +225,12 @@ export class PredictionOrchestrator extends EventEmitter {
         return { status: 'not_found' };
       }
 
+      const prediction = result.rows[0];
+
       // Emit event
       this.emit('prediction:updated', {
         predictionId,
+        matchId: prediction.match_id || '', // Empty string if not matched
         fields: Object.keys(updates),
         timestamp: Date.now(),
       } as PredictionUpdatedEvent);
@@ -281,7 +284,7 @@ export class PredictionOrchestrator extends EventEmitter {
       }
 
       const result = await pool.query(
-        'DELETE FROM ai_predictions WHERE id = $1 RETURNING external_id',
+        'DELETE FROM ai_predictions WHERE id = $1 RETURNING external_id, match_id',
         [predictionId]
       );
 
@@ -292,8 +295,11 @@ export class PredictionOrchestrator extends EventEmitter {
         return { status: 'not_found' };
       }
 
+      const prediction = result.rows[0];
+
       this.emit('prediction:deleted', {
         predictionId,
+        matchId: prediction.match_id || '', // Empty string if not matched
         timestamp: Date.now(),
       } as PredictionDeletedEvent);
 

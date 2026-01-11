@@ -18,10 +18,13 @@ export interface PredictionCreatedEvent extends PredictionEvent {
 }
 
 export interface PredictionUpdatedEvent extends PredictionEvent {
+  matchId: string | null;
   fields: string[];
 }
 
-export interface PredictionDeletedEvent extends PredictionEvent {}
+export interface PredictionDeletedEvent extends PredictionEvent {
+  matchId: string | null;
+}
 
 export interface PredictionCreateData {
   external_id: string;

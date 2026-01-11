@@ -220,7 +220,7 @@ const start = async () => {
           type: 'PREDICTION_CREATED',
           predictionId: event.predictionId,
           botName: event.botName,
-          matchId: event.matchId,
+          matchId: event.matchId || '', // Handle null matchId
           prediction: event.prediction,
           accessType: event.accessType,
           timestamp: event.timestamp,
@@ -236,6 +236,7 @@ const start = async () => {
         const { broadcastEvent } = await import('./routes/websocket.routes');
         broadcastEvent({
           type: 'PREDICTION_UPDATED',
+          matchId: event.matchId || '', // Handle null matchId
           predictionId: event.predictionId,
           fields: event.fields,
           timestamp: event.timestamp,
@@ -251,6 +252,7 @@ const start = async () => {
         const { broadcastEvent } = await import('./routes/websocket.routes');
         broadcastEvent({
           type: 'PREDICTION_DELETED',
+          matchId: event.matchId || '', // Handle null matchId
           predictionId: event.predictionId,
           timestamp: event.timestamp,
         });

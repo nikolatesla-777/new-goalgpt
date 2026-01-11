@@ -1415,28 +1415,19 @@ export const getMatchLiveStats = async (
       });
       return;
     }
-    home: s.home,
-      away: s.away,
-        name: STAT_NAMES[s.type]?.name || `Stat ${s.type}`,
-          nameTr: STAT_NAMES[s.type]?.nameTr || `İstatistik ${s.type}`,
-            source: 'basic'
-  }));
 
-  result = {
-    matchId: match_id,
-    allStats,
-    basicStats: allStats,
-    detailedStats: [],
-    incidents: matchData.incidents || [],
-    score: matchData.score || null,
-  };
-} else {
-  result = { matchId: match_id, allStats: [], basicStats: [], detailedStats: [], incidents: [], score: null };
-      }
-    } catch (err: any) {
-  logger.warn(`[MatchController] Fast fetch error for ${match_id}: ${err.message}`);
-  result = { matchId: match_id, allStats: [], basicStats: [], detailedStats: [], incidents: [], score: null };
-}
+    // Fallback: If API failed, create empty result structure
+    logger.warn(`[MatchController] No live data available for ${match_id}, using empty fallback`);
+    result = {
+      matchId: match_id,
+      match_status: matchStatus,
+      allStats: [],
+      basicStats: [],
+      detailedStats: [],
+      incidents: [],
+      score: null,
+      halfTimeStats: null,
+    };
 
 // CRITICAL: Save first half stats when match reaches HALF_TIME
 if (isHalfTime && result && result.allStats.length > 0 && !firstHalfStats) {

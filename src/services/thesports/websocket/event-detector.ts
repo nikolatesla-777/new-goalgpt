@@ -85,7 +85,32 @@ export interface MinuteUpdateEvent {
   timestamp: number;
 }
 
-export type MatchEvent = GoalEvent | CardEvent | SubstitutionEvent | GoalCancelledEvent | ScoreChangeEvent | DangerAlertEvent | MatchStateChangeEvent | MinuteUpdateEvent;
+export interface PredictionCreatedEvent {
+  type: 'PREDICTION_CREATED';
+  predictionId: string;
+  botName: string;
+  matchId: string; // Empty string if not matched yet
+  prediction: string;
+  accessType: 'VIP' | 'FREE';
+  timestamp: number;
+}
+
+export interface PredictionUpdatedEvent {
+  type: 'PREDICTION_UPDATED';
+  matchId: string;
+  predictionId: string;
+  fields: string[];
+  timestamp: number;
+}
+
+export interface PredictionDeletedEvent {
+  type: 'PREDICTION_DELETED';
+  matchId: string;
+  predictionId: string;
+  timestamp: number;
+}
+
+export type MatchEvent = GoalEvent | CardEvent | SubstitutionEvent | GoalCancelledEvent | ScoreChangeEvent | DangerAlertEvent | MatchStateChangeEvent | MinuteUpdateEvent | PredictionCreatedEvent | PredictionUpdatedEvent | PredictionDeletedEvent;
 
 export class EventDetector {
   private processedEvents = new Map<string, number>(); // Event ID -> timestamp
