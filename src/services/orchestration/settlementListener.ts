@@ -132,8 +132,8 @@ export class OrchestratorSettlementListener {
           away_score_display,
           minute,
           status_id,
-          ht_home,
-          ht_away
+          (home_scores->>1)::INTEGER as ht_home,
+          (away_scores->>1)::INTEGER as ht_away
         FROM ts_matches
         WHERE external_id = $1
       `, [matchId]);
