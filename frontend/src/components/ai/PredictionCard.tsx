@@ -87,7 +87,6 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
     const currentMinute = getCurrentMinute();
     // Phase 5: Use live_match_status
     const isLive = (prediction.live_match_status || 0) >= 2 && (prediction.live_match_status || 0) <= 7;
-    const isFinished = prediction.live_match_status === 8;
 
     // Match Status Badge - Professional UI/UX
     const getMatchStatusBadge = () => {
