@@ -99,11 +99,10 @@ export class LiveMatchOrchestrator extends EventEmitter {
     // API minute can be stale/delayed, causing minute to jump backwards
     minute: { source: 'computed', fallback: 'api', nullable: true },
 
-    // Critical timestamps: Write-once (never overwrite once set)
-    // Source: 'api' ensures we trust the provider's timestamp when it arrives
-    first_half_kickoff_ts: { source: 'api', writeOnce: true, nullable: true },
-    second_half_kickoff_ts: { source: 'api', writeOnce: true, nullable: true },
-    overtime_kickoff_ts: { source: 'api', writeOnce: true, nullable: true },
+    // Critical timestamps: Write-once (never overwrite)
+    first_half_kickoff_ts: { writeOnce: true, nullable: true },
+    second_half_kickoff_ts: { writeOnce: true, nullable: true },
+    overtime_kickoff_ts: { writeOnce: true, nullable: true },
 
     // Provider data: API only, watchdog can update last_event_ts for anomaly recovery
     provider_update_time: { source: 'api', nullable: true },

@@ -237,13 +237,10 @@ export class DataUpdateWorker {
         const statusId = matchData.score[1];
 
         // Use API kickoff time if available, otherwise use current timestamp as fallback
-        // kick-off timestamp from provider (or null)
-        // CRITICAL FIX: Do NOT use 'now' as fallback. If API doesn't provide it, don't write it.
-        // Using 'now' corrupts the write-once field if API temporarily sends null.
-        const kickoffTime = live.liveKickoffTime;
+        const kickoffTime = live.liveKickoffTime !== null ? live.liveKickoffTime : now;
 
         // First half (status 2): update first_half_kickoff_ts
-        if (statusId === 2 && kickoffTime !== null) {
+        if (statusId === 2) {
           updates.push({
             field: 'first_half_kickoff_ts',
             value: kickoffTime,
@@ -251,10 +248,12 @@ export class DataUpdateWorker {
             priority: 2,
             timestamp: live.updateTime || providerUpdateTime || now,
           });
+          if (live.liveKickoffTime === null) {
+            logger.warn(`[DataUpdate.orchestrator] Using fallback kickoff time (now) for first_half of ${matchId}`);
+          }
         }
-
         // Second half (status 4): update second_half_kickoff_ts
-        else if (statusId === 4 && kickoffTime !== null) {
+        else if (statusId === 4) {
           updates.push({
             field: 'second_half_kickoff_ts',
             value: kickoffTime,
@@ -262,10 +261,12 @@ export class DataUpdateWorker {
             priority: 2,
             timestamp: live.updateTime || providerUpdateTime || now,
           });
+          if (live.liveKickoffTime === null) {
+            logger.warn(`[DataUpdate.orchestrator] Using fallback kickoff time (now) for second_half of ${matchId}`);
+          }
         }
-
         // Overtime (status 5+): update overtime_kickoff_ts
-        else if (statusId >= 5 && kickoffTime !== null) {
+        else if (statusId >= 5) {
           updates.push({
             field: 'overtime_kickoff_ts',
             value: kickoffTime,
@@ -273,6 +274,9 @@ export class DataUpdateWorker {
             priority: 2,
             timestamp: live.updateTime || providerUpdateTime || now,
           });
+          if (live.liveKickoffTime === null) {
+            logger.warn(`[DataUpdate.orchestrator] Using fallback kickoff time (now) for overtime of ${matchId}`);
+          }
         }
       }
 
