@@ -45,16 +45,26 @@ export class SeasonStandingsService {
 
             // Find the standings for this specific season
             if (liveResponse.results && Array.isArray(liveResponse.results)) {
+                // CRITICAL FIX: Log all returned season IDs for debugging
+                const returnedSeasonIds = liveResponse.results.map((r: any) => r.season_id);
+                logger.info(`/table/live returned ${liveResponse.results.length} seasons: ${returnedSeasonIds.join(', ')}`);
+
                 const seasonStandings = liveResponse.results.find(
                     (r: any) => r.season_id === season_id
                 );
-                
+
                 if (seasonStandings && seasonStandings.tables && seasonStandings.tables.length > 0) {
                     // Parse standings
                     standings = this.parseTableLiveResponse(seasonStandings);
-                    
+
                     // Save raw to database (without team names - we'll enrich on read)
                     await this.saveStandingsToDb(season_id, standings, liveResponse);
+                    logger.info(`✅ Found matching standings for season ${season_id}: ${standings.length} teams`);
+                } else {
+                    // CRITICAL FIX: API returned data but for DIFFERENT seasons
+                    // This happens for minor leagues where API doesn't have standings
+                    logger.warn(`⚠️ /table/live returned data for seasons [${returnedSeasonIds.join(', ')}] but NOT for requested season ${season_id}`);
+                    // DO NOT cache wrong data - leave standings empty
                 }
             }
         } catch (error: any) {
@@ -65,7 +75,7 @@ export class SeasonStandingsService {
         if (standings.length === 0) {
             logger.info(`Fetching standings from DB for season: ${season_id}`);
             const dbStandings = await this.getStandingsFromDb(season_id);
-            
+
             if (dbStandings && dbStandings.standings && Array.isArray(dbStandings.standings)) {
                 standings = dbStandings.standings;
             }
@@ -74,7 +84,7 @@ export class SeasonStandingsService {
         // 4. Enrich with team names from ts_teams table
         if (standings.length > 0) {
             standings = await this.enrichWithTeamNames(standings);
-            
+
             const response: any = { code: 0, results: standings };
             await cacheService.set(cacheKey, response, CacheTTL.FiveMinutes);
             return response;
@@ -125,14 +135,14 @@ export class SeasonStandingsService {
      */
     private parseTableLiveResponse(seasonData: any): any[] {
         const result: any[] = [];
-        
+
         if (!seasonData.tables || !Array.isArray(seasonData.tables)) {
             return result;
         }
 
         for (const table of seasonData.tables) {
             if (!table.rows || !Array.isArray(table.rows)) continue;
-            
+
             for (const row of table.rows) {
                 result.push({
                     position: row.position,
@@ -164,10 +174,10 @@ export class SeasonStandingsService {
                 });
             }
         }
-        
+
         // Sort by position
         result.sort((a, b) => a.position - b.position);
-        
+
         return result;
     }
 
@@ -185,7 +195,7 @@ export class SeasonStandingsService {
                     raw_response = EXCLUDED.raw_response,
                     updated_at = NOW()
             `, [seasonId, JSON.stringify(standings), JSON.stringify(rawResponse)]);
-            
+
             logger.info(`✅ Saved standings for season ${seasonId}: ${standings.length} teams`);
         } finally {
             client.release();
