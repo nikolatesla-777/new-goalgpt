@@ -7,7 +7,7 @@
  * - No more 50-second wait for ALL data!
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   getMatchById,
@@ -218,10 +218,22 @@ export function MatchDetailPage() {
     loadTabData();
   }, [activeTab, matchId, match, h2h, standings, lineup, trend, ai]);
 
-  // WebSocket for real-time score updates
+  // Track last score update timestamp to prevent stale updates
+  const lastScoreUpdateRef = useRef<number>(0);
+
+  // WebSocket for real-time score updates with timestamp validation
   useMatchSocket(matchId || '', {
     onScoreChange: (event) => {
       if (!match) return;
+
+      // CRITICAL: Only apply update if it's newer than the last one
+      // This prevents stale WebSocket events from overwriting current scores
+      if (event.timestamp && event.timestamp <= lastScoreUpdateRef.current) {
+        console.log(`[MatchDetail] Ignoring stale score update: ${event.homeScore}-${event.awayScore} (ts=${event.timestamp}, lastTs=${lastScoreUpdateRef.current})`);
+        return;
+      }
+
+      lastScoreUpdateRef.current = event.timestamp || Date.now();
       setMatch(prev => prev ? {
         ...prev,
         home_score: event.homeScore,
