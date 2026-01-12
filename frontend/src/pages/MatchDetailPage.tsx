@@ -145,13 +145,26 @@ export function MatchDetailPage() {
   useEffect(() => {
     if (!matchId || !match) return;
 
+    // Helper function to wrap API calls with timeout
+    const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T | null> => {
+      const timeoutPromise = new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs)
+      );
+      try {
+        return await Promise.race([promise, timeoutPromise]) as T;
+      } catch (err: any) {
+        console.error(`[MatchDetail] Request timed out: ${err.message}`);
+        return null;
+      }
+    };
+
     const loadTabData = async () => {
       try {
         switch (activeTab) {
           case 'h2h':
             if (!h2h) {
               setTabLoading(prev => ({ ...prev, h2h: true }));
-              const data = await getMatchH2H(matchId);
+              const data = await withTimeout(getMatchH2H(matchId));
               setH2h(data);
               setTabLoading(prev => ({ ...prev, h2h: false }));
             }
@@ -160,7 +173,7 @@ export function MatchDetailPage() {
           case 'standings':
             if (!standings && match.season_id) {
               setTabLoading(prev => ({ ...prev, standings: true }));
-              const data = await getSeasonStandings(match.season_id);
+              const data = await withTimeout(getSeasonStandings(match.season_id));
               setStandings(data);
               setTabLoading(prev => ({ ...prev, standings: false }));
             }
@@ -169,7 +182,8 @@ export function MatchDetailPage() {
           case 'lineup':
             if (!lineup) {
               setTabLoading(prev => ({ ...prev, lineup: true }));
-              const data = await getMatchLineup(matchId);
+              // CRITICAL: Add 10s timeout to prevent infinite loading
+              const data = await withTimeout(getMatchLineup(matchId), 10000);
               setLineup(data);
               setTabLoading(prev => ({ ...prev, lineup: false }));
             }
@@ -178,7 +192,8 @@ export function MatchDetailPage() {
           case 'trend':
             if (!trend) {
               setTabLoading(prev => ({ ...prev, trend: true }));
-              const data = await getMatchTrend(matchId);
+              // CRITICAL: Add 10s timeout to prevent infinite loading
+              const data = await withTimeout(getMatchTrend(matchId), 10000);
               setTrend(data);
               setTabLoading(prev => ({ ...prev, trend: false }));
             }
