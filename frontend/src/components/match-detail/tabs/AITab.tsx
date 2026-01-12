@@ -71,6 +71,16 @@ export function AITab({ match }: AITabProps) {
     }] as Prediction[];
   }, [aiPrediction, match.id]);
 
+  // Show loading spinner while fetching
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-12 text-center">
+        <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+        <p className="text-gray-600">AI tahminleri yükleniyor...</p>
+      </div>
+    );
+  }
+
   if (predictions.length === 0) {
     return (
       <div className="bg-gradient-to-br from-white via-gray-50 to-white rounded-2xl p-12 text-center border border-gray-200/50 shadow-lg">
