@@ -5,17 +5,42 @@
  * Now receives data via props (no Context).
  */
 
+import { UsersThree, Question } from '@phosphor-icons/react';
+
 interface H2HTabProps {
   data: any;
   match: any;
 }
 
-export function H2HTab({ data }: H2HTabProps) {
-
+export function H2HTab({ data, match }: H2HTabProps) {
+  // Enhanced empty state with team info
   if (!data) {
+    const homeTeamName = match?.home_team?.name || 'Ev Sahibi';
+    const awayTeamName = match?.away_team?.name || 'Deplasman';
+
     return (
-      <div className="text-center p-8 md:p-10 text-gray-600 bg-white rounded-xl">
-        H2H verisi bulunamadı
+      <div className="bg-gradient-to-br from-white via-gray-50 to-white rounded-2xl p-8 md:p-12 text-center border border-gray-200/50 shadow-lg">
+        <div className="flex flex-col items-center justify-center">
+          <div className="relative mb-6">
+            <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-indigo-200 rounded-3xl flex items-center justify-center shadow-inner">
+              <UsersThree size={40} weight="duotone" className="text-indigo-500" />
+            </div>
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gray-400 rounded-full border-4 border-white flex items-center justify-center">
+              <Question size={12} weight="bold" className="text-white" />
+            </div>
+          </div>
+          <h3 className="text-xl font-bold text-gray-800 mb-3">
+            Karşılıklı Maç Geçmişi Bulunamadı
+          </h3>
+          <p className="text-gray-600 max-w-md mx-auto leading-relaxed mb-4">
+            <span className="font-semibold text-blue-600">{homeTeamName}</span> ve{' '}
+            <span className="font-semibold text-red-500">{awayTeamName}</span> takımları
+            arasında daha önce kayıtlı bir karşılaşma bulunmuyor.
+          </p>
+          <div className="bg-gray-100 rounded-lg px-4 py-2 text-xs text-gray-500">
+            Bu takımlar ilk kez karşılaşıyor olabilir veya veriler henüz yüklenmemiş olabilir.
+          </div>
+        </div>
       </div>
     );
   }
@@ -64,12 +89,7 @@ export function H2HTab({ data }: H2HTabProps) {
         </div>
       )}
 
-      {/* If no data at all */}
-      {!summary && h2hMatches.length === 0 && (
-        <div className="text-center p-8 sm:p-10 text-gray-600 bg-white rounded-xl">
-          H2H verisi bulunamadı
-        </div>
-      )}
+      {/* Note: If !data is true, the enhanced empty state above is shown instead */}
     </div>
   );
 }
