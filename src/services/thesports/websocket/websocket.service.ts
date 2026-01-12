@@ -134,6 +134,40 @@ export class WebSocketService {
               parsedScore.away.score
             );
 
+            // ===== FIX 2: STATUS-MINUTE ANOMALY DETECTION =====
+            // CRITICAL: If status=3 (HT) but minute > 55, MQTT status is STALE
+            // HT normally lasts 10-15 minutes, so minute > 55 means match is actually in 2H
+            // Force transition to SECOND_HALF (4) to prevent stuck HT state
+            const minute = parsedScore.minute;
+            const statusId = parsedScore.statusId;
+
+            if (statusId === 3 && minute && minute > 55) {
+              logger.warn(`[WebSocket] 🚨 ANOMALY DETECTED: status=3 (HT) but minute=${minute}. Forcing 2H transition for ${parsedScore.matchId}`);
+
+              const correctedStatus = 4; // SECOND_HALF
+              await this.updateMatchStatusInDatabase(parsedScore.matchId, correctedStatus, providerUpdateTime);
+
+              // Update local state as well
+              this.handleMatchStateTransition(
+                parsedScore.matchId,
+                correctedStatus,
+                parsedScore.home.score,
+                parsedScore.away.score
+              );
+
+              // Emit corrected event
+              this.emitEvent({
+                type: 'MATCH_STATE_CHANGE',
+                matchId: parsedScore.matchId,
+                statusId: correctedStatus,
+                timestamp: Date.now(),
+              } as any, mqttReceivedTs);
+
+              // Skip normal status change handling since we already corrected it
+              continue;
+            }
+            // ===== END FIX 2 =====
+
             // If status changed (and we had a previous state), persist to DB + notify frontend
             if (statusChanged) {
               await this.updateMatchStatusInDatabase(parsedScore.matchId, parsedScore.statusId, providerUpdateTime);
@@ -473,19 +507,53 @@ export class WebSocketService {
 
     const getDataStr = (entry: any) => String(entry?.data ?? '').toLowerCase();
 
-    // Check for HALF_TIME
+    // Check for HALF_TIME - MULTI-LANGUAGE SUPPORT
     const halfTimeEntry = recent.find((e) => {
       const dataStr = getDataStr(e);
-      return dataStr.includes('half time') || dataStr.includes('halftime') || dataStr.includes('ht') || dataStr.includes('devre arası') || dataStr.includes('devre arasi');
+      return dataStr.includes('half time') ||
+        dataStr.includes('halftime') ||
+        dataStr.includes('ht') ||
+        dataStr.includes('devre arası') ||
+        dataStr.includes('devre arasi') ||
+        // Spanish
+        dataStr.includes('medio tiempo') ||
+        dataStr.includes('descanso') ||
+        dataStr.includes('entretiempo') ||
+        // Portuguese
+        dataStr.includes('intervalo') ||
+        // French
+        dataStr.includes('mi-temps') ||
+        // German
+        dataStr.includes('halbzeit') ||
+        // Italian
+        dataStr.includes('primo tempo') ||
+        dataStr.includes('intervallo');
     });
     if (halfTimeEntry) {
       logger.info(`[WebSocket/TLIVE] HALF_TIME detected from tlive: ${JSON.stringify(halfTimeEntry)}`);
       return MatchState.HALF_TIME as unknown as number;
     }
 
+    // Check for SECOND_HALF - MULTI-LANGUAGE SUPPORT
     if (recent.some((e) => {
       const dataStr = getDataStr(e);
-      return dataStr.includes('second half') || dataStr.includes('2nd half') || dataStr.includes('2h') || dataStr.includes('ikinci yarı') || dataStr.includes('ikinci yari');
+      return dataStr.includes('second half') ||
+        dataStr.includes('2nd half') ||
+        dataStr.includes('2h') ||
+        dataStr.includes('ikinci yarı') ||
+        dataStr.includes('ikinci yari') ||
+        // Spanish
+        dataStr.includes('segundo tiempo') ||
+        dataStr.includes('segunda parte') ||
+        // Portuguese
+        dataStr.includes('segundo tempo') ||
+        // French
+        dataStr.includes('deuxième mi-temps') ||
+        dataStr.includes('2eme mi-temps') ||
+        // German
+        dataStr.includes('zweite halbzeit') ||
+        // Italian
+        dataStr.includes('secondo tempo');
     })) {
       return MatchState.SECOND_HALF as unknown as number;
     }
@@ -493,7 +561,7 @@ export class WebSocketService {
     // Check for FINAL WHISTLE / MATCH END indicators
     if (recent.some((e) => {
       const dataStr = getDataStr(e);
-      // CRITICAL FIX: Robust keywords for match ending
+      // CRITICAL FIX: Robust keywords for match ending - MULTI-LANGUAGE
       return dataStr.includes('full time') ||
         dataStr.includes('fulltime') ||
         dataStr.includes('final whistle') ||
@@ -502,11 +570,25 @@ export class WebSocketService {
         dataStr.includes('maç bitti') ||
         dataStr.includes('mac bitti') ||
         dataStr.includes('maç sona erdi') ||
-        dataStr.includes('ended') ||       // "Ended" is usually safe if it's the main verb
+        dataStr.includes('ended') ||
         dataStr === 'ft' ||
         dataStr.startsWith('ft ') ||
         dataStr.endsWith(' ft') ||
-        dataStr.includes(' ft ');
+        dataStr.includes(' ft ') ||
+        // Spanish
+        dataStr.includes('fin del partido') ||
+        dataStr.includes('final del partido') ||
+        dataStr.includes('tiempo completo') ||
+        // Portuguese
+        dataStr.includes('fim de jogo') ||
+        dataStr.includes('final do jogo') ||
+        // French
+        dataStr.includes('fin du match') ||
+        // German
+        dataStr.includes('spielende') ||
+        dataStr.includes('abpfiff') ||
+        // Italian
+        dataStr.includes('fine partita');
     })) {
       // DOUBLE CHECK: Ensure it's not "First Half Ended" or "Second Half Started"
       const isFalsePositive = recent.some(e => {
