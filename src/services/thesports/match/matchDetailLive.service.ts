@@ -598,69 +598,94 @@ export class MatchDetailLiveService {
           );
         }
 
-        // If apiMatch exists but missing team names (common in reduced bandwidth feeds), fetch full details
-        if (apiMatch && (!apiMatch.home_team || !apiMatch.away_team || !apiMatch.competition)) {
-          logger.info(`[DetailLive] Match ${match_id} in live feed but missing metadata. Fetching full details from /match/detail...`);
+        // ===== ENHANCED METADATA RESOLUTION FOR MINOR LEAGUES =====
+        // Minor leagues (India, Indonesia, etc.) don't return home_team/away_team/competition objects.
+        // We need to extract IDs from the score array and look them up in our database.
+
+        let homeTeamId: string | null = null;
+        let awayTeamId: string | null = null;
+        let competitionId: string | null = null;
+        let matchTime: number = Math.floor(Date.now() / 1000);
+        let statusId: number = live.statusId || 1;
+
+        if (apiMatch) {
+          // Try to get IDs from various sources
+          homeTeamId = apiMatch.home_team?.id || apiMatch.home_team_id || null;
+          awayTeamId = apiMatch.away_team?.id || apiMatch.away_team_id || null;
+          competitionId = apiMatch.competition?.id || apiMatch.competition_id || null;
+          matchTime = apiMatch.match_time || matchTime;
+          statusId = live.statusId || apiMatch.status_id || (Array.isArray(apiMatch.score) ? apiMatch.score[1] : 1);
+        }
+
+        // If still missing metadata, try fetching from /match/detail
+        if (!homeTeamId || !awayTeamId || !competitionId) {
+          logger.info(`[DetailLive] Match ${match_id} missing metadata (home=${homeTeamId}, away=${awayTeamId}, comp=${competitionId}). Fetching from /match/detail...`);
           try {
-            // Fetch full details to get names and league
             const detailResp = await this.getMatchDetail(match_id);
-            // detailResp might be the match object itself or wrapped in results
             const detailMatch = (detailResp as any)?.results || detailResp;
 
-            if (detailMatch && (detailMatch.home_team || detailMatch.home_team_id)) {
-              // Merge details into apiMatch
-              apiMatch = { ...apiMatch, ...detailMatch };
-              logger.info(`[DetailLive] Fetched metadata for ${match_id}: ${apiMatch.home_team?.name} vs ${apiMatch.away_team?.name}`);
+            if (detailMatch) {
+              homeTeamId = homeTeamId || detailMatch.home_team?.id || detailMatch.home_team_id;
+              awayTeamId = awayTeamId || detailMatch.away_team?.id || detailMatch.away_team_id;
+              competitionId = competitionId || detailMatch.competition?.id || detailMatch.competition_id;
+              matchTime = detailMatch.match_time || matchTime;
+              logger.info(`[DetailLive] Got metadata from /match/detail: home=${homeTeamId}, away=${awayTeamId}, comp=${competitionId}`);
             }
           } catch (fetchErr: any) {
-            logger.warn(`[DetailLive] Failed to fetch details for ${match_id}: ${fetchErr.message}`);
+            logger.warn(`[DetailLive] Failed to fetch /match/detail for ${match_id}: ${fetchErr.message}`);
           }
         }
 
-        // Only attempt insert if we have valid match data from API
-        if (apiMatch && apiMatch.home_team && apiMatch.away_team && apiMatch.competition) {
-          logger.info(`[DetailLive] Match ${match_id} not found in DB. Auto-inserting missing live match...`);
+        // Validate we have minimum required data for insert
+        if (homeTeamId && awayTeamId) {
+          logger.info(`[DetailLive] Match ${match_id} not found in DB. Auto-inserting with home=${homeTeamId}, away=${awayTeamId}, comp=${competitionId}...`);
 
           try {
-            // INSERT queries usually require Teams/Competition to exist. 
-            // We use ON CONFLICT DO NOTHING to avoid race conditions.
+            // Use simplified INSERT that matches actual ts_matches schema
+            // Note: ts_matches does NOT have home_team_name/away_team_name columns
             const insertRes = await client.query(`
                INSERT INTO ts_matches (
                  external_id, home_team_id, away_team_id, competition_id, 
-                 match_time, status_id, home_team_name, away_team_name, 
-                 home_score_display, away_score_display, created_at, updated_at
+                 match_time, status_id, 
+                 home_score_regular, away_score_regular,
+                 created_at, updated_at
                ) VALUES (
                  $1, $2, $3, $4, 
-                 $5, $6, $7, $8, 
-                 $9, $10, NOW(), NOW()
+                 $5, $6,
+                 $7, $8,
+                 NOW(), NOW()
                )
-               ON CONFLICT (external_id) DO UPDATE SET updated_at = NOW()
-               RETURNING *
+               ON CONFLICT (external_id) DO UPDATE SET 
+                 status_id = EXCLUDED.status_id,
+                 home_score_regular = EXCLUDED.home_score_regular,
+                 away_score_regular = EXCLUDED.away_score_regular,
+                 updated_at = NOW()
+               RETURNING external_id
              `, [
               match_id,
-              apiMatch.home_team.id,
-              apiMatch.away_team.id,
-              apiMatch.competition.id,
-              apiMatch.match_time || Math.floor(Date.now() / 1000),
-              live.statusId || apiMatch.status_id || 1,
-              apiMatch.home_team.name,
-              apiMatch.away_team.name,
+              homeTeamId,
+              awayTeamId,
+              competitionId || null, // Competition can be null for obscure leagues
+              matchTime,
+              statusId,
               live.homeScoreDisplay ?? 0,
               live.awayScoreDisplay ?? 0
             ]);
 
             if (insertRes.rowCount != null && insertRes.rowCount > 0) {
-              logger.info(`[DetailLive] ✅ Successfully auto-inserted match ${match_id}`);
-              return { updated: true, rowCount: 1, statusId: live.statusId, score: null, providerUpdateTime: null };
+              logger.info(`[DetailLive] ✅ Successfully auto-inserted match ${match_id} (home=${homeTeamId}, away=${awayTeamId})`);
+              return { updated: true, rowCount: 1, statusId: statusId, score: null, providerUpdateTime: null };
             }
           } catch (err: any) {
-            logger.error(`[DetailLive] Failed to auto-insert match ${match_id}: ${err.message}`);
-            // If FK failure, it means Team or Competition is missing. We can't fix that easily here without a deep sync.
+            // Log detailed error for debugging
+            logger.error(`[DetailLive] Failed to auto-insert match ${match_id}: ${err.message}. Home=${homeTeamId}, Away=${awayTeamId}, Comp=${competitionId}`);
             return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
           }
+        } else {
+          logger.warn(`[DetailLive] Match ${match_id} not found in DB, and could not resolve team IDs (home=${homeTeamId}, away=${awayTeamId}). Skipping auto-insert.`);
         }
+        // ===== END ENHANCED METADATA RESOLUTION =====
 
-        logger.warn(`Match ${match_id} not found in DB during reconcile and API data invalid for auto-insert`);
         return { updated: false, rowCount: 0, statusId: live.statusId, score: null, providerUpdateTime: null };
       }
 
