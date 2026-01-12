@@ -624,7 +624,8 @@ export class MatchDetailLiveService {
             const detailResp = await this.getMatchDetail(match_id);
             const detailMatch = (detailResp as any)?.results || detailResp;
 
-            if (detailMatch) {
+            // Check if we got valid data (not an error response)
+            if (detailMatch && !detailMatch.err) {
               homeTeamId = homeTeamId || detailMatch.home_team?.id || detailMatch.home_team_id;
               awayTeamId = awayTeamId || detailMatch.away_team?.id || detailMatch.away_team_id;
               competitionId = competitionId || detailMatch.competition?.id || detailMatch.competition_id;
@@ -633,6 +634,35 @@ export class MatchDetailLiveService {
             }
           } catch (fetchErr: any) {
             logger.warn(`[DetailLive] Failed to fetch /match/detail for ${match_id}: ${fetchErr.message}`);
+          }
+        }
+
+        // CRITICAL FIX: If /match/detail failed or returned empty, try /match/diary as last resort
+        // /match/diary is the ONLY reliable source for minor league team IDs (India, Indonesia, etc.)
+        if (!homeTeamId || !awayTeamId) {
+          logger.info(`[DetailLive] Match ${match_id} still missing team IDs after /match/detail. Trying /match/diary...`);
+          try {
+            // Get today's date in YYYYMMDD format
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const diaryResp = await this.client.get<any>('/match/diary', { date: today });
+            const diaryResults = diaryResp?.results || [];
+
+            const diaryMatch = diaryResults.find((m: any) =>
+              String(m?.id) === String(match_id)
+            );
+
+            if (diaryMatch) {
+              homeTeamId = homeTeamId || diaryMatch.home_team_id;
+              awayTeamId = awayTeamId || diaryMatch.away_team_id;
+              competitionId = competitionId || diaryMatch.competition_id;
+              matchTime = diaryMatch.match_time || matchTime;
+              statusId = diaryMatch.status_id || statusId;
+              logger.info(`[DetailLive] ✅ Got metadata from /match/diary: home=${homeTeamId}, away=${awayTeamId}, comp=${competitionId}`);
+            } else {
+              logger.warn(`[DetailLive] Match ${match_id} not found in /match/diary for date ${today}`);
+            }
+          } catch (diaryErr: any) {
+            logger.warn(`[DetailLive] Failed to fetch /match/diary: ${diaryErr.message}`);
           }
         }
 
