@@ -23,11 +23,13 @@ import { predictionRoutes } from './routes/prediction.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
 import websocketRoutes from './routes/websocket.routes';
 import metricsRoutes from './routes/metrics.routes';
+import { authRoutes } from './routes/auth.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
 import { config } from './config';
 import { WebSocketService } from './services/thesports/websocket/websocket.service';
+import { initializeFirebase } from './config/firebase.config';
 import { theSportsAPI } from './core/TheSportsAPIManager'; // Phase 3A: Singleton migration
 import { MatchWatchdogWorker } from './jobs/matchWatchdog.job';
 import { MatchDetailLiveService } from './services/thesports/match/matchDetailLive.service';
@@ -78,6 +80,7 @@ fastify.register(dashboardRoutes);
 fastify.register(healthRoutes, { prefix: '/api' });
 fastify.register(websocketRoutes); // WebSocket route: /ws
 fastify.register(metricsRoutes, { prefix: '/api/metrics' }); // Metrics routes
+fastify.register(authRoutes, { prefix: '/api/auth' }); // Phase 2: Authentication routes
 
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
@@ -99,6 +102,18 @@ const HOST = '0.0.0.0';
 
 const start = async () => {
   try {
+    // Phase 2: Initialize Firebase Admin SDK (for OAuth verification)
+    try {
+      initializeFirebase();
+      logger.info('✅ Firebase Admin SDK initialized');
+    } catch (firebaseErr: any) {
+      // Firebase is optional - only needed for OAuth authentication
+      // Server will start without it, but OAuth endpoints will fail
+      logger.warn('⚠️  Firebase Admin SDK initialization failed:', firebaseErr.message);
+      logger.warn('    OAuth authentication will not work without Firebase credentials');
+      logger.warn('    See: docs/PHASE-2-SETUP-GUIDE.md for setup instructions');
+    }
+
     await fastify.listen({ port: PORT, host: HOST });
     logger.info(`🚀 Fastify server running on port ${PORT}`);
 
