@@ -27,6 +27,7 @@ import { authRoutes } from './routes/auth.routes';
 import { xpRoutes } from './routes/xp.routes';
 import { creditsRoutes } from './routes/credits.routes';
 import { badgesRoutes } from './routes/badges.routes';
+import { referralsRoutes } from './routes/referrals.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -87,6 +88,7 @@ fastify.register(authRoutes, { prefix: '/api/auth' }); // Phase 2: Authenticatio
 fastify.register(xpRoutes, { prefix: '/api/xp' }); // Phase 2: XP system routes
 fastify.register(creditsRoutes, { prefix: '/api/credits' }); // Phase 2: Credits system routes
 fastify.register(badgesRoutes, { prefix: '/api/badges' }); // Phase 3: Badges system routes
+fastify.register(referralsRoutes, { prefix: '/api/referrals' }); // Phase 3: Referrals system routes
 
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
