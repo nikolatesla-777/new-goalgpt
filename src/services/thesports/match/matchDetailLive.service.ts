@@ -13,6 +13,7 @@ import { MatchDetailLiveResponse, MatchDetailLiveParams } from '../../../types/t
 import { pool } from '../../../database/connection';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { getWithCacheFallback } from '../../../utils/cache/cache-fallback.util';
+import { IncidentOrchestrator } from '../../orchestration/IncidentOrchestrator';
 
 export class MatchDetailLiveService {
   private client = theSportsAPI;
@@ -1124,6 +1125,16 @@ export class MatchDetailLiveService {
       if (this.hasIncidentsColumn && live.incidents !== null) {
         setParts.push(`incidents = $${i++}::jsonb`);
         values.push(JSON.stringify(live.incidents));
+
+        // CRITICAL: Also persist to ts_incidents table via IncidentOrchestrator
+        // This enables proper Events tab API from normalized table instead of JSONB
+        try {
+          const incidentOrchestrator = IncidentOrchestrator.getInstance();
+          await incidentOrchestrator.processIncidents(match_id, live.incidents, 'detail_live');
+        } catch (incErr) {
+          logger.warn(`[DetailLive] IncidentOrchestrator failed for ${match_id}:`, incErr);
+          // Non-blocking - incidents still saved to ts_matches.incidents column
+        }
       }
 
       if (this.hasStatisticsColumn && live.statistics !== null) {
