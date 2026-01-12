@@ -69,7 +69,7 @@ export async function googleSignIn(
       .select([
         'cu.id',
         'cu.email',
-        'cu.name',
+        'cu.full_name as name',
         'cu.phone',
         'cu.username',
         'cu.referral_code',
@@ -107,7 +107,7 @@ export async function googleSignIn(
           .insertInto('customer_users')
           .values({
             email,
-            name: name || email.split('@')[0],
+            full_name: name || email.split('@')[0],
             google_id: googleId,
             phone: null,
             username: null,
@@ -115,7 +115,7 @@ export async function googleSignIn(
             created_at: sql`NOW()`,
             updated_at: sql`NOW()`,
           })
-          .returning(['id', 'email', 'name', 'phone', 'username', 'referral_code', 'created_at'])
+          .returning(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'created_at'])
           .executeTakeFirstOrThrow();
 
         user = newUser;
@@ -253,7 +253,7 @@ export async function googleSignIn(
       .select([
         'cu.id',
         'cu.email',
-        'cu.name',
+        'cu.full_name as name',
         'cu.phone',
         'cu.username',
         'cu.referral_code',

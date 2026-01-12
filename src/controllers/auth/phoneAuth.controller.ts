@@ -77,13 +77,13 @@ export async function phoneLogin(
           .values({
             phone,
             email: null,
-            name: null,
+            full_name: null,
             username: null,
             referral_code: referralCode,
             created_at: sql`NOW()`,
             updated_at: sql`NOW()`,
           })
-          .returning(['id', 'email', 'name', 'phone', 'username', 'referral_code', 'created_at'])
+          .returning(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'created_at'])
           .executeTakeFirstOrThrow();
 
         user = newUser;
@@ -217,7 +217,7 @@ export async function phoneLogin(
       .select([
         'cu.id',
         'cu.email',
-        'cu.name',
+        'cu.full_name as name',
         'cu.phone',
         'cu.username',
         'cu.referral_code',

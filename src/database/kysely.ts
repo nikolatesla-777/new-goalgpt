@@ -34,16 +34,46 @@ export interface Database {
 // Table interfaces
 export interface CustomerUser {
   id: Generated<string>;
+  public_id: string | null;
   email: string | null;
-  name: string | null;
   phone: string | null;
-  google_id: string | null;
-  apple_id: string | null;
-  username: string | null;
-  referral_code: string | null;
+  email_verified_at: Date | null;
+  phone_verified_at: Date | null;
+  password_hash: string | null;
+  full_name: string | null;
+  address: string | null;
+  is_active: boolean;
+  is_online: boolean;
+  last_seen_at: Date | null;
+  two_fa_enabled: boolean;
+  two_fa_secret: string | null;
+  registration_platform: string | null;
+  registration_source: string | null;
+  registration_ip: string | null;
+  registration_country: string | null;
+  last_login_ip: string | null;
+  last_login_country: string | null;
+  last_login_platform: string | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
+  public_code: string | null;
+  username: string | null;
+  profile_image_url: string | null;
+  cover_image_url: string | null;
+  is_push_allowed_mobile: boolean | null;
+  is_push_allowed_web: boolean | null;
+  deleted_by: string | null;
+  selected_team_id: string | null;
+  selected_team_name: string | null;
+  selected_team_logo: string | null;
+  is_vip: boolean | null;
+  old_id: string | null;
+  password_last_changed: Date | null;
+  locale_preference: string | null;
+  google_id: string | null;
+  apple_id: string | null;
+  referral_code: string | null;
 }
 
 export interface CustomerOAuthIdentity {

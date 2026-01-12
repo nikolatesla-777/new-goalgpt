@@ -434,7 +434,7 @@ export async function getXPLeaderboard(limit: number = 100) {
     .innerJoin('customer_users as cu', 'cu.id', 'xp.customer_user_id')
     .select([
       'cu.id',
-      'cu.name',
+      'cu.full_name as name',
       'cu.username',
       'xp.xp_points',
       'xp.level',

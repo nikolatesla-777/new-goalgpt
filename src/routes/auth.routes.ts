@@ -108,7 +108,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           .select([
             'cu.id',
             'cu.email',
-            'cu.name',
+            'cu.full_name as name',
             'cu.phone',
             'cu.username',
             'cu.referral_code',

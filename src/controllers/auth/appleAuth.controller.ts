@@ -68,7 +68,7 @@ export async function appleSignIn(
       .select([
         'cu.id',
         'cu.email',
-        'cu.name',
+        'cu.full_name as name',
         'cu.phone',
         'cu.username',
         'cu.referral_code',
@@ -114,7 +114,7 @@ export async function appleSignIn(
           .insertInto('customer_users')
           .values({
             email,
-            name: providedName || email.split('@')[0],
+            full_name: providedName || email.split('@')[0],
             apple_id: appleId,
             phone: null,
             username: null,
@@ -122,7 +122,7 @@ export async function appleSignIn(
             created_at: sql`NOW()`,
             updated_at: sql`NOW()`,
           })
-          .returning(['id', 'email', 'name', 'phone', 'username', 'referral_code', 'created_at'])
+          .returning(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'created_at'])
           .executeTakeFirstOrThrow();
 
         user = newUser;
@@ -259,7 +259,7 @@ export async function appleSignIn(
       .select([
         'cu.id',
         'cu.email',
-        'cu.name',
+        'cu.full_name as name',
         'cu.phone',
         'cu.username',
         'cu.referral_code',
