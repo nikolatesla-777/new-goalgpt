@@ -30,6 +30,7 @@ import { badgesRoutes } from './routes/badges.routes';
 import { referralsRoutes } from './routes/referrals.routes';
 import { partnersRoutes } from './routes/partners.routes';
 import { commentsRoutes } from './routes/comments.routes';
+import { dailyRewardsRoutes } from './routes/dailyRewards.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -93,6 +94,7 @@ fastify.register(badgesRoutes, { prefix: '/api/badges' }); // Phase 3: Badges sy
 fastify.register(referralsRoutes, { prefix: '/api/referrals' }); // Phase 3: Referrals system routes
 fastify.register(partnersRoutes, { prefix: '/api/partners' }); // Phase 3: Partners system routes
 fastify.register(commentsRoutes, { prefix: '/api/comments' }); // Phase 3: Match Comments system routes
+fastify.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' }); // Phase 3: Daily Rewards system routes
 
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
