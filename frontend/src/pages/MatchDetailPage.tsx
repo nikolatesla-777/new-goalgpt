@@ -123,10 +123,24 @@ export function MatchDetailPage() {
           });
         }
 
-        // Set events
+        // Set events - CRITICAL FIX: API returns {success, data: {incidents: []}}
+        // Must extract the nested incidents array, not the data object
         if (eventsRes.status === 'fulfilled') {
           const eventsData = eventsRes.value;
-          setEvents(eventsData?.data || eventsData?.incidents || []);
+          // Handle all possible response structures:
+          // 1. {data: {incidents: []}} - current API format
+          // 2. {data: {results: []}} - alternative format
+          // 3. {incidents: []} - flat format
+          // 4. {data: []} - array directly in data
+          const incidents =
+            eventsData?.data?.incidents ||  // nested incidents array
+            eventsData?.data?.results ||    // nested results array
+            (Array.isArray(eventsData?.data) ? eventsData.data : null) || // data is array
+            eventsData?.incidents ||        // flat incidents
+            eventsData?.results ||          // flat results
+            [];
+          setEvents(incidents);
+          console.log(`[MatchDetail] Set ${incidents.length} events from API`);
         }
       } catch (err: any) {
         console.error('Failed to load match data:', err);
