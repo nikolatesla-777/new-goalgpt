@@ -639,6 +639,10 @@ export class MatchDetailLiveService {
 
         // CRITICAL FIX: If /match/detail failed or returned empty, try /match/diary as last resort
         // /match/diary is the ONLY reliable source for minor league team IDs (India, Indonesia, etc.)
+        // ALSO extract scores from diary since /detail_live may not have them
+        let diaryHomeScore: number | null = null;
+        let diaryAwayScore: number | null = null;
+
         if (!homeTeamId || !awayTeamId) {
           logger.info(`[DetailLive] Match ${match_id} still missing team IDs after /match/detail. Trying /match/diary...`);
           try {
@@ -657,7 +661,17 @@ export class MatchDetailLiveService {
               competitionId = competitionId || diaryMatch.competition_id;
               matchTime = diaryMatch.match_time || matchTime;
               statusId = diaryMatch.status_id || statusId;
-              logger.info(`[DetailLive] ✅ Got metadata from /match/diary: home=${homeTeamId}, away=${awayTeamId}, comp=${competitionId}`);
+
+              // CRITICAL FIX: Extract scores from diary's home_scores/away_scores arrays
+              // Format: [regular, halftime, red_cards, yellow_cards, etc...]
+              if (Array.isArray(diaryMatch.home_scores) && diaryMatch.home_scores.length > 0) {
+                diaryHomeScore = typeof diaryMatch.home_scores[0] === 'number' ? diaryMatch.home_scores[0] : null;
+              }
+              if (Array.isArray(diaryMatch.away_scores) && diaryMatch.away_scores.length > 0) {
+                diaryAwayScore = typeof diaryMatch.away_scores[0] === 'number' ? diaryMatch.away_scores[0] : null;
+              }
+
+              logger.info(`[DetailLive] ✅ Got metadata from /match/diary: home=${homeTeamId}, away=${awayTeamId}, comp=${competitionId}, score=${diaryHomeScore ?? '?'}-${diaryAwayScore ?? '?'}, status=${statusId}`);
             } else {
               logger.warn(`[DetailLive] Match ${match_id} not found in /match/diary for date ${today}`);
             }
@@ -673,6 +687,10 @@ export class MatchDetailLiveService {
           try {
             // Use simplified INSERT that matches actual ts_matches schema
             // Note: ts_matches does NOT have home_team_name/away_team_name columns
+            // CRITICAL: Use diaryHomeScore/diaryAwayScore if available, fallback to live.homeScoreDisplay
+            const finalHomeScore = diaryHomeScore ?? live.homeScoreDisplay ?? 0;
+            const finalAwayScore = diaryAwayScore ?? live.awayScoreDisplay ?? 0;
+
             const insertRes = await client.query(`
                INSERT INTO ts_matches (
                  external_id, home_team_id, away_team_id, competition_id, 
@@ -698,8 +716,8 @@ export class MatchDetailLiveService {
               competitionId || null, // Competition can be null for obscure leagues
               matchTime,
               statusId,
-              live.homeScoreDisplay ?? 0,
-              live.awayScoreDisplay ?? 0
+              finalHomeScore,
+              finalAwayScore
             ]);
 
             if (insertRes.rowCount != null && insertRes.rowCount > 0) {
