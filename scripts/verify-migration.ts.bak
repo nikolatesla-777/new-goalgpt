@@ -1,0 +1,278 @@
+import { Kysely, PostgresDialect, sql } from 'kysely';
+import { Pool } from 'pg';
+
+/**
+ * Migration Verification Script
+ * Validates data integrity after Phase 1 migration
+ *
+ * Usage: npx ts-node scripts/verify-migration.ts
+ */
+
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
+
+const db = new Kysely<any>({
+  dialect: new PostgresDialect({ pool }),
+});
+
+async function verifyMigration() {
+  console.log('🔍 Verifying migration data integrity...\n');
+  console.log('='.repeat(60));
+
+  let errorCount = 0;
+  let warningCount = 0;
+
+  // 1. Check all users have XP records
+  console.log('\n📊 Checking XP records...');
+  const usersWithoutXP = await sql`
+    SELECT COUNT(*) as count
+    FROM customer_users cu
+    WHERE cu.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM customer_xp WHERE customer_user_id = cu.id
+      )
+  `.execute(db);
+
+  const missingXP = parseInt(usersWithoutXP.rows[0].count as string);
+  if (missingXP === 0) {
+    console.log('✅ All users have XP records');
+  } else {
+    console.log(`❌ ${missingXP} users missing XP records`);
+    errorCount++;
+  }
+
+  // 2. Check all users have Credits records
+  console.log('\n💰 Checking Credit records...');
+  const usersWithoutCredits = await sql`
+    SELECT COUNT(*) as count
+    FROM customer_users cu
+    WHERE cu.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM customer_credits WHERE customer_user_id = cu.id
+      )
+  `.execute(db);
+
+  const missingCredits = parseInt(usersWithoutCredits.rows[0].count as string);
+  if (missingCredits === 0) {
+    console.log('✅ All users have Credit records');
+  } else {
+    console.log(`❌ ${missingCredits} users missing Credit records`);
+    errorCount++;
+  }
+
+  // 3. Verify VIP bonus was granted
+  console.log('\n🎁 Checking VIP welcome bonuses...');
+  const vipCount = await sql`
+    SELECT COUNT(DISTINCT cs.customer_user_id) as count
+    FROM customer_subscriptions cs
+    WHERE cs.status = 'active'
+      AND cs.expires_at > NOW()
+  `.execute(db);
+
+  const vipWithBonus = await sql`
+    SELECT COUNT(DISTINCT cct.customer_user_id) as count
+    FROM customer_credit_transactions cct
+    WHERE cct.transaction_type = 'promotional'
+      AND cct.metadata->>'migration' = 'true'
+      AND cct.amount = 50
+  `.execute(db);
+
+  console.log(`   VIP users: ${vipCount.rows[0].count}`);
+  console.log(`   Bonuses granted: ${vipWithBonus.rows[0].count}`);
+
+  if (vipCount.rows[0].count === vipWithBonus.rows[0].count) {
+    console.log('✅ All VIP users received welcome bonus');
+  } else {
+    console.log('⚠️  VIP bonus count mismatch');
+    warningCount++;
+  }
+
+  // 4. Check badges were created
+  console.log('\n🏅 Checking badges...');
+  const badgeCount = await sql`
+    SELECT COUNT(*) as count FROM badges WHERE deleted_at IS NULL
+  `.execute(db);
+
+  const badges = parseInt(badgeCount.rows[0].count as string);
+  if (badges >= 3) {
+    console.log(`✅ ${badges} badges created (expected >= 3)`);
+  } else {
+    console.log(`❌ Only ${badges} badges found (expected >= 3)`);
+    errorCount++;
+  }
+
+  // 5. Check referral codes generated
+  console.log('\n🔗 Checking referral codes...');
+  const totalUsers = await sql`
+    SELECT COUNT(*) as count FROM customer_users WHERE deleted_at IS NULL
+  `.execute(db);
+
+  const usersWithReferralCode = await sql`
+    SELECT COUNT(*) as count
+    FROM customer_users
+    WHERE deleted_at IS NULL AND referral_code IS NOT NULL
+  `.execute(db);
+
+  console.log(`   Total users: ${totalUsers.rows[0].count}`);
+  console.log(`   Users with referral code: ${usersWithReferralCode.rows[0].count}`);
+
+  if (totalUsers.rows[0].count === usersWithReferralCode.rows[0].count) {
+    console.log('✅ All users have referral codes');
+  } else {
+    console.log('⚠️  Some users missing referral codes');
+    warningCount++;
+  }
+
+  // 6. Verify foreign key constraints
+  console.log('\n🔗 Checking foreign key integrity...');
+  const orphanedRecords = await sql`
+    SELECT
+      (SELECT COUNT(*) FROM customer_xp WHERE customer_user_id NOT IN (SELECT id FROM customer_users)) as orphaned_xp,
+      (SELECT COUNT(*) FROM customer_credits WHERE customer_user_id NOT IN (SELECT id FROM customer_users)) as orphaned_credits,
+      (SELECT COUNT(*) FROM customer_badges WHERE customer_user_id NOT IN (SELECT id FROM customer_users)) as orphaned_badges
+  `.execute(db);
+
+  const orphanedXP = parseInt(orphanedRecords.rows[0].orphaned_xp as string);
+  const orphanedCredits = parseInt(orphanedRecords.rows[0].orphaned_credits as string);
+  const orphanedBadges = parseInt(orphanedRecords.rows[0].orphaned_badges as string);
+
+  if (orphanedXP === 0 && orphanedCredits === 0 && orphanedBadges === 0) {
+    console.log('✅ No orphaned records found');
+  } else {
+    console.log(`   Orphaned XP records: ${orphanedXP}`);
+    console.log(`   Orphaned Credit records: ${orphanedCredits}`);
+    console.log(`   Orphaned Badge records: ${orphanedBadges}`);
+    if (orphanedXP > 0 || orphanedCredits > 0 || orphanedBadges > 0) {
+      console.log('❌ Foreign key constraint violations detected');
+      errorCount++;
+    }
+  }
+
+  // 7. Check table existence
+  console.log('\n📋 Checking table existence...');
+  const expectedTables = [
+    'customer_oauth_identities',
+    'customer_xp',
+    'customer_xp_transactions',
+    'badges',
+    'customer_badges',
+    'customer_credits',
+    'customer_credit_transactions',
+    'customer_ad_views',
+    'referrals',
+    'partners',
+    'partner_analytics',
+    'match_comments',
+    'match_comment_likes',
+    'customer_daily_rewards',
+    'blog_posts',
+    'notification_templates',
+    'scheduled_notifications'
+  ];
+
+  for (const table of expectedTables) {
+    const exists = await sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_name = ${table}
+      ) as exists
+    `.execute(db);
+
+    if (exists.rows[0].exists) {
+      console.log(`   ✅ ${table}`);
+    } else {
+      console.log(`   ❌ ${table} missing`);
+      errorCount++;
+    }
+  }
+
+  // 8. Check altered columns
+  console.log('\n🔧 Checking altered table columns...');
+  const alterChecks = [
+    { table: 'customer_users', column: 'google_id' },
+    { table: 'customer_users', column: 'apple_id' },
+    { table: 'customer_users', column: 'username' },
+    { table: 'customer_subscriptions', column: 'partner_id' },
+    { table: 'customer_subscriptions', column: 'referral_code' },
+    { table: 'ts_prediction_mapped', column: 'credit_cost' },
+    { table: 'ts_prediction_mapped', column: 'purchased_by_user_id' }
+  ];
+
+  for (const check of alterChecks) {
+    const exists = await sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.columns
+        WHERE table_name = ${check.table}
+          AND column_name = ${check.column}
+      ) as exists
+    `.execute(db);
+
+    if (exists.rows[0].exists) {
+      console.log(`   ✅ ${check.table}.${check.column}`);
+    } else {
+      console.log(`   ❌ ${check.table}.${check.column} missing`);
+      errorCount++;
+    }
+  }
+
+  // 9. Check constraints
+  console.log('\n🔒 Checking constraints...');
+  const constraintChecks = [
+    { table: 'customer_xp', constraint: 'chk_xp_positive' },
+    { table: 'customer_xp', constraint: 'chk_xp_level' },
+    { table: 'customer_credits', constraint: 'chk_balance_positive' },
+    { table: 'referrals', constraint: 'chk_referral_self' }
+  ];
+
+  for (const check of constraintChecks) {
+    const exists = await sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.table_constraints
+        WHERE table_name = ${check.table}
+          AND constraint_name = ${check.constraint}
+      ) as exists
+    `.execute(db);
+
+    if (exists.rows[0].exists) {
+      console.log(`   ✅ ${check.table}.${check.constraint}`);
+    } else {
+      console.log(`   ⚠️  ${check.table}.${check.constraint} missing`);
+      warningCount++;
+    }
+  }
+
+  // Final Summary
+  console.log('\n' + '='.repeat(60));
+  console.log('\n📊 VERIFICATION SUMMARY:');
+  console.log(`   Errors: ${errorCount}`);
+  console.log(`   Warnings: ${warningCount}`);
+
+  if (errorCount === 0 && warningCount === 0) {
+    console.log('\n✅ Migration verification PASSED!');
+    console.log('   All checks completed successfully.');
+    process.exit(0);
+  } else if (errorCount === 0) {
+    console.log('\n⚠️  Migration verification PASSED with warnings');
+    console.log('   Please review warnings above.');
+    process.exit(0);
+  } else {
+    console.log('\n❌ Migration verification FAILED!');
+    console.log('   Please fix errors before proceeding to production.');
+    process.exit(1);
+  }
+}
+
+// Run verification
+verifyMigration()
+  .catch((error) => {
+    console.error('\n❌ Verification script error:', error);
+    process.exit(1);
+  })
+  .finally(() => {
+    db.destroy();
+  });
