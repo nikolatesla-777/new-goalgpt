@@ -1,4 +1,4 @@
-import { Kysely, PostgresDialect } from 'kysely';
+import { Kysely, PostgresDialect, Generated } from 'kysely';
 import { pool } from './connection';
 
 /**
@@ -33,7 +33,7 @@ export interface Database {
 
 // Table interfaces
 export interface CustomerUser {
-  id: string;
+  id: Generated<string>;
   email: string | null;
   name: string | null;
   phone: string | null;
@@ -47,7 +47,7 @@ export interface CustomerUser {
 }
 
 export interface CustomerOAuthIdentity {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   provider: 'google' | 'apple' | 'phone';
   provider_user_id: string;
@@ -67,7 +67,7 @@ export interface CustomerOAuthIdentity {
 }
 
 export interface CustomerXP {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   xp_points: number;
   level: 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'vip_elite';
@@ -83,7 +83,7 @@ export interface CustomerXP {
 }
 
 export interface CustomerXPTransaction {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   xp_amount: number;
   transaction_type: string;
@@ -95,7 +95,7 @@ export interface CustomerXPTransaction {
 }
 
 export interface CustomerCredits {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   balance: number;
   lifetime_earned: number;
@@ -105,7 +105,7 @@ export interface CustomerCredits {
 }
 
 export interface CustomerCreditTransaction {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   amount: number;
   transaction_type: string;
@@ -119,7 +119,7 @@ export interface CustomerCreditTransaction {
 }
 
 export interface CustomerPushToken {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   token: string;
   platform: 'ios' | 'android' | 'web';
@@ -131,7 +131,7 @@ export interface CustomerPushToken {
 }
 
 export interface CustomerSubscription {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   status: string;
   expired_at: Date | null;
@@ -143,7 +143,7 @@ export interface CustomerSubscription {
 }
 
 export interface Badge {
-  id: string;
+  id: Generated<string>;
   slug: string;
   name_tr: string;
   name_en: string;
@@ -165,7 +165,7 @@ export interface Badge {
 }
 
 export interface CustomerBadge {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   badge_id: string;
   unlocked_at: Date;
@@ -175,7 +175,7 @@ export interface CustomerBadge {
 }
 
 export interface Referral {
-  id: string;
+  id: Generated<string>;
   referrer_user_id: string;
   referred_user_id: string;
   referral_code: string;
@@ -192,7 +192,7 @@ export interface Referral {
 }
 
 export interface Partner {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   business_name: string;
   tax_id: string | null;
@@ -216,7 +216,7 @@ export interface Partner {
 }
 
 export interface PartnerAnalytics {
-  id: string;
+  id: Generated<string>;
   partner_id: string;
   date: Date;
   new_signups: number;
@@ -229,7 +229,7 @@ export interface PartnerAnalytics {
 }
 
 export interface MatchComment {
-  id: string;
+  id: Generated<string>;
   match_id: number;
   customer_user_id: string;
   parent_comment_id: string | null;
@@ -245,14 +245,14 @@ export interface MatchComment {
 }
 
 export interface MatchCommentLike {
-  id: string;
+  id: Generated<string>;
   comment_id: string;
   customer_user_id: string;
   created_at: Date;
 }
 
 export interface CustomerDailyReward {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   reward_date: Date;
   day_number: number;
@@ -262,7 +262,7 @@ export interface CustomerDailyReward {
 }
 
 export interface BlogPost {
-  id: string;
+  id: Generated<string>;
   slug: string;
   title_tr: string;
   title_en: string | null;
@@ -283,7 +283,7 @@ export interface BlogPost {
 }
 
 export interface NotificationTemplate {
-  id: string;
+  id: Generated<string>;
   name: string;
   title_tr: string;
   title_en: string | null;
@@ -302,7 +302,7 @@ export interface NotificationTemplate {
 }
 
 export interface ScheduledNotification {
-  id: string;
+  id: Generated<string>;
   template_id: string | null;
   title_tr: string;
   title_en: string | null;
@@ -323,7 +323,7 @@ export interface ScheduledNotification {
 }
 
 export interface CustomerAdView {
-  id: string;
+  id: Generated<string>;
   customer_user_id: string;
   ad_network: string;
   ad_unit_id: string;
