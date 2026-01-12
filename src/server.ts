@@ -350,6 +350,15 @@ const start = async () => {
       setWebSocketState(false, false);
     }
 
+    // Phase 4: Initialize background jobs (gamification automation)
+    try {
+      const { initializeJobs } = await import('./jobs/jobManager');
+      initializeJobs();
+    } catch (jobsErr: any) {
+      logger.warn('⚠️  Background jobs initialization failed:', jobsErr.message);
+      logger.warn('    Phase 4 automation features will not work');
+    }
+
     logger.info('✅ Startup complete: bootstrap OK, workers started');
   } catch (err) {
     logger.error('Error starting server:', err);
