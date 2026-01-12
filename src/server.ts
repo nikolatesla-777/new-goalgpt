@@ -24,6 +24,8 @@ import { dashboardRoutes } from './routes/dashboard.routes';
 import websocketRoutes from './routes/websocket.routes';
 import metricsRoutes from './routes/metrics.routes';
 import { authRoutes } from './routes/auth.routes';
+import { xpRoutes } from './routes/xp.routes';
+import { creditsRoutes } from './routes/credits.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -81,6 +83,8 @@ fastify.register(healthRoutes, { prefix: '/api' });
 fastify.register(websocketRoutes); // WebSocket route: /ws
 fastify.register(metricsRoutes, { prefix: '/api/metrics' }); // Metrics routes
 fastify.register(authRoutes, { prefix: '/api/auth' }); // Phase 2: Authentication routes
+fastify.register(xpRoutes, { prefix: '/api/xp' }); // Phase 2: XP system routes
+fastify.register(creditsRoutes, { prefix: '/api/credits' }); // Phase 2: Credits system routes
 
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
