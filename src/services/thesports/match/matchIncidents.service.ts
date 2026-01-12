@@ -16,6 +16,7 @@ import { pool } from '../../../database/connection';
 import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchDetailLiveResponse } from '../../../types/thesports/match';
+import { IncidentOrchestrator } from '../../orchestration/IncidentOrchestrator';
 
 export class MatchIncidentsService {
   /**
@@ -27,7 +28,19 @@ export class MatchIncidentsService {
   async getMatchIncidents(matchId: string): Promise<{ incidents: any[] }> {
     try {
       // ============================================================
-      // STEP 1: DATABASE FIRST (FAST - ~50ms)
+      // STEP 1: CHECK ts_incidents TABLE FIRST (NORMALIZED - BEST)
+      // ============================================================
+
+      const incidentOrchestrator = IncidentOrchestrator.getInstance();
+      const normalizedIncidents = await incidentOrchestrator.getMatchIncidents(matchId);
+
+      if (normalizedIncidents.length > 0) {
+        logger.debug(`[MatchIncidents] ✓ Found ${normalizedIncidents.length} incidents in ts_incidents table for ${matchId}`);
+        return { incidents: normalizedIncidents };
+      }
+
+      // ============================================================
+      // STEP 2: FALLBACK TO ts_matches.incidents JSONB
       // ============================================================
 
       // CRITICAL FIX: Query by external_id (TheSports ID), not UUID id
