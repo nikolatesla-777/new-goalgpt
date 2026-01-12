@@ -10,3 +10,6 @@ eskiuygulamadata/
 .env.staging
 *.backup
 *.bak
+
+# Firebase credentials
+firebase-service-account.json
