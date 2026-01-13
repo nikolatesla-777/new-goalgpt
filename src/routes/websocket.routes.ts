@@ -126,6 +126,15 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
   let errorCount = 0;
   const broadcastStartTs = Date.now();
 
+  // CRITICAL DEBUG: Log active connections before broadcast
+  const connectionCount = activeConnections.size;
+  if (connectionCount === 0) {
+    logger.warn(`[WebSocket Route] BROADCAST FAILED: No active connections for ${event.type} (${event.matchId})`);
+    return;
+  }
+
+  logger.info(`[WebSocket Route] Broadcasting ${event.type} to ${connectionCount} connections`);
+
   activeConnections.forEach((socket) => {
     try {
       if (socket.readyState === 1) { // WebSocket.OPEN
@@ -133,6 +142,7 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
         sentCount++;
       } else {
         // Remove closed connections
+        logger.debug(`[WebSocket Route] Removing connection with readyState=${socket.readyState}`);
         activeConnections.delete(socket);
       }
     } catch (error: any) {
@@ -144,12 +154,10 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
 
   const broadcastDuration = Date.now() - broadcastStartTs;
 
-  if (sentCount > 0) {
-    logger.debug(
-      `[WebSocket Route] Broadcasted ${event.type} event to ${sentCount} clients ` +
-      `(${errorCount} errors, ${broadcastDuration}ms)${optimisticData ? ' [+optimistic]' : ''}`
-    );
-  }
+  logger.info(
+    `[WebSocket Route] Broadcasted ${event.type} to ${sentCount}/${connectionCount} clients ` +
+    `(${errorCount} errors, ${broadcastDuration}ms)${optimisticData ? ' [+optimistic]' : ''}`
+  );
 }
 
 /**
