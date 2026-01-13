@@ -217,8 +217,8 @@ export default async function websocketRoutes(
   // WebSocket route: /ws
   // @fastify/websocket v8+: first param is SocketStream which contains .socket (WebSocket)
   fastify.get('/ws', { websocket: true }, (connection /* SocketStream */, req) => {
-    // CRITICAL DIAGNOSTIC: Log immediately when handler is called
-    console.log('[WS-ENTRY] Handler entered!');
+    // CRITICAL DIAGNOSTIC: Use process.stdout.write for immediate flush
+    process.stdout.write('[WS-ENTRY] Handler entered at ' + Date.now() + '\\n');
 
     try {
       const clientId = req.socket?.remoteAddress || 'unknown';
