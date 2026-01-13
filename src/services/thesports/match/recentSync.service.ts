@@ -42,7 +42,7 @@ export class RecentSyncService {
     return withSyncLock(SyncType.RECENT, async () => {
       // Get last sync timestamp from database or use provided
       let lastSyncUnix: number;
-      
+
       if (lastSyncTimestamp) {
         lastSyncUnix = Math.floor(lastSyncTimestamp.getTime() / 1000);
       } else {
@@ -116,6 +116,17 @@ export class RecentSyncService {
   }
 
   /**
+   * Helper to safely convert to number, returns null if NaN
+   */
+  private safeNumber(value: any, fallback: number | null = null): number | null {
+    if (value === null || value === undefined || value === '') {
+      return fallback;
+    }
+    const num = Number(value);
+    return isNaN(num) ? fallback : num;
+  }
+
+  /**
    * Map API match response to MatchSyncData format
    * Handles score arrays (Array[7]) with correct index mapping
    */
@@ -125,14 +136,14 @@ export class RecentSyncService {
     const homeScores = match.home_scores || (match.home_score !== undefined ? [match.home_score] : null);
     const awayScores = match.away_scores || (match.away_score !== undefined ? [match.away_score] : null);
 
-    // Extract score components from array
-    const homeRegularScore = Array.isArray(homeScores) && homeScores.length > 0 ? homeScores[0] : null;
-    const homeOvertimeScore = Array.isArray(homeScores) && homeScores.length > 5 ? homeScores[5] : null;
-    const homePenaltyScore = Array.isArray(homeScores) && homeScores.length > 6 ? homeScores[6] : null;
-    
-    const awayRegularScore = Array.isArray(awayScores) && awayScores.length > 0 ? awayScores[0] : null;
-    const awayOvertimeScore = Array.isArray(awayScores) && awayScores.length > 5 ? awayScores[5] : null;
-    const awayPenaltyScore = Array.isArray(awayScores) && awayScores.length > 6 ? awayScores[6] : null;
+    // Extract score components from array - CRITICAL: Use safeNumber to prevent NaN
+    const homeRegularScore = Array.isArray(homeScores) && homeScores.length > 0 ? this.safeNumber(homeScores[0]) : null;
+    const homeOvertimeScore = Array.isArray(homeScores) && homeScores.length > 5 ? this.safeNumber(homeScores[5]) : null;
+    const homePenaltyScore = Array.isArray(homeScores) && homeScores.length > 6 ? this.safeNumber(homeScores[6]) : null;
+
+    const awayRegularScore = Array.isArray(awayScores) && awayScores.length > 0 ? this.safeNumber(awayScores[0]) : null;
+    const awayOvertimeScore = Array.isArray(awayScores) && awayScores.length > 5 ? this.safeNumber(awayScores[5]) : null;
+    const awayPenaltyScore = Array.isArray(awayScores) && awayScores.length > 6 ? this.safeNumber(awayScores[6]) : null;
 
     // Calculate display scores (same logic as MQTT parser)
     const homeDisplayScore = this.calculateDisplayScore(homeRegularScore, homeOvertimeScore, homePenaltyScore, match.status);
@@ -144,21 +155,21 @@ export class RecentSyncService {
       competition_id: match.competition_id || null,
       home_team_id: match.home_team_id || match.home_id || null,
       away_team_id: match.away_team_id || match.away_id || null,
-      status_id: typeof match.status === 'number' ? match.status : (match.status_id || null),
-      match_time: match.match_time || null,
+      status_id: this.safeNumber(match.status ?? match.status_id, 1),
+      match_time: this.safeNumber(match.match_time),
       venue_id: match.venue_id || null,
       referee_id: match.referee_id || null,
       neutral: match.neutral ?? null,
       note: match.note || null,
       home_scores: homeScores, // Keep full array for legacy support
       away_scores: awayScores, // Keep full array for legacy support
-      home_position: match.home_position || null,
-      away_position: match.away_position || null,
+      home_position: this.safeNumber(match.home_position),
+      away_position: this.safeNumber(match.away_position),
       coverage_mlive: match.coverage_mlive ?? null,
       coverage_lineup: match.coverage_lineup ?? null,
       stage_id: match.stage_id || null,
-      group_num: match.group_num || null,
-      round_num: match.round_num || match.round || null,
+      group_num: this.safeNumber(match.group_num),
+      round_num: this.safeNumber(match.round_num ?? match.round),
       related_id: match.related_id || null,
       agg_score: match.agg_score || null,
       environment_weather: match.environment_weather || match.weather || null,
@@ -170,7 +181,7 @@ export class RecentSyncService {
       has_ot: match.has_ot ?? null,
       ended: match.ended ?? null,
       team_reverse: match.team_reverse ?? null,
-      external_updated_at: match.updated_at || null,
+      external_updated_at: this.safeNumber(match.updated_at),
       // Score components (mapped from array indices)
       home_score_regular: homeRegularScore,
       home_score_overtime: homeOvertimeScore,
@@ -215,7 +226,7 @@ export class RecentSyncService {
     if (syncState && syncState.last_updated_at) {
       return new Date(syncState.last_updated_at * 1000);
     }
-    
+
     // Default: 1 hour ago
     const oneHourAgo = new Date();
     oneHourAgo.setHours(oneHourAgo.getHours() - 1);

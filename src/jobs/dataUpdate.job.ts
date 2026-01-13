@@ -145,29 +145,41 @@ export class DataUpdateWorker {
   }
 
   /**
+   * Helper to safely convert to number, returns null if NaN
+   */
+  private safeNumber(value: any, fallback: number | null = null): number | null {
+    if (value === null || value === undefined || value === '') {
+      return fallback;
+    }
+    const num = Number(value);
+    return isNaN(num) ? fallback : num;
+  }
+
+  /**
    * Helper to map API match object to MatchSyncData
    */
   private mapToSyncData(match: any): MatchSyncData {
     const homeScores = Array.isArray(match.home_scores) ? match.home_scores : [];
     const awayScores = Array.isArray(match.away_scores) ? match.away_scores : [];
 
+    // CRITICAL FIX: Use safeNumber to prevent NaN values
     return {
       external_id: String(match.id || match.match_id),
       competition_id: match.competition_id,
       season_id: match.season_id,
-      match_time: match.match_time as any,
-      status_id: Number(match.status_id ?? match.status ?? 1),
+      match_time: this.safeNumber(match.match_time),
+      status_id: this.safeNumber(match.status_id ?? match.status, 1),
       home_team_id: match.home_team_id,
       away_team_id: match.away_team_id,
       home_scores: homeScores,
       away_scores: awayScores,
-      home_score_regular: homeScores[0] || match.home_score || null,
-      away_score_regular: awayScores[0] || match.away_score || null,
+      home_score_regular: this.safeNumber(homeScores[0] ?? match.home_score),
+      away_score_regular: this.safeNumber(awayScores[0] ?? match.away_score),
       venue_id: match.venue_id || null,
       referee_id: match.referee_id || null,
       stage_id: match.stage_id || null,
-      round_num: match.round_num != null ? Number(match.round_num) : null,
-      group_num: match.group_num != null ? Number(match.group_num) : null,
+      round_num: this.safeNumber(match.round_num),
+      group_num: this.safeNumber(match.group_num),
     };
   }
 
