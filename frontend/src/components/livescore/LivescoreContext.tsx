@@ -269,8 +269,42 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
 
             // Handle score changes, match state changes, and minute updates
             if (message.type === 'GOAL' || message.type === 'SCORE_CHANGE' || message.type === 'MATCH_STATE_CHANGE' || message.type === 'MINUTE_UPDATE') {
-              // Phase 6: Optimistic Update - Apply instantly if available
-              if (message.optimistic && message.matchId) {
+              // CRITICAL FIX (2026-01-13): Handle MINUTE_UPDATE with direct message format
+              // Backend sends: { type: 'MINUTE_UPDATE', matchId, minute, statusId }
+              // NOT wrapped in optimistic object like MQTT events
+              if (message.type === 'MINUTE_UPDATE' && message.matchId && (message.minute !== undefined || message.optimistic?.minute !== undefined)) {
+                const newMinute = message.optimistic?.minute ?? message.minute;
+                const newStatusId = message.optimistic?.statusId ?? message.statusId;
+
+                setAllMatches(prevMatches => {
+                  const matchIndex = prevMatches.findIndex(m => m.id === message.matchId);
+                  if (matchIndex === -1) return prevMatches;
+
+                  const match = prevMatches[matchIndex];
+                  const currentMinute = (match as any).minute;
+                  const currentStatus = (match as any).status_id;
+
+                  // Only update if values changed
+                  if (currentMinute === newMinute && (newStatusId === undefined || currentStatus === newStatusId)) {
+                    return prevMatches;
+                  }
+
+                  const updatedMatch = { ...match };
+                  (updatedMatch as any).minute = newMinute;
+                  if (newStatusId !== undefined) {
+                    (updatedMatch as any).status_id = newStatusId;
+                    (updatedMatch as any).status = newStatusId;
+                  }
+
+                  const newMatches = [...prevMatches];
+                  newMatches[matchIndex] = updatedMatch;
+                  return newMatches;
+                });
+                setLastUpdate(new Date());
+              }
+
+              // Phase 6: Optimistic Update - Apply instantly if available (for GOAL/SCORE_CHANGE/MATCH_STATE_CHANGE)
+              else if (message.optimistic && message.matchId) {
                 setAllMatches(prevMatches => {
                   // Find match index first
                   const matchIndex = prevMatches.findIndex(m => m.id === message.matchId);
