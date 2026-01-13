@@ -490,7 +490,7 @@ export class LiveMatchOrchestrator extends EventEmitter {
       resolved.minute = null;
       if (this.fieldMetadataMap['minute']) {
         resolved.minute_source = 'computed';
-        resolved.minute_timestamp = Date.now() / 1000;
+        resolved.minute_timestamp = Math.floor(Date.now() / 1000);
       }
 
       // 2. Force ended = true (using 'ended' column as requested proxy for is_finalized)
