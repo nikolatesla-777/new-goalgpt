@@ -241,10 +241,10 @@ export default async function websocketRoutes(
 
       logger.info(`[WebSocket Route] Active connections: ${activeConnections.size}`);
 
-      // Send welcome message
+      // Send welcome message - UNIQUE STRING TO VERIFY HANDLER RUNS
       socket.send(JSON.stringify({
-        type: 'CONNECTED',
-        message: 'WebSocket connected successfully',
+        type: 'CONNECTED_FROM_HANDLER',
+        message: '*** HANDLER CODE RUNS ***',
         timestamp: Date.now(),
       }));
 
