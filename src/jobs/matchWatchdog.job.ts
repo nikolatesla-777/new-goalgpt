@@ -1011,6 +1011,53 @@ export class MatchWatchdogWorker {
         attemptedCount++;
 
         try {
+          // CRITICAL FIX (2026-01-13): Handle KICKOFF TIMESTAMP MISMATCH ANOMALY
+          // If status=2 (1H) but second_half_kickoff_ts exists, force status=4 immediately
+          // This is the primary cause of "stuck at 45" bug for minor league matches
+          if (overdue.statusId === 2 && overdue.reason.includes('second_half_kickoff_ts')) {
+            logger.warn(
+              `[Watchdog] KICKOFF MISMATCH DETECTED: ${overdue.matchId} has status=2 (1H) but 2H kickoff timestamp exists! ` +
+              `Force transitioning to status=4 (SECOND_HALF).`
+            );
+
+            const nowTs = Math.floor(Date.now() / 1000);
+
+            // First, force status_id=4 via orchestrator (high priority watchdog source)
+            const statusFixResult = await this.orchestrator.updateMatch(
+              overdue.matchId,
+              [
+                { field: 'status_id', value: 4, source: 'watchdog', priority: 3, timestamp: nowTs },
+                { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+              ],
+              'watchdog-kickoff-mismatch-fix'
+            );
+
+            if (statusFixResult.status === 'success') {
+              successCount++;
+              reasons['kickoff_mismatch_fixed'] = (reasons['kickoff_mismatch_fixed'] || 0) + 1;
+
+              logEvent('info', 'watchdog.reconcile.done', {
+                match_id: overdue.matchId,
+                result: 'success',
+                reason: 'kickoff_mismatch_fixed',
+                duration_ms: Date.now() - reconcileStartTime,
+                fields_updated: statusFixResult.fieldsUpdated,
+                old_status: 2,
+                new_status: 4,
+              });
+
+              // Now try to get actual status from API (may be status=8 if match already ended)
+              const reconcileResult = await this.reconcileViaOrchestrator(overdue.matchId);
+              if (reconcileResult.statusId !== undefined && reconcileResult.statusId !== 4) {
+                logger.info(`[Watchdog] Kickoff mismatch match ${overdue.matchId} further updated to status=${reconcileResult.statusId} from API`);
+              }
+              continue;
+            }
+
+            logger.error(`[Watchdog] Failed to fix kickoff mismatch for ${overdue.matchId}: ${statusFixResult.reason}`);
+            // Fall through to normal reconcile if kickoff mismatch fix failed
+          }
+
           // PHASE C: Use orchestrator - try to reconcile via API to get correct status
           const reconcileResult = await this.reconcileViaOrchestrator(overdue.matchId);
           const duration = Date.now() - reconcileStartTime;

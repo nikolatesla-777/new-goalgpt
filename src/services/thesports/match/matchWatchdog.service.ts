@@ -120,6 +120,11 @@ export class MatchWatchdogService {
    * These matches are stuck in live status but minute exceeds normal game time:
    * - status_id = 4 (SECOND_HALF) AND minute > 105 (90 + 15 injury time)
    * - status_id = 5 (OVERTIME) AND minute > 130 (120 + 10 injury time)
+   * 
+   * CRITICAL FIX (2026-01-13): Also detect KICKOFF TIMESTAMP MISMATCH anomalies:
+   * - status_id = 2 (FIRST_HALF) but second_half_kickoff_ts IS NOT NULL → should be status 4!
+   * - status_id = 3 (HALF_TIME) but elapsed time > 60 minutes → match should have progressed
+   * - status_id = 2 (FIRST_HALF) and elapsed time > 75 minutes → definitely past 1H
    *
    * These need immediate reconciliation to get correct status from API.
    *
@@ -131,26 +136,63 @@ export class MatchWatchdogService {
   ): Promise<Array<{ matchId: string; statusId: number; minute: number; reason: string }>> {
     const client = await pool.connect();
     try {
+      const nowTs = Math.floor(Date.now() / 1000);
+
       const query = `
         SELECT
           external_id,
           status_id,
-          minute
+          minute,
+          match_time,
+          second_half_kickoff_ts,
+          ($1::integer - match_time) / 60 as elapsed_minutes
         FROM ts_matches
         WHERE
-          (status_id = 4 AND minute > 100)  -- SECOND_HALF exceeded max (90 + 10 injury) - LOWERED FROM 105 FOR FASTER FT DETECTION
+          -- Original checks: minute exceeded max
+          (status_id = 4 AND minute > 100)  -- SECOND_HALF exceeded max (90 + 10 injury)
           OR (status_id = 5 AND minute > 130) -- OVERTIME exceeded max (120 + 10 injury)
-          OR (status_id = 2 AND minute > 60)  -- FIRST_HALF exceeded max (45 + 15 injury - something is very wrong)
-          OR (status_id = 3 AND minute > 60)  -- CRITICAL FIX: HALF_TIME with minute > 60 is stuck (HT should be ~45-48 min)
-        ORDER BY minute DESC
-        LIMIT $1
+          OR (status_id = 2 AND minute > 60)  -- FIRST_HALF exceeded max
+          OR (status_id = 3 AND minute > 60)  -- HALF_TIME with minute > 60 is stuck
+          
+          -- CRITICAL FIX: KICKOFF TIMESTAMP MISMATCH DETECTION
+          -- status_id = 2 (FIRST_HALF) but second_half_kickoff_ts exists → should be 4!
+          OR (status_id = 2 AND second_half_kickoff_ts IS NOT NULL)
+          
+          -- status_id = 3 (HALF_TIME) but elapsed > 60min since match_time → stuck at HT
+          OR (status_id = 3 AND ($1::integer - match_time) > 3600)
+          
+          -- status_id = 2 (FIRST_HALF) but elapsed > 75min → definitely past 1H
+          OR (status_id = 2 AND ($1::integer - match_time) > 4500)
+        ORDER BY 
+          CASE 
+            WHEN status_id = 2 AND second_half_kickoff_ts IS NOT NULL THEN 0  -- Highest priority: kickoff mismatch
+            WHEN status_id = 2 AND ($1::integer - match_time) > 4500 THEN 1   -- Second: elapsed time anomaly
+            ELSE 2
+          END,
+          minute DESC
+        LIMIT $2
       `;
 
-      const result = await client.query(query, [limit]);
+      const result = await client.query(query, [nowTs, limit]);
 
       return result.rows.map((row: any) => {
         let reason = '';
-        if (row.status_id === 4 && row.minute > 100) {
+        const elapsedMinutes = Math.floor((nowTs - row.match_time) / 60);
+
+        // KICKOFF MISMATCH (highest priority)
+        if (row.status_id === 2 && row.second_half_kickoff_ts) {
+          reason = `CRITICAL ANOMALY: status=2 (1H) but second_half_kickoff_ts exists! Elapsed ${elapsedMinutes} min. Should be status=4 (2H)`;
+        }
+        // ELAPSED TIME ANOMALY for 1H
+        else if (row.status_id === 2 && elapsedMinutes > 75) {
+          reason = `ANOMALY: status=2 (1H) but elapsed ${elapsedMinutes} min > 75. Match stuck.`;
+        }
+        // ELAPSED TIME ANOMALY for HT
+        else if (row.status_id === 3 && elapsedMinutes > 60) {
+          reason = `ANOMALY: status=3 (HT) but elapsed ${elapsedMinutes} min > 60. HT stuck too long.`;
+        }
+        // Original minute-based checks
+        else if (row.status_id === 4 && row.minute > 100) {
           reason = `SECOND_HALF minute ${row.minute} > 100 (should have ended)`;
         } else if (row.status_id === 5 && row.minute > 130) {
           reason = `OVERTIME minute ${row.minute} > 130 (should have ended)`;
@@ -163,7 +205,7 @@ export class MatchWatchdogService {
         return {
           matchId: row.external_id,
           statusId: row.status_id,
-          minute: row.minute,
+          minute: row.minute ?? 0,
           reason,
         };
       });
