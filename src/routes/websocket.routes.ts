@@ -215,20 +215,22 @@ export default async function websocketRoutes(
   options: FastifyPluginOptions
 ) {
   // WebSocket route: /ws
-  fastify.get('/ws', { websocket: true }, (connection, req) => {
+  // @fastify/websocket v8+: first param is SocketStream which contains .socket (WebSocket)
+  fastify.get('/ws', { websocket: true }, (connection /* SocketStream */, req) => {
+    // CRITICAL DIAGNOSTIC: Log immediately when handler is called
+    console.log('[WS-ENTRY] Handler entered!');
+
     try {
       const clientId = req.socket?.remoteAddress || 'unknown';
 
-      // CRITICAL FIX: @fastify/websocket v8+ passes WebSocket as `connection` directly
-      // Older versions have it as `connection.socket`
-      const socket = (connection as any).socket || connection;
+      // v8 API: SocketStream has .socket property containing the actual WebSocket
+      const socket = connection.socket;
 
-      // DIAGNOSTIC: Use console.log to verify handler execution
-      console.log(`[WS-DIAGNOSTIC] Handler called for client: ${clientId}`);
+      console.log(`[WS-DIAGNOSTIC] Socket type: ${typeof socket}, has send: ${typeof socket?.send}`);
       logger.info(`[WebSocket Route] New client connected: ${clientId}`);
 
       // Verify socket has required WebSocket methods
-      if (typeof socket.send !== 'function') {
+      if (typeof socket?.send !== 'function') {
         logger.error(`[WebSocket Route] Invalid socket object - missing send method`);
         return;
       }
