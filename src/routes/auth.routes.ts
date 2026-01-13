@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { googleSignIn } from '../controllers/auth/googleAuth.controller';
 import { appleSignIn } from '../controllers/auth/appleAuth.controller';
 import { phoneLogin, refreshToken } from '../controllers/auth/phoneAuth.controller';
+import { legacyLogin, checkLegacyUser, migrateToOAuth } from '../controllers/auth/legacyAuth.controller';
 import { requireAuth } from '../middleware/auth.middleware';
 import { db } from '../database/kysely';
 import { sql } from 'kysely';
@@ -215,4 +216,58 @@ export async function authRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  // ============================================================================
+  // LEGACY AUTHENTICATION (Backward Compatibility)
+  // ============================================================================
+
+  /**
+   * POST /api/auth/legacy/login
+   * Login with phone + password (existing users)
+   *
+   * Body:
+   * - phone: string (e.g., +905551234567)
+   * - password: string
+   * - deviceInfo?: { deviceId, platform, appVersion }
+   *
+   * Response:
+   * - success: boolean
+   * - user: { ... }
+   * - tokens: { accessToken, refreshToken, expiresIn }
+   * - migration: { available: true, message: string }
+   */
+  fastify.post('/legacy/login', legacyLogin);
+
+  /**
+   * POST /api/auth/legacy/check
+   * Check if phone number has legacy account
+   *
+   * Body:
+   * - phone: string
+   *
+   * Response:
+   * - exists: boolean
+   * - hasPassword: boolean
+   * - isLegacyUser: boolean
+   */
+  fastify.post('/legacy/check', checkLegacyUser);
+
+  /**
+   * POST /api/auth/legacy/migrate-oauth
+   * Migrate legacy account to OAuth (link Google/Apple)
+   *
+   * Requires: Authentication
+   *
+   * Body:
+   * - oauthProvider: 'google' | 'apple'
+   * - oauthUserId: string
+   * - email?: string
+   * - name?: string
+   *
+   * Response:
+   * - success: boolean
+   * - message: string
+   * - provider: string
+   */
+  fastify.post('/legacy/migrate-oauth', { preHandler: requireAuth }, migrateToOAuth);
 }

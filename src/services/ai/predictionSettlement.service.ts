@@ -377,10 +377,20 @@ class PredictionSettlementService {
       await client.query('BEGIN');
 
       // Veritabanından gerçek final skorunu al (COALESCE ile NULL kontrolü)
+      // home_scores JSON dizisi: [0]=current, [4]=regular time score
+      // Önce display, sonra JSON array, sonra event'ten gelen skor
       const matchResult = await client.query(`
         SELECT
-          COALESCE(home_score_display, home_score_regular, $2) as home_final,
-          COALESCE(away_score_display, away_score_regular, $3) as away_final
+          COALESCE(
+            home_score_display, 
+            (home_scores->>0)::INTEGER,
+            $2
+          ) as home_final,
+          COALESCE(
+            away_score_display, 
+            (away_scores->>0)::INTEGER,
+            $3
+          ) as away_final
         FROM ts_matches
         WHERE external_id = $1
       `, [event.matchId, event.homeScore, event.awayScore]);
