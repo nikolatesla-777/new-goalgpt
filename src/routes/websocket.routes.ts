@@ -223,6 +223,8 @@ export default async function websocketRoutes(
       // Older versions have it as `connection.socket`
       const socket = (connection as any).socket || connection;
 
+      // DIAGNOSTIC: Use console.log to verify handler execution
+      console.log(`[WS-DIAGNOSTIC] Handler called for client: ${clientId}`);
       logger.info(`[WebSocket Route] New client connected: ${clientId}`);
 
       // Verify socket has required WebSocket methods
