@@ -269,11 +269,57 @@ export class MatchWatchdogWorker {
     const startedAt = Date.now();
 
     try {
+      const nowTs = Math.floor(Date.now() / 1000);
+
+      // CRITICAL FIX (2026-01-13): PROACTIVE KICKOFF DETECTION
+      // Instead of waiting for TheSports API/MQTT to tell us match started,
+      // we proactively transition status=1 → status=2 when match_time passes.
+      // This runs FIRST, before any other processing, for fastest possible kickoff detection.
+      try {
+        const immediateKickoffs = await this.matchWatchdogService.findImmediateKickoffs(nowTs, 120, 100);
+
+        if (immediateKickoffs.length > 0) {
+          logger.info(`[Watchdog] ⚡ Proactive Kickoff: Found ${immediateKickoffs.length} matches that just started`);
+
+          for (const kickoff of immediateKickoffs) {
+            try {
+              // Calculate minute based on time since match_time
+              const calculatedMinute = Math.max(1, Math.floor(kickoff.secondsSinceKickoff / 60));
+
+              // Force status=2 (FIRST_HALF) via orchestrator
+              const result = await this.orchestrator.updateMatch(
+                kickoff.matchId,
+                [
+                  { field: 'status_id', value: 2, source: 'computed', priority: 2, timestamp: nowTs },
+                  { field: 'minute', value: calculatedMinute, source: 'computed', priority: 1, timestamp: nowTs },
+                ],
+                'proactive-kickoff'
+              );
+
+              if (result.status === 'success') {
+                logger.info(`[Watchdog] ⚡ KICKOFF: ${kickoff.matchId} → status=2 (FIRST_HALF), minute=${calculatedMinute}`);
+
+                logEvent('info', 'watchdog.proactive_kickoff', {
+                  match_id: kickoff.matchId,
+                  seconds_since_kickoff: kickoff.secondsSinceKickoff,
+                  calculated_minute: calculatedMinute,
+                  result: 'success',
+                });
+              }
+            } catch (kickoffErr: any) {
+              logger.warn(`[Watchdog] Proactive kickoff failed for ${kickoff.matchId}: ${kickoffErr.message}`);
+            }
+          }
+        }
+      } catch (kickoffError: any) {
+        logger.error('[Watchdog] Proactive Kickoff Detection failed:', kickoffError);
+        // Continue with normal processing even if kickoff detection fails
+      }
+
       // CRITICAL: Execute Global Live Sweep
       // This ensures matches that "Start Late" or have "Wrong Schedule" are picked up INSTANTLY.
       await this.runGlobalSweep();
 
-      const nowTs = Math.floor(Date.now() / 1000);
 
       // CRITICAL FIX (2026-01-11): Use /match/diary instead of /match/recent/list
       // /match/recent/list only returns recently CHANGED matches (500 limit)

@@ -267,5 +267,55 @@ export class MatchWatchdogService {
       client.release();
     }
   }
+
+  /**
+   * Find matches that JUST started (match_time passed within last N seconds)
+   * 
+   * CRITICAL FIX (2026-01-13): Proactive Kickoff Detection
+   * Instead of waiting for TheSports API/MQTT to tell us match started,
+   * we proactively transition status=1 → status=2 when match_time passes.
+   * 
+   * This eliminates the 5+ minute delay for minor league matches where
+   * MQTT doesn't send kickoff events and API is slow to update.
+   * 
+   * @param nowTs - Current Unix timestamp (seconds)
+   * @param windowSeconds - How far back to check (default 120s = 2 minutes window)
+   * @param limit - Maximum matches to return
+   * @returns Array of matches that just kicked off but are still status=1
+   */
+  async findImmediateKickoffs(
+    nowTs: number,
+    windowSeconds: number = 120,
+    limit: number = 100
+  ): Promise<Array<{ matchId: string; matchTime: number; secondsSinceKickoff: number }>> {
+    const client = await pool.connect();
+    try {
+      const query = `
+        SELECT 
+          external_id as match_id,
+          match_time,
+          $1::integer - match_time as seconds_since_kickoff
+        FROM ts_matches
+        WHERE status_id = 1  -- Still marked as NOT_STARTED
+          AND match_time <= $1  -- Kickoff time has passed
+          AND match_time > $1 - $2  -- Within the window (last N seconds)
+        ORDER BY match_time DESC
+        LIMIT $3
+      `;
+
+      const result = await client.query(query, [nowTs, windowSeconds, limit]);
+
+      return result.rows.map((row: any) => ({
+        matchId: row.match_id,
+        matchTime: row.match_time,
+        secondsSinceKickoff: Math.floor(row.seconds_since_kickoff),
+      }));
+    } catch (error: any) {
+      logger.error('[Watchdog] Error finding immediate kickoffs:', error);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
 }
 
