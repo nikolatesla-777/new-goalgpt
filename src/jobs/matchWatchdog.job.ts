@@ -316,6 +316,53 @@ export class MatchWatchdogWorker {
         // Continue with normal processing even if kickoff detection fails
       }
 
+      // CRITICAL FIX (2026-01-13): PROACTIVE MATCH FINISH DETECTION
+      // Just like proactive kickoff detection, we proactively transition live matches to FINISHED
+      // when match_time + 130 minutes has passed OR minute >= 90 with no update in 15 minutes.
+      // This fixes matches stuck in CANLI (e.g., Indonesia WC at 90+10' forever).
+      try {
+        const overdueFinishes = await this.matchWatchdogService.findOverdueFinishes(nowTs, 100);
+
+        if (overdueFinishes.length > 0) {
+          logger.info(`[Watchdog] 🏁 Proactive Finish: Found ${overdueFinishes.length} matches that should have ended`);
+
+          for (const finish of overdueFinishes) {
+            try {
+              // Force status=8 (FINISHED) via orchestrator with actual scores
+              const result = await this.orchestrator.updateMatch(
+                finish.matchId,
+                [
+                  { field: 'status_id', value: 8, source: 'computed', priority: 10, timestamp: nowTs },
+                  { field: 'minute', value: 90, source: 'computed', priority: 10, timestamp: nowTs },
+                ],
+                'proactive-finish'
+              );
+
+              if (result.status === 'success') {
+                logger.info(`[Watchdog] 🏁 FINISHED: ${finish.matchId} → status=8 (was ${finish.statusId} @ ${finish.minute}') [${finish.reason}] Score: ${finish.homeScore}-${finish.awayScore}`);
+
+                logEvent('info', 'watchdog.proactive_finish', {
+                  match_id: finish.matchId,
+                  previous_status: finish.statusId,
+                  previous_minute: finish.minute,
+                  seconds_since_kickoff: finish.secondsSinceKickoff,
+                  seconds_since_update: finish.secondsSinceUpdate,
+                  reason: finish.reason,
+                  home_score: finish.homeScore,
+                  away_score: finish.awayScore,
+                  result: 'success',
+                });
+              }
+            } catch (finishErr: any) {
+              logger.warn(`[Watchdog] Proactive finish failed for ${finish.matchId}: ${finishErr.message}`);
+            }
+          }
+        }
+      } catch (finishError: any) {
+        logger.error('[Watchdog] Proactive Finish Detection failed:', finishError);
+        // Continue with normal processing even if finish detection fails
+      }
+
       // CRITICAL: Execute Global Live Sweep
       // This ensures matches that "Start Late" or have "Wrong Schedule" are picked up INSTANTLY.
       await this.runGlobalSweep();

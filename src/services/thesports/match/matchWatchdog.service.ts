@@ -317,5 +317,90 @@ export class MatchWatchdogService {
       client.release();
     }
   }
+
+  /**
+   * Find matches that should have FINISHED but are still marked live
+   * 
+   * CRITICAL FIX (2026-01-13): Proactive Match Finish Detection
+   * Just like proactive kickoff detection, we proactively transition
+   * status (2,3,4,5,7) → status=8 when match should have ended.
+   * 
+   * This eliminates the problem where MQTT/API never sends finish event
+   * for minor league matches (e.g., Indonesia WC stuck at 90+10' forever).
+   * 
+   * CRITERIA for forcing finish:
+   * 1. Match is live (status 2,3,4,5,7)
+   * 2. Either:
+   *    a) match_time + 130 minutes has passed (absolute timeout), OR
+   *    b) minute >= 90 AND no update in last 15 minutes (stale finish)
+   * 
+   * @param nowTs - Current Unix timestamp (seconds)
+   * @param limit - Maximum matches to return
+   * @returns Array of matches that should be finished
+   */
+  async findOverdueFinishes(
+    nowTs: number,
+    limit: number = 100
+  ): Promise<Array<{
+    matchId: string;
+    matchTime: number;
+    minute: number;
+    statusId: number;
+    secondsSinceKickoff: number;
+    secondsSinceUpdate: number;
+    reason: 'absolute_timeout' | 'stale_finish';
+    homeScore: number;
+    awayScore: number;
+  }>> {
+    const client = await pool.connect();
+    try {
+      const query = `
+        SELECT 
+          external_id as match_id,
+          match_time,
+          minute,
+          status_id,
+          $1::integer - match_time as seconds_since_kickoff,
+          EXTRACT(EPOCH FROM (NOW() - updated_at))::integer as seconds_since_update,
+          home_scores[1] as home_score,
+          away_scores[1] as away_score,
+          CASE 
+            WHEN $1::integer - match_time > 7800 THEN 'absolute_timeout'  -- 130 minutes = 7800 seconds
+            ELSE 'stale_finish'
+          END as reason
+        FROM ts_matches
+        WHERE 
+          status_id IN (2, 3, 4, 5, 7)  -- Live statuses
+          AND (
+            -- Condition A: Match has been running for > 130 minutes (absolute timeout)
+            $1::integer - match_time > 7800  -- 130 minutes = 7800 seconds
+            OR
+            -- Condition B: Minute >= 90 AND no update in last 15 minutes (stale finish)
+            (minute >= 90 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 900)  -- 15 minutes = 900 seconds
+          )
+        ORDER BY match_time ASC  -- Process oldest first
+        LIMIT $2
+      `;
+
+      const result = await client.query(query, [nowTs, limit]);
+
+      return result.rows.map((row: any) => ({
+        matchId: row.match_id,
+        matchTime: row.match_time,
+        minute: row.minute ?? 90,
+        statusId: row.status_id,
+        secondsSinceKickoff: Math.floor(row.seconds_since_kickoff),
+        secondsSinceUpdate: Math.floor(row.seconds_since_update),
+        reason: row.reason,
+        homeScore: row.home_score ?? 0,
+        awayScore: row.away_score ?? 0,
+      }));
+    } catch (error: any) {
+      logger.error('[Watchdog] Error finding overdue finishes:', error);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
 }
 
