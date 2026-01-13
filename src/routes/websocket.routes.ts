@@ -46,7 +46,7 @@ export function getActiveConnections(): number {
 export function getWebSocketHealth() {
   const now = Date.now();
   const uptime = now - connectionStartTime;
-  
+
   return {
     activeConnections: activeConnections.size,
     totalConnections,
@@ -208,52 +208,69 @@ export default async function websocketRoutes(
 ) {
   // WebSocket route: /ws
   fastify.get('/ws', { websocket: true }, (connection, req) => {
-    const clientId = req.socket.remoteAddress || 'unknown';
-    const socket = connection.socket as any; // WebSocket socket
-    logger.info(`[WebSocket Route] New client connected: ${clientId}`);
+    try {
+      const clientId = req.socket?.remoteAddress || 'unknown';
 
-    // Add connection to active set
-    activeConnections.add(socket);
-    totalConnections++;
+      // CRITICAL FIX: @fastify/websocket v8+ passes WebSocket as `connection` directly
+      // Older versions have it as `connection.socket`
+      const socket = (connection as any).socket || connection;
 
-    // Send welcome message
-    socket.send(JSON.stringify({
-      type: 'CONNECTED',
-      message: 'WebSocket connected successfully',
-      timestamp: Date.now(),
-    }));
+      logger.info(`[WebSocket Route] New client connected: ${clientId}`);
 
-    // Handle incoming messages (if needed)
-    socket.on('message', (message: Buffer) => {
-      try {
-        const data = JSON.parse(message.toString());
-        logger.debug(`[WebSocket Route] Received message from client ${clientId}:`, data);
-        
-        // Handle ping/pong for keepalive
-        if (data.type === 'PING') {
-          socket.send(JSON.stringify({
-            type: 'PONG',
-            timestamp: Date.now(),
-          }));
-        }
-      } catch (error: any) {
-        logger.warn(`[WebSocket Route] Invalid message from client ${clientId}:`, error.message);
+      // Verify socket has required WebSocket methods
+      if (typeof socket.send !== 'function') {
+        logger.error(`[WebSocket Route] Invalid socket object - missing send method`);
+        return;
       }
-    });
 
-    // Handle connection close
-    socket.on('close', () => {
-      logger.info(`[WebSocket Route] Client disconnected: ${clientId}`);
-      activeConnections.delete(socket);
-      totalDisconnections++;
-    });
+      // Add connection to active set
+      activeConnections.add(socket);
+      totalConnections++;
 
-    // Handle connection error
-    socket.on('error', (error: Error) => {
-      logger.error(`[WebSocket Route] Connection error for client ${clientId}:`, error);
-      activeConnections.delete(socket);
-      totalDisconnections++;
-    });
+      logger.info(`[WebSocket Route] Active connections: ${activeConnections.size}`);
+
+      // Send welcome message
+      socket.send(JSON.stringify({
+        type: 'CONNECTED',
+        message: 'WebSocket connected successfully',
+        timestamp: Date.now(),
+      }));
+
+
+      // Handle incoming messages (if needed)
+      socket.on('message', (message: Buffer) => {
+        try {
+          const data = JSON.parse(message.toString());
+          logger.debug(`[WebSocket Route] Received message from client ${clientId}:`, data);
+
+          // Handle ping/pong for keepalive
+          if (data.type === 'PING') {
+            socket.send(JSON.stringify({
+              type: 'PONG',
+              timestamp: Date.now(),
+            }));
+          }
+        } catch (error: any) {
+          logger.warn(`[WebSocket Route] Invalid message from client ${clientId}:`, error.message);
+        }
+      });
+
+      // Handle connection close
+      socket.on('close', () => {
+        logger.info(`[WebSocket Route] Client disconnected: ${clientId}`);
+        activeConnections.delete(socket);
+        totalDisconnections++;
+      });
+
+      // Handle connection error
+      socket.on('error', (error: Error) => {
+        logger.error(`[WebSocket Route] Connection error for client ${clientId}:`, error);
+        activeConnections.delete(socket);
+        totalDisconnections++;
+      });
+    } catch (connectionError: any) {
+      logger.error(`[WebSocket Route] Failed to initialize WebSocket connection:`, connectionError);
+    }
   });
 
   logger.info('[WebSocket Route] WebSocket route registered at /ws');
