@@ -31,6 +31,7 @@ const AdminBots = lazy(() => import('./components/admin').then(m => ({ default: 
 const AdminBotDetail = lazy(() => import('./components/admin').then(m => ({ default: m.AdminBotDetail })));
 const AdminManualPredictions = lazy(() => import('./components/admin').then(m => ({ default: m.AdminManualPredictions })));
 const AIPredictionsPage = lazy(() => import('./components/ai/AIPredictionsPage').then(m => ({ default: m.AIPredictionsPage })));
+const AIAnalysisLab = lazy(() => import('./components/ai-lab').then(m => ({ default: m.AIAnalysisLab })));
 
 // Match Detail (heavy page with charts)
 const MatchDetailPage = lazy(() => import('./pages/MatchDetailPage').then(m => ({ default: m.MatchDetailPage })));
@@ -88,86 +89,89 @@ function App() {
                 <Route path="ai" element={<AIMatchesTab />} />
               </Route>
 
-            {/* New Premium AI Page */}
-            <Route path="/ai-predictions" element={<Suspense fallback={<LoadingFallback />}><AIPredictionsPage /></Suspense>} />
+              {/* New Premium AI Page */}
+              <Route path="/ai-predictions" element={<Suspense fallback={<LoadingFallback />}><AIPredictionsPage /></Suspense>} />
 
-            {/* Admin Panel Routes */}
-            <Route path="/admin/predictions" element={<Suspense fallback={<LoadingFallback />}><AdminPredictions /></Suspense>} />
-            <Route path="/admin/logs" element={<Suspense fallback={<LoadingFallback />}><AdminLogs /></Suspense>} />
-            <Route path="/admin/bots" element={<Suspense fallback={<LoadingFallback />}><AdminBots /></Suspense>} />
-            <Route path="/admin/bots/:botName" element={<Suspense fallback={<LoadingFallback />}><AdminBotDetail /></Suspense>} />
-            <Route path="/admin/manual-predictions" element={<Suspense fallback={<LoadingFallback />}><AdminManualPredictions /></Suspense>} />
+              {/* AI Analysis Lab (FootyStats Integration Testing) */}
+              <Route path="/ai-lab" element={<Suspense fallback={<LoadingFallback />}><AIAnalysisLab /></Suspense>} />
 
-            {/* Match Detail - Single route with query param tabs */}
-            <Route
-              path="/match/:matchId"
-              element={
+              {/* Admin Panel Routes */}
+              <Route path="/admin/predictions" element={<Suspense fallback={<LoadingFallback />}><AdminPredictions /></Suspense>} />
+              <Route path="/admin/logs" element={<Suspense fallback={<LoadingFallback />}><AdminLogs /></Suspense>} />
+              <Route path="/admin/bots" element={<Suspense fallback={<LoadingFallback />}><AdminBots /></Suspense>} />
+              <Route path="/admin/bots/:botName" element={<Suspense fallback={<LoadingFallback />}><AdminBotDetail /></Suspense>} />
+              <Route path="/admin/manual-predictions" element={<Suspense fallback={<LoadingFallback />}><AdminManualPredictions /></Suspense>} />
+
+              {/* Match Detail - Single route with query param tabs */}
+              <Route
+                path="/match/:matchId"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<LoadingFallback />}>
+                      <MatchDetailPage />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+
+              {/* Redirects for old bookmarked URLs (backwards compatibility) */}
+              {/* CRITICAL FIX: Use absolute navigation to avoid /match/ID/stats?tab=stats double path */}
+              <Route path="/match/:matchId/stats" element={<MatchTabRedirect tab="stats" />} />
+              <Route path="/match/:matchId/events" element={<MatchTabRedirect tab="events" />} />
+              <Route path="/match/:matchId/h2h" element={<MatchTabRedirect tab="h2h" />} />
+              <Route path="/match/:matchId/standings" element={<MatchTabRedirect tab="standings" />} />
+              <Route path="/match/:matchId/lineup" element={<MatchTabRedirect tab="lineup" />} />
+              <Route path="/match/:matchId/trend" element={<MatchTabRedirect tab="trend" />} />
+              <Route path="/match/:matchId/ai" element={<MatchTabRedirect tab="ai" />} />
+
+              {/* Team Detail with Nested Routes for Tabs */}
+              <Route path="/team/:teamId" element={
                 <ErrorBoundary>
                   <Suspense fallback={<LoadingFallback />}>
-                    <MatchDetailPage />
+                    <TeamDetailLayout />
                   </Suspense>
                 </ErrorBoundary>
-              }
-            />
+              }>
+                {/* Default redirect to overview tab */}
+                <Route index element={<Navigate to="overview" replace />} />
+                {/* Tab routes */}
+                <Route path="overview" element={<Suspense fallback={<LoadingFallback />}><OverviewTab /></Suspense>} />
+                <Route path="fixtures" element={<Suspense fallback={<LoadingFallback />}><FixturesTab /></Suspense>} />
+                <Route path="standings" element={<Suspense fallback={<LoadingFallback />}><TeamStandingsTab /></Suspense>} />
+                <Route path="stage" element={<Suspense fallback={<LoadingFallback />}><StageTab /></Suspense>} />
+                <Route path="players" element={<Suspense fallback={<LoadingFallback />}><PlayersTab /></Suspense>} />
+              </Route>
 
-            {/* Redirects for old bookmarked URLs (backwards compatibility) */}
-            {/* CRITICAL FIX: Use absolute navigation to avoid /match/ID/stats?tab=stats double path */}
-            <Route path="/match/:matchId/stats" element={<MatchTabRedirect tab="stats" />} />
-            <Route path="/match/:matchId/events" element={<MatchTabRedirect tab="events" />} />
-            <Route path="/match/:matchId/h2h" element={<MatchTabRedirect tab="h2h" />} />
-            <Route path="/match/:matchId/standings" element={<MatchTabRedirect tab="standings" />} />
-            <Route path="/match/:matchId/lineup" element={<MatchTabRedirect tab="lineup" />} />
-            <Route path="/match/:matchId/trend" element={<MatchTabRedirect tab="trend" />} />
-            <Route path="/match/:matchId/ai" element={<MatchTabRedirect tab="ai" />} />
+              <Route path="/player/:playerId" element={
+                <ErrorBoundary>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <PlayerCardPage />
+                  </Suspense>
+                </ErrorBoundary>
+              } />
 
-            {/* Team Detail with Nested Routes for Tabs */}
-            <Route path="/team/:teamId" element={
-              <ErrorBoundary>
-                <Suspense fallback={<LoadingFallback />}>
-                  <TeamDetailLayout />
-                </Suspense>
-              </ErrorBoundary>
-            }>
-              {/* Default redirect to overview tab */}
-              <Route index element={<Navigate to="overview" replace />} />
-              {/* Tab routes */}
-              <Route path="overview" element={<Suspense fallback={<LoadingFallback />}><OverviewTab /></Suspense>} />
-              <Route path="fixtures" element={<Suspense fallback={<LoadingFallback />}><FixturesTab /></Suspense>} />
-              <Route path="standings" element={<Suspense fallback={<LoadingFallback />}><TeamStandingsTab /></Suspense>} />
-              <Route path="stage" element={<Suspense fallback={<LoadingFallback />}><StageTab /></Suspense>} />
-              <Route path="players" element={<Suspense fallback={<LoadingFallback />}><PlayersTab /></Suspense>} />
+              {/* Competition Detail with Nested Routes for Tabs */}
+              <Route path="/competition/:id" element={
+                <ErrorBoundary>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <CompetitionDetailLayout />
+                  </Suspense>
+                </ErrorBoundary>
+              }>
+                {/* Default redirect to overview tab */}
+                <Route index element={<Navigate to="overview" replace />} />
+                {/* Tab routes */}
+                <Route path="overview" element={<Suspense fallback={<LoadingFallback />}><CompOverviewTab /></Suspense>} />
+                <Route path="fixtures" element={<Suspense fallback={<LoadingFallback />}><CompFixturesTab /></Suspense>} />
+                <Route path="standings" element={<Suspense fallback={<LoadingFallback />}><CompStandingsTab /></Suspense>} />
+              </Route>
             </Route>
-
-            <Route path="/player/:playerId" element={
-              <ErrorBoundary>
-                <Suspense fallback={<LoadingFallback />}>
-                  <PlayerCardPage />
-                </Suspense>
-              </ErrorBoundary>
-            } />
-
-            {/* Competition Detail with Nested Routes for Tabs */}
-            <Route path="/competition/:id" element={
-              <ErrorBoundary>
-                <Suspense fallback={<LoadingFallback />}>
-                  <CompetitionDetailLayout />
-                </Suspense>
-              </ErrorBoundary>
-            }>
-              {/* Default redirect to overview tab */}
-              <Route index element={<Navigate to="overview" replace />} />
-              {/* Tab routes */}
-              <Route path="overview" element={<Suspense fallback={<LoadingFallback />}><CompOverviewTab /></Suspense>} />
-              <Route path="fixtures" element={<Suspense fallback={<LoadingFallback />}><CompFixturesTab /></Suspense>} />
-              <Route path="standings" element={<Suspense fallback={<LoadingFallback />}><CompStandingsTab /></Suspense>} />
-            </Route>
-          </Route>
-        </Routes>
-        {/* Real-time prediction settlement notifications */}
-        <PredictionToast />
-      </BrowserRouter>
-    </AIPredictionsProvider>
-  </FavoritesProvider>
+          </Routes>
+          {/* Real-time prediction settlement notifications */}
+          <PredictionToast />
+        </BrowserRouter>
+      </AIPredictionsProvider>
+    </FavoritesProvider>
   );
 }
 

@@ -1,0 +1,1 @@
+export { AIAnalysisLab } from './AIAnalysisLab';

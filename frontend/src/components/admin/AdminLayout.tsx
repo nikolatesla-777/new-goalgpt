@@ -75,6 +75,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
         label: 'YAPAY ZEKA',
         items: [
             { path: '/ai-predictions', label: 'Yapay Zeka', icon: SparklesIcon },
+            { path: '/ai-lab', label: 'AI Analiz Lab', icon: SparklesIcon },
             { path: '/admin/predictions', label: 'Tahmin Listesi', icon: PredictionsIcon },
             { path: '/admin/logs', label: 'İstek Logları', icon: LogsIcon },
             { path: '/admin/manual-predictions', label: 'Manuel Tahmin', icon: ManualIcon },
