@@ -834,9 +834,16 @@ export const getLiveMatches = async (
       reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
       reply.header('X-Cache', 'HIT');
 
+      // Ensure mobile app compatible format
+      const responseData = {
+        matches: cachedData.results || cachedData.matches || [],
+        total: (cachedData.results || cachedData.matches || []).length,
+        results: cachedData.results || cachedData.matches || [], // Keep for backward compatibility
+      };
+
       reply.send({
         success: true,
-        data: cachedData,
+        data: responseData,
       });
       return;
     }
@@ -880,10 +887,11 @@ export const getLiveMatches = async (
     const dbResult = await matchDatabaseService.getLiveMatches();
     const normalized = dbResult.results.map(normalizeDbMatch);
 
-    // Prepare response data
+    // Prepare response data with mobile app compatible format
     const responseData = {
-      ...dbResult,
-      results: normalized,
+      matches: normalized,
+      total: normalized.length,
+      results: normalized, // Keep for backward compatibility
     };
 
     // CACHE: Save to cache for future requests (30s TTL)

@@ -398,6 +398,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     /**
      * GET /api/predictions/matched
      * List matched predictions with results
+     * Mobile app compatible format
      */
     fastify.get('/api/predictions/matched', async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
         try {
@@ -406,6 +407,11 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
 
             return reply.status(200).send({
                 success: true,
+                data: {
+                    predictions,
+                    total: predictions.length
+                },
+                // Keep for backward compatibility
                 count: predictions.length,
                 predictions
             });
@@ -421,6 +427,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     /**
      * GET /api/predictions/match/:matchId
      * Get all predictions for a specific match (for match detail page)
+     * Mobile app compatible format
      */
     fastify.get('/api/predictions/match/:matchId', async (request: FastifyRequest<{ Params: { matchId: string } }>, reply: FastifyReply) => {
         try {
@@ -429,6 +436,11 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
 
             return reply.status(200).send({
                 success: true,
+                data: {
+                    predictions,
+                    matchId
+                },
+                // Keep for backward compatibility
                 count: predictions.length,
                 predictions
             });

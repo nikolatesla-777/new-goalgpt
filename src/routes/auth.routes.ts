@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+import { emailLogin, emailRegister } from '../controllers/auth/emailAuth.controller';
 import { googleSignIn } from '../controllers/auth/googleAuth.controller';
 import { appleSignIn } from '../controllers/auth/appleAuth.controller';
 import { phoneLogin, refreshToken } from '../controllers/auth/phoneAuth.controller';
@@ -13,6 +14,39 @@ import { sql } from 'kysely';
  */
 
 export async function authRoutes(fastify: FastifyInstance) {
+  /**
+   * POST /api/auth/login
+   * Email/Password Login
+   *
+   * Body:
+   * - email: string
+   * - password: string
+   * - deviceInfo?: { deviceId, platform, appVersion, fcmToken }
+   *
+   * Response:
+   * - success: boolean
+   * - user: { id, email, name, xp, credits, isVip, ... }
+   * - tokens: { accessToken, refreshToken, expiresIn }
+   */
+  fastify.post('/login', emailLogin);
+
+  /**
+   * POST /api/auth/register
+   * Email/Password Registration
+   *
+   * Body:
+   * - email: string
+   * - password: string
+   * - name?: string
+   * - deviceInfo?: { deviceId, platform, appVersion, fcmToken }
+   *
+   * Response:
+   * - success: boolean
+   * - user: { id, email, name, xp, credits, isVip, ... }
+   * - tokens: { accessToken, refreshToken, expiresIn }
+   */
+  fastify.post('/register', emailRegister);
+
   /**
    * POST /api/auth/google/signin
    * Google OAuth Sign In
