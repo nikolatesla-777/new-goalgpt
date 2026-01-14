@@ -28,6 +28,7 @@ import { SeasonStandingsParams } from '../types/thesports/season/seasonStandings
 import { logger } from '../utils/logger';
 import { generateMinuteText } from '../utils/matchMinuteText';
 import { liveMatchCache } from '../services/thesports/match/liveMatchCache.service';
+import { matchStatsRepository } from '../repositories/matchStats.repository';
 import { getDiaryCache, setDiaryCache, getSmartTTL, getLiveMatchesCache, setLiveMatchesCache } from '../utils/matchCache';
 // SINGLETON: Use shared API client instead of creating new instances
 import { theSportsAPI } from '../core';
@@ -1317,7 +1318,46 @@ export const getMatchLiveStats = async (
     let firstHalfStats = await combinedStatsService.getFirstHalfStats(match_id);
     let secondHalfStats = await combinedStatsService.getSecondHalfStats(match_id);
 
-    // For LIVE matches: Check CACHE first
+    // ===== DB-FIRST ARCHITECTURE =====
+    // For LIVE matches: Check ts_match_stats FIRST (instant response ~5ms)
+    // This is populated by background sync in matchSync.job.ts
+    const dbStats = await matchStatsRepository.getStats(match_id);
+    if (dbStats && (dbStats.home_corner !== 0 || dbStats.away_corner !== 0 ||
+      dbStats.home_shots !== 0 || dbStats.away_shots !== 0 ||
+      dbStats.home_yellow_cards !== 0 || dbStats.away_yellow_cards !== 0)) {
+      logger.debug(`[MatchController] ⚡ DB-FIRST: Returning stats from ts_match_stats for ${match_id}`);
+
+      // Convert DB stats to API response format
+      const statsArray = [
+        { type: 2, home: dbStats.home_corner, away: dbStats.away_corner, name: 'Corner Kicks', nameTr: 'Korner' },
+        { type: 3, home: dbStats.home_yellow_cards, away: dbStats.away_yellow_cards, name: 'Yellow Cards', nameTr: 'Sarı Kart' },
+        { type: 4, home: dbStats.home_red_cards, away: dbStats.away_red_cards, name: 'Red Cards', nameTr: 'Kırmızı Kart' },
+        { type: 21, home: dbStats.home_shots_on_target, away: dbStats.away_shots_on_target, name: 'Shots on Target', nameTr: 'İsabetli Şut' },
+        { type: 22, home: (dbStats.home_shots || 0) - (dbStats.home_shots_on_target || 0), away: (dbStats.away_shots || 0) - (dbStats.away_shots_on_target || 0), name: 'Shots off Target', nameTr: 'İsabetsiz Şut' },
+        { type: 23, home: dbStats.home_attacks, away: dbStats.away_attacks, name: 'Attacks', nameTr: 'Atak' },
+        { type: 24, home: dbStats.home_dangerous_attacks, away: dbStats.away_dangerous_attacks, name: 'Dangerous Attacks', nameTr: 'Tehlikeli Atak' },
+        { type: 25, home: dbStats.home_possession, away: dbStats.away_possession, name: 'Ball Possession (%)', nameTr: 'Top Hakimiyeti' },
+      ].filter(s => s.home !== undefined && s.away !== undefined);
+
+      reply.send({
+        success: true,
+        data: {
+          match_id,
+          match_status: matchStatus,
+          stats: statsArray,
+          fullTime: { stats: statsArray, results: statsArray },
+          firstHalfStats: firstHalfStats || null,
+          secondHalfStats: secondHalfStats || null,
+          halfTime: null,
+          incidents: [],
+          score: null,
+          sources: { basic: statsArray.length, detailed: 0, from: 'database (db-first)' },
+        },
+      });
+      return;
+    }
+
+    // For LIVE matches: Check CACHE second (if DB empty)
     // This prevents blocking the thread for 5-10s if the external API is slow
     const cachedLiveDetail = await liveMatchCache.get(match_id);
     if (cachedLiveDetail) {
