@@ -19,6 +19,7 @@ import { logEvent } from '../utils/obsLogger';
 import { AIPredictionService } from '../services/ai/aiPrediction.service';
 import { predictionSettlementService } from '../services/ai/predictionSettlement.service';
 import { LiveMatchOrchestrator, FieldUpdate } from '../services/orchestration/LiveMatchOrchestrator';
+import { matchStatsRepository } from '../repositories/matchStats.repository';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -254,6 +255,21 @@ export class MatchSyncWorker {
           // Retry later
           this.enqueueReconcile(matchId);
         }
+      }
+
+      // Step 5: Save stats to database (DB-first architecture)
+      // Extract stats from API response and persist to ts_match_stats
+      try {
+        const parsedStats = matchStatsRepository.parseStatsFromDetailLive(matchData);
+        if (Object.keys(parsedStats).length > 0) {
+          await matchStatsRepository.upsertStats({
+            match_id: matchId,
+            ...parsedStats,
+          });
+        }
+      } catch (statsError: any) {
+        // Non-blocking: stats save failure shouldn't fail the reconcile
+        logger.warn(`[reconcileViaOrchestrator] Stats save failed for ${matchId}: ${statsError.message}`);
       }
     } catch (error: any) {
       logger.error(`[reconcileViaOrchestrator] Error for match ${matchId}:`, error);
