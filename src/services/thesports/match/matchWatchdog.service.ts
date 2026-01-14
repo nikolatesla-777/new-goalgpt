@@ -365,20 +365,21 @@ export class MatchWatchdogService {
           home_scores[1] as home_score,
           away_scores[1] as away_score,
           CASE 
-            WHEN $1::integer - match_time > 7800 THEN 'absolute_timeout'  -- 130 minutes = 7800 seconds
+            WHEN $1::integer - match_time > 7800 THEN 'absolute_timeout'
+            WHEN minute > 100 THEN 'minute_exceeded'
             ELSE 'stale_finish'
           END as reason
         FROM ts_matches
         WHERE 
-          status_id IN (2, 3, 4, 5, 7)  -- Live statuses
+          status_id IN (2, 3, 4, 5, 7)
           AND (
-            -- Condition A: Match has been running for > 130 minutes (absolute timeout)
-            $1::integer - match_time > 7800  -- 130 minutes = 7800 seconds
+            $1::integer - match_time > 7800
             OR
-            -- Condition B: Minute >= 90 AND no update in last 15 minutes (stale finish)
-            (minute >= 90 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 900)  -- 15 minutes = 900 seconds
+            minute > 100
+            OR
+            (minute >= 90 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 900)
           )
-        ORDER BY match_time ASC  -- Process oldest first
+        ORDER BY match_time ASC
         LIMIT $2
       `;
 
