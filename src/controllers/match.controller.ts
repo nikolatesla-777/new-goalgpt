@@ -315,8 +315,20 @@ export const getMatchById = async (
           m.last_event_ts,
           m.home_team_id,
           m.away_team_id,
-          m.home_score_regular as home_score,
-          m.away_score_regular as away_score,
+          -- CRITICAL FIX: Use COALESCE to get score from multiple sources
+          -- Priority: home_score_display > home_scores[0] > home_score_regular > 0
+          COALESCE(
+            m.home_score_display,
+            (m.home_scores->0)::INTEGER,
+            m.home_score_regular,
+            0
+          ) as home_score,
+          COALESCE(
+            m.away_score_display,
+            (m.away_scores->0)::INTEGER,
+            m.away_score_regular,
+            0
+          ) as away_score,
           m.home_score_overtime,
           m.away_score_overtime,
           m.home_score_penalties,
