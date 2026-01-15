@@ -134,32 +134,44 @@ const start = async () => {
     // Phase 3A: Using theSportsAPI singleton (global rate limiting enabled)
     logger.info('[Migration] Using TheSportsAPIManager singleton for all workers');
 
+    // ============ WORKERS STARTUP ============
+    logger.info('========================================');
+    logger.info('🚀 Starting Background Workers...');
+    logger.info('========================================');
+
     // Start workers (all use singleton internally)
     teamDataSyncWorker = new TeamDataSyncWorker();
     teamDataSyncWorker.start();
+    logger.info('✅ TeamDataSync Worker started (interval: 6h)');
 
     teamLogoSyncWorker = new TeamLogoSyncWorker();
     teamLogoSyncWorker.start();
+    logger.info('✅ TeamLogoSync Worker started (interval: 24h)');
 
     matchSyncWorker = new MatchSyncWorker();
     matchSyncWorker.start();
+    logger.info('✅ MatchSync Worker started (interval: 30s)');
 
     dailyMatchSyncWorker = new DailyMatchSyncWorker();
     dailyMatchSyncWorker.start();
+    logger.info('✅ DailyMatchSync Worker started (interval: 1h)');
 
     lineupRefreshJob = new LineupRefreshJob();
     lineupRefreshJob.start();
+    logger.info('✅ LineupRefresh Job started (interval: 5m)');
 
     postMatchProcessorJob = new PostMatchProcessorJob();
     postMatchProcessorJob.start();
+    logger.info('✅ PostMatchProcessor Job started (interval: 2m)');
 
     dataUpdateWorker = new DataUpdateWorker();
     dataUpdateWorker.start();
+    logger.info('✅ DataUpdate Worker started (interval: 20s)');
 
     try {
       matchMinuteWorker = new MatchMinuteWorker();
       matchMinuteWorker.start();
-      logger.info('✅ Match Minute Worker started');
+      logger.info('✅ MatchMinute Worker started (interval: 30s)');
     } catch (err: any) {
       logger.error('❌ Failed to start Match Minute Worker:', err);
     }
@@ -167,22 +179,28 @@ const start = async () => {
     // Match Data Sync Worker (automatically saves statistics, incidents, trend for live matches)
     matchDataSyncWorker = new MatchDataSyncWorker();
     matchDataSyncWorker.start();
+    logger.info('✅ MatchDataSync Worker started (interval: 60s)');
 
     // Match Watchdog Worker (for should-be-live matches)
     const matchDetailLiveService = new MatchDetailLiveService();
     const matchRecentService = new MatchRecentService();
     matchWatchdogWorker = new MatchWatchdogWorker(matchDetailLiveService, matchRecentService);
     matchWatchdogWorker.start();
+    logger.info('✅ MatchWatchdog Worker started (interval: 30s)');
 
     // Competition Sync Worker (syncs competition/league data)
     competitionSyncWorker = new CompetitionSyncWorker();
     competitionSyncWorker.start();
-    logger.info('✅ Competition Sync Worker started');
+    logger.info('✅ CompetitionSync Worker started (interval: 24h)');
 
     // Player Sync Worker (syncs player data)
     playerSyncWorker = new PlayerSyncWorker();
     playerSyncWorker.start();
-    logger.info('✅ Player Sync Worker started');
+    logger.info('✅ PlayerSync Worker started (interval: 24h)');
+
+    logger.info('========================================');
+    logger.info('🎉 All 12 Background Workers Started!');
+    logger.info('========================================');
 
     // Initialize Orchestrator Settlement Listener
     // Connects orchestrator events to AI prediction settlement
