@@ -6,6 +6,8 @@
 
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import dotenv from 'dotenv';
 import { randomUUID } from 'crypto';
@@ -70,10 +72,33 @@ const fastify = Fastify({
 // Register WebSocket
 fastify.register(websocket);
 
-// Register CORS
+// Register Helmet (Security Headers)
+fastify.register(helmet, {
+  contentSecurityPolicy: false,  // API server - not needed
+  crossOriginEmbedderPolicy: false,
+});
+
+// Register Rate Limiting (200 req/min - Serbest config)
+fastify.register(rateLimit, {
+  max: 200,
+  timeWindow: '1 minute',
+  keyGenerator: (request) => request.ip,
+  errorResponseBuilder: (_request, context) => ({
+    statusCode: 429,
+    error: 'Too Many Requests',
+    message: `Rate limit exceeded. Try again in ${context.after}`,
+  }),
+});
+
+// Register CORS (Restricted to production domain)
 fastify.register(cors, {
-  origin: '*',
+  origin: [
+    'https://partnergoalgpt.com',
+    'https://www.partnergoalgpt.com',
+  ],
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 });
 
 

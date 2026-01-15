@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '../middleware/auth.middleware';
+import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 import {
   grantXP,
   getUserXP,
@@ -82,19 +82,13 @@ export async function xpRoutes(fastify: FastifyInstance) {
    * POST /api/xp/grant
    * Grant XP to a user (admin only)
    * Protected: Requires authentication + admin role
-   * TODO: Add admin role check middleware
    */
   fastify.post(
     '/grant',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, requireAdmin] },
     async (request: FastifyRequest<GrantXPRequest>, reply: FastifyReply) => {
       try {
         const { userId, amount, transactionType, description, referenceId, referenceType, metadata } = request.body;
-
-        // TODO: Verify admin role
-        // if (!request.user!.isAdmin) {
-        //   return reply.status(403).send({ error: 'ADMIN_REQUIRED' });
-        // }
 
         const result = await grantXP({
           userId,

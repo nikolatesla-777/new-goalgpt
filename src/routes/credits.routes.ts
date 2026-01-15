@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '../middleware/auth.middleware';
+import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 import {
   grantCredits,
   spendCredits,
@@ -114,19 +114,13 @@ export async function creditsRoutes(fastify: FastifyInstance) {
    * POST /api/credits/grant
    * Grant credits to a user (admin only)
    * Protected: Requires authentication + admin role
-   * TODO: Add admin role check middleware
    */
   fastify.post(
     '/grant',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, requireAdmin] },
     async (request: FastifyRequest<GrantCreditsRequest>, reply: FastifyReply) => {
       try {
         const { userId, amount, transactionType, description, referenceId, referenceType, metadata } = request.body;
-
-        // TODO: Verify admin role
-        // if (!request.user!.isAdmin) {
-        //   return reply.status(403).send({ error: 'ADMIN_REQUIRED' });
-        // }
 
         const result = await grantCredits({
           userId,
@@ -333,19 +327,13 @@ export async function creditsRoutes(fastify: FastifyInstance) {
    * POST /api/credits/refund
    * Refund credits (admin only)
    * Protected: Requires authentication + admin role
-   * TODO: Add admin role check middleware
    */
   fastify.post(
     '/refund',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, requireAdmin] },
     async (request: FastifyRequest<RefundCreditsRequest>, reply: FastifyReply) => {
       try {
         const { userId, amount, reason, referenceId } = request.body;
-
-        // TODO: Verify admin role
-        // if (!request.user!.isAdmin) {
-        //   return reply.status(403).send({ error: 'ADMIN_REQUIRED' });
-        // }
 
         const result = await refundCredits(userId, amount, reason, referenceId);
 
