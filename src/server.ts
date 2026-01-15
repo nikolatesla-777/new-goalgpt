@@ -11,6 +11,7 @@ import dotenv from 'dotenv';
 import { randomUUID } from 'crypto';
 import { logger } from './utils/logger';
 import { logEvent } from './utils/obsLogger';
+import { sendStartupAlert } from './utils/telegramAlert';
 
 // Routes - Corrected Imports
 import matchRoutes from './routes/match.routes';
@@ -201,6 +202,9 @@ const start = async () => {
     logger.info('========================================');
     logger.info('🎉 All 12 Background Workers Started!');
     logger.info('========================================');
+
+    // Send Telegram startup notification (if configured)
+    sendStartupAlert().catch(err => logger.debug('[TelegramAlert] Startup alert skipped:', err.message));
 
     // Initialize Orchestrator Settlement Listener
     // Connects orchestrator events to AI prediction settlement
