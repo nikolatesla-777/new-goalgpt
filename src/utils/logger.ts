@@ -15,19 +15,29 @@ export const logger = winston.createLogger({
   ],
 });
 
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf(
-          ({ timestamp, level, message, ...meta }) =>
-            `${timestamp} [${level}]: ${message} ${
-              Object.keys(meta).length ? JSON.stringify(meta, null, 2) : ''
-            }`
-        )
-      ),
-    })
+// CRITICAL FIX: Also add Console transport in production for PM2 visibility
+// Previous bug: Console only added in dev, so PM2 logs were empty
+const consoleFormat = process.env.NODE_ENV === 'production'
+  ? winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    winston.format.printf(
+      ({ timestamp, level, message, ...meta }) =>
+        `${timestamp} [${level.toUpperCase()}]: ${message} ${Object.keys(meta).length && !meta.service ? JSON.stringify(meta) : ''
+        }`
+    )
+  )
+  : winston.format.combine(
+    winston.format.colorize(),
+    winston.format.printf(
+      ({ timestamp, level, message, ...meta }) =>
+        `${timestamp} [${level}]: ${message} ${Object.keys(meta).length ? JSON.stringify(meta, null, 2) : ''
+        }`
+    )
   );
-}
+
+logger.add(
+  new winston.transports.Console({
+    format: consoleFormat,
+  })
+);
 
