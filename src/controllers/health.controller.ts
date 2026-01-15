@@ -150,8 +150,149 @@ export async function getHealthDetailed(
   });
 }
 
+/**
+ * GET /sync/status
+ * Check sync gap between API live matches and database
+ */
+export async function getSyncStatus(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    // Get DB live match count
+    const dbResult = await pool.query(`
+      SELECT COUNT(*) as count FROM ts_matches 
+      WHERE status_id IN (2, 3, 4, 5, 7)
+    `);
+    const dbCount = parseInt(dbResult.rows[0]?.count || '0');
 
+    // Get API live match count via fetch
+    const apiUrl = `${config.thesports.baseUrl}/match/detail_live?user=${config.thesports.user}&secret=${config.thesports.secret}`;
+    const apiResponse = await fetch(apiUrl);
+    const apiData = await apiResponse.json() as any;
+    const apiCount = apiData.results?.length || 0;
 
+    const syncGap = apiCount - dbCount;
+    const syncStatus = syncGap <= 5 ? 'healthy' : syncGap <= 15 ? 'warning' : 'critical';
 
+    reply.send({
+      ok: syncStatus === 'healthy',
+      syncStatus,
+      api: {
+        liveMatches: apiCount,
+      },
+      db: {
+        liveMatches: dbCount,
+      },
+      gap: syncGap,
+      message: syncGap <= 5
+        ? 'Sync is healthy'
+        : `${syncGap} matches missing from database`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    reply.code(500).send({
+      ok: false,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
 
+/**
+ * POST /sync/force
+ * Force sync live matches from API to database
+ */
+export async function forceSyncLiveMatches(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    // Fetch live matches from API
+    const apiUrl = `${config.thesports.baseUrl}/match/detail_live?user=${config.thesports.user}&secret=${config.thesports.secret}`;
+    const apiResponse = await fetch(apiUrl);
+    const apiData = await apiResponse.json() as any;
+    const apiMatches = apiData.results || [];
+
+    if (apiMatches.length === 0) {
+      reply.send({
+        ok: true,
+        message: 'No live matches in API',
+        synced: 0,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Get existing match IDs from DB
+    const existingResult = await pool.query(`
+      SELECT external_id FROM ts_matches 
+      WHERE external_id = ANY($1)
+    `, [apiMatches.map((m: any) => m.id)]);
+    const existingIds = new Set(existingResult.rows.map(r => r.external_id));
+
+    // Find missing matches
+    const missingMatches = apiMatches.filter((m: any) => !existingIds.has(m.id));
+
+    // Insert missing matches with basic info
+    let insertedCount = 0;
+    for (const match of missingMatches) {
+      try {
+        const score = match.score || [];
+        const statusId = score[1] || 1;
+        const homeScores = score[2] || [0, 0, 0];
+        const awayScores = score[3] || [0, 0, 0];
+        const updateTime = score[4] || Math.floor(Date.now() / 1000);
+
+        await pool.query(`
+          INSERT INTO ts_matches (
+            external_id, status_id, home_score, away_score,
+            home_scores, away_scores, provider_update_time, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+          ON CONFLICT (external_id) DO UPDATE SET
+            status_id = EXCLUDED.status_id,
+            home_score = EXCLUDED.home_score,
+            away_score = EXCLUDED.away_score,
+            updated_at = NOW()
+        `, [
+          match.id,
+          statusId,
+          homeScores[0] || 0,
+          awayScores[0] || 0,
+          JSON.stringify(homeScores),
+          JSON.stringify(awayScores),
+          updateTime
+        ]);
+        insertedCount++;
+      } catch (insertErr: any) {
+        logEvent('warn', 'force_sync.insert_error', {
+          matchId: match.id,
+          error: insertErr.message
+        });
+      }
+    }
+
+    logEvent('info', 'force_sync.completed', {
+      apiCount: apiMatches.length,
+      existingCount: existingIds.size,
+      insertedCount,
+    });
+
+    reply.send({
+      ok: true,
+      message: `Force sync completed`,
+      api: apiMatches.length,
+      existing: existingIds.size,
+      synced: insertedCount,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logEvent('error', 'force_sync.failed', { error: error.message });
+    reply.code(500).send({
+      ok: false,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
 
