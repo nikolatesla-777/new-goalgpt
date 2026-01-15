@@ -248,12 +248,20 @@ export default async function websocketRoutes(
         timestamp: Date.now(),
       }));
 
+      // Heartbeat to keep connection alive (fixes Nginx timeout)
+      const pingInterval = setInterval(() => {
+        if (socket.readyState === 1) {
+          socket.send(JSON.stringify({ type: 'PING', timestamp: Date.now() }));
+        } else {
+          clearInterval(pingInterval);
+        }
+      }, 30000); // Send ping every 30 seconds
 
       // Handle incoming messages (if needed)
       socket.on('message', (message: Buffer) => {
         try {
           const data = JSON.parse(message.toString());
-          logger.debug(`[WebSocket Route] Received message from client ${clientId}:`, data);
+          // logger.debug(`[WebSocket Route] Received message from client ${clientId}:`, data);
 
           // Handle ping/pong for keepalive
           if (data.type === 'PING') {
@@ -269,6 +277,7 @@ export default async function websocketRoutes(
 
       // Handle connection close
       socket.on('close', () => {
+        clearInterval(pingInterval);
         logger.info(`[WebSocket Route] Client disconnected: ${clientId}`);
         activeConnections.delete(socket);
         totalDisconnections++;
@@ -276,6 +285,7 @@ export default async function websocketRoutes(
 
       // Handle connection error
       socket.on('error', (error: Error) => {
+        clearInterval(pingInterval);
         logger.error(`[WebSocket Route] Connection error for client ${clientId}:`, error);
         activeConnections.delete(socket);
         totalDisconnections++;
