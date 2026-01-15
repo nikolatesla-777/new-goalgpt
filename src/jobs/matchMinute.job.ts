@@ -82,15 +82,14 @@ export class MatchMinuteWorker {
 
           // OPTIMIZATION: Skip minute calculation if DataUpdate recently updated this match
           // DataUpdate worker (20s interval) fetches fresh minute from API
-          // If match was updated within last 25 seconds, API data is fresh enough
-          // This prevents duplicate calculations and reduces CPU load
+          // CRITICAL FIX (2026-01-15): Reduced from 25s to 5s to minimize minute update delays
           const providerUpdateTime = match.provider_update_time ? Number(match.provider_update_time) : null;
           const lastEventTs = match.last_event_ts ? Number(match.last_event_ts) : null;
 
           // Use the most recent timestamp (provider_update_time or last_event_ts)
           const lastApiUpdate = providerUpdateTime || lastEventTs;
 
-          if (lastApiUpdate && (nowTs - lastApiUpdate) < 25) {
+          if (lastApiUpdate && (nowTs - lastApiUpdate) < 5) {
             const secondsAgo = nowTs - lastApiUpdate;
             logger.debug(
               `[MinuteEngine] skipped match_id=${matchId} reason=recently_updated_by_api (${secondsAgo}s ago) - using API minute`

@@ -37,7 +37,7 @@ export class MatchWatchdogService {
    * 
    * Thresholds:
    * - status_id IN (2, 4, 5, 7) → staleSeconds (default 120)
-   * - status_id = 3 (HALF_TIME) → halfTimeStaleSeconds (default 900)
+   * - status_id = 3 (HALF_TIME) → halfTimeStaleSeconds (default 300, reduced from 900)
    * 
    * @param nowTs - Current Unix timestamp (seconds)
    * @param staleSeconds - Stale threshold for statuses 2/4/5/7 (default 120)
@@ -48,7 +48,7 @@ export class MatchWatchdogService {
   async findStaleLiveMatches(
     nowTs: number,
     staleSeconds: number = 120,
-    halfTimeStaleSeconds: number = 900,
+    halfTimeStaleSeconds: number = 300,  // CRITICAL FIX (2026-01-15): Reduced from 900 to 300
     limit: number = 50
   ): Promise<StaleMatch[]> {
     const client = await pool.connect();
@@ -364,16 +364,17 @@ export class MatchWatchdogService {
           EXTRACT(EPOCH FROM (NOW() - updated_at))::integer as seconds_since_update,
           home_scores[1] as home_score,
           away_scores[1] as away_score,
-          CASE 
-            WHEN $1::integer - match_time > 7800 THEN 'absolute_timeout'
+          CASE
+            -- CRITICAL FIX (2026-01-15): Reduced from 7800 (130min) to 6300 (105min = 90 + 15 HT)
+            WHEN $1::integer - match_time > 6300 THEN 'absolute_timeout'
             WHEN minute > 100 THEN 'minute_exceeded'
             ELSE 'stale_finish'
           END as reason
         FROM ts_matches
-        WHERE 
+        WHERE
           status_id IN (2, 3, 4, 5, 7)
           AND (
-            $1::integer - match_time > 7800
+            $1::integer - match_time > 6300
             OR
             minute > 100
             OR

@@ -245,11 +245,13 @@ const start = async () => {
 
       // Only broadcast minute updates (not score/status - those come via MQTT)
       const hasMinuteField = data.fields.includes('minute');
-      const isMatchMinuteSource = data.source === 'matchMinute';
+      // CRITICAL FIX: matchMinute.job.ts sends source='computed', not 'matchMinute'
+      // Accept both for backward compatibility
+      const isMinuteUpdate = data.source === 'computed' || data.source === 'matchMinute';
 
-      logger.debug(`[MinuteBroadcast] Checks: hasMinuteField=${hasMinuteField}, isMatchMinuteSource=${isMatchMinuteSource}`);
+      logger.debug(`[MinuteBroadcast] Checks: hasMinuteField=${hasMinuteField}, isMinuteUpdate=${isMinuteUpdate}`);
 
-      if (hasMinuteField && isMatchMinuteSource) {
+      if (hasMinuteField && isMinuteUpdate) {
         try {
           // Fetch current match state for broadcast
           const matchState = await pool.query(`
