@@ -5,7 +5,7 @@
  */
 
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { getHealth, getReady } from '../controllers/health.controller';
+import { getHealth, getReady, getHealthDetailed } from '../controllers/health.controller';
 
 export async function healthRoutes(
   fastify: FastifyInstance,
@@ -22,6 +22,12 @@ export async function healthRoutes(
    * Readiness check - returns 200 only if critical dependencies are OK
    */
   fastify.get('/ready', getReady);
+
+  /**
+   * GET /health/detailed
+   * Detailed health check with memory and worker stats
+   */
+  fastify.get('/health/detailed', getHealthDetailed);
 }
 
 

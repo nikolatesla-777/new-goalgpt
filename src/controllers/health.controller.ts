@@ -28,7 +28,7 @@ export async function getHealth(
   reply: FastifyReply
 ): Promise<void> {
   const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
-  
+
   reply.send({
     ok: true,
     service: 'goalgpt-server',
@@ -107,6 +107,47 @@ export async function getReady(
     logEvent('warn', 'health.ready.failed', { checks });
     reply.code(503).send(response); // Service Unavailable
   }
+}
+
+/**
+ * GET /health/detailed
+ * Detailed health check with memory and system metrics
+ */
+export async function getHealthDetailed(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  const memUsage = process.memoryUsage();
+  const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
+
+  // Format uptime as human readable
+  const hours = Math.floor(uptimeSeconds / 3600);
+  const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+  const seconds = uptimeSeconds % 60;
+  const uptimeFormatted = `${hours}h ${minutes}m ${seconds}s`;
+
+  reply.send({
+    ok: true,
+    service: 'goalgpt-server',
+    uptime: {
+      seconds: uptimeSeconds,
+      formatted: uptimeFormatted,
+    },
+    memory: {
+      heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+      rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+      external: `${Math.round(memUsage.external / 1024 / 1024)}MB`,
+      heapUsedBytes: memUsage.heapUsed,
+      heapTotalBytes: memUsage.heapTotal,
+    },
+    node: {
+      version: process.version,
+      platform: process.platform,
+      arch: process.arch,
+    },
+    timestamp: new Date().toISOString(),
+  });
 }
 
 
