@@ -833,5 +833,40 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         }
     });
 
+    /**
+     * POST /api/predictions/manual-coupon
+     * Create a new Combined Betting Coupon
+     */
+    interface CouponBody {
+        title: string;
+        access_type: 'VIP' | 'FREE';
+        items: Array<{
+            match_id: string;
+            home_team: string;
+            away_team: string;
+            league: string;
+            score: string;
+            minute: number;
+            prediction: string;
+        }>;
+    }
+
+    fastify.post('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Body: CouponBody }>, reply: FastifyReply) => {
+        try {
+            const result = await aiPredictionService.createCoupon(request.body);
+            if (result) {
+                return reply.status(200).send({ success: true, message: 'Coupon created', coupon: result });
+            } else {
+                return reply.status(500).send({ success: false, error: 'Failed to create coupon' });
+            }
+        } catch (error) {
+            logger.error('[Predictions] Create coupon error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
     logger.info('[Routes] AI Prediction routes registered');
 }

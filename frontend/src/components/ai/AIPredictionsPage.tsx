@@ -3,6 +3,7 @@ import { CaretLeft, ChartLineUp, Target, Trophy, Clock, X, ListBullets, Star } f
 import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { AIScanningWidget } from './AIScanningWidget';
+import { TopPicksSlider } from './TopPicksSlider';
 import { PredictionCard } from './PredictionCard';
 import { useAIPredictions } from '../../context/AIPredictionsContext';
 import { useBotStats, type BotStats } from '../../hooks/useBotStats';
@@ -140,11 +141,9 @@ export function AIPredictionsPage() {
 
             toast.custom((t) => (
                 <div
-                    className={`${
-                        t.visible ? 'animate-enter' : 'animate-leave'
-                    } max-w-md w-full bg-[#1A1A1A] shadow-lg rounded-2xl pointer-events-auto flex border ${
-                        isWin ? 'border-green-500/30' : 'border-red-500/30'
-                    }`}
+                    className={`${t.visible ? 'animate-enter' : 'animate-leave'
+                        } max-w-md w-full bg-[#1A1A1A] shadow-lg rounded-2xl pointer-events-auto flex border ${isWin ? 'border-green-500/30' : 'border-red-500/30'
+                        }`}
                 >
                     <div className="flex-1 p-4">
                         <div className="flex items-start">
@@ -226,6 +225,9 @@ export function AIPredictionsPage() {
             <div className="p-4 max-w-lg mx-auto">
                 {/* Scanning Widget */}
                 <AIScanningWidget />
+
+                {/* Hot Picks Slider */}
+                <TopPicksSlider predictions={contextPredictions || []} botStatsMap={botStatsMap} />
 
                 {/* Win Rate Stats Section */}
                 <div className="mb-8">

@@ -58,6 +58,11 @@ export function AdminManualPredictions() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
+    // Coupon Mode State
+    const [isCouponMode, setIsCouponMode] = useState(false);
+    const [couponTitle, setCouponTitle] = useState('');
+    const [couponItems, setCouponItems] = useState<any[]>([]);
+
     useEffect(() => {
         fetchManualPredictions();
         fetchLiveMatches();
@@ -82,9 +87,6 @@ export function AdminManualPredictions() {
 
     const fetchLiveMatches = async () => {
         try {
-            // Using existing endpoint or a new one? 
-            // We'll assume a new endpoint or use /matches/live if available.
-            // For now let's assume /matches/live-simple that returns basic info for dropdown
             const res = await fetch(`${API_BASE}/matches/live`);
             if (res.ok) {
                 const data = await res.json();
@@ -105,41 +107,112 @@ export function AdminManualPredictions() {
         }
     };
 
+    // Add current selection to coupon cart
+    const handleAddToCoupon = () => {
+        if (!selectedMatch) return;
+        const finalPrediction = predictionType === 'OTHER' ? customPrediction : predictionType;
+
+        const newItem = {
+            match_id: selectedMatch.id,
+            home_team: selectedMatch.home_team_name,
+            away_team: selectedMatch.away_team_name,
+            league: selectedMatch.league_name || selectedMatch.competition?.name || selectedMatch.competition_name || '',
+            score: `${selectedMatch.home_score}-${selectedMatch.away_score}`,
+            minute: minute,
+            prediction: finalPrediction,
+            tempId: Date.now() // for UI list key
+        };
+
+        setCouponItems([...couponItems, newItem]);
+        // Reset selection but keep modal
+        setSelectedMatch(null);
+        setMinute(0);
+        setPredictionType('IY 0.5 ÜST');
+        setCustomPrediction('');
+    };
+
+    const handleRemoveFromCoupon = (index: number) => {
+        const newItems = [...couponItems];
+        newItems.splice(index, 1);
+        setCouponItems(newItems);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedMatch) return;
+
+        // Validation
+        if (isCouponMode) {
+            if (couponItems.length < 2) {
+                alert('Kupon modu için en az 2 maç eklemelisiniz!');
+                return;
+            }
+            if (!couponTitle) {
+                alert('Lütfen kupon başlığı giriniz!');
+                return;
+            }
+        } else {
+            if (!selectedMatch) return;
+        }
 
         setIsSubmitting(true);
         try {
-            const finalPrediction = predictionType === 'OTHER' ? customPrediction : predictionType;
+            if (isCouponMode) {
+                // COUPON SUBMISSION
+                const payload = {
+                    title: couponTitle,
+                    access_type: accessType,
+                    items: couponItems.map(({ tempId, ...rest }) => rest)
+                };
 
-            const payload = {
-                match_id: selectedMatch.id,  // Internal UUID
-                home_team: selectedMatch.home_team_name,
-                away_team: selectedMatch.away_team_name,
-                league: selectedMatch.league_name || selectedMatch.competition?.name || selectedMatch.competition_name || '',
-                score: `${selectedMatch.home_score}-${selectedMatch.away_score}`,
-                minute: minute,
-                prediction: finalPrediction,  // "IY 0.5 ÜST", "MS 2.5 ÜST"
-                access_type: accessType,
-                bot_name: 'Alert System'
-            };
+                const res = await fetch(`${API_BASE}/predictions/manual-coupon`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
-            const res = await fetch(`${API_BASE}/predictions/manual`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+                if (res.ok) {
+                    alert('Kupon başarıyla oluşturuldu!');
+                    setShowCreateModal(false);
+                    fetchManualPredictions();
+                    // Reset
+                    setCouponItems([]);
+                    setCouponTitle('');
+                    setSelectedMatch(null);
+                    setMinute(0);
+                } else {
+                    const err = await res.json();
+                    alert(`Hata: ${err.error || 'Kupon oluşturulamadı'}`);
+                }
 
-            if (res.ok) {
-                setShowCreateModal(false);
-                fetchManualPredictions(); // Refresh list
-                // Reset form
-                setSelectedMatch(null);
-                setMinute(0);
-                setPredictionType('IY 0.5 ÜST');
             } else {
-                alert('Tahmin oluşturulamadı!');
+                // SINGLE PREDICTION SUBMISSION (Legacy)
+                const finalPrediction = predictionType === 'OTHER' ? customPrediction : predictionType;
+                const payload = {
+                    match_id: selectedMatch!.id,
+                    home_team: selectedMatch!.home_team_name,
+                    away_team: selectedMatch!.away_team_name,
+                    league: selectedMatch!.league_name || selectedMatch!.competition?.name || selectedMatch!.competition_name || '',
+                    score: `${selectedMatch!.home_score}-${selectedMatch!.away_score}`,
+                    minute: minute,
+                    prediction: finalPrediction,
+                    access_type: accessType,
+                    bot_name: 'Alert System'
+                };
+
+                const res = await fetch(`${API_BASE}/predictions/manual`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    setShowCreateModal(false);
+                    fetchManualPredictions();
+                    setSelectedMatch(null);
+                    setMinute(0);
+                } else {
+                    alert('Tahmin oluşturulamadı!');
+                }
             }
         } catch (err) {
             console.error('Error creating prediction:', err);
@@ -278,30 +351,61 @@ export function AdminManualPredictions() {
             {/* Create Modal */}
             {showCreateModal && (
                 <div className="modal-overlay">
-                    <div className="modal-content large">
+                    <div className="modal-content large" style={{ maxWidth: '800px' }}>
                         <div className="modal-header">
                             <h2>
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M12 4v16m-8-8h16" />
                                 </svg>
-                                Yeni Tahmin Oluştur
+                                {isCouponMode ? 'Kombine Kupon Oluştur' : 'Tekli Tahmin Oluştur'}
                                 <span className="live-count">{liveMatches.length} canlı maç</span>
                             </h2>
                             <button className="close-btn" onClick={() => setShowCreateModal(false)}>×</button>
                         </div>
                         <form onSubmit={handleSubmit}>
-                            <div className="form-grid">
+                            {/* Mode Switcher */}
+                            <div style={{ padding: '0 24px 16px', borderBottom: '1px solid var(--admin-border)' }}>
+                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: isCouponMode ? 'var(--admin-text-secondary)' : 'var(--admin-primary)' }}>
+                                        <input type="radio" checked={!isCouponMode} onChange={() => setIsCouponMode(false)} />
+                                        Tekli Tahmin
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: isCouponMode ? 'var(--admin-primary)' : 'var(--admin-text-secondary)' }}>
+                                        <input type="radio" checked={isCouponMode} onChange={() => setIsCouponMode(true)} />
+                                        Kombine Kupon
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="form-grid" style={{ marginTop: '16px' }}>
+                                {/* Coupon Title - ONLY FOR COUPON MODE */}
+                                {isCouponMode && (
+                                    <div className="form-group full-width">
+                                        <label>Kupon Başlığı</label>
+                                        <input
+                                            type="text"
+                                            className="admin-input"
+                                            placeholder="Örn: Cumartesi Banko Kupon #1"
+                                            value={couponTitle}
+                                            onChange={(e) => setCouponTitle(e.target.value)}
+                                            required={isCouponMode}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Match Selection */}
                                 <div className="form-group full-width">
-                                    <label>Lig / Maç</label>
+                                    <label>Maç Seç</label>
                                     <select
                                         className="admin-input"
+                                        value={selectedMatch?.id || ''}
                                         onChange={(e) => handleMatchSelect(e.target.value)}
-                                        required
+                                        required={!isCouponMode && couponItems.length === 0} // Required if single OR coupon empty
                                     >
                                         <option value="">Maç Seçiniz...</option>
                                         {liveMatches.map(m => (
                                             <option key={m.id} value={m.id}>
-                                                {m.home_team_name} {m.home_score}-{m.away_score} {m.away_team_name} ({m.minute}') • {m.league_name || m.competition_name}
+                                                {m.home_team_name} {m.home_score}-{m.away_score} {m.away_team_name} ({m.minute}')
                                             </option>
                                         ))}
                                     </select>
@@ -318,8 +422,9 @@ export function AdminManualPredictions() {
                                     />
                                 </div>
 
+                                {/* Access Type - Global for Modal */}
                                 <div className="form-group">
-                                    <label>Erişim Türü</label>
+                                    <label>Erişim</label>
                                     <select
                                         className="admin-input"
                                         value={accessType}
@@ -331,7 +436,7 @@ export function AdminManualPredictions() {
                                 </div>
 
                                 <div className="form-group full-width">
-                                    <label>Tahmin Şablonu</label>
+                                    <label>Tahmin</label>
                                     <select
                                         className="admin-input"
                                         value={predictionType}
@@ -346,23 +451,55 @@ export function AdminManualPredictions() {
 
                                 {predictionType === 'OTHER' && (
                                     <div className="form-group full-width">
-                                        <label>Tahmin (Özel)</label>
+                                        <label>Özel Tahmin</label>
                                         <input
                                             type="text"
                                             className="admin-input"
                                             placeholder="Örn: Ev Sahibi 1.5 Üst"
                                             value={customPrediction}
                                             onChange={(e) => setCustomPrediction(e.target.value)}
-                                            required
                                         />
+                                    </div>
+                                )}
+
+                                {/* ADD BUTTON FOR COUPON MODE */}
+                                {isCouponMode && (
+                                    <div className="form-group full-width">
+                                        <button
+                                            type="button"
+                                            className="admin-btn admin-btn-secondary"
+                                            onClick={handleAddToCoupon}
+                                            disabled={!selectedMatch}
+                                            style={{ width: '100%', justifyContent: 'center' }}
+                                        >
+                                            + Kupona Ekle
+                                        </button>
                                     </div>
                                 )}
                             </div>
 
+                            {/* COUPON ITEMS LIST */}
+                            {isCouponMode && couponItems.length > 0 && (
+                                <div style={{ margin: '16px 24px', background: 'var(--admin-bg-secondary)', borderRadius: '8px', padding: '12px' }}>
+                                    <h4 style={{ margin: '0 0 12px', fontSize: '14px', color: 'var(--admin-text-secondary)' }}>Kupon İçeriği ({couponItems.length} Maç)</h4>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {couponItems.map((item, idx) => (
+                                            <div key={item.tempId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--admin-bg-main)', padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--admin-border)' }}>
+                                                <div style={{ fontSize: '13px' }}>
+                                                    <div style={{ fontWeight: 600 }}>{item.home_team} vs {item.away_team}</div>
+                                                    <div style={{ color: 'var(--admin-primary)' }}>{item.prediction} <span style={{ color: 'var(--admin-text-secondary)', fontSize: '12px' }}>({item.minute}')</span></div>
+                                                </div>
+                                                <button type="button" onClick={() => handleRemoveFromCoupon(idx)} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer' }}>×</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="modal-actions">
                                 <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setShowCreateModal(false)}>İptal</button>
                                 <button type="submit" className="admin-btn admin-btn-primary" disabled={isSubmitting}>
-                                    {isSubmitting ? 'Kaydediliyor...' : 'Kaydet'}
+                                    {isSubmitting ? 'Kaydediliyor...' : (isCouponMode ? `Kuponu Oluştur (${couponItems.length})` : 'Kaydet')}
                                 </button>
                             </div>
                         </form>

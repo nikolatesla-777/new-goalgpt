@@ -1624,6 +1624,7 @@ export class AIPredictionService {
         prediction: string;         // "IY 0.5 ÜST", "MS 2.5 ÜST"
         access_type: 'VIP' | 'FREE';
         bot_name?: string;
+        coupon_id?: string;         // Optional: link to a coupon
     }): Promise<{ id: string; prediction: string } | null> {
         const client = await pool.connect();
         try {
@@ -1650,7 +1651,7 @@ export class AIPredictionService {
             }
 
             const predictionId = crypto.randomUUID();
-            const externalId = `manual_${Date.now()}`;
+            const externalId = `manual_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
             const botName = data.bot_name || 'Alert System';
 
             // Insert into ai_predictions with NEW 29-column schema
@@ -1659,8 +1660,8 @@ export class AIPredictionService {
                     id, external_id, canonical_bot_name, league_name,
                     home_team_name, away_team_name, score_at_prediction,
                     minute_at_prediction, prediction, prediction_threshold,
-                    match_id, result, access_type, source, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+                    match_id, result, access_type, source, created_at, coupon_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), $15)
             `, [
                 predictionId,
                 externalId,
@@ -1675,7 +1676,8 @@ export class AIPredictionService {
                 data.match_id,
                 'pending',
                 data.access_type,
-                'manual'
+                'manual',
+                data.coupon_id || null
             ]);
 
             logger.info(`[AIPrediction] Manuel tahmin oluşturuldu: ${data.prediction} - ${data.home_team} vs ${data.away_team} (match_id: ${data.match_id})`);
@@ -1685,6 +1687,98 @@ export class AIPredictionService {
         } catch (error) {
             await client.query('ROLLBACK');
             logger.error('[AIPredictions] Create Manual Prediction Error:', error);
+            return null;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Create a new Coupon with multiple predictions
+     */
+    async createCoupon(data: {
+        title: string;
+        access_type: 'VIP' | 'FREE';
+        items: Array<{
+            match_id: string;
+            home_team: string;
+            away_team: string;
+            league: string;
+            score: string;
+            minute: number;
+            prediction: string;
+        }>;
+    }): Promise<{ id: string; title: string; count: number } | null> {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // 1. Create Coupon
+            const couponId = crypto.randomUUID();
+            await client.query(`
+                INSERT INTO ai_coupons (id, title, access_type, status, created_at)
+                VALUES ($1, $2, $3, 'pending', NOW())
+            `, [couponId, data.title, data.access_type]);
+
+            // 2. Create Predictions for each item
+            let successCount = 0;
+            for (const item of data.items) {
+                // Determine threshold
+                const thresholdMatch = item.prediction.match(/(\d+\.?\d*)/);
+                const threshold = thresholdMatch ? parseFloat(thresholdMatch[1]) : 0.5;
+
+                // Get league if missing
+                let leagueName = item.league;
+                if (!leagueName || leagueName.trim() === '' || leagueName === '-') {
+                    const matchQuery = await client.query(`
+                        SELECT c.name as competition_name
+                        FROM ts_matches m
+                        LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+                        WHERE m.id = $1
+                    `, [item.match_id]);
+                    if (matchQuery.rows.length > 0 && matchQuery.rows[0].competition_name) {
+                        leagueName = matchQuery.rows[0].competition_name;
+                    }
+                }
+
+                const predictionId = crypto.randomUUID();
+                const externalId = `manual_coupon_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+                await client.query(`
+                    INSERT INTO ai_predictions (
+                        id, external_id, canonical_bot_name, league_name,
+                        home_team_name, away_team_name, score_at_prediction,
+                        minute_at_prediction, prediction, prediction_threshold,
+                        match_id, result, access_type, source, created_at, coupon_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), $15)
+                `, [
+                    predictionId,
+                    externalId,
+                    'Coupon Bot', // Distinct bot name for coupons
+                    leagueName || '',
+                    item.home_team,
+                    item.away_team,
+                    item.score,
+                    item.minute,
+                    item.prediction,
+                    threshold,
+                    item.match_id,
+                    'pending',
+                    data.access_type, // Inherit from Coupon
+                    'manual_coupon',
+                    couponId
+                ]);
+                successCount++;
+            }
+
+            logger.info(`[AIPrediction] Coupon created: ${data.title} with ${successCount} items`);
+
+            await client.query('COMMIT');
+            return { id: couponId, title: data.title, count: successCount };
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            logger.error('[AIPredictions] Create Coupon Error:', error);
             return null;
         } finally {
             client.release();

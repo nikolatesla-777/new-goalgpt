@@ -1,5 +1,5 @@
 import { Cpu, WifiHigh, Lightning, Globe } from '@phosphor-icons/react';
-import { useBotStats } from '../../hooks/useBotStats';
+// import { useBotStats } from '../../hooks/useBotStats';
 import { useEffect, useState } from 'react';
 
 // Premium looking log entries
@@ -15,7 +15,7 @@ const LOG_ENTRIES = [
 ];
 
 export function AIScanningWidget() {
-    const { stats } = useBotStats();
+    // const { stats } = useBotStats();
     const [logs, setLogs] = useState<Array<typeof LOG_ENTRIES[0] & { id: number }>>([]);
     const [activeNode, setActiveNode] = useState(0);
 
@@ -70,7 +70,7 @@ export function AIScanningWidget() {
                         </span>
                         <span className="flex items-center gap-1.5 text-green-500/50">
                             <Globe size={14} />
-                            REGION: EU-WEST
+                            REGION: ALL WORLD
                         </span>
                     </div>
                 </div>
@@ -103,17 +103,16 @@ export function AIScanningWidget() {
                                 GoalGPT <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600">Core Engine</span>
                             </h2>
                             <p className="text-xs text-gray-400 leading-relaxed font-medium">
-                                Sistem şu anda <span className="text-white font-bold">{stats?.global.total_predictions || 324}</span> farklı veri noktasını analiz ediyor.
-                                Tahmin modelleri 7/24 aktif olarak çalışmaktadır.
+                                GoalGPT, en isabetli gol beklentilerini sunabilmek için <span className="text-white font-bold">500+ veri kaynağından</span> beslenen yapay zeka modeliyle, maçları <span className="text-green-400 font-bold">7/24 kesintisiz</span> olarak taramaya devam ediyor.
                             </p>
                         </div>
 
                         {/* Metric Cards */}
                         <div className="grid grid-cols-3 gap-3">
                             <div className="bg-[#111] p-3 rounded-lg border border-white/5 hover:border-green-500/20 transition-colors group/metric">
-                                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 font-bold">Analiz</div>
+                                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 font-bold">DATABASE</div>
                                 <div className="text-white font-mono text-sm group-hover/metric:text-green-400 transition-colors">
-                                    {(stats?.global.total_predictions || 0) * 12 + 842}k
+                                    +500
                                 </div>
                             </div>
                             <div className="bg-[#111] p-3 rounded-lg border border-white/5 hover:border-green-500/20 transition-colors group/metric">
@@ -147,9 +146,16 @@ export function AIScanningWidget() {
                     <div className="absolute top-0 right-0 w-24 h-full bg-gradient-to-l from-[#050505] to-transparent pointer-events-none" />
                 </div>
 
-                {/* Progress Line */}
-                <div className="h-0.5 w-full bg-[#111] relative overflow-hidden">
-                    <div className="absolute inset-y-0 left-0 w-full bg-gradient-to-r from-transparent via-green-500 to-transparent opacity-50 animate-[scanner_3s_ease-in-out_infinite]" />
+                {/* Progress Line - Premium Scanner Effect */}
+                <div className="h-[3px] w-full bg-[#050505] relative overflow-hidden">
+                    {/* Background Trace */}
+                    <div className="absolute inset-0 bg-green-500/5" />
+
+                    {/* Glowing Scanner Beam */}
+                    <div className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-green-500 to-transparent blur-sm opacity-75 animate-[scanner_2.5s_ease-in-out_infinite]" />
+
+                    {/* Sharp Core Line */}
+                    <div className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-green-400 to-transparent opacity-100 animate-[scanner_2.5s_ease-in-out_infinite]" />
                 </div>
             </div>
 
