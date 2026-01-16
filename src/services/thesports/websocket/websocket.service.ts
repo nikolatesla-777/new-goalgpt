@@ -1362,9 +1362,16 @@ export class WebSocketService {
           setClauses.push(`away_score_display = $${queryValues.length + 1}`);
           queryValues.push(parsedScore.away.score);
 
-          // Legacy arrays
-          setClauses.push(`home_scores = ARRAY[$${queryValues.length - 7}]`);
-          setClauses.push(`away_scores = ARRAY[$${queryValues.length - 3}]`);
+          // Legacy arrays - CRITICAL FIX: Use JSONB format, not PostgreSQL ARRAY
+          // Score array format: [regular, halftime, red_cards, yellow_cards, corners, overtime, penalty]
+          setClauses.push(`home_scores = jsonb_build_array($${queryValues.length + 1}, 0, 0, 0, 0, $${queryValues.length + 2}, $${queryValues.length + 3})`);
+          queryValues.push(parsedScore.home.regularScore);
+          queryValues.push(parsedScore.home.overtimeScore || 0);
+          queryValues.push(parsedScore.home.penaltyScore || 0);
+          setClauses.push(`away_scores = jsonb_build_array($${queryValues.length + 1}, 0, 0, 0, 0, $${queryValues.length + 2}, $${queryValues.length + 3})`);
+          queryValues.push(parsedScore.away.regularScore);
+          queryValues.push(parsedScore.away.overtimeScore || 0);
+          queryValues.push(parsedScore.away.penaltyScore || 0);
 
           // Kickoff timestamps (write-once)
           if (kickoffClauses.length > 0) {
@@ -1470,10 +1477,26 @@ export class WebSocketService {
             queryValues.push(kickoffSeconds);
           }
 
-          setClauses.push(`home_scores = ARRAY[$${queryValues.length + 1}]`);
+          // CRITICAL FIX: Use JSONB format + add missing score display columns
+          // Score array format: [regular, halftime, red_cards, yellow_cards, corners, overtime, penalty]
+          setClauses.push(`home_scores = jsonb_build_array($${queryValues.length + 1}, 0, 0, 0, 0, $${queryValues.length + 2}, $${queryValues.length + 3})`);
+          queryValues.push(parsedScore.home.regularScore || parsedScore.home.score || 0);
+          queryValues.push(parsedScore.home.overtimeScore || 0);
+          queryValues.push(parsedScore.home.penaltyScore || 0);
+          setClauses.push(`away_scores = jsonb_build_array($${queryValues.length + 1}, 0, 0, 0, 0, $${queryValues.length + 2}, $${queryValues.length + 3})`);
+          queryValues.push(parsedScore.away.regularScore || parsedScore.away.score || 0);
+          queryValues.push(parsedScore.away.overtimeScore || 0);
+          queryValues.push(parsedScore.away.penaltyScore || 0);
+
+          // Add score display columns (missing in legacy path)
+          setClauses.push(`home_score_display = $${queryValues.length + 1}`);
           queryValues.push(parsedScore.home.score);
-          setClauses.push(`away_scores = ARRAY[$${queryValues.length + 1}]`);
+          setClauses.push(`away_score_display = $${queryValues.length + 1}`);
           queryValues.push(parsedScore.away.score);
+          setClauses.push(`home_score_regular = $${queryValues.length + 1}`);
+          queryValues.push(parsedScore.home.regularScore || parsedScore.home.score || 0);
+          setClauses.push(`away_score_regular = $${queryValues.length + 1}`);
+          queryValues.push(parsedScore.away.regularScore || parsedScore.away.score || 0);
 
           // Add kickoff timestamps
           if (kickoffClauses.length > 0) {

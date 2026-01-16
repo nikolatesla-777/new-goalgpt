@@ -20,21 +20,25 @@ export interface TokenPair {
   expiresIn: number;
 }
 
-// Environment variables with defaults
-const JWT_SECRET = process.env.JWT_SECRET || 'development-secret-change-in-production';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'development-refresh-secret';
+// Environment variables
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const JWT_ACCESS_TOKEN_EXPIRES_IN = process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h';
 const JWT_REFRESH_TOKEN_EXPIRES_IN = process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || '30d';
 
-// Warn if using default secrets in production
+// FATAL: Require secrets in production
 if (process.env.NODE_ENV === 'production') {
-  if (JWT_SECRET === 'development-secret-change-in-production') {
-    console.warn('⚠️  WARNING: Using default JWT_SECRET in production!');
+  if (!JWT_SECRET) {
+    throw new Error('FATAL: JWT_SECRET environment variable is required in production');
   }
-  if (JWT_REFRESH_SECRET === 'development-refresh-secret') {
-    console.warn('⚠️  WARNING: Using default JWT_REFRESH_SECRET in production!');
+  if (!JWT_REFRESH_SECRET) {
+    throw new Error('FATAL: JWT_REFRESH_SECRET environment variable is required in production');
   }
 }
+
+// Development fallbacks (only for local development)
+const EFFECTIVE_JWT_SECRET: string = JWT_SECRET || 'development-secret-change-in-production';
+const EFFECTIVE_JWT_REFRESH_SECRET: string = JWT_REFRESH_SECRET || 'development-refresh-secret';
 
 /**
  * Generate JWT access and refresh tokens
@@ -43,7 +47,7 @@ if (process.env.NODE_ENV === 'production') {
  */
 export function generateTokens(payload: Omit<JWTPayload, 'iat' | 'exp'>): TokenPair {
   // Generate access token (short-lived)
-  const accessToken = jwt.sign(payload, JWT_SECRET, {
+  const accessToken = jwt.sign(payload, EFFECTIVE_JWT_SECRET, {
     expiresIn: JWT_ACCESS_TOKEN_EXPIRES_IN,
   });
 
@@ -53,7 +57,7 @@ export function generateTokens(payload: Omit<JWTPayload, 'iat' | 'exp'>): TokenP
       userId: payload.userId,
       tokenType: 'refresh',
     },
-    JWT_REFRESH_SECRET,
+    EFFECTIVE_JWT_REFRESH_SECRET,
     {
       expiresIn: JWT_REFRESH_TOKEN_EXPIRES_IN,
     }
@@ -78,7 +82,7 @@ export function generateTokens(payload: Omit<JWTPayload, 'iat' | 'exp'>): TokenP
  */
 export function verifyAccessToken(token: string): JWTPayload {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as unknown as JWTPayload;
     return decoded;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
@@ -99,7 +103,7 @@ export function verifyAccessToken(token: string): JWTPayload {
  */
 export function verifyRefreshToken(token: string): { userId: string; tokenType: string } {
   try {
-    const decoded = jwt.verify(token, JWT_REFRESH_SECRET) as {
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_REFRESH_SECRET) as unknown as {
       userId: string;
       tokenType: string;
     };

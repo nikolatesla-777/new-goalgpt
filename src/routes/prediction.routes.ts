@@ -12,6 +12,7 @@ import { aiPredictionService, RawPredictionPayload } from '../services/ai/aiPred
 import { unifiedPredictionService, PredictionFilter } from '../services/ai/unifiedPrediction.service';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
+import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 
 interface IngestBody {
     id?: string;
@@ -541,8 +542,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     /**
      * POST /api/predictions/update-results
      * Manually trigger result updates for completed matches
+     * SECURITY: Admin-only endpoint
      */
-    fastify.post('/api/predictions/update-results', async (request: FastifyRequest, reply: FastifyReply) => {
+    fastify.post('/api/predictions/update-results', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const updatedCount = await aiPredictionService.updatePredictionResults();
 
@@ -621,8 +623,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * PUT /api/predictions/:id/display
      * Update display_prediction text for a prediction (admin only)
      * This is what users will see in the TAHMİN column
+     * SECURITY: Admin-only endpoint
      */
-    fastify.put('/api/predictions/:id/display', async (request: FastifyRequest<{ Params: { id: string }; Body: { display_prediction: string } }>, reply: FastifyReply) => {
+    fastify.put('/api/predictions/:id/display', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Params: { id: string }; Body: { display_prediction: string } }>, reply: FastifyReply) => {
         try {
             const { id } = request.params;
             const { display_prediction } = request.body;
@@ -661,8 +664,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     /**
      * PUT /api/predictions/bulk-display
      * Bulk update display_prediction for multiple predictions
+     * SECURITY: Admin-only endpoint
      */
-    fastify.put('/api/predictions/bulk-display', async (request: FastifyRequest<{ Body: { updates: { id: string; display_prediction: string }[] } }>, reply: FastifyReply) => {
+    fastify.put('/api/predictions/bulk-display', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Body: { updates: { id: string; display_prediction: string }[] } }>, reply: FastifyReply) => {
         try {
             const { updates } = request.body;
 
@@ -697,8 +701,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     /**
      * PUT /api/predictions/:id/access
      * Toggle access_type between VIP and FREE
+     * SECURITY: Admin-only endpoint
      */
-    fastify.put('/api/predictions/:id/access', async (request: FastifyRequest<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>, reply: FastifyReply) => {
+    fastify.put('/api/predictions/:id/access', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>, reply: FastifyReply) => {
         try {
             const { id } = request.params;
             const { access_type } = request.body;
@@ -810,7 +815,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         bot_name?: string;          // Optional, defaults to "Manual"
     }
 
-    fastify.post('/api/predictions/manual', async (request: FastifyRequest<{ Body: ManualPredictionBody }>, reply: FastifyReply) => {
+    // SECURITY: Admin-only endpoint for creating manual predictions
+    fastify.post('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Body: ManualPredictionBody }>, reply: FastifyReply) => {
         try {
             const result = await aiPredictionService.createManualPrediction(request.body);
             if (result) {

@@ -25,6 +25,7 @@ import {
   getMatchById,
   getUnifiedMatches,
 } from '../controllers/match.controller';
+import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 
 export default async function matchRoutes(
   fastify: FastifyInstance,
@@ -83,8 +84,10 @@ export default async function matchRoutes(
    * POST /api/matches/admin/pre-sync
    * Trigger pre-sync for today's matches (H2H, lineups, standings, compensation)
    * Long-running operation - timeout handled by Fastify default (30s) or nginx
+   * SECURITY: Admin-only endpoint
    */
   fastify.post('/admin/pre-sync', {
+    preHandler: [requireAuth, requireAdmin],
     schema: {
       // No timeout in schema, handled at server level
     },

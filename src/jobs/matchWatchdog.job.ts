@@ -275,8 +275,9 @@ export class MatchWatchdogWorker {
       // Instead of waiting for TheSports API/MQTT to tell us match started,
       // we proactively transition status=1 → status=2 when match_time passes.
       // This runs FIRST, before any other processing, for fastest possible kickoff detection.
+      // CRITICAL FIX (2026-01-15): Expanded window from 120s to 300s (5 min) to catch delayed kickoffs
       try {
-        const immediateKickoffs = await this.matchWatchdogService.findImmediateKickoffs(nowTs, 120, 100);
+        const immediateKickoffs = await this.matchWatchdogService.findImmediateKickoffs(nowTs, 300, 100);
 
         if (immediateKickoffs.length > 0) {
           logger.info(`[Watchdog] ⚡ Proactive Kickoff: Found ${immediateKickoffs.length} matches that just started`);
