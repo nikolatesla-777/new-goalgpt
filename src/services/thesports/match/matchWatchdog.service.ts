@@ -348,7 +348,7 @@ export class MatchWatchdogService {
     statusId: number;
     secondsSinceKickoff: number;
     secondsSinceUpdate: number;
-    reason: 'absolute_timeout' | 'stale_finish';
+    reason: 'absolute_timeout' | 'stale_finish' | 'halftime_stuck';
     homeScore: number;
     awayScore: number;
   }>> {
@@ -365,22 +365,44 @@ export class MatchWatchdogService {
           home_scores[1] as home_score,
           away_scores[1] as away_score,
           CASE
+            -- CRITICAL FIX (2026-01-16): HALF_TIME stuck detection
+            -- HT should only last 15 minutes max. If match started 75+ min ago and still HT, it's stuck
+            WHEN status_id = 3 AND $1::integer - match_time > 4500 THEN 'halftime_stuck'
+            -- HT with no updates for 20 minutes = definitely stuck
+            WHEN status_id = 3 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 1200 THEN 'halftime_stuck'
             -- CRITICAL FIX (2026-01-15): Reduced from 7800 (130min) to 6300 (105min = 90 + 15 HT)
             WHEN $1::integer - match_time > 6300 THEN 'absolute_timeout'
             WHEN minute >= 95 THEN 'minute_exceeded'
+            -- 2nd half stuck at 90+ min with no update for 10 minutes
+            WHEN minute >= 90 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 600 THEN 'stale_finish'
             ELSE 'stale_finish'
           END as reason
         FROM ts_matches
         WHERE
           status_id IN (2, 3, 4, 5, 7)
           AND (
+            -- Absolute timeout: match started 105+ minutes ago
             $1::integer - match_time > 6300
             OR
+            -- Minute exceeded max (90+5 injury time)
             minute >= 95
             OR
+            -- 2nd half stuck at 90+ with no update for 10 minutes
             (minute >= 90 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 600)
+            OR
+            -- CRITICAL: HALF_TIME stuck detection
+            -- HT elapsed > 75 min (45min 1H + 15min HT + 15min safety margin)
+            (status_id = 3 AND $1::integer - match_time > 4500)
+            OR
+            -- HT with no updates for 20 minutes = stuck
+            (status_id = 3 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 1200)
           )
-        ORDER BY match_time ASC
+        ORDER BY
+          CASE
+            WHEN status_id = 3 THEN 0  -- Prioritize stuck HALF_TIME matches
+            ELSE 1
+          END,
+          match_time ASC
         LIMIT $2
       `;
 
