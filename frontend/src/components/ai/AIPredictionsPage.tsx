@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { CaretLeft, ChartLineUp, Target, Trophy, Clock, X, ListBullets, Star } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router-dom';
+import toast, { Toaster } from 'react-hot-toast';
 import { AIScanningWidget } from './AIScanningWidget';
 import { PredictionCard } from './PredictionCard';
 import { useAIPredictions } from '../../context/AIPredictionsContext';
@@ -11,7 +12,7 @@ type DateFilter = 'today' | 'yesterday' | 'month';
 
 export function AIPredictionsPage() {
     const navigate = useNavigate();
-    const { predictions: contextPredictions, loading } = useAIPredictions();
+    const { predictions: contextPredictions, loading, lastSettlement, isConnected } = useAIPredictions();
     const { stats: botStatsResponse } = useBotStats(); // Fetch bot stats
 
     // Create a fast lookup map for bot stats
@@ -130,10 +131,79 @@ export function AIPredictionsPage() {
         { key: 'lost', label: 'Kaybetti', icon: <X size={16} weight="bold" />, count: lostPredictions.length },
     ];
 
+    // Toast notifications for settlements
+    useEffect(() => {
+        if (lastSettlement) {
+            const isWin = lastSettlement.result === 'won';
+            const emoji = isWin ? '🏆' : '😔';
+            const title = isWin ? 'Kazandınız!' : 'Kaybettiniz';
+
+            toast.custom((t) => (
+                <div
+                    className={`${
+                        t.visible ? 'animate-enter' : 'animate-leave'
+                    } max-w-md w-full bg-[#1A1A1A] shadow-lg rounded-2xl pointer-events-auto flex border ${
+                        isWin ? 'border-green-500/30' : 'border-red-500/30'
+                    }`}
+                >
+                    <div className="flex-1 p-4">
+                        <div className="flex items-start">
+                            <div className="flex-shrink-0 pt-0.5">
+                                <span className="text-2xl">{emoji}</span>
+                            </div>
+                            <div className="ml-3 flex-1">
+                                <p className={`text-sm font-bold ${isWin ? 'text-green-400' : 'text-red-400'}`}>
+                                    {title}
+                                </p>
+                                <p className="mt-1 text-xs text-gray-400">
+                                    <span className="font-semibold text-white">{lastSettlement.botName}</span>
+                                    {' · '}
+                                    {lastSettlement.prediction}
+                                </p>
+                                <p className="mt-1 text-xs text-gray-500">
+                                    {lastSettlement.homeTeam} vs {lastSettlement.awayTeam}
+                                    {lastSettlement.finalScore && ` (${lastSettlement.finalScore})`}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => toast.dismiss(t.id)}
+                                className="ml-4 flex-shrink-0 text-gray-500 hover:text-white transition-colors"
+                            >
+                                <X size={16} weight="bold" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ), {
+                duration: isWin ? 5000 : 3000,
+                position: 'top-right',
+            });
+        }
+    }, [lastSettlement]);
+
     return (
         <div className="min-h-screen bg-[#0A0A0A] text-white pb-20">
+            {/* Toast Container */}
+            <Toaster
+                position="top-right"
+                toastOptions={{
+                    className: '',
+                    style: {
+                        background: 'transparent',
+                        boxShadow: 'none',
+                    },
+                }}
+            />
+
+            {/* Connection Status Banner */}
+            {!isConnected && (
+                <div className="fixed top-0 left-0 right-0 bg-red-500 text-white p-2 text-center z-50 text-sm font-bold animate-pulse">
+                    ⚠️ Bağlantı kesildi - Yeniden bağlanılıyor...
+                </div>
+            )}
+
             {/* Header */}
-            <header className="sticky top-0 z-30 bg-[#0A0A0A]/80 backdrop-blur-md border-b border-white/5 px-4 py-3">
+            <header className={`sticky ${!isConnected ? 'top-[36px]' : 'top-0'} z-30 bg-[#0A0A0A]/80 backdrop-blur-md border-b border-white/5 px-4 py-3 transition-all`}>
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => navigate('/')}
@@ -144,6 +214,12 @@ export function AIPredictionsPage() {
                     <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
                         Yapay Zeka
                     </h1>
+                    {isConnected && (
+                        <div className="ml-auto flex items-center gap-2 text-xs text-green-500">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            <span className="font-semibold">Canlı</span>
+                        </div>
+                    )}
                 </div>
             </header>
 

@@ -1,6 +1,7 @@
 import { Robot, Trophy, WarningCircle, Clock, Star, Info } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import type { AIPrediction } from '../../context/AIPredictionsContext';
 import { BotInfoModal } from './BotInfoModal';
 import { BOT_DESCRIPTIONS, DEFAULT_BOT_DESCRIPTION } from '../../constants/botDescriptions';
@@ -17,11 +18,62 @@ interface PredictionCardProps {
 export function PredictionCard({ prediction, isVip = false, isFavorite = false, onToggleFavorite, botStats }: PredictionCardProps) {
     const navigate = useNavigate();
     const [isInfoOpen, setIsInfoOpen] = useState(false);
+    const [justSettled, setJustSettled] = useState(false);
+    const prevResultRef = useRef(prediction.result);
 
     // Phase 5: Use new result field
     const isWinner = prediction.result === 'won';
     const isLoser = prediction.result === 'lost';
     const isPending = !prediction.result || prediction.result === 'pending';
+
+    // Settlement animation effect
+    useEffect(() => {
+        // Check if prediction just settled (pending → won/lost)
+        const wasPending = prevResultRef.current === 'pending' || !prevResultRef.current;
+        const isNowSettled = isWinner || isLoser;
+
+        if (wasPending && isNowSettled && !justSettled) {
+            setJustSettled(true);
+
+            // Confetti for winners 🎉
+            if (isWinner) {
+                const duration = 2000;
+                const animationEnd = Date.now() + duration;
+                const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
+
+                const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+                const interval = setInterval(() => {
+                    const timeLeft = animationEnd - Date.now();
+
+                    if (timeLeft <= 0) {
+                        return clearInterval(interval);
+                    }
+
+                    const particleCount = 50 * (timeLeft / duration);
+                    confetti({
+                        ...defaults,
+                        particleCount,
+                        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+                    });
+                    confetti({
+                        ...defaults,
+                        particleCount,
+                        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+                    });
+                }, 250);
+
+                // Clear animation state after 3 seconds
+                setTimeout(() => setJustSettled(false), 3000);
+            } else {
+                // For losers, just clear animation state after 1 second
+                setTimeout(() => setJustSettled(false), 1000);
+            }
+        }
+
+        // Update previous result reference
+        prevResultRef.current = prediction.result;
+    }, [prediction.result, isWinner, isLoser, justSettled]);
 
     // Bot Info Logic - use canonical_bot_name
     const botName = prediction.canonical_bot_name || 'AI Bot';
@@ -326,18 +378,18 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                         {/* Status Button (Right Aligned) */}
                         <div className="flex-shrink-0 ml-auto pl-2">
                             {isPending && (
-                                <div className="px-4 py-1.5 rounded-lg bg-[#222] border border-white/10 text-gray-400 text-xs font-bold uppercase tracking-wide">
+                                <div className="px-4 py-1.5 rounded-lg bg-[#222] border border-white/10 text-gray-400 text-xs font-bold uppercase tracking-wide animate-pulse">
                                     Bekliyor
                                 </div>
                             )}
                             {isWinner && (
-                                <div className="flex items-center gap-1.5 px-4 py-1.5 bg-green-500 text-black rounded-lg shadow-lg shadow-green-500/20">
+                                <div className={`flex items-center gap-1.5 px-4 py-1.5 bg-green-500 text-black rounded-lg shadow-lg shadow-green-500/20 transition-all ${justSettled ? 'animate-bounce scale-110' : ''}`}>
                                     <Trophy size={14} weight="fill" />
                                     <span className="text-xs font-black uppercase tracking-wide">WIN</span>
                                 </div>
                             )}
                             {isLoser && (
-                                <div className="flex items-center gap-1.5 px-4 py-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg">
+                                <div className={`flex items-center gap-1.5 px-4 py-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg transition-all ${justSettled ? 'animate-pulse scale-95' : ''}`}>
                                     <WarningCircle size={14} weight="fill" />
                                     <span className="text-xs font-black uppercase tracking-wide">LOSE</span>
                                 </div>
