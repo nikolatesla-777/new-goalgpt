@@ -251,9 +251,24 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
           setIsSocketConnected(true);
         };
 
+        // Client-side PING to keep connection alive (25s interval)
+        let clientPingInterval: ReturnType<typeof setInterval> | null = null;
+
+        const startClientPing = () => {
+          clientPingInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'PING', timestamp: Date.now() }));
+            }
+          }, 25000);
+        };
+
+        // Start ping after connection is established
+        ws.addEventListener('open', startClientPing);
+
         ws.onclose = () => {
           console.log('[LivescoreContext] WebSocket disconnected');
           setIsSocketConnected(false);
+          if (clientPingInterval) clearInterval(clientPingInterval);
           // Reconnect after 5 seconds
           setTimeout(connectWebSocket, 5000);
         };

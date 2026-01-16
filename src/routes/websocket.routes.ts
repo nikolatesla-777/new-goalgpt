@@ -255,7 +255,7 @@ export default async function websocketRoutes(
         } else {
           clearInterval(pingInterval);
         }
-      }, 30000); // Send ping every 30 seconds
+      }, 15000); // Send ping every 15 seconds (aggressive keepalive)
 
       // Handle incoming messages (if needed)
       socket.on('message', (message: Buffer) => {
