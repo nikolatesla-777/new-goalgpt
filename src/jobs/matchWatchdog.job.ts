@@ -17,6 +17,7 @@ import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 import { CircuitOpenError } from '../utils/circuitBreaker';
+import { invalidateLiveMatchesCache } from '../utils/matchCache';
 // PHASE C: Use LiveMatchOrchestrator for centralized write coordination
 import { LiveMatchOrchestrator, FieldUpdate } from '../services/orchestration/LiveMatchOrchestrator';
 
@@ -311,6 +312,13 @@ export class MatchWatchdogWorker {
               logger.warn(`[Watchdog] Proactive kickoff failed for ${kickoff.matchId}: ${kickoffErr.message}`);
             }
           }
+
+          // CRITICAL FIX (2026-01-16): Invalidate live matches cache after kickoff
+          // New live matches should appear immediately in /api/matches/live
+          if (immediateKickoffs.length > 0) {
+            invalidateLiveMatchesCache();
+            logger.info(`[Watchdog] Cache invalidated after ${immediateKickoffs.length} kickoffs`);
+          }
         }
       } catch (kickoffError: any) {
         logger.error('[Watchdog] Proactive Kickoff Detection failed:', kickoffError);
@@ -357,6 +365,13 @@ export class MatchWatchdogWorker {
             } catch (finishErr: any) {
               logger.warn(`[Watchdog] Proactive finish failed for ${finish.matchId}: ${finishErr.message}`);
             }
+          }
+
+          // CRITICAL FIX (2026-01-16): Invalidate live matches cache after finishing matches
+          // Without this, finished matches stay in /api/matches/live cache for 30s showing wrong status
+          if (overdueFinishes.length > 0) {
+            invalidateLiveMatchesCache();
+            logger.info(`[Watchdog] Cache invalidated after finishing ${overdueFinishes.length} matches`);
           }
         }
       } catch (finishError: any) {
