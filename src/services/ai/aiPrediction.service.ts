@@ -860,6 +860,9 @@ export class AIPredictionService {
                 m.minute as match_minute,
                 COALESCE(m.home_score_display, 0) as home_score_display,
                 COALESCE(m.away_score_display, 0) as away_score_display,
+                -- CRITICAL FIX (2026-01-17): Frontend expects home_score/away_score, not home_score_display
+                COALESCE(m.home_score_display, 0) as home_score,
+                COALESCE(m.away_score_display, 0) as away_score,
                 -- Team data
                 ht.name as home_team_db_name,
                 ht.logo_url as home_team_logo,
