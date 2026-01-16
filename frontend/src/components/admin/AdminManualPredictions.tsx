@@ -167,6 +167,7 @@ export function AdminManualPredictions() {
                 const res = await fetch(`${API_BASE}/predictions/manual-coupon`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify(payload)
                 });
 
@@ -202,6 +203,7 @@ export function AdminManualPredictions() {
                 const res = await fetch(`${API_BASE}/predictions/manual`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify(payload)
                 });
 
