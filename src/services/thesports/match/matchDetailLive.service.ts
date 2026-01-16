@@ -1060,27 +1060,30 @@ export class MatchDetailLiveService {
             logger.warn(`[DetailLive] first_half_kickoff_ts is NULL for status 2 match ${match_id}, using ingestionTs=${ingestionTs} for minute calculation`);
           }
 
-          const calculatedMinute = this.calculateMinuteFromKickoffs(
-            live.statusId,
-            effectiveFirstHalfKickoff,  // Use new value if we just set it, otherwise existing, or ingestionTs fallback
-            secondHalfKickoffToUse,  // Use new value if we just set it, otherwise existing
-            overtimeKickoffToUse,    // Use new value if we just set it, otherwise existing
-            existing.minute,
-            ingestionTs
-          );
+          // CRITICAL FIX: Check terminal status BEFORE calculating minute
+          // Terminal statuses (FINISHED, HALF_TIME) should NEVER have a running minute value
+          const isHalfTime = live.statusId === 3; // TheSports commonly uses 3 = HALF_TIME
+          const isFinished = live.statusId === 8 || live.statusId === 9; // 8=Finished, 9=Delayed
 
-          if (calculatedMinute !== null) {
-            setParts.push(`${this.minuteColumnName} = $${i++}`);
-            values.push(calculatedMinute);
-            logger.info(`[DetailLive] Setting calculated minute=${calculatedMinute} from kickoff_ts for match_id=${match_id} status=${live.statusId} (first_half_ts=${effectiveFirstHalfKickoff}, second_half_ts=${secondHalfKickoffToUse})`);
+          if (isHalfTime || isFinished) {
+            // Force minute=NULL for terminal states to prevent ghost minutes
+            setParts.push(`${this.minuteColumnName} = NULL`);
+            logger.info(`[DetailLive] Terminal status ${live.statusId} detected for match_id=${match_id}. Forcing minute=NULL`);
           } else {
-            // IMPORTANT: During halftime (and some terminal states), we must NOT show a running minute.
-            // If we persist minute values during HT, UI can display weird values (e.g., "HT 06:00").
-            // We clear minute only if the schema has a minute column AND provider didn't supply a minute.
-            const isHalfTime = live.statusId === 3; // TheSports commonly uses 3 = HALF_TIME
-            const isFinished = live.statusId === 8 || live.statusId === 9; // defensive (varies by plan); no harm if not used
-            if (isHalfTime || isFinished) {
-              setParts.push(`${this.minuteColumnName} = NULL`);
+            // For live matches, calculate minute from kickoff timestamps
+            const calculatedMinute = this.calculateMinuteFromKickoffs(
+              live.statusId,
+              effectiveFirstHalfKickoff,  // Use new value if we just set it, otherwise existing, or ingestionTs fallback
+              secondHalfKickoffToUse,  // Use new value if we just set it, otherwise existing
+              overtimeKickoffToUse,    // Use new value if we just set it, otherwise existing
+              existing.minute,
+              ingestionTs
+            );
+
+            if (calculatedMinute !== null) {
+              setParts.push(`${this.minuteColumnName} = $${i++}`);
+              values.push(calculatedMinute);
+              logger.info(`[DetailLive] Setting calculated minute=${calculatedMinute} from kickoff_ts for match_id=${match_id} status=${live.statusId} (first_half_ts=${effectiveFirstHalfKickoff}, second_half_ts=${secondHalfKickoffToUse})`);
             } else {
               // CRITICAL: If we can't calculate minute but match is live, log warning
               logger.warn(`[DetailLive] Cannot calculate minute for match_id=${match_id} status=${live.statusId} - kickoff timestamps missing (first_half=${effectiveFirstHalfKickoff}, second_half=${secondHalfKickoffToUse})`);
