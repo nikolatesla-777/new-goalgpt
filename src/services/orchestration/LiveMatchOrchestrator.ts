@@ -424,7 +424,7 @@ export class LiveMatchOrchestrator extends EventEmitter {
 
       // Rule 3: Source priority
       if (rules?.source) {
-        // SPECIAL CASE: Watchdog can force-update certain fields for anomaly recovery
+        // SPECIAL CASE 1: Watchdog can force-update certain fields for anomaly recovery
         if (update.source === 'watchdog' && rules.allowWatchdog) {
           logEvent('debug', 'orchestrator.watchdog_override', {
             matchId: currentState.external_id,
@@ -432,6 +432,47 @@ export class LiveMatchOrchestrator extends EventEmitter {
             reason: 'Watchdog force-update for anomaly recovery',
           });
           // Allow watchdog to update - skip other source checks
+        }
+        // SPECIAL CASE 2: CRITICAL FIX - Preferred source ALWAYS wins
+        // If incoming update is from preferred source, ALWAYS accept it regardless of current source
+        // This fixes MQTT updates being rejected when field was previously written by API
+        else if (update.source === rules.source) {
+          logEvent('debug', 'orchestrator.preferred_source_accept', {
+            matchId: currentState.external_id,
+            field: fieldName,
+            incomingSource: update.source,
+            preferredSource: rules.source,
+            reason: 'Preferred source always wins',
+          });
+          // Allow - preferred source always wins
+        }
+        // SPECIAL CASE 3: Stale data override for terminal status
+        // If data is more than 5 minutes old and incoming update is terminal status, allow it
+        else if (fieldName === 'status_id' && update.value === 8 && currentTimestamp) {
+          const nowTs = Math.floor(Date.now() / 1000);
+          const lastUpdateAge = nowTs - currentTimestamp;
+          if (lastUpdateAge > 300) { // 5 minutes
+            logEvent('info', 'orchestrator.stale_data_override', {
+              matchId: currentState.external_id,
+              field: fieldName,
+              lastUpdateAge,
+              incomingSource: update.source,
+              reason: 'Data is stale (>5min), allowing terminal status update',
+            });
+            // Allow - stale data can be overridden by terminal status
+          } else {
+            // Normal source priority check
+            if (currentValue !== null && currentSource === rules.source && update.source !== rules.source) {
+              logEvent('debug', 'orchestrator.source_priority_skip', {
+                matchId: currentState.external_id,
+                field: fieldName,
+                currentSource,
+                incomingSource: update.source,
+                preferredSource: rules.source,
+              });
+              continue; // Reject - wrong source
+            }
+          }
         } else {
           // Normal source priority logic
           // If current value exists and comes from preferred source
