@@ -24,7 +24,7 @@ import leagueRoutes from './routes/league.routes';
 import { healthRoutes } from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
-import websocketRoutes from './routes/websocket.routes';
+import websocketRoutes, { broadcastEvent, setLatencyMonitor } from './routes/websocket.routes';
 import metricsRoutes from './routes/metrics.routes';
 import { authRoutes } from './routes/auth.routes';
 import { xpRoutes } from './routes/xp.routes';
@@ -263,10 +263,7 @@ const start = async () => {
           if (matchState.rows.length > 0) {
             const { minute, status_id } = matchState.rows[0];
 
-            // Import broadcastEvent dynamically (after WebSocket service initializes)
-            const { broadcastEvent } = await import('./routes/websocket.routes');
-
-            // Broadcast MINUTE_UPDATE to all WebSocket clients
+            // Broadcast MINUTE_UPDATE to all WebSocket clients (using static import)
             broadcastEvent({
               type: 'MINUTE_UPDATE',
               matchId: data.matchId,
@@ -293,7 +290,6 @@ const start = async () => {
     // Listener 1: Broadcast prediction events to WebSocket clients
     predictionOrchestrator.on('prediction:created', async (event: PredictionCreatedEvent) => {
       try {
-        const { broadcastEvent } = await import('./routes/websocket.routes');
         broadcastEvent({
           type: 'PREDICTION_CREATED',
           predictionId: event.predictionId,
@@ -311,7 +307,6 @@ const start = async () => {
 
     predictionOrchestrator.on('prediction:updated', async (event: PredictionUpdatedEvent) => {
       try {
-        const { broadcastEvent } = await import('./routes/websocket.routes');
         broadcastEvent({
           type: 'PREDICTION_UPDATED',
           matchId: event.matchId || '', // Handle null matchId
@@ -327,7 +322,6 @@ const start = async () => {
 
     predictionOrchestrator.on('prediction:deleted', async (event: PredictionDeletedEvent) => {
       try {
-        const { broadcastEvent } = await import('./routes/websocket.routes');
         broadcastEvent({
           type: 'PREDICTION_DELETED',
           matchId: event.matchId || '', // Handle null matchId
@@ -350,7 +344,7 @@ const start = async () => {
 
       // CRITICAL: Connect WebSocketService events to Fastify WebSocket broadcasting
       // This ensures real-time events reach frontend clients
-      const { broadcastEvent, setLatencyMonitor } = await import('./routes/websocket.routes');
+      // Using static imports for broadcastEvent and setLatencyMonitor (imported at top)
       const { setLatencyMonitor: setMetricsLatencyMonitor, setWriteQueue } = await import('./controllers/metrics.controller');
 
       // LATENCY MONITORING: Share latency monitor instance
