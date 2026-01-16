@@ -61,7 +61,7 @@ export class WebSocketService {
 
   constructor() {
     this.client = new WebSocketClient({
-      host: 'mqtt://mq.thesports.com', // MQTT broker host
+      host: config.thesports?.mqtt?.host || 'mqtt://mq.thesports.com', // MQTT broker host (env: THESPORTS_MQTT_HOST)
       user: config.thesports?.user,
       secret: config.thesports?.secret,
     });

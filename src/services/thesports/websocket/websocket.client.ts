@@ -40,7 +40,7 @@ export class WebSocketClient {
 
   constructor(clientConfig?: Partial<MQTTClientConfig>) {
     this.config = {
-      host: clientConfig?.host || 'mqtt://mq.thesports.com',
+      host: clientConfig?.host || config.thesports?.mqtt?.host || 'mqtt://mq.thesports.com',
       user: clientConfig?.user || config.thesports?.user || '',
       secret: clientConfig?.secret || config.thesports?.secret || '',
       reconnectAttempts: clientConfig?.reconnectAttempts || 5,
