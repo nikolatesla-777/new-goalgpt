@@ -93,7 +93,8 @@ export class LiveMatchOrchestrator extends EventEmitter {
     away_score_display: { source: 'mqtt', fallback: 'api', nullable: true },
 
     // Status: API preferred (authoritative), MQTT fallback, watchdog can force-update for anomaly recovery
-    status_id: { source: 'api', fallback: 'mqtt', allowWatchdog: true },
+    // CRITICAL FIX: nullable=false prevents NULL status_id from API errors causing matches to disappear
+    status_id: { source: 'api', fallback: 'mqtt', allowWatchdog: true, nullable: false },
 
     // Minute: CRITICAL FIX - computed preferred (per TheSports docs: calculate from kickoff)
     // API minute can be stale/delayed, causing minute to jump backwards
@@ -397,6 +398,25 @@ export class LiveMatchOrchestrator extends EventEmitter {
             incomingStatus: update.value,
             source: update.source,
             reason: 'Cannot revert from terminal status to non-terminal',
+          });
+          continue; // REJECT
+        }
+
+        // Rule 2B: CRITICAL FIX - Prevent LIVE ↔ NOT_STARTED downgrade (race condition protection)
+        // IF match is currently LIVE (2,3,4,5,7)
+        // AND incoming status is NOT_STARTED (1)
+        // THEN REJECT - likely API error or stale data causing match to disappear from frontend
+        const LIVE_STATUSES = [2, 3, 4, 5, 7];
+        const currentIsLive = LIVE_STATUSES.includes(currentState.status_id);
+        const incomingIsNotStarted = update.value === 1;
+
+        if (currentIsLive && incomingIsNotStarted) {
+          logEvent('warn', 'orchestrator.live_to_notstarted_blocked', {
+            matchId: currentState.external_id,
+            currentStatus: currentState.status_id,
+            incomingStatus: update.value,
+            source: update.source,
+            reason: 'Cannot downgrade from LIVE to NOT_STARTED - likely API error',
           });
           continue; // REJECT
         }

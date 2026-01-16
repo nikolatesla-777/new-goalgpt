@@ -411,10 +411,12 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
           // GOAL: Goal scored
           // SCORE_CHANGE: Score updated (includes goal cancellations)
           // MATCH_STATE_CHANGE: Status changed (NOT_STARTED → FIRST_HALF, HALF_TIME → SECOND_HALF, etc.)
+          // MINUTE_UPDATE: Match minute updated (real-time minute synchronization)
           if (
             message.type === 'GOAL' ||
             message.type === 'SCORE_CHANGE' ||
-            message.type === 'MATCH_STATE_CHANGE'
+            message.type === 'MATCH_STATE_CHANGE' ||
+            message.type === 'MINUTE_UPDATE'
           ) {
             // CRITICAL FIX: Debounce WebSocket events to prevent race condition with polling
             // Clear existing debounce timer
