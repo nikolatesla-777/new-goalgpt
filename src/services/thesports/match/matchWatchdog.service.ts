@@ -355,7 +355,7 @@ export class MatchWatchdogService {
     const client = await pool.connect();
     try {
       const query = `
-        SELECT 
+        SELECT
           external_id as match_id,
           match_time,
           minute,
@@ -367,7 +367,7 @@ export class MatchWatchdogService {
           CASE
             -- CRITICAL FIX (2026-01-15): Reduced from 7800 (130min) to 6300 (105min = 90 + 15 HT)
             WHEN $1::integer - match_time > 6300 THEN 'absolute_timeout'
-            WHEN minute > 100 THEN 'minute_exceeded'
+            WHEN minute >= 95 THEN 'minute_exceeded'
             ELSE 'stale_finish'
           END as reason
         FROM ts_matches
@@ -376,9 +376,9 @@ export class MatchWatchdogService {
           AND (
             $1::integer - match_time > 6300
             OR
-            minute > 100
+            minute >= 95
             OR
-            (minute >= 90 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 900)
+            (minute >= 90 AND EXTRACT(EPOCH FROM (NOW() - updated_at)) > 600)
           )
         ORDER BY match_time ASC
         LIMIT $2
