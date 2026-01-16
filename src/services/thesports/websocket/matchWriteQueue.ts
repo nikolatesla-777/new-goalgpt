@@ -1,13 +1,18 @@
 /**
  * Match Write Queue
- * 
+ *
  * Batches database writes for the same match to reduce database load and improve performance.
  * Groups updates by matchId and flushes them periodically or when batch size is reached.
+ *
+ * CRITICAL REFACTOR (2026-01-16):
+ * - Now uses LiveMatchOrchestrator for all writes
+ * - Ensures MQTT data goes through protection layer (NULL rejection, terminal state, etc.)
+ * - MQTT source has highest priority (3) for real-time updates
  */
 
-import { pool } from '../../../database/connection';
 import { logger } from '../../../utils/logger';
 import { ParsedScore } from '../../../types/thesports/websocket/websocket.types';
+import { LiveMatchOrchestrator, FieldUpdate } from '../../orchestration/LiveMatchOrchestrator';
 
 interface MatchUpdate {
   type: 'score' | 'incidents' | 'statistics' | 'status';
@@ -35,8 +40,10 @@ export class MatchWriteQueue {
   private readonly batchSize: number = 10; // Flush when queue has 10 matches
   private readonly flushIntervalMs: number = 100; // Flush every 100ms
   private isFlushing: boolean = false;
+  private orchestrator: LiveMatchOrchestrator;
 
   constructor() {
+    this.orchestrator = LiveMatchOrchestrator.getInstance();
     this.startFlushInterval();
   }
 
@@ -127,179 +134,168 @@ export class MatchWriteQueue {
   }
 
   /**
-   * Batch write to database
+   * Batch write via LiveMatchOrchestrator
+   *
+   * CRITICAL REFACTOR (2026-01-16):
+   * - Replaced direct DB writes with orchestrator.updateMatch()
+   * - All MQTT updates now go through protection layer
+   * - Source priority: 'mqtt' (highest = 3)
    */
   private async batchWrite(batches: MatchUpdateBatch[]): Promise<void> {
     if (batches.length === 0) return;
 
-    const client = await pool.connect();
-    try {
-      // Process each batch (could be optimized further with bulk UPDATE)
-      for (const batch of batches) {
-        try {
-          await this.writeBatch(client, batch);
-        } catch (error: any) {
-          logger.error(`[MatchWriteQueue] Error writing batch for match ${batch.matchId}:`, error);
-          // Continue with other batches
-        }
+    // Process each batch through orchestrator
+    for (const batch of batches) {
+      try {
+        await this.writeBatchViaOrchestrator(batch);
+      } catch (error: any) {
+        logger.error(`[MatchWriteQueue] Error writing batch for match ${batch.matchId}:`, error);
+        // Continue with other batches
       }
-    } finally {
-      client.release();
     }
   }
 
   /**
-   * Write single batch to database
+   * Write single batch via LiveMatchOrchestrator
+   *
+   * CRITICAL REFACTOR (2026-01-16):
+   * - Converts batch updates to FieldUpdate[] format
+   * - Sends to orchestrator with source='mqtt' and priority=3 (highest)
+   * - Orchestrator handles: NULL rejection, terminal state protection, timestamp checks
    */
-  private async writeBatch(client: any, batch: MatchUpdateBatch): Promise<void> {
-    // Optimistic locking check
-    const freshnessCheck = await this.shouldApplyUpdate(
-      client,
-      batch.matchId,
-      batch.providerUpdateTime
-    );
-
-    if (!freshnessCheck.apply) {
-      logger.debug(`[MatchWriteQueue] Skipping stale update for ${batch.matchId}`);
-      return;
-    }
-
-    // Build UPDATE query based on what's in the batch
-    const setParts: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
+  private async writeBatchViaOrchestrator(batch: MatchUpdateBatch): Promise<void> {
+    const updates: FieldUpdate[] = [];
+    const nowTs = Math.floor(Date.now() / 1000);
+    const timestamp = batch.providerUpdateTime || nowTs;
 
     // Status update
     if (batch.updates.status !== undefined && batch.updates.status !== null && !isNaN(Number(batch.updates.status))) {
-      setParts.push(`status_id = $${paramIndex++}`);
-      values.push(Number(batch.updates.status)); // Ensure number type
+      updates.push({
+        field: 'status_id',
+        value: Number(batch.updates.status),
+        source: 'mqtt',
+        priority: 3, // Highest priority for real-time MQTT data
+        timestamp: batch.updates.statusProviderTime || timestamp,
+      });
     }
 
-    // Score update (from ParsedScore)
+    // Score updates (from ParsedScore)
     if (batch.updates.score) {
       const score = batch.updates.score;
-      // Only update scores if they are valid numbers (not null/undefined/NaN)
+
+      // Home score display
       if (score.home?.score !== undefined && score.home?.score !== null && !isNaN(Number(score.home.score))) {
-        setParts.push(`home_score_display = $${paramIndex++}`);
-        values.push(Number(score.home.score));
+        updates.push({
+          field: 'home_score_display',
+          value: Number(score.home.score),
+          source: 'mqtt',
+          priority: 3,
+          timestamp,
+        });
       }
+
+      // Away score display
       if (score.away?.score !== undefined && score.away?.score !== null && !isNaN(Number(score.away.score))) {
-        setParts.push(`away_score_display = $${paramIndex++}`);
-        values.push(Number(score.away.score));
+        updates.push({
+          field: 'away_score_display',
+          value: Number(score.away.score),
+          source: 'mqtt',
+          priority: 3,
+          timestamp,
+        });
       }
-      
-      // Add other score fields if needed
+
+      // Regular scores (if different from display)
       if (score.home?.regularScore !== undefined && score.home?.regularScore !== null && !isNaN(Number(score.home.regularScore))) {
-        setParts.push(`home_score_regular = $${paramIndex++}`);
-        values.push(Number(score.home.regularScore));
+        updates.push({
+          field: 'home_score_regular',
+          value: Number(score.home.regularScore),
+          source: 'mqtt',
+          priority: 3,
+          timestamp,
+        });
       }
+
       if (score.away?.regularScore !== undefined && score.away?.regularScore !== null && !isNaN(Number(score.away.regularScore))) {
-        setParts.push(`away_score_regular = $${paramIndex++}`);
-        values.push(Number(score.away.regularScore));
+        updates.push({
+          field: 'away_score_regular',
+          value: Number(score.away.regularScore),
+          source: 'mqtt',
+          priority: 3,
+          timestamp,
+        });
       }
 
-      // CRITICAL: Update minute from ParsedScore (calculated from messageTimestamp)
+      // Minute from MQTT (calculated from messageTimestamp)
+      // NOTE: Orchestrator will respect source priority (mqtt > computed)
       if (score.minute !== undefined && score.minute !== null && !isNaN(Number(score.minute))) {
-        setParts.push(`minute = $${paramIndex++}`);
-        values.push(Number(score.minute));
+        updates.push({
+          field: 'minute',
+          value: Number(score.minute),
+          source: 'mqtt',
+          priority: 3,
+          timestamp,
+        });
       }
     }
 
-    // Incidents update
+    // Incidents update (JSONB field - not in orchestrator field rules, will be added dynamically)
     if (batch.updates.incidents) {
-      setParts.push(`incidents = $${paramIndex++}::jsonb`);
-      values.push(JSON.stringify(batch.updates.incidents));
+      updates.push({
+        field: 'incidents',
+        value: batch.updates.incidents,
+        source: 'mqtt',
+        priority: 3,
+        timestamp,
+      });
     }
 
-    // Statistics update
+    // Statistics update (JSONB field)
     if (batch.updates.statistics) {
-      setParts.push(`statistics = $${paramIndex++}::jsonb`);
-      values.push(JSON.stringify(batch.updates.statistics));
+      updates.push({
+        field: 'statistics',
+        value: batch.updates.statistics,
+        source: 'mqtt',
+        priority: 3,
+        timestamp,
+      });
     }
 
-    // Timestamps
-    if (freshnessCheck.providerTimeToWrite !== null && freshnessCheck.providerTimeToWrite !== undefined && !isNaN(Number(freshnessCheck.providerTimeToWrite))) {
-      setParts.push(`provider_update_time = GREATEST(COALESCE(provider_update_time, 0), $${paramIndex++}::bigint)`);
-      values.push(Number(freshnessCheck.providerTimeToWrite)); // Ensure number type
-    }
-    if (freshnessCheck.ingestionTs !== null && freshnessCheck.ingestionTs !== undefined && !isNaN(Number(freshnessCheck.ingestionTs))) {
-      setParts.push(`last_event_ts = $${paramIndex++}::bigint`);
-      values.push(Number(freshnessCheck.ingestionTs)); // Ensure number type
-    }
-    
-    // Always update updated_at timestamp
-    setParts.push(`updated_at = NOW()`);
-
-    // Check if we have anything meaningful to update (besides updated_at)
-    if (setParts.length === 1) {
-      // Only updated_at, nothing else to update - skip
-      return;
+    // Provider timestamps
+    if (batch.providerUpdateTime !== null && !isNaN(Number(batch.providerUpdateTime))) {
+      updates.push({
+        field: 'provider_update_time',
+        value: Number(batch.providerUpdateTime),
+        source: 'mqtt',
+        priority: 3,
+        timestamp,
+      });
     }
 
-    // Execute UPDATE - matchId as last parameter
-    const matchIdParam = paramIndex;
-    values.push(String(batch.matchId)); // Ensure string type for external_id
-    
-    const query = `
-      UPDATE ts_matches
-      SET ${setParts.join(', ')}
-      WHERE external_id = $${matchIdParam}
-    `;
+    if (batch.latestIngestionTs !== null && !isNaN(Number(batch.latestIngestionTs))) {
+      updates.push({
+        field: 'last_event_ts',
+        value: Number(batch.latestIngestionTs),
+        source: 'mqtt',
+        priority: 3,
+        timestamp,
+      });
+    }
 
-    try {
-      const result = await client.query(query, values);
-      
-      if (result.rowCount === 0) {
-        logger.warn(`[MatchWriteQueue] UPDATE affected 0 rows for match ${batch.matchId}`);
+    // Send to orchestrator if we have updates
+    if (updates.length > 0) {
+      const result = await this.orchestrator.updateMatch(batch.matchId, updates, 'mqtt');
+
+      if (result.status === 'success') {
+        logger.debug(
+          `[MatchWriteQueue → Orchestrator] ✅ Updated ${batch.matchId}: ` +
+          `${result.fieldsUpdated?.join(', ')} (${updates.length} fields sent)`
+        );
+      } else if (result.status === 'rejected') {
+        logger.warn(
+          `[MatchWriteQueue → Orchestrator] ⚠️ Rejected ${batch.matchId}: ${result.reason}`
+        );
       }
-    } catch (error: any) {
-      // Enhanced error logging for debugging (only log detailed info on actual errors)
-      logger.error(`[MatchWriteQueue] Error writing batch for match ${batch.matchId}:`, error.message || error);
-      if (process.env.NODE_ENV === 'development') {
-        logger.error(`[MatchWriteQueue] Query: ${query}`);
-        logger.error(`[MatchWriteQueue] Values: ${JSON.stringify(values.map((v, i) => ({ index: i + 1, type: typeof v, value: v })))}`);
-        logger.error(`[MatchWriteQueue] SetParts: ${JSON.stringify(setParts)}`);
-      }
-      throw error; // Re-throw to be caught by batchWrite
-    }
-  }
-
-  /**
-   * Optimistic locking check (same logic as WebSocketService)
-   */
-  private async shouldApplyUpdate(
-    client: any,
-    matchId: string,
-    incomingProviderUpdateTime: number | null
-  ): Promise<{ apply: boolean; providerTimeToWrite: number | null; ingestionTs: number }> {
-    const ingestionTs = Math.floor(Date.now() / 1000);
-
-    const result = await client.query(
-      `SELECT provider_update_time, last_event_ts FROM ts_matches WHERE external_id = $1`,
-      [matchId]
-    );
-
-    if (result.rows.length === 0) {
-      logger.warn(`[MatchWriteQueue] Match ${matchId} not found in DB during optimistic locking check`);
-      return { apply: true, providerTimeToWrite: incomingProviderUpdateTime, ingestionTs };
-    }
-
-    const existing = result.rows[0];
-    // Convert string to number (PostgreSQL returns BIGINT as string)
-    const existingProviderTime = existing.provider_update_time != null ? Number(existing.provider_update_time) : null;
-    const existingEventTime = existing.last_event_ts != null ? Number(existing.last_event_ts) : null;
-
-    if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
-      if (existingProviderTime !== null && incomingProviderUpdateTime <= existingProviderTime) {
-        return { apply: false, providerTimeToWrite: null, ingestionTs };
-      }
-      const providerTimeToWrite = Math.max(existingProviderTime || 0, incomingProviderUpdateTime);
-      return { apply: true, providerTimeToWrite, ingestionTs };
-    } else {
-      if (existingEventTime !== null && ingestionTs <= existingEventTime + 5) {
-        return { apply: false, providerTimeToWrite: null, ingestionTs };
-      }
-      return { apply: true, providerTimeToWrite: null, ingestionTs };
     }
   }
 
