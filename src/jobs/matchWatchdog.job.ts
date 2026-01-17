@@ -591,18 +591,24 @@ export class MatchWatchdogWorker {
       // /data/update handles live match updates but doesn't handle HALF_TIME -> END transitions
       // We need to find stale matches (especially HALF_TIME) that should be END
       // UPDATED: Reduced HALF_TIME threshold from 900s (15 min) to 300s (5 min) for faster recovery
-      const stales = await this.matchWatchdogService.findStaleLiveMatches(nowTs, 120, 300, 100);
+      // PERFORMANCE FIX (2026-01-17): Limit to 5 matches per tick (was 100)
+      // Each reconcileViaOrchestrator() takes ~10s → 5 matches = 50s tick duration (acceptable)
+      // Processing 28+ matches was causing 4.5min tick duration, blocking the watchdog
+      const stales = await this.matchWatchdogService.findStaleLiveMatches(nowTs, 120, 300, 5);
 
       // CRITICAL FIX: Also find matches that should be live (match_time passed but status still NOT_STARTED)
       // This ensures matches transition from NOT_STARTED to LIVE when they actually start
       // maxMinutesAgo = 1440 (24 saat) to catch ALL today's matches, even if they started many hours ago
       // Previous limit of 120 minutes was too restrictive and missed matches that started 3+ hours ago
-      // CRITICAL: Increase limit to 2000 to process more matches per tick (was 1000)
-      const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 2000);
+      // PERFORMANCE FIX (2026-01-17): Limit to 5 matches per tick (was 2000)
+      // Each match calls reconcileViaOrchestrator() (~10s) → 5 matches = 50s max
+      const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 5);
 
       // CRITICAL FIX: Find matches that exceeded maximum duration (minute > 105 for 2nd half, > 130 for overtime)
       // These matches should have ended but status is still LIVE - need immediate reconciliation
-      const overdueMatches = await this.matchWatchdogService.findOverdueMatches(50);
+      // PERFORMANCE FIX (2026-01-17): Limit to 5 matches per tick (was 50)
+      // Each match calls reconcileViaOrchestrator() (~10s) → 5 matches = 50s max
+      const overdueMatches = await this.matchWatchdogService.findOverdueMatches(5);
       if (overdueMatches.length > 0) {
         logger.warn(`[Watchdog] Found ${overdueMatches.length} OVERDUE matches (minute exceeded max):`);
         overdueMatches.forEach(m => logger.warn(`  - ${m.matchId}: ${m.reason}`));
