@@ -194,9 +194,28 @@ const start = async () => {
     postMatchProcessorJob.start();
     logger.info('✅ PostMatchProcessor Job started (interval: 2m)');
 
+    // PHASE 7: DataUpdate Worker DISABLED - replaced by HTTP endpoint + 5s cron
+    /*
     dataUpdateWorker = new DataUpdateWorker();
     dataUpdateWorker.start();
     logger.info('✅ DataUpdate Worker started (interval: 20s)');
+    */
+
+    // PHASE 7: State Update Endpoint (5s interval) - Minimal architecture
+    setInterval(async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/matches/update-live-states', {
+          method: 'POST',
+        });
+        const result = await response.json();
+        if (result.updated > 0) {
+          logger.debug(`[Cron:StateUpdate] Updated ${result.updated} matches in ${result.duration_ms}ms`);
+        }
+      } catch (error: any) {
+        logger.error('[Cron:StateUpdate] Failed:', error.message);
+      }
+    }, 5000); // 5 seconds
+    logger.info('✅ State Update Cron started (interval: 5s) - ENDPOINT MODE');
 
     try {
       matchMinuteWorker = new MatchMinuteWorker();
@@ -387,14 +406,14 @@ const shutdown = async () => {
     logger.info('[Shutdown] Stopping workers...');
     if (teamDataSyncWorker) teamDataSyncWorker.stop();
     if (teamLogoSyncWorker) teamLogoSyncWorker.stop();
-    if (matchSyncWorker) matchSyncWorker.stop();
+    // if (matchSyncWorker) matchSyncWorker.stop(); // PHASE 7: DISABLED
     if (dailyMatchSyncWorker) dailyMatchSyncWorker.stop();
     if (lineupRefreshJob) lineupRefreshJob.stop();
     if (postMatchProcessorJob) postMatchProcessorJob.stop();
-    if (dataUpdateWorker) dataUpdateWorker.stop();
+    // if (dataUpdateWorker) dataUpdateWorker.stop(); // PHASE 7: DISABLED (replaced by endpoint)
     if (matchMinuteWorker) matchMinuteWorker.stop();
     if (matchDataSyncWorker) matchDataSyncWorker.stop();
-    if (matchWatchdogWorker) matchWatchdogWorker.stop();
+    // if (matchWatchdogWorker) matchWatchdogWorker.stop(); // PHASE 7: DISABLED
     if (competitionSyncWorker) competitionSyncWorker.stop();
     if (playerSyncWorker) playerSyncWorker.stop();
 

@@ -867,10 +867,10 @@ export const getLiveMatches = async (
       const externalId = row.external_id ?? row.match_id ?? row.id;
       const statusId = row.status_id ?? row.status ?? row.match_status ?? 1;
 
-      // PHASE 6 FIX: Database now returns correct columns (home_score_display)
-      // Fallback chain for safety: home_score (from DB) → home_score_display → home_score_regular → 0
-      const homeScoreDisplay = row.home_score ?? row.home_score_display ?? row.home_score_regular ?? 0;
-      const awayScoreDisplay = row.away_score ?? row.away_score_display ?? row.away_score_regular ?? 0;
+      // PHASE 7: Database query fixed to read home_score_display directly
+      // No fallback needed - database returns COALESCE(home_score_display, 0) as home_score
+      const homeScoreDisplay = row.home_score ?? 0;
+      const awayScoreDisplay = row.away_score ?? 0;
 
       // Phase 3C: Read minute from DB and generate minute_text
       const minute = row.minute !== null && row.minute !== undefined ? Number(row.minute) : null;

@@ -29,6 +29,7 @@ import {
   forceRefreshStuckMatches,
   forceRefreshMatch,
 } from '../controllers/match/forceRefreshStuck.controller';
+import { updateLiveMatchStates } from '../controllers/match/liveStateUpdate.controller';
 import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 
 export default async function matchRoutes(
@@ -161,6 +162,14 @@ export default async function matchRoutes(
    * NOTE: Must be registered before /:match_id route to avoid route conflicts
    */
   fastify.get('/:match_id/incidents', getMatchIncidents);
+
+  /**
+   * POST /api/matches/update-live-states
+   * PHASE 7: State transition endpoint (45'→HT, 90+→FT)
+   * Called by 5s cron job to handle match state progression
+   * Replaces DataUpdate worker with minimal HTTP endpoint approach
+   */
+  fastify.post('/update-live-states', updateLiveMatchStates);
 
   /**
    * POST /api/matches/force-refresh-stuck

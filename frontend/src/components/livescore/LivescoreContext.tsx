@@ -216,7 +216,15 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
               const liveMatch = {
                 ...apiMatch, // Use API data as base (competition, team info, etc.)
                 minute: (prevMatch as any).minute !== undefined ? (prevMatch as any).minute : (apiMatch as any).minute,
-                minute_text: (prevMatch as any).minute_text || (apiMatch as any).minute_text, // Preserve WebSocket, fallback to API
+                minute_text: (
+                  (prevMatch as any).minute_text ||              // 1. WebSocket data
+                  (apiMatch as any).minute_text ||               // 2. API data
+                  generateMinuteText(                            // 3. Generate from minute+status
+                    (prevMatch as any).minute ?? (apiMatch as any).minute,
+                    prevStatus ?? (apiMatch as any).status_id ?? 1
+                  ) ||
+                  '—'                                             // 4. Fallback
+                ),
                 status: prevStatus,
                 home_score: (prevMatch as any).home_score !== undefined ? (prevMatch as any).home_score : (apiMatch as any).home_score,
                 away_score: (prevMatch as any).away_score !== undefined ? (prevMatch as any).away_score : (apiMatch as any).away_score,
