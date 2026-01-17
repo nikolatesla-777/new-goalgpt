@@ -79,32 +79,45 @@ export class WebSocketParser {
         if (numericKeys.length > 0) {
           // Convert object to array: {"0": msg1, "1": msg2} -> [msg1, msg2]
           const messages = numericKeys.map(key => data[key]);
-          
+
+          logger.info(`[Parser] parseMQTTMessage detected ${numericKeys.length} numeric keys, unwrapping ${messages.length} messages`);
+
           // Parse each message and combine results
           const result = { score: [] as WebSocketScoreMessage[], stats: [] as WebSocketStatsMessage[], incidents: [] as WebSocketIncidentMessage[], tlive: [] as WebSocketTliveMessage[] };
           let hasValidMessage = false;
-          
+
           for (const msg of messages) {
-            if (!msg || typeof msg !== 'object') continue;
-            
+            if (!msg || typeof msg !== 'object') {
+              logger.warn(`[Parser] Skipping invalid message (not object): ${typeof msg}`);
+              continue;
+            }
+
+            logger.info(`[Parser] Unwrapped message: ${JSON.stringify(msg).slice(0, 150)}...`);
+
             // Guard: Check if match_id or id exists
             const matchId = this.extractMatchIdFromPayload(msg);
             if (!matchId || matchId.trim() === '') {
               logger.warn('MQTT message missing valid match_id/id, skipping:', msg);
               continue;
             }
-            
+
+            logger.info(`[Parser] Match ID extracted: ${matchId}, calling parseSingleMessage`);
+
             // Try to parse as score, stats, or incidents
             const parsed = this.parseSingleMessage(msg);
             if (parsed) {
+              logger.info(`[Parser] parseSingleMessage returned valid result`);
               if (parsed.score) result.score.push(...parsed.score);
               if (parsed.stats) result.stats.push(...parsed.stats);
               if (parsed.incidents) result.incidents.push(...parsed.incidents);
               if ((parsed as any).tlive) (result as any).tlive.push(...(parsed as any).tlive);
               hasValidMessage = true;
+            } else {
+              logger.warn(`[Parser] parseSingleMessage returned NULL for message`);
             }
           }
-          
+
+          logger.info(`[Parser] parseMQTTMessage result: hasValidMessage=${hasValidMessage}`);
           return hasValidMessage ? result : null;
         }
         
