@@ -239,7 +239,9 @@ export class WebSocketService {
             // REFACTOR: Direct database write (bypass queue/orchestrator)
             // MQTT is authoritative for real-time score updates - write immediately
             const ingestionTs = Math.floor(Date.now() / 1000);
+            logger.info(`[WebSocket] BEFORE writeMQTTScoreDirectly for ${parsedScore.matchId}`);
             await this.writeMQTTScoreDirectly(parsedScore, providerUpdateTime, ingestionTs);
+            logger.info(`[WebSocket] AFTER writeMQTTScoreDirectly for ${parsedScore.matchId}`);
 
             // CRITICAL FIX: Emit SCORE_CHANGE immediately for frontend real-time updates
             // The actual DB write will happen via queue (100ms), but frontend gets notified now
