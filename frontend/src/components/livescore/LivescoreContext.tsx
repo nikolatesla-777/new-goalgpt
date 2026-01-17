@@ -364,15 +364,18 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
                 setLastUpdate(new Date());
               }
 
-              // Debounced full refresh for eventual consistency (5 seconds)
-              // Smart cache ensures this is fast (event-driven invalidation already cleared stale data)
-              // Increased to 5s to reduce unnecessary API calls since optimistic updates handle real-time feedback
+              // PHASE 6 FIX: Debounced refetch DISABLED
+              // Trust MQTT/WebSocket data as the sole source of truth
+              // Backend now returns correct columns (home_score_display), no need to refetch
+              // Refetch was causing score reversion when backend had stale cache
+              /*
               if (fetchTimerRef.current) {
                 clearTimeout(fetchTimerRef.current);
               }
               fetchTimerRef.current = setTimeout(() => {
                 fetchMatches();
               }, 5000);
+              */
             }
 
             // PHASE 5: Handle PREDICTION_SETTLED event
@@ -406,11 +409,13 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
 
               setLastUpdate(new Date());
 
-              // Debounced refresh (5s) for eventual consistency
+              // PHASE 6 FIX: Debounced refetch DISABLED (trust WebSocket data)
+              /*
               if (fetchTimerRef.current) {
                 clearTimeout(fetchTimerRef.current);
               }
               fetchTimerRef.current = setTimeout(() => fetchMatches(), 5000);
+              */
             }
           } catch (e) {
             // Ignore parse errors

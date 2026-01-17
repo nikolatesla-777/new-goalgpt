@@ -71,8 +71,8 @@ export class MatchDatabaseService {
           m.last_event_ts,
           m.home_team_id,
           m.away_team_id,
-          m.home_score_regular as home_score,
-          m.away_score_regular as away_score,
+          COALESCE(m.home_score_display, m.home_score_regular, 0) as home_score,
+          COALESCE(m.away_score_display, m.away_score_regular, 0) as away_score,
           m.home_score_overtime,
           m.away_score_overtime,
           m.home_score_penalties,
@@ -270,12 +270,16 @@ export class MatchDatabaseService {
    */
   async getLiveMatches(includeAI: boolean = false): Promise<MatchDiaryResponse> {
     try {
-      // Phase 6: Smart Cache - Check cache first (event-driven invalidation)
+      // CRITICAL FIX (2026-01-17): CACHE DISABLED for score debugging
+      // Cache was causing stale scores to be returned
+      // TODO: Re-enable after fixing cache invalidation
+      /*
       const cached = liveMatchCache.getLiveMatches();
       if (cached) {
         logger.debug(`[MatchDatabase] Cache HIT for live matches`);
         return cached;
       }
+      */
 
       logger.info(`🔍 [MatchDatabase] Cache MISS - querying live matches from DATABASE...`);
 
@@ -309,8 +313,8 @@ export class MatchDatabaseService {
           m.last_event_ts,
           m.home_team_id,
           m.away_team_id,
-          m.home_score_regular as home_score,
-          m.away_score_regular as away_score,
+          COALESCE(m.home_score_display, m.home_score_regular, 0) as home_score,
+          COALESCE(m.away_score_display, m.away_score_regular, 0) as away_score,
           m.home_score_overtime,
           m.away_score_overtime,
           m.home_score_penalties,
@@ -384,6 +388,12 @@ export class MatchDatabaseService {
       // #endregion
 
       logger.info(`✅ [MatchDatabase] Found ${matches.length} strictly live matches in database (status_id IN 2,3,4,5,7, NO TIME WINDOW)`);
+
+      // CRITICAL FIX (2026-01-17): Cache SET disabled for debugging
+      // TODO: Re-enable after fixing cache invalidation
+      /*
+      liveMatchCache.setLiveMatches(response);
+      */
 
       // CRITICAL FIX: Removed API fallback - DB is authoritative
       // API fallback was causing issues and returning 0 matches
@@ -542,8 +552,8 @@ export class MatchDatabaseService {
           m.last_event_ts,
           m.home_team_id,
           m.away_team_id,
-          m.home_score_regular as home_score,
-          m.away_score_regular as away_score,
+          COALESCE(m.home_score_display, m.home_score_regular, 0) as home_score,
+          COALESCE(m.away_score_display, m.away_score_regular, 0) as away_score,
           m.home_score_overtime,
           m.away_score_overtime,
           m.home_score_penalties,

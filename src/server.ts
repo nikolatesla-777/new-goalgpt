@@ -172,9 +172,15 @@ const start = async () => {
     teamLogoSyncWorker.start();
     logger.info('✅ TeamLogoSync Worker started (interval: 24h)');
 
+    // PHASE 6 FIX: MatchSync Worker DISABLED
+    // MQTT/WebSocket is the sole data source for live scores
+    // API polling worker was causing race conditions and overriding MQTT data
+    /*
     matchSyncWorker = new MatchSyncWorker();
     matchSyncWorker.start();
     logger.info('✅ MatchSync Worker started (interval: 30s)');
+    */
+    logger.info('⚠️ MatchSync Worker DISABLED (MQTT-only mode)');
 
     dailyMatchSyncWorker = new DailyMatchSyncWorker();
     dailyMatchSyncWorker.start();
@@ -205,12 +211,17 @@ const start = async () => {
     matchDataSyncWorker.start();
     logger.info('✅ MatchDataSync Worker started (interval: 60s)');
 
-    // Match Watchdog Worker (for should-be-live matches)
+    // PHASE 6 FIX: Match Watchdog Worker DISABLED
+    // Watchdog was incorrectly auto-finishing live matches (Galatasaray bug)
+    // Match finish should only happen via MQTT updates
+    /*
     const matchDetailLiveService = new MatchDetailLiveService();
     const matchRecentService = new MatchRecentService();
     matchWatchdogWorker = new MatchWatchdogWorker(matchDetailLiveService, matchRecentService);
     matchWatchdogWorker.start();
     logger.info('✅ MatchWatchdog Worker started (interval: 30s)');
+    */
+    logger.info('⚠️ MatchWatchdog Worker DISABLED (MQTT-only mode)');
 
     // Competition Sync Worker (syncs competition/league data)
     competitionSyncWorker = new CompetitionSyncWorker();

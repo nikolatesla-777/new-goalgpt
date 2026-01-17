@@ -105,8 +105,13 @@ export class WebSocketService {
    */
   private async handleMessage(message: any): Promise<void> {
     try {
-      // TEMPORARY DEBUG: Log all incoming messages
-      logger.info(`[WebSocket] handleMessage called, message type: ${message?.score ? 'SCORE' : message?.incidents ? 'INCIDENT' : 'OTHER'}`);
+      // TEMPORARY DEBUG: Log all incoming messages (check for non-empty arrays)
+      const msgType = this.validator.isScoreMessage(message) ? 'SCORE'
+        : this.validator.isStatsMessage(message) ? 'STATS'
+        : this.validator.isIncidentsMessage(message) ? 'INCIDENTS'
+        : this.validator.isTliveMessage(message) ? 'TLIVE'
+        : 'OTHER';
+      logger.info(`[WebSocket] handleMessage called, message type: ${msgType}`);
 
       // LATENCY MONITORING: Record MQTT message received timestamp
       const mqttReceivedTs = Date.now();
@@ -412,26 +417,24 @@ export class WebSocketService {
 
       // Handle stats messages
       if (this.validator.isStatsMessage(message)) {
-        const statsMessages = Array.isArray((message as any).stats) ? (message as any).stats : [];
-        for (const statsMsg of statsMessages) {
-          const matchId = String((statsMsg as any)?.id ?? (statsMsg as any)?.match_id ?? (statsMsg as any)?.matchId ?? '').trim();
-          if (!matchId) {
-            logger.warn('Stats message missing id/matchId, skipping item:', statsMsg);
-            continue;
-          }
-
-          // Parse stats to structured format
-          const structuredStats = this.parser.parseStatsToStructured(statsMsg);
-
-          // Update database with statistics
-          await this.updateMatchStatisticsInDatabase(matchId, structuredStats, providerUpdateTime);
-
-          // Update cache
-          const statsCacheKey = `${CacheKeyPrefix.TheSports}:ws:stats:${matchId}`;
-          await cacheService.set(statsCacheKey, structuredStats, CacheTTL.Minute);
-
-          logger.debug(`Stats update received for match ${matchId}: ${Object.keys(structuredStats).length} stat types`);
+        // CRITICAL FIX: Extract match ID from message (not from individual stat items)
+        const matchId = String((message as any)?.id ?? (message as any)?.match_id ?? (message as any)?.matchId ?? '').trim();
+        if (!matchId) {
+          logger.warn('Stats message missing id/matchId, skipping:', message);
+          return;
         }
+
+        // Parse stats to structured format (pass full message with id + stats array)
+        const structuredStats = this.parser.parseStatsToStructured(message);
+
+        // Update database with statistics
+        await this.updateMatchStatisticsInDatabase(matchId, structuredStats, providerUpdateTime);
+
+        // Update cache
+        const statsCacheKey = `${CacheKeyPrefix.TheSports}:ws:stats:${matchId}`;
+        await cacheService.set(statsCacheKey, structuredStats, CacheTTL.Minute);
+
+        logger.debug(`Stats update received for match ${matchId}: ${Object.keys(structuredStats).length} stat types`);
       }
 
       // Handle tlive messages (timeline / phase updates: HT / 2H / FT etc.)

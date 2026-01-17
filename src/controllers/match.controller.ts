@@ -29,7 +29,7 @@ import { logger } from '../utils/logger';
 import { generateMinuteText } from '../utils/matchMinuteText';
 import { liveMatchCache } from '../services/thesports/match/liveMatchCache.service';
 import { matchStatsRepository } from '../repositories/matchStats.repository';
-import { getDiaryCache, setDiaryCache, getSmartTTL, getLiveMatchesCache, setLiveMatchesCache } from '../utils/matchCache';
+import { getDiaryCache, setDiaryCache, getSmartTTL } from '../utils/matchCache';
 // SINGLETON: Use shared API client instead of creating new instances
 import { theSportsAPI } from '../core';
 
@@ -840,17 +840,19 @@ export const getLiveMatches = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    // CACHE: Check cache first (30s TTL for live matches)
+    // CRITICAL FIX (2026-01-17): CACHE DISABLED TEMPORARILY for score debugging
+    // Cache was returning stale scores, bypassing to ensure fresh data
+    // TODO: Re-enable after fixing cache invalidation on MQTT updates
+    /*
     const cachedData = getLiveMatchesCache();
     if (cachedData) {
       reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
       reply.header('X-Cache', 'HIT');
 
-      // Ensure mobile app compatible format
       const responseData = {
         matches: cachedData.results || cachedData.matches || [],
         total: (cachedData.results || cachedData.matches || []).length,
-        results: cachedData.results || cachedData.matches || [], // Keep for backward compatibility
+        results: cachedData.results || cachedData.matches || [],
       };
 
       reply.send({
@@ -859,13 +861,16 @@ export const getLiveMatches = async (
       });
       return;
     }
+    */
 
     const normalizeDbMatch = (row: any) => {
       const externalId = row.external_id ?? row.match_id ?? row.id;
       const statusId = row.status_id ?? row.status ?? row.match_status ?? 1;
 
-      const homeScoreRegular = row.home_score_regular ?? row.home_score ?? 0;
-      const awayScoreRegular = row.away_score_regular ?? row.away_score ?? 0;
+      // PHASE 6 FIX: Database now returns correct columns (home_score_display)
+      // Fallback chain for safety: home_score (from DB) → home_score_display → home_score_regular → 0
+      const homeScoreDisplay = row.home_score ?? row.home_score_display ?? row.home_score_regular ?? 0;
+      const awayScoreDisplay = row.away_score ?? row.away_score_display ?? row.away_score_regular ?? 0;
 
       // Phase 3C: Read minute from DB and generate minute_text
       const minute = row.minute !== null && row.minute !== undefined ? Number(row.minute) : null;
@@ -878,10 +883,10 @@ export const getLiveMatches = async (
         status: statusId,
         match_status: statusId,
         status_id: statusId,
-        home_score_regular: row.home_score_regular ?? homeScoreRegular,
-        away_score_regular: row.away_score_regular ?? awayScoreRegular,
-        home_score: row.home_score ?? homeScoreRegular,
-        away_score: row.away_score ?? awayScoreRegular,
+        home_score_regular: homeScoreDisplay,  // FIXED: Use display score
+        away_score_regular: awayScoreDisplay,  // FIXED: Use display score
+        home_score: homeScoreDisplay,          // FIXED: Use display score
+        away_score: awayScoreDisplay,          // FIXED: Use display score
         // Phase 4-4: Backend-provided minute and minute_text (ALWAYS generated, never forward DB null)
         minute: minute,
         minute_text: minuteText, // CRITICAL: Override any DB minute_text (never forward null)
@@ -906,12 +911,12 @@ export const getLiveMatches = async (
       results: normalized, // Keep for backward compatibility
     };
 
-    // CACHE: Save to cache for future requests (30s TTL)
-    setLiveMatchesCache(responseData);
+    // PHASE 6 FIX: Cache disabled - direct database reads only for real-time MQTT scores
+    // setLiveMatchesCache(responseData); // REMOVED
 
-    // Add Cache-Control headers for browser caching
-    reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
-    reply.header('X-Cache', 'MISS');
+    // No browser caching for real-time live scores
+    reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    reply.header('X-Cache', 'DISABLED');
 
     reply.send({
       success: true,
