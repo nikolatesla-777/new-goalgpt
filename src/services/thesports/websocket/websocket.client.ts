@@ -201,12 +201,20 @@ export class WebSocketClient {
       const rawData = typeof message === 'string' ? message : message.toString();
       const data = JSON.parse(rawData);
 
+      // DEBUG: Log raw message structure
+      const keys = Object.keys(data);
+      logger.info(`[MQTT.client] Raw message keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}, total: ${keys.length}`);
+
       // MQTT messages are JSON arrays, pass to parser
       const parsedMessage = this.parser.parseMQTTMessage(data);
 
+      // DEBUG: Log parse result
       if (!parsedMessage) {
+        logger.warn(`[MQTT.client] parseMQTTMessage returned NULL - message filtered`);
         return;
       }
+
+      logger.info(`[MQTT.client] Parsed message - calling ${this.messageHandlers.length} handlers`);
 
       // Notify handlers
       this.messageHandlers.forEach(handler => {
