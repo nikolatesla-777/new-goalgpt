@@ -65,11 +65,20 @@ export class MatchDataSyncWorker {
         fieldsUpdated.push(update.field);
         paramIndex++;
 
-        if (['home_score_display', 'away_score_display', 'status_id', 'minute'].includes(update.field)) {
-          setClauses.push(`${update.field}_source = $${paramIndex}`);
+        // Map field names to correct source column names
+        const sourceColumnMap: Record<string, string> = {
+          'home_score_display': 'home_score_source',
+          'away_score_display': 'away_score_source',
+          'status_id': 'status_id_source',
+          'minute': 'minute_source',
+        };
+
+        const sourceColumn = sourceColumnMap[update.field];
+        if (sourceColumn) {
+          setClauses.push(`${sourceColumn} = $${paramIndex}`);
           values.push(update.source);
           paramIndex++;
-          setClauses.push(`${update.field}_timestamp = $${paramIndex}`);
+          setClauses.push(`${sourceColumn.replace('_source', '_timestamp')} = $${paramIndex}`);
           values.push(update.timestamp);
           paramIndex++;
         }
