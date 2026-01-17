@@ -548,9 +548,10 @@ export class MatchWatchdogWorker {
         // Continue with normal processing even if finish detection fails
       }
 
-      // CRITICAL: Execute Global Live Sweep
-      // This ensures matches that "Start Late" or have "Wrong Schedule" are picked up INSTANTLY.
-      await this.runGlobalSweep();
+      // TEMPORARY DISABLE (2026-01-17): Global Sweep takes too long (100+ API calls)
+      // Causing Watchdog tick() to never complete, isRunning stuck forever
+      // TODO: Re-enable after optimization (batch processing, timeout limits)
+      // await this.runGlobalSweep();
 
 
       // CRITICAL FIX (2026-01-11): Use /match/diary instead of /match/recent/list
