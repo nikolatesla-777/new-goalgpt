@@ -105,6 +105,9 @@ export class WebSocketService {
    */
   private async handleMessage(message: any): Promise<void> {
     try {
+      // TEMPORARY DEBUG: Log all incoming messages
+      logger.info(`[WebSocket] handleMessage called, message type: ${message?.score ? 'SCORE' : message?.incidents ? 'INCIDENT' : 'OTHER'}`);
+
       // LATENCY MONITORING: Record MQTT message received timestamp
       const mqttReceivedTs = Date.now();
 
@@ -113,6 +116,7 @@ export class WebSocketService {
 
       // Handle score messages
       if (this.validator.isScoreMessage(message)) {
+        logger.info(`[WebSocket] isScoreMessage=true, score array length: ${Array.isArray(message?.score) ? message.score.length : 0}`);
         const scoreMessages = Array.isArray((message as any).score) ? (message as any).score : [];
         for (const scoreMsg of scoreMessages) {
           try {
