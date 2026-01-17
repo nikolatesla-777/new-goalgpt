@@ -100,17 +100,20 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
 
     // Determine the score to display
     const getDisplayScore = () => {
-        // If finished and has final_score, parse it
-        if ((isWinner || isLoser) && prediction.final_score) {
-            return prediction.final_score;
-        }
+        // PHASE 6 FIX: Prioritize live scores over final_score
+        // final_score is score at prediction time, not actual live score
 
-        // Live scores from ts_matches join
+        // 1. Live scores from ts_matches join (highest priority)
         if (prediction.home_score_display != null && prediction.away_score_display != null) {
             return `${prediction.home_score_display} - ${prediction.away_score_display}`;
         }
 
-        // Fallback to score at prediction time
+        // 2. If finished and has final_score, use it (only when no live data)
+        if ((isWinner || isLoser) && prediction.final_score) {
+            return prediction.final_score;
+        }
+
+        // 3. Fallback to score at prediction time
         if (prediction.score_at_prediction) {
             return prediction.score_at_prediction;
         }
