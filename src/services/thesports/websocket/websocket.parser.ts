@@ -142,27 +142,40 @@ export class WebSocketParser {
    * Parse a single message (array or object format)
    */
   private parseSingleMessage(data: any): WebSocketMessage | null {
+    // DEBUG: Log type checks
+    const isScore = this.isScoreUpdate(data);
+    const isStats = this.isStatsUpdate(data);
+    const isIncidents = this.isIncidentsUpdate(data);
+    const isTlive = this.isTliveUpdate(data);
+
+    logger.info(`[Parser] parseSingleMessage checks - score:${isScore}, stats:${isStats}, incidents:${isIncidents}, tlive:${isTlive}`);
+
     // Check message type based on structure
     // Score update: [match_id, status_code, home_data[], away_data[], timestamp]
-    if (this.isScoreUpdate(data)) {
+    if (isScore) {
+      logger.info(`[Parser] Parsing as SCORE message`);
       return { score: [this.parseScoreFromArray(data)], stats: [], incidents: [], tlive: [] };
     }
 
     // Stats update: Different structure
-    if (this.isStatsUpdate(data)) {
+    if (isStats) {
+      logger.info(`[Parser] Parsing as STATS message`);
       return { score: [], stats: [this.parseStatsFromArray(data)], incidents: [], tlive: [] };
     }
 
     // Incidents: Different structure
-    if (this.isIncidentsUpdate(data)) {
+    if (isIncidents) {
+      logger.info(`[Parser] Parsing as INCIDENTS message`);
       return { score: [], stats: [], incidents: [this.parseIncidentsFromArray(data)], tlive: [] };
     }
 
     // TLIVE update: match timeline / phase changes (HT/2H/FT etc.)
-    if (this.isTliveUpdate(data)) {
+    if (isTlive) {
+      logger.info(`[Parser] Parsing as TLIVE message`);
       return { score: [], stats: [], incidents: [], tlive: [this.parseTliveFromArray(data)] };
     }
 
+    logger.warn(`[Parser] Unknown message type - returning null`);
     return null;
   }
 
