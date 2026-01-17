@@ -205,6 +205,13 @@ export class WebSocketClient {
       const keys = Object.keys(data);
       logger.info(`[MQTT.client] Raw message keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}, total: ${keys.length}`);
 
+      // DEBUG: Log first message content
+      if (keys.length > 0) {
+        const firstKey = keys[0];
+        const firstMsg = data[firstKey];
+        logger.info(`[MQTT.client] First message (key="${firstKey}"): ${JSON.stringify(firstMsg).slice(0, 200)}...`);
+      }
+
       // MQTT messages are JSON arrays, pass to parser
       const parsedMessage = this.parser.parseMQTTMessage(data);
 
