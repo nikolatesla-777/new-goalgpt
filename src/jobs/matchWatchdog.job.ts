@@ -1463,8 +1463,13 @@ export class MatchWatchdogWorker {
     }
 
     logger.info('[Watchdog] Starting MatchWatchdogWorker for should-be-live and stale match detection');
-    // Run immediately on start
-    void this.tick();
+
+    // Run immediately on start with timeout safety
+    logger.info('[Watchdog] Calling first tick()...');
+    this.tick().catch(err => {
+      logger.error('[Watchdog] Initial tick() failed:', err);
+      this.isRunning = false; // Reset flag on error
+    });
 
     // CRITICAL FIX (2026-01-09): Run every 30 seconds (balanced approach)
     // Reason: 5s was too aggressive (unnecessary API calls, 83% more frequent than needed)
@@ -1472,7 +1477,10 @@ export class MatchWatchdogWorker {
     // 30s provides good balance: catches anomalies quickly without overwhelming API
     // DataUpdate worker already handles real-time updates every 20s
     this.intervalId = setInterval(() => {
-      void this.tick();
+      this.tick().catch(err => {
+        logger.error('[Watchdog] Interval tick() failed:', err);
+        this.isRunning = false; // Reset flag on error to prevent deadlock
+      });
     }, 30000); // 30 seconds (balanced)
 
     logEvent('info', 'worker.started', {
