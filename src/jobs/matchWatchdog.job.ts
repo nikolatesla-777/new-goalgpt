@@ -377,15 +377,17 @@ export class MatchWatchdogWorker {
    */
   async tick(): Promise<void> {
     if (this.isRunning) {
-      logger.debug('[Watchdog] Tick already running, skipping this run');
+      logger.warn('[Watchdog] Tick already running, skipping this run');
       return;
     }
 
     this.isRunning = true;
     const startedAt = Date.now();
+    logger.info('[Watchdog] ========== TICK START ==========');
 
     try {
       const nowTs = Math.floor(Date.now() / 1000);
+      logger.info(`[Watchdog] Current timestamp: ${nowTs}`);
 
       // CRITICAL FIX (2026-01-13): PROACTIVE KICKOFF DETECTION
       // Instead of waiting for TheSports API/MQTT to tell us match started,
@@ -445,13 +447,20 @@ export class MatchWatchdogWorker {
       // when match_time + 130 minutes has passed OR minute >= 90 with no update in 15 minutes.
       // This fixes matches stuck in CANLI (e.g., Indonesia WC at 90+10' forever).
       try {
+        logger.info('[Watchdog] 🏁 Checking for overdue finishes...');
         const overdueFinishes = await this.matchWatchdogService.findOverdueFinishes(nowTs, 100);
+        logger.info(`[Watchdog] 🏁 findOverdueFinishes returned: ${overdueFinishes.length} matches`);
 
         if (overdueFinishes.length > 0) {
           logger.info(`[Watchdog] 🏁 Proactive Finish: Found ${overdueFinishes.length} matches that should have ended`);
+          overdueFinishes.forEach(f => {
+            logger.info(`[Watchdog]   - ${f.matchId}: minute=${f.minute}, status=${f.statusId}, reason=${f.reason}, score=${f.homeScore}-${f.awayScore}`);
+          });
 
           for (const finish of overdueFinishes) {
             try {
+              logger.info(`[Watchdog] 🏁 Processing finish for ${finish.matchId} (${finish.reason})...`);
+
               // Force status=8 (FINISHED) via orchestrator with actual scores
               const result = await this.updateMatchDirect(
                 finish.matchId,
@@ -461,6 +470,8 @@ export class MatchWatchdogWorker {
                 ],
                 'proactive-finish'
               );
+
+              logger.info(`[Watchdog] 🏁 updateMatchDirect result for ${finish.matchId}: ${result.status}, fields: ${result.fieldsUpdated.join(',')}`);
 
               if (result.status === 'success') {
                 logger.info(`[Watchdog] 🏁 FINISHED: ${finish.matchId} → status=8 (was ${finish.statusId} @ ${finish.minute}') [${finish.reason}] Score: ${finish.homeScore}-${finish.awayScore}`);
@@ -478,7 +489,7 @@ export class MatchWatchdogWorker {
                 });
               }
             } catch (finishErr: any) {
-              logger.warn(`[Watchdog] Proactive finish failed for ${finish.matchId}: ${finishErr.message}`);
+              logger.error(`[Watchdog] 🏁 Proactive finish FAILED for ${finish.matchId}: ${finishErr.message}`, finishErr);
             }
           }
 
@@ -488,9 +499,12 @@ export class MatchWatchdogWorker {
             invalidateLiveMatchesCache();
             logger.info(`[Watchdog] Cache invalidated after finishing ${overdueFinishes.length} matches`);
           }
+        } else {
+          logger.info('[Watchdog] 🏁 No overdue finishes found (all matches within normal time)');
         }
       } catch (finishError: any) {
-        logger.error('[Watchdog] Proactive Finish Detection failed:', finishError);
+        logger.error('[Watchdog] 🏁 Proactive Finish Detection EXCEPTION:', finishError);
+        logger.error('[Watchdog] 🏁 Stack trace:', finishError.stack);
         // Continue with normal processing even if finish detection fails
       }
 
@@ -1422,9 +1436,11 @@ export class MatchWatchdogWorker {
         `attempted=${attemptedCount} success=${successCount} fail=${failCount} skipped=${skippedCount} (${duration}ms)`
       );
     } catch (error: any) {
-      logger.error('[Watchdog] Error in tick:', error);
+      logger.error('[Watchdog] CRITICAL ERROR in tick:', error);
+      logger.error('[Watchdog] Error stack:', error.stack);
     } finally {
       this.isRunning = false;
+      logger.info('[Watchdog] ========== TICK END ==========');
     }
   }
 
