@@ -239,16 +239,10 @@ export class WebSocketService {
             // CRITICAL: Check for score rollback (Goal Cancellation)
             await this.detectScoreRollback(parsedScore);
 
-            // CRITICAL FIX: Use ONLY queue-based writes to prevent race conditions
-            // Queue flushes every 100ms which is fast enough for real-time updates
-            // Removed immediate write that was causing duplicate writes and status flicker
+            // REFACTOR: Direct database write (bypass queue/orchestrator)
+            // MQTT is authoritative for real-time score updates - write immediately
             const ingestionTs = Math.floor(Date.now() / 1000);
-            this.writeQueue.enqueue(parsedScore.matchId, {
-              type: 'score',
-              data: parsedScore,
-              providerUpdateTime,
-              ingestionTs,
-            });
+            await this.writeMQTTScoreDirectly(parsedScore, providerUpdateTime, ingestionTs);
 
             // CRITICAL FIX: Emit SCORE_CHANGE immediately for frontend real-time updates
             // The actual DB write will happen via queue (100ms), but frontend gets notified now
@@ -2000,6 +1994,136 @@ export class WebSocketService {
     } catch (error: any) {
       // Don't throw - this is a background operation
       logger.warn(`[WebSocket] Error saving incidents to combined stats for ${matchId}: ${error.message}`);
+    }
+  }
+
+  /**
+   * REFACTOR: Direct MQTT score write to database
+   *
+   * Bypasses queue and orchestrator for lightning-fast updates.
+   * MQTT is the authoritative source for real-time scores.
+   *
+   * Optimistic locking: Uses provider_update_time timestamp to prevent stale updates.
+   */
+  private async writeMQTTScoreDirectly(
+    parsedScore: ParsedScore,
+    providerUpdateTime: number | null,
+    ingestionTs: number
+  ): Promise<void> {
+    const startTime = Date.now();
+    const matchId = parsedScore.matchId;
+
+    try {
+      // Prepare score arrays (7-element format per TheSports API)
+      const homeScores = [
+        parsedScore.home.regularScore ?? 0,     // Index 0: regular score
+        parsedScore.home.halftime ?? 0,         // Index 1: halftime
+        parsedScore.home.redCards ?? 0,         // Index 2: red cards
+        parsedScore.home.yellowCards ?? 0,      // Index 3: yellow cards
+        parsedScore.home.corners ?? 0,          // Index 4: corners
+        parsedScore.home.overtimeScore ?? 0,    // Index 5: overtime score
+        parsedScore.home.penaltyScore ?? 0,     // Index 6: penalty score
+      ];
+
+      const awayScores = [
+        parsedScore.away.regularScore ?? 0,
+        parsedScore.away.halftime ?? 0,
+        parsedScore.away.redCards ?? 0,
+        parsedScore.away.yellowCards ?? 0,
+        parsedScore.away.corners ?? 0,
+        parsedScore.away.overtimeScore ?? 0,
+        parsedScore.away.penaltyScore ?? 0,
+      ];
+
+      // Calculate display scores (per TheSports algorithm)
+      const homeScoreDisplay = parsedScore.home.score;
+      const awayScoreDisplay = parsedScore.away.score;
+
+      // Optimistic locking: Only update if provider_update_time is fresher
+      // OR if provider_update_time is NULL (first write)
+      const query = `
+        UPDATE ts_matches
+        SET
+          home_scores = $1::jsonb,
+          away_scores = $2::jsonb,
+          home_score_display = $3,
+          away_score_display = $4,
+          status_id = $5,
+          minute = $6,
+          provider_update_time = CASE
+            WHEN $7 IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $7)
+            ELSE provider_update_time
+          END,
+          last_event_ts = $8,
+          updated_at = NOW(),
+          home_score_source = 'mqtt',
+          home_score_timestamp = $8,
+          away_score_source = 'mqtt',
+          away_score_timestamp = $8,
+          status_id_source = 'mqtt',
+          status_id_timestamp = $8,
+          minute_source = 'mqtt',
+          minute_timestamp = $8
+        WHERE external_id = $9
+          AND (
+            provider_update_time IS NULL
+            OR provider_update_time < $7
+            OR $7 IS NULL
+          )
+        RETURNING external_id, home_score_display, away_score_display, status_id, minute
+      `;
+
+      const result = await pool.query(query, [
+        JSON.stringify(homeScores),         // $1
+        JSON.stringify(awayScores),         // $2
+        homeScoreDisplay,                   // $3
+        awayScoreDisplay,                   // $4
+        parsedScore.statusId,               // $5
+        parsedScore.minute,                 // $6
+        providerUpdateTime,                 // $7
+        ingestionTs,                        // $8
+        matchId,                            // $9
+      ]);
+
+      const latency = Date.now() - startTime;
+
+      if (result.rowCount === 0) {
+        // Update rejected due to stale data OR match not found
+        logger.debug(`[MQTT Direct Write] Update rejected for ${matchId} (stale or not found)`);
+        logEvent('debug', 'mqtt.direct_write.rejected', {
+          matchId,
+          reason: 'stale_or_not_found',
+        });
+        return;
+      }
+
+      // Success! Log metrics
+      const updated = result.rows[0];
+      logger.info(`[MQTT Direct Write] ✅ ${matchId}: ${updated.home_score_display}-${updated.away_score_display} (${latency}ms)`);
+
+      logEvent('info', 'mqtt.direct_write.success', {
+        matchId,
+        score: `${updated.home_score_display}-${updated.away_score_display}`,
+        statusId: updated.status_id,
+        minute: updated.minute,
+        latency_ms: latency,
+      });
+
+      // Invalidate cache
+      await cacheService.deletePattern(CacheKeyPrefix.LIVE_MATCHES);
+      await cacheService.delete(`${CacheKeyPrefix.MATCH_DETAIL}:${matchId}`);
+
+    } catch (error: any) {
+      const latency = Date.now() - startTime;
+      logger.error(`[MQTT Direct Write] ❌ Failed for ${matchId} (${latency}ms): ${error.message}`);
+      logEvent('error', 'mqtt.direct_write.error', {
+        matchId,
+        error: error.message,
+        latency_ms: latency,
+      });
+
+      // Don't throw - allow process to continue
+      // Error is logged and monitored via metrics
     }
   }
 }
