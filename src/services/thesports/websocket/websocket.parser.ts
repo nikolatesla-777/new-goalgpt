@@ -135,15 +135,61 @@ export class WebSocketParser {
         return this.parseSingleMessage(data);
       }
 
-      // Handle array format: [match_id, status_code, home_data[], away_data[], timestamp]
+      // Handle array format
       if (Array.isArray(data)) {
-        // Guard: Check if match_id exists
+        logger.info(`[Parser] Array detected, length: ${data.length}, first element type: ${typeof data[0]}`);
+
+        // Check if it's an array of message objects: [{id: "...", stats: [...]}, ...]
+        if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null && !Array.isArray(data[0])) {
+          logger.info(`[Parser] Array of message objects detected, processing ${data.length} messages`);
+
+          // Parse each message object and combine results
+          const result = { score: [] as WebSocketScoreMessage[], stats: [] as WebSocketStatsMessage[], incidents: [] as WebSocketIncidentMessage[], tlive: [] as WebSocketTliveMessage[] };
+          let hasValidMessage = false;
+
+          for (const msg of data) {
+            if (!msg || typeof msg !== 'object') {
+              logger.warn(`[Parser] Skipping invalid message in array: ${typeof msg}`);
+              continue;
+            }
+
+            logger.info(`[Parser] Processing array message: ${JSON.stringify(msg).slice(0, 150)}...`);
+
+            // Guard: Check if match_id or id exists
+            const matchId = this.extractMatchIdFromPayload(msg);
+            if (!matchId || matchId.trim() === '') {
+              logger.warn('[Parser] Array message missing valid match_id/id, skipping:', msg);
+              continue;
+            }
+
+            logger.info(`[Parser] Match ID extracted: ${matchId}, calling parseSingleMessage`);
+
+            // Try to parse as score, stats, or incidents
+            const parsed = this.parseSingleMessage(msg);
+            if (parsed) {
+              logger.info(`[Parser] parseSingleMessage returned valid result`);
+              if (parsed.score) result.score.push(...parsed.score);
+              if (parsed.stats) result.stats.push(...parsed.stats);
+              if (parsed.incidents) result.incidents.push(...parsed.incidents);
+              if ((parsed as any).tlive) (result as any).tlive.push(...(parsed as any).tlive);
+              hasValidMessage = true;
+            } else {
+              logger.warn(`[Parser] parseSingleMessage returned NULL for array message`);
+            }
+          }
+
+          logger.info(`[Parser] Array processing result: hasValidMessage=${hasValidMessage}`);
+          return hasValidMessage ? result : null;
+        }
+
+        // Otherwise, treat as score array: [match_id, status_code, home_data[], away_data[], timestamp]
+        logger.info(`[Parser] Treating as score array format`);
         const matchId = this.extractMatchIdFromPayload(data);
         if (!matchId || matchId.trim() === '') {
           logger.warn('MQTT array message missing valid match_id, skipping:', data);
           return null;
         }
-        
+
         return this.parseSingleMessage(data);
       }
 
