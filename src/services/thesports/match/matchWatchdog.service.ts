@@ -354,6 +354,10 @@ export class MatchWatchdogService {
   }>> {
     const client = await pool.connect();
     try {
+      // PERFORMANCE FIX (2026-01-17): Only check recent matches (last 12 hours)
+      // Prevents scanning 10K+ old finished matches
+      const twelveHoursAgo = nowTs - 43200;
+
       const query = `
         SELECT
           external_id as match_id,
@@ -380,6 +384,8 @@ export class MatchWatchdogService {
         FROM ts_matches
         WHERE
           status_id IN (2, 3, 4, 5, 7)
+          -- PERFORMANCE: Only check matches from last 12 hours
+          AND match_time > $3
           AND (
             -- Absolute timeout: match started 105+ minutes ago
             $1::integer - match_time > 6300
@@ -406,7 +412,7 @@ export class MatchWatchdogService {
         LIMIT $2
       `;
 
-      const result = await client.query(query, [nowTs, limit]);
+      const result = await client.query(query, [nowTs, limit, twelveHoursAgo]);
 
       return result.rows.map((row: any) => ({
         matchId: row.match_id,
