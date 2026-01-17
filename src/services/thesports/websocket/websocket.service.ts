@@ -2006,7 +2006,7 @@ export class WebSocketService {
     const matchId = parsedScore.matchId;
 
     // TEMPORARY: Log all MQTT direct write attempts for monitoring
-    logger.info(`[MQTT Direct Write] 📥 Attempting ${matchId}: ${parsedScore.home.score}-${parsedScore.away.score}, status=${parsedScore.statusId}, minute=${parsedScore.minute}`);
+    logger.info(`[MQTT Direct Write] ATTEMPTING ${matchId}: ${parsedScore.home.score}-${parsedScore.away.score}, status=${parsedScore.statusId}, minute=${parsedScore.minute}`);
 
     try {
       // Prepare score arrays (7-element format per TheSports API)
