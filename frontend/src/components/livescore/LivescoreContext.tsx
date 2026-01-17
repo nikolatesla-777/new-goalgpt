@@ -451,18 +451,23 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
     // Initial fetch
     refresh();
 
-    // OPTIMIZATION: Polling only when WebSocket is disconnected
-    // When WebSocket is active, we get real-time updates via onmessage
-    // This prevents duplicate API calls and reduces server load
+    // PHASE 6 FIX: Always poll, but with different intervals
+    // WebSocket provides real-time updates for scores/minutes, but may miss match finish events
+    // Polling ensures we catch match state changes (especially finish) even if MQTT doesn't send them
     let pollInterval: ReturnType<typeof setInterval> | null = null;
 
     if (!isSocketConnected) {
+      // WebSocket disconnected: Poll frequently (15s)
       pollInterval = setInterval(() => {
         fetchMatches();
       }, 15000);
       console.log('[LivescoreContext] ⏱️ Polling ENABLED (WebSocket disconnected) - 15s interval');
     } else {
-      console.log('[LivescoreContext] ✅ Polling DISABLED (WebSocket connected) - using real-time updates');
+      // WebSocket connected: Poll less frequently (60s) to catch missed state changes
+      pollInterval = setInterval(() => {
+        fetchMatches();
+      }, 60000);
+      console.log('[LivescoreContext] ⏱️ Polling ENABLED (WebSocket connected) - 60s interval for state sync');
     }
 
     return () => {
