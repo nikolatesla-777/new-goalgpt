@@ -14,6 +14,7 @@ import type { ReactNode } from 'react';
 import { getUnifiedMatches } from '../../api/matches';
 import type { Match } from '../../api/matches';
 import { getTodayInTurkey } from '../../utils/dateUtils';
+import { generateMinuteText } from '../../utils/matchMinuteText';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -287,6 +288,7 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
               // CRITICAL FIX (2026-01-13): Handle MINUTE_UPDATE with direct message format
               // Backend sends: { type: 'MINUTE_UPDATE', matchId, minute, statusId }
               // NOT wrapped in optimistic object like MQTT events
+              // PHASE 6 FIX (2026-01-17): Generate minute_text to prevent dakika kaybı
               if (message.type === 'MINUTE_UPDATE' && message.matchId && (message.minute !== undefined || message.optimistic?.minute !== undefined)) {
                 const newMinute = message.optimistic?.minute ?? message.minute;
                 const newStatusId = message.optimistic?.statusId ?? message.statusId;
@@ -311,6 +313,11 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
                     (updatedMatch as any).status = newStatusId;
                   }
 
+                  // CRITICAL: Generate minute_text to prevent it from disappearing
+                  // Use new status if provided, otherwise use current status
+                  const statusForText = newStatusId !== undefined ? newStatusId : currentStatus;
+                  (updatedMatch as any).minute_text = generateMinuteText(newMinute, statusForText);
+
                   const newMatches = [...prevMatches];
                   newMatches[matchIndex] = updatedMatch;
                   return newMatches;
@@ -319,6 +326,7 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
               }
 
               // Phase 6: Optimistic Update - Apply instantly if available (for GOAL/SCORE_CHANGE/MATCH_STATE_CHANGE)
+              // PHASE 6 FIX (2026-01-17): Generate minute_text when minute updates
               else if (message.optimistic && message.matchId) {
                 setAllMatches(prevMatches => {
                   // Find match index first
@@ -351,6 +359,13 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
                   if (message.optimistic.minuteText !== undefined && (match as any).minute_text !== message.optimistic.minuteText) {
                     (updatedMatch as any).minute_text = message.optimistic.minuteText;
                     hasChanges = true;
+                  }
+
+                  // CRITICAL: If minute or status changed but minuteText wasn't provided, generate it
+                  if (hasChanges && (message.optimistic.minute !== undefined || message.optimistic.statusId !== undefined) && message.optimistic.minuteText === undefined) {
+                    const minute = message.optimistic.minute !== undefined ? message.optimistic.minute : (match as any).minute;
+                    const statusId = message.optimistic.statusId !== undefined ? message.optimistic.statusId : (match as any).status_id;
+                    (updatedMatch as any).minute_text = generateMinuteText(minute, statusId);
                   }
 
                   // Only update if something actually changed
