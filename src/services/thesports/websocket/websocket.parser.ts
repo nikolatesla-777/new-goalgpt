@@ -69,12 +69,16 @@ export class WebSocketParser {
    */
   parseMQTTMessage(data: any): WebSocketMessage | null {
     try {
+      logger.info(`[Parser] parseMQTTMessage called, data type: ${typeof data}, isArray: ${Array.isArray(data)}`);
+
       // Handle object format: {"0": {...}, "1": {...}}
       // Convert to array of messages
       if (data && typeof data === 'object' && !Array.isArray(data)) {
         // Check if it's a multi-message object with numeric keys
         const keys = Object.keys(data);
+        logger.info(`[Parser] Object detected, keys: [${keys.join(', ')}]`);
         const numericKeys = keys.filter(k => /^\d+$/.test(k));
+        logger.info(`[Parser] Numeric keys filtered: [${numericKeys.join(', ')}], count: ${numericKeys.length}`);
         
         if (numericKeys.length > 0) {
           // Convert object to array: {"0": msg1, "1": msg2} -> [msg1, msg2]
