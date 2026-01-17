@@ -25,6 +25,10 @@ import {
   getMatchById,
   getUnifiedMatches,
 } from '../controllers/match.controller';
+import {
+  forceRefreshStuckMatches,
+  forceRefreshMatch,
+} from '../controllers/match/forceRefreshStuck.controller';
 import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 
 export default async function matchRoutes(
@@ -157,6 +161,22 @@ export default async function matchRoutes(
    * NOTE: Must be registered before /:match_id route to avoid route conflicts
    */
   fastify.get('/:match_id/incidents', getMatchIncidents);
+
+  /**
+   * POST /api/matches/force-refresh-stuck
+   * Force refresh matches stuck at 90+ minutes
+   * Uses /match/detail_live to get latest status and finish matches
+   * MQTT-only mode solution for matches without MQTT coverage
+   */
+  fastify.post('/force-refresh-stuck', forceRefreshStuckMatches);
+
+  /**
+   * POST /api/matches/:match_id/force-refresh
+   * Force refresh a single match by ID
+   * Uses /match/detail_live to get latest status
+   * Useful for manual refresh of stuck matches
+   */
+  fastify.post('/:match_id/force-refresh', forceRefreshMatch);
 
   /**
    * GET /api/matches/:match_id
