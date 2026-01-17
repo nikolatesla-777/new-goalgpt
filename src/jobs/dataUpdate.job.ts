@@ -63,6 +63,20 @@ export class DataUpdateWorker {
     }
 
     try {
+      // CRITICAL FIX: Protect finished matches from being overridden
+      // Once status=8, it should be IMMUTABLE (unless update also has status=8)
+      const statusUpdate = updates.find(u => u.field === 'status_id');
+      if (statusUpdate && statusUpdate.value !== 8) {
+        const checkQuery = `SELECT status_id FROM ts_matches WHERE external_id = $1`;
+        const checkResult = await pool.query(checkQuery, [matchId]);
+        const existing = checkResult.rows[0];
+
+        if (existing?.status_id === 8) {
+          logger.warn(`[DataUpdate.directWrite] REJECT: Match ${matchId} already finished (status=8 immutable). Attempted change to status=${statusUpdate.value}`);
+          return { status: 'rejected_immutable', fieldsUpdated: [] };
+        }
+      }
+
       const setClauses: string[] = [];
       const values: any[] = [];
       let paramIndex = 1;

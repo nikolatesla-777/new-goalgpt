@@ -54,6 +54,20 @@ export class MatchWatchdogWorker {
     }
 
     try {
+      // CRITICAL FIX: Protect finished matches from being overridden
+      // Once status=8, it should be IMMUTABLE (unless update also has status=8)
+      const statusUpdate = updates.find(u => u.field === 'status_id');
+      if (statusUpdate && statusUpdate.value !== 8) {
+        const checkQuery = `SELECT status_id, status_id_source, status_id_timestamp FROM ts_matches WHERE external_id = $1`;
+        const checkResult = await pool.query(checkQuery, [matchId]);
+        const existing = checkResult.rows[0];
+
+        if (existing?.status_id === 8) {
+          logger.warn(`[Watchdog.directWrite] REJECT: Match ${matchId} already finished (status=8 immutable). Attempted change to status=${statusUpdate.value}`);
+          return { status: 'rejected_immutable', fieldsUpdated: [] };
+        }
+      }
+
       const setClauses: string[] = [];
       const values: any[] = [];
       let paramIndex = 1;
@@ -459,6 +473,32 @@ export class MatchWatchdogWorker {
 
           for (const finish of overdueFinishes) {
             try {
+              // CRITICAL FIX: Handle halftime_stuck differently!
+              // Halftime stuck matches should transition to status=4 (SECOND_HALF), NOT finish!
+              if (finish.reason === 'halftime_stuck') {
+                logger.info(`[Watchdog] 🟡 HT STUCK: ${finish.matchId} → transitioning to SECOND_HALF (status=4)`);
+
+                // Estimate second_half_kickoff_ts if missing
+                // Typically 2nd half starts 60 minutes after kickoff (45min play + 15min HT)
+                const estimatedSecondHalfTs = finish.matchTime + 3600;
+
+                const result = await this.updateMatchDirect(
+                  finish.matchId,
+                  [
+                    { field: 'status_id', value: 4, source: 'computed', priority: 10, timestamp: nowTs },
+                    { field: 'second_half_kickoff_ts', value: estimatedSecondHalfTs, source: 'computed', priority: 10, timestamp: nowTs },
+                    { field: 'minute', value: 46, source: 'computed', priority: 10, timestamp: nowTs },
+                  ],
+                  'halftime-stuck-fix'
+                );
+
+                if (result.status === 'success') {
+                  logger.info(`[Watchdog] 🟡 HT STUCK FIXED: ${finish.matchId} → status=4, minute=46 (was HT @ 45')`);
+                }
+                continue;
+              }
+
+              // Regular finish logic for absolute_timeout, minute_exceeded, stale_finish
               logger.info(`[Watchdog] 🏁 Processing finish for ${finish.matchId} (${finish.reason})...`);
 
               // Force status=8 (FINISHED) via orchestrator with actual scores
@@ -489,7 +529,7 @@ export class MatchWatchdogWorker {
                 });
               }
             } catch (finishErr: any) {
-              logger.error(`[Watchdog] 🏁 Proactive finish FAILED for ${finish.matchId}: ${finishErr.message}`, finishErr);
+              logger.error(`[Watchdog] 🏁 Proactive finish/HT fix FAILED for ${finish.matchId}: ${finishErr.message}`, finishErr);
             }
           }
 
