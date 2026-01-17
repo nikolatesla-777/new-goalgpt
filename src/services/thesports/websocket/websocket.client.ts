@@ -199,7 +199,9 @@ export class WebSocketClient {
     try {
       // Parse JSON array from MQTT payload
       const rawData = typeof message === 'string' ? message : message.toString();
+      logger.info(`[MQTT.client] Raw MQTT message (before parse): ${rawData.slice(0, 200)}...`);
       const data = JSON.parse(rawData);
+      logger.info(`[MQTT.client] After JSON.parse - type: ${typeof data}, isArray: ${Array.isArray(data)}`);
 
       // DEBUG: Log raw message structure
       const keys = Object.keys(data);
