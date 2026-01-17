@@ -17,8 +17,15 @@ import { predictionSettlementService } from '../services/ai/predictionSettlement
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
-// PHASE C: Use LiveMatchOrchestrator for centralized write coordination
-import { LiveMatchOrchestrator } from '../services/orchestration/LiveMatchOrchestrator';
+
+// REFACTOR: Direct database writes (orchestrator removed)
+interface FieldUpdate {
+  field: string;
+  value: any;
+  source: string;
+  priority: number;
+  timestamp: number;
+}
 
 export class MatchDataSyncWorker {
   private apiClient = theSportsAPI; // Phase 3A: Use singleton
@@ -27,7 +34,6 @@ export class MatchDataSyncWorker {
   private matchTrendService: MatchTrendService;
   private matchDatabaseService: MatchDatabaseService;
   private aiPredictionService: AIPredictionService;
-  private orchestrator: LiveMatchOrchestrator;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -37,7 +43,48 @@ export class MatchDataSyncWorker {
     this.matchTrendService = new MatchTrendService();
     this.matchDatabaseService = new MatchDatabaseService();
     this.aiPredictionService = new AIPredictionService();
-    this.orchestrator = LiveMatchOrchestrator.getInstance();
+  }
+
+  /**
+   * REFACTOR: Direct database write helper (replaces orchestrator.updateMatch)
+   */
+  private async updateMatchDirect(matchId: string, updates: FieldUpdate[], source: string): Promise<{ status: string; fieldsUpdated: string[] }> {
+    if (updates.length === 0) {
+      return { status: 'success', fieldsUpdated: [] };
+    }
+
+    try {
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+      const fieldsUpdated: string[] = [];
+
+      for (const update of updates) {
+        setClauses.push(`${update.field} = $${paramIndex}`);
+        values.push(update.value);
+        fieldsUpdated.push(update.field);
+        paramIndex++;
+
+        if (['home_score_display', 'away_score_display', 'status_id', 'minute'].includes(update.field)) {
+          setClauses.push(`${update.field}_source = $${paramIndex}`);
+          values.push(update.source);
+          paramIndex++;
+          setClauses.push(`${update.field}_timestamp = $${paramIndex}`);
+          values.push(update.timestamp);
+          paramIndex++;
+        }
+      }
+
+      setClauses.push(`updated_at = NOW()`);
+      const query = `UPDATE ts_matches SET ${setClauses.join(', ')} WHERE external_id = $${paramIndex}`;
+      values.push(matchId);
+
+      await pool.query(query, values);
+      return { status: 'success', fieldsUpdated };
+    } catch (error: any) {
+      logger.error(`[MatchDataSync.directWrite] Failed to update ${matchId}:`, error);
+      return { status: 'error', fieldsUpdated: [] };
+    }
   }
 
   /**
@@ -157,7 +204,7 @@ export class MatchDataSyncWorker {
           if ((results.first_half?.length ?? 0) > 0 || (results.second_half?.length ?? 0) > 0 || (results.overtime?.length ?? 0) > 0) {
             // PHASE C: Use orchestrator for centralized write coordination
             const now = Math.floor(Date.now() / 1000);
-            const orchestratorResult = await this.orchestrator.updateMatch(
+            const orchestratorResult = await this.updateMatchDirect(
               matchId,
               [
                 {

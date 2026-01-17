@@ -45,8 +45,6 @@ import { MatchWatchdogWorker } from './jobs/matchWatchdog.job';
 import { MatchDetailLiveService } from './services/thesports/match/matchDetailLive.service';
 import { MatchRecentService } from './services/thesports/match/matchRecent.service';
 import { unifiedPredictionService } from './services/ai/unifiedPrediction.service';
-import { LiveMatchOrchestrator } from './services/orchestration/LiveMatchOrchestrator';
-import { OrchestratorSettlementListener } from './services/orchestration/settlementListener';
 import { PredictionOrchestrator } from './services/orchestration/PredictionOrchestrator';
 import type { PredictionCreatedEvent, PredictionUpdatedEvent, PredictionDeletedEvent } from './services/orchestration/predictionEvents';
 
@@ -231,57 +229,6 @@ const start = async () => {
     // Send Telegram startup notification (if configured)
     sendStartupAlert().catch(err => logger.debug('[TelegramAlert] Startup alert skipped:', err.message));
 
-    // Initialize Orchestrator Settlement Listener
-    // Connects orchestrator events to AI prediction settlement
-    const orchestrator = LiveMatchOrchestrator.getInstance();
-    const settlementListener = new OrchestratorSettlementListener(orchestrator);
-    logger.info('✅ Orchestrator Settlement Listener initialized');
-
-    // Initialize Orchestrator Minute Broadcast Listener
-    // Connects orchestrator minute updates to WebSocket broadcast for live frontend updates
-    orchestrator.on('match:updated', async (data: any) => {
-      // CRITICAL FIX: Changed from debug to info for production visibility
-      logger.info(`[MinuteBroadcast] match:updated event received: matchId=${data.matchId}, fields=${JSON.stringify(data.fields)}, source=${data.source}`);
-
-      // Only broadcast minute updates (not score/status - those come via MQTT)
-      const hasMinuteField = data.fields.includes('minute');
-      // CRITICAL FIX: matchMinute.job.ts sends source='computed', not 'matchMinute'
-      // Accept both for backward compatibility
-      const isMinuteUpdate = data.source === 'computed' || data.source === 'matchMinute';
-
-      logger.debug(`[MinuteBroadcast] Checks: hasMinuteField=${hasMinuteField}, isMinuteUpdate=${isMinuteUpdate}`);
-
-      if (hasMinuteField && isMinuteUpdate) {
-        try {
-          // Fetch current match state for broadcast
-          const matchState = await pool.query(`
-            SELECT minute, status_id
-            FROM ts_matches
-            WHERE external_id = $1
-          `, [data.matchId]);
-
-          if (matchState.rows.length > 0) {
-            const { minute, status_id } = matchState.rows[0];
-
-            // Broadcast MINUTE_UPDATE to all WebSocket clients (using static import)
-            broadcastEvent({
-              type: 'MINUTE_UPDATE',
-              matchId: data.matchId,
-              minute: minute,
-              statusId: status_id,
-              timestamp: Date.now(),
-            });
-
-            // CRITICAL FIX: Changed from debug to info for production visibility
-            logger.info(`[MinuteBroadcast] ✅ Sent MINUTE_UPDATE for ${data.matchId}: minute=${minute}`);
-          }
-        } catch (error: any) {
-          logger.error(`[MinuteBroadcast] Error broadcasting minute update for ${data.matchId}:`, error);
-        }
-      }
-    });
-    logger.info('✅ Orchestrator Minute Broadcast Listener initialized');
-
     // Initialize Prediction Orchestrator
     // Event-driven CRUD for AI predictions (Phase 2)
     const predictionOrchestrator = PredictionOrchestrator.getInstance();
@@ -345,19 +292,14 @@ const start = async () => {
       // CRITICAL: Connect WebSocketService events to Fastify WebSocket broadcasting
       // This ensures real-time events reach frontend clients
       // Using static imports for broadcastEvent and setLatencyMonitor (imported at top)
-      const { setLatencyMonitor: setMetricsLatencyMonitor, setWriteQueue } = await import('./controllers/metrics.controller');
+      const { setLatencyMonitor: setMetricsLatencyMonitor } = await import('./controllers/metrics.controller');
 
       // LATENCY MONITORING: Share latency monitor instance
       const latencyMonitor = (websocketService as any).latencyMonitor;
-      const writeQueue = (websocketService as any).writeQueue;
 
       if (latencyMonitor) {
         setLatencyMonitor(latencyMonitor);
         setMetricsLatencyMonitor(latencyMonitor);
-      }
-
-      if (writeQueue) {
-        setWriteQueue(writeQueue);
       }
 
       websocketService.onEvent((event: any, mqttReceivedTs?: number) => {

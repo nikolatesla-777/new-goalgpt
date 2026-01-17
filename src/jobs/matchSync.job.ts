@@ -18,15 +18,22 @@ import { pool } from '../database/connection';
 import { logEvent } from '../utils/obsLogger';
 import { AIPredictionService } from '../services/ai/aiPrediction.service';
 import { predictionSettlementService } from '../services/ai/predictionSettlement.service';
-import { LiveMatchOrchestrator, FieldUpdate } from '../services/orchestration/LiveMatchOrchestrator';
 import { matchStatsRepository } from '../repositories/matchStats.repository';
+
+// REFACTOR: Direct database writes (orchestrator removed)
+interface FieldUpdate {
+  field: string;
+  value: any;
+  source: string;
+  priority: number;
+  timestamp: number;
+}
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class MatchSyncWorker {
   private recentSyncService: RecentSyncService;
   private matchDetailLiveService: MatchDetailLiveService;
-  private orchestrator: LiveMatchOrchestrator;
   private isRunning = false;
   private cronJob: cron.ScheduledTask | null = null;
   private liveInterval: NodeJS.Timeout | null = null;
@@ -65,7 +72,48 @@ export class MatchSyncWorker {
     this.recentSyncService = new RecentSyncService(matchSyncService);
     this.matchDetailLiveService = new MatchDetailLiveService();
     this.aiPredictionService = new AIPredictionService();
-    this.orchestrator = LiveMatchOrchestrator.getInstance();
+  }
+
+  /**
+   * REFACTOR: Direct database write helper (replaces orchestrator.updateMatch)
+   */
+  private async updateMatchDirect(matchId: string, updates: FieldUpdate[], source: string): Promise<{ status: string; fieldsUpdated: string[] }> {
+    if (updates.length === 0) {
+      return { status: 'success', fieldsUpdated: [] };
+    }
+
+    try {
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+      const fieldsUpdated: string[] = [];
+
+      for (const update of updates) {
+        setClauses.push(`${update.field} = $${paramIndex}`);
+        values.push(update.value);
+        fieldsUpdated.push(update.field);
+        paramIndex++;
+
+        if (['home_score_display', 'away_score_display', 'status_id', 'minute'].includes(update.field)) {
+          setClauses.push(`${update.field}_source = $${paramIndex}`);
+          values.push(update.source);
+          paramIndex++;
+          setClauses.push(`${update.field}_timestamp = $${paramIndex}`);
+          values.push(update.timestamp);
+          paramIndex++;
+        }
+      }
+
+      setClauses.push(`updated_at = NOW()`);
+      const query = `UPDATE ts_matches SET ${setClauses.join(', ')} WHERE external_id = $${paramIndex}`;
+      values.push(matchId);
+
+      await pool.query(query, values);
+      return { status: 'success', fieldsUpdated };
+    } catch (error: any) {
+      logger.error(`[MatchSync.directWrite] Failed to update ${matchId}:`, error);
+      return { status: 'error', fieldsUpdated: [] };
+    }
   }
 
   /**
@@ -244,7 +292,7 @@ export class MatchSyncWorker {
 
       // Step 4: Send to orchestrator
       if (updates.length > 0) {
-        const result = await this.orchestrator.updateMatch(matchId, updates, 'matchSync');
+        const result = await this.updateMatchDirect(matchId, updates, 'matchSync');
 
         if (result.status === 'success') {
           logEvent('info', 'matchsync.orchestrator.success', {

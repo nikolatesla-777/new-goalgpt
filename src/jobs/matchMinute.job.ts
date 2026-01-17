@@ -12,17 +12,14 @@ import { pool } from '../database/connection';
 import { MatchMinuteService } from '../services/thesports/match/matchMinute.service';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
-import { LiveMatchOrchestrator } from '../services/orchestration/LiveMatchOrchestrator';
 
 export class MatchMinuteWorker {
   private matchMinuteService: MatchMinuteService;
-  private orchestrator: LiveMatchOrchestrator;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
   constructor() {
     this.matchMinuteService = new MatchMinuteService();
-    this.orchestrator = LiveMatchOrchestrator.getInstance();
   }
 
   /**
@@ -129,33 +126,26 @@ export class MatchMinuteWorker {
             continue;
           }
 
-          // PHASE C: Use orchestrator for coordinated writes
+          // REFACTOR: Direct database write (bypass orchestrator)
           // Only send update if minute changed
           if (newMinute !== existingMinute) {
-            const result = await this.orchestrator.updateMatch(
-              matchId,
-              [
-                {
-                  field: 'minute',
-                  value: newMinute,
-                  source: 'computed',
-                  priority: 1,
-                  timestamp: nowTs,
-                },
-                {
-                  field: 'last_minute_update_ts',
-                  value: nowTs,
-                  source: 'computed',
-                  priority: 1,
-                  timestamp: nowTs,
-                },
-              ],
-              'matchMinute'
-            );
+            try {
+              const updateQuery = `
+                UPDATE ts_matches
+                SET
+                  minute = $1,
+                  last_minute_update_ts = $2,
+                  minute_source = 'computed',
+                  minute_timestamp = $2
+                WHERE external_id = $3
+              `;
 
-            if (result.status === 'success') {
+              await client.query(updateQuery, [newMinute, nowTs, matchId]);
               updatedCount++;
-            } else {
+
+              logger.debug(`[MinuteEngine] Updated ${matchId}: minute ${existingMinute} → ${newMinute}`);
+            } catch (error: any) {
+              logger.error(`[MinuteEngine] Failed to update ${matchId}:`, error);
               skippedCount++;
             }
           } else {

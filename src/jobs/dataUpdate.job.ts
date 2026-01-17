@@ -14,9 +14,16 @@ import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 // SINGLETON: Use shared API client for global rate limiting
 import { theSportsAPI } from '../core';
-// PHASE C: Use LiveMatchOrchestrator for centralized write coordination
-import { LiveMatchOrchestrator, FieldUpdate } from '../services/orchestration/LiveMatchOrchestrator';
 import { MatchSyncService, MatchSyncData } from '../services/thesports/match/matchSync.service';
+
+// REFACTOR: Direct database writes (orchestrator removed)
+interface FieldUpdate {
+  field: string;
+  value: any;
+  source: string;
+  priority: number;
+  timestamp: number;
+}
 import { TeamDataService } from '../services/thesports/team/teamData.service';
 import { CompetitionService } from '../services/thesports/competition/competition.service';
 
@@ -26,7 +33,6 @@ export class DataUpdateWorker {
   private matchDetailLiveService: MatchDetailLiveService;
   private combinedStatsService: CombinedStatsService;
   private matchTrendService: MatchTrendService;
-  private orchestrator: LiveMatchOrchestrator;
   private matchSyncService: MatchSyncService;
   private teamDataService: TeamDataService;
   private competitionService: CompetitionService;
@@ -41,12 +47,53 @@ export class DataUpdateWorker {
     this.matchTrendService = new MatchTrendService();
     this.combinedStatsService = new CombinedStatsService();
     this.matchTrendService = new MatchTrendService();
-    this.orchestrator = LiveMatchOrchestrator.getInstance();
 
     // Services for on-the-fly ingestion
     this.teamDataService = new TeamDataService();
     this.competitionService = new CompetitionService();
     this.matchSyncService = new MatchSyncService(this.teamDataService, this.competitionService);
+  }
+
+  /**
+   * REFACTOR: Direct database write helper (replaces orchestrator.updateMatch)
+   */
+  private async updateMatchDirect(matchId: string, updates: FieldUpdate[], source: string): Promise<{ status: string; fieldsUpdated: string[] }> {
+    if (updates.length === 0) {
+      return { status: 'success', fieldsUpdated: [] };
+    }
+
+    try {
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+      const fieldsUpdated: string[] = [];
+
+      for (const update of updates) {
+        setClauses.push(`${update.field} = $${paramIndex}`);
+        values.push(update.value);
+        fieldsUpdated.push(update.field);
+        paramIndex++;
+
+        if (['home_score_display', 'away_score_display', 'status_id', 'minute'].includes(update.field)) {
+          setClauses.push(`${update.field}_source = $${paramIndex}`);
+          values.push(update.source);
+          paramIndex++;
+          setClauses.push(`${update.field}_timestamp = $${paramIndex}`);
+          values.push(update.timestamp);
+          paramIndex++;
+        }
+      }
+
+      setClauses.push(`updated_at = NOW()`);
+      const query = `UPDATE ts_matches SET ${setClauses.join(', ')} WHERE external_id = $${paramIndex}`;
+      values.push(matchId);
+
+      await pool.query(query, values);
+      return { status: 'success', fieldsUpdated };
+    } catch (error: any) {
+      logger.error(`[DataUpdate.directWrite] Failed to update ${matchId}:`, error);
+      return { status: 'error', fieldsUpdated: [] };
+    }
   }
 
   /**
@@ -347,7 +394,7 @@ export class DataUpdateWorker {
 
       // Step 4: Send to orchestrator
       if (updates.length > 0) {
-        const result = await this.orchestrator.updateMatch(matchId, updates, 'dataUpdate');
+        const result = await this.updateMatchDirect(matchId, updates, 'dataUpdate');
 
         if (result.status === 'success') {
           logEvent('info', 'dataupdate.orchestrator.success', {

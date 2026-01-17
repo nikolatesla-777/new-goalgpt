@@ -17,7 +17,6 @@ import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { pool } from '../../../database/connection';
 import { ParsedScore, WebSocketTliveMessage } from '../../../types/thesports/websocket/websocket.types';
 import { VARResult, MatchState, isLiveMatchState, canResurrectFromEnd } from '../../../types/thesports/enums';
-import { MatchWriteQueue } from './matchWriteQueue';
 import { EventLatencyMonitor } from './eventLatencyMonitor';
 import { aiPredictionService } from '../../ai/aiPrediction.service';
 import { predictionSettlementService } from '../../ai/predictionSettlement.service';
@@ -29,7 +28,6 @@ export class WebSocketService {
   private validator: WebSocketValidator;
   private eventDetector: EventDetector;
   private eventHandlers: Array<(event: MatchEvent, mqttReceivedTs?: number) => void> = [];
-  private writeQueue: MatchWriteQueue;
   private latencyMonitor: EventLatencyMonitor;
   private mqttReceivedTimestamps: Map<string, number> = new Map(); // Key: matchId:eventType, Value: mqttReceivedTs
 
@@ -69,7 +67,6 @@ export class WebSocketService {
     this.parser = new WebSocketParser();
     this.validator = new WebSocketValidator();
     this.eventDetector = new EventDetector();
-    this.writeQueue = new MatchWriteQueue();
     this.latencyMonitor = new EventLatencyMonitor();
 
     // Register message handler
@@ -1845,11 +1842,6 @@ export class WebSocketService {
     }
     this.matchKeepaliveTimers.clear();
     this.matchStates.clear();
-
-    // Stop write queue and flush remaining items
-    if (this.writeQueue) {
-      this.writeQueue.stop();
-    }
 
     this.client.disconnect();
   }

@@ -8,7 +8,6 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import {
   getLatencyMetrics,
   getWebSocketMetrics,
-  getQueueMetrics,
 } from '../controllers/metrics.controller';
 
 export default async function metricsRoutes(
@@ -27,12 +26,6 @@ export default async function metricsRoutes(
    * Get WebSocket connection health metrics
    */
   fastify.get('/websocket', getWebSocketMetrics);
-
-  /**
-   * GET /api/metrics/queue
-   * Get MatchWriteQueue statistics
-   */
-  fastify.get('/queue', getQueueMetrics);
 }
 
 

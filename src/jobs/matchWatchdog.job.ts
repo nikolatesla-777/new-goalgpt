@@ -18,15 +18,21 @@ import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 import { CircuitOpenError } from '../utils/circuitBreaker';
 import { invalidateLiveMatchesCache } from '../utils/matchCache';
-// PHASE C: Use LiveMatchOrchestrator for centralized write coordination
-import { LiveMatchOrchestrator, FieldUpdate } from '../services/orchestration/LiveMatchOrchestrator';
+
+// REFACTOR: Direct database writes (orchestrator removed)
+interface FieldUpdate {
+  field: string;
+  value: any;
+  source: string;
+  priority: number;
+  timestamp: number;
+}
 
 export class MatchWatchdogWorker {
   private matchWatchdogService: MatchWatchdogService;
   private matchDetailLiveService: MatchDetailLiveService;
   private matchRecentService: MatchRecentService;
   private matchDiaryService: MatchDiaryService;
-  private orchestrator: LiveMatchOrchestrator;
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
 
@@ -35,7 +41,58 @@ export class MatchWatchdogWorker {
     this.matchDetailLiveService = matchDetailLiveService;
     this.matchRecentService = matchRecentService;
     this.matchDiaryService = new MatchDiaryService();
-    this.orchestrator = LiveMatchOrchestrator.getInstance();
+  }
+
+  /**
+   * REFACTOR: Direct database write helper (replaces orchestrator.updateMatch)
+   * Builds dynamic UPDATE query from field updates
+   */
+  private async updateMatchDirect(matchId: string, updates: FieldUpdate[], source: string): Promise<{ status: string; fieldsUpdated: string[] }> {
+    if (updates.length === 0) {
+      return { status: 'success', fieldsUpdated: [] };
+    }
+
+    try {
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+      const fieldsUpdated: string[] = [];
+
+      for (const update of updates) {
+        setClauses.push(`${update.field} = $${paramIndex}`);
+        values.push(update.value);
+        fieldsUpdated.push(update.field);
+        paramIndex++;
+
+        // Add source and timestamp tracking for core fields
+        if (['home_score_display', 'away_score_display', 'status_id', 'minute'].includes(update.field)) {
+          setClauses.push(`${update.field}_source = $${paramIndex}`);
+          values.push(update.source);
+          paramIndex++;
+
+          setClauses.push(`${update.field}_timestamp = $${paramIndex}`);
+          values.push(update.timestamp);
+          paramIndex++;
+        }
+      }
+
+      // Always update updated_at
+      setClauses.push(`updated_at = NOW()`);
+
+      const query = `
+        UPDATE ts_matches
+        SET ${setClauses.join(', ')}
+        WHERE external_id = $${paramIndex}
+      `;
+      values.push(matchId);
+
+      await pool.query(query, values);
+
+      return { status: 'success', fieldsUpdated };
+    } catch (error: any) {
+      logger.error(`[Watchdog.directWrite] Failed to update ${matchId}:`, error);
+      return { status: 'error', fieldsUpdated: [] };
+    }
   }
 
   /**
@@ -187,7 +244,7 @@ export class MatchWatchdogWorker {
 
       // Step 4: Send to orchestrator
       if (updates.length > 0) {
-        const result = await this.orchestrator.updateMatch(matchId, updates, 'watchdog');
+        const result = await this.updateMatchDirect(matchId, updates, 'watchdog');
 
         if (result.status === 'success') {
           logEvent('info', 'watchdog.orchestrator.success', {
@@ -289,7 +346,7 @@ export class MatchWatchdogWorker {
               const calculatedMinute = Math.max(1, Math.floor(kickoff.secondsSinceKickoff / 60));
 
               // Force status=2 (FIRST_HALF) via orchestrator
-              const result = await this.orchestrator.updateMatch(
+              const result = await this.updateMatchDirect(
                 kickoff.matchId,
                 [
                   { field: 'status_id', value: 2, source: 'computed', priority: 2, timestamp: nowTs },
@@ -338,7 +395,7 @@ export class MatchWatchdogWorker {
           for (const finish of overdueFinishes) {
             try {
               // Force status=8 (FINISHED) via orchestrator with actual scores
-              const result = await this.orchestrator.updateMatch(
+              const result = await this.updateMatchDirect(
                 finish.matchId,
                 [
                   { field: 'status_id', value: 8, source: 'computed', priority: 10, timestamp: nowTs },
@@ -562,7 +619,7 @@ export class MatchWatchdogWorker {
                   );
 
                   // PHASE C: Use orchestrator for centralized write coordination
-                  const orchestratorResult = await this.orchestrator.updateMatch(
+                  const orchestratorResult = await this.updateMatchDirect(
                     stale.matchId,
                     [
                       { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
@@ -671,7 +728,7 @@ export class MatchWatchdogWorker {
                 );
 
                 // PHASE C: Use orchestrator for centralized write coordination
-                const orchestratorResult = await this.orchestrator.updateMatch(
+                const orchestratorResult = await this.updateMatchDirect(
                   stale.matchId,
                   [
                     { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
@@ -707,7 +764,7 @@ export class MatchWatchdogWorker {
             const nowTs = Math.floor(Date.now() / 1000);
 
             // PHASE C: Use orchestrator for centralized write coordination
-            const orchestratorResult = await this.orchestrator.updateMatch(
+            const orchestratorResult = await this.updateMatchDirect(
               stale.matchId,
               [
                 { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
@@ -871,7 +928,7 @@ export class MatchWatchdogWorker {
                 const nowTs = Math.floor(Date.now() / 1000);
 
                 // PHASE C: Use orchestrator for centralized write coordination
-                const orchestratorResult = await this.orchestrator.updateMatch(
+                const orchestratorResult = await this.updateMatchDirect(
                   match.matchId,
                   [
                     { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
@@ -982,7 +1039,7 @@ export class MatchWatchdogWorker {
                 : ingestionTs;
 
               // PHASE C: Use orchestrator for centralized write coordination
-              const orchestratorResult = await this.orchestrator.updateMatch(
+              const orchestratorResult = await this.updateMatchDirect(
                 match.matchId,
                 [
                   { field: 'status_id', value: recentListMatch.statusId, source: 'api', priority: 2, timestamp: providerTimeToWrite },
@@ -1132,7 +1189,7 @@ export class MatchWatchdogWorker {
             const nowTs = Math.floor(Date.now() / 1000);
 
             // First, force status_id=4 via orchestrator (high priority watchdog source)
-            const statusFixResult = await this.orchestrator.updateMatch(
+            const statusFixResult = await this.updateMatchDirect(
               overdue.matchId,
               [
                 { field: 'status_id', value: 4, source: 'watchdog', priority: 3, timestamp: nowTs },
@@ -1220,7 +1277,7 @@ export class MatchWatchdogWorker {
           const nowTs = Math.floor(Date.now() / 1000);
 
           // PHASE C: Use orchestrator for centralized write coordination
-          const orchestratorResult = await this.orchestrator.updateMatch(
+          const orchestratorResult = await this.updateMatchDirect(
             overdue.matchId,
             [
               { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
