@@ -212,13 +212,14 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
             if (isLive && [2, 3, 4, 5, 7].includes(apiStatus)) {
               // Match is still live → preserve existing data (has WebSocket updates)
               // Only update fields that WebSocket doesn't control
+              // CRITICAL FIX: Fallback to API data if WebSocket hasn't updated yet
               const liveMatch = {
                 ...apiMatch, // Use API data as base (competition, team info, etc.)
-                minute: (prevMatch as any).minute, // Preserve WebSocket minute
-                minute_text: (prevMatch as any).minute_text, // Preserve WebSocket minute_text
+                minute: (prevMatch as any).minute !== undefined ? (prevMatch as any).minute : (apiMatch as any).minute,
+                minute_text: (prevMatch as any).minute_text || (apiMatch as any).minute_text, // Preserve WebSocket, fallback to API
                 status: prevStatus,
-                home_score: (prevMatch as any).home_score, // Preserve WebSocket score
-                away_score: (prevMatch as any).away_score,
+                home_score: (prevMatch as any).home_score !== undefined ? (prevMatch as any).home_score : (apiMatch as any).home_score,
+                away_score: (prevMatch as any).away_score !== undefined ? (prevMatch as any).away_score : (apiMatch as any).away_score,
               };
               (liveMatch as any).status_id = prevStatus; // Preserve WebSocket status
               mergedMatches.push(liveMatch);
