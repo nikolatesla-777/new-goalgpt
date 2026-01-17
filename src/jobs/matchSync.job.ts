@@ -409,6 +409,11 @@ export class MatchSyncWorker {
    * - Throttle between API calls
    */
   private async processReconcileQueue(): Promise<void> {
+    // DEBUG: Always log to see if function is called
+    if (this.reconcileQueue.size > 0) {
+      logger.info(`[LiveReconcile.DEBUG] Called with queueSize=${this.reconcileQueue.size}, isReconciling=${this.isReconciling}`);
+    }
+
     if (this.isReconciling) return;
     if (this.reconcileQueue.size === 0) return;
 
