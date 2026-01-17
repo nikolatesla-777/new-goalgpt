@@ -858,11 +858,12 @@ export class AIPredictionService {
                 -- Match data
                 m.status_id as match_status_id,
                 m.minute as match_minute,
-                COALESCE(m.home_score_display, 0) as home_score_display,
-                COALESCE(m.away_score_display, 0) as away_score_display,
-                -- CRITICAL FIX (2026-01-17): Frontend expects home_score/away_score, not home_score_display
-                COALESCE(m.home_score_display, 0) as home_score,
-                COALESCE(m.away_score_display, 0) as away_score,
+                -- CRITICAL FIX (2026-01-17): Parse from JSONB array if home_score_display is NULL
+                COALESCE(m.home_score_display, (m.home_scores->>0)::INTEGER) as home_score_display,
+                COALESCE(m.away_score_display, (m.away_scores->>0)::INTEGER) as away_score_display,
+                -- Frontend expects home_score/away_score aliases
+                COALESCE(m.home_score_display, (m.home_scores->>0)::INTEGER) as home_score,
+                COALESCE(m.away_score_display, (m.away_scores->>0)::INTEGER) as away_score,
                 -- Team data
                 ht.name as home_team_db_name,
                 ht.logo_url as home_team_logo,
@@ -1072,9 +1073,32 @@ export class AIPredictionService {
                 // Determine Period based on minute_at_prediction (FIXED RULE)
                 const period: 'IY' | 'MS' = (row.minute_at_prediction || 0) <= 45 ? 'IY' : 'MS';
 
-                // Extract Scores
-                const finalHome = row.home_score_display ?? 0;
-                const finalAway = row.away_score_display ?? 0;
+                // Extract Scores - CRITICAL FIX: Parse from JSONB if home_score_display is NULL
+                let finalHome = row.home_score_display;
+                let finalAway = row.away_score_display;
+
+                // Fallback to JSONB array if display score is NULL
+                if (finalHome === null || finalHome === undefined) {
+                    try {
+                        const hScores = Array.isArray(row.home_scores) ? row.home_scores : JSON.parse(row.home_scores || '[]');
+                        finalHome = hScores[0] !== undefined ? parseInt(hScores[0]) : 0;
+                    } catch (e) {
+                        finalHome = 0;
+                    }
+                } else {
+                    finalHome = finalHome ?? 0;
+                }
+
+                if (finalAway === null || finalAway === undefined) {
+                    try {
+                        const aScores = Array.isArray(row.away_scores) ? row.away_scores : JSON.parse(row.away_scores || '[]');
+                        finalAway = aScores[0] !== undefined ? parseInt(aScores[0]) : 0;
+                    } catch (e) {
+                        finalAway = 0;
+                    }
+                } else {
+                    finalAway = finalAway ?? 0;
+                }
 
                 // IY Scores (from JSON arrays, Index 1 is usually Period 1)
                 let htHome = 0;
