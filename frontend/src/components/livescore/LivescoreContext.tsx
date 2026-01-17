@@ -168,10 +168,76 @@ export function LivescoreProvider({ children }: LivescoreProviderProps) {
         includeAI: true,     // PHASE 4: Include AI predictions via LEFT JOIN
       });
 
-      const matches = response?.results || [];
+      const newMatches = response?.results || [];
 
       if (mountedRef.current) {
-        setAllMatches(matches);
+        // CRITICAL FIX (2026-01-17): Smart merge to prevent dakika kaybı and list jumping
+        // Problem: setAllMatches(newMatches) completely replaces array → loses WebSocket updates
+        // Solution: For LIVE matches, preserve existing data (WebSocket is authoritative)
+        //           For finished/not-started matches, update from API
+        setAllMatches(prevMatches => {
+          // If first load (no previous matches), just set the new matches
+          if (prevMatches.length === 0) {
+            return newMatches;
+          }
+
+          // Create map for fast lookup
+          const newMatchesMap = new Map(newMatches.map(m => [m.id, m]));
+
+          // CRITICAL FIX: Preserve array order to prevent list jumping
+          // Strategy:
+          // 1. Keep existing matches in same order, update their data
+          // 2. Add new matches at the end
+          // 3. Remove matches that no longer exist
+
+          const mergedMatches: Match[] = [];
+          const processedIds = new Set<string>();
+
+          // Step 1: Update existing matches (preserve order)
+          for (const prevMatch of prevMatches) {
+            const apiMatch = newMatchesMap.get(prevMatch.id);
+
+            // If match no longer exists in API response, skip it (will be removed)
+            if (!apiMatch) {
+              continue;
+            }
+
+            processedIds.add(prevMatch.id);
+
+            // Check if match is LIVE (status_id 2,3,4,5,7)
+            const prevStatus = (prevMatch as any).status_id ?? (prevMatch as any).status ?? 0;
+            const isLive = [2, 3, 4, 5, 7].includes(prevStatus);
+            const apiStatus = (apiMatch as any).status_id ?? (apiMatch as any).status ?? 0;
+
+            if (isLive && [2, 3, 4, 5, 7].includes(apiStatus)) {
+              // Match is still live → preserve existing data (has WebSocket updates)
+              // Only update fields that WebSocket doesn't control
+              const liveMatch = {
+                ...apiMatch, // Use API data as base (competition, team info, etc.)
+                minute: (prevMatch as any).minute, // Preserve WebSocket minute
+                minute_text: (prevMatch as any).minute_text, // Preserve WebSocket minute_text
+                status: prevStatus,
+                home_score: (prevMatch as any).home_score, // Preserve WebSocket score
+                away_score: (prevMatch as any).away_score,
+              };
+              (liveMatch as any).status_id = prevStatus; // Preserve WebSocket status
+              mergedMatches.push(liveMatch);
+            } else {
+              // Match finished or not started → use fresh API data
+              mergedMatches.push(apiMatch);
+            }
+          }
+
+          // Step 2: Add new matches that didn't exist before (append at end)
+          for (const apiMatch of newMatches) {
+            if (!processedIds.has(apiMatch.id)) {
+              mergedMatches.push(apiMatch);
+            }
+          }
+
+          return mergedMatches;
+        });
+
         setError(null);
         setLastUpdate(new Date());
       }
