@@ -113,30 +113,34 @@ export class WebSocketValidator {
 
   /**
    * Type guard: Check if message is score
+   * CRITICAL FIX: Must check for non-empty array to avoid treating empty score arrays as score messages
    */
   isScoreMessage(message: any): message is { score: any[] } {
-    return message && Array.isArray(message.score);
+    return message && Array.isArray(message.score) && message.score.length > 0;
   }
 
   /**
    * Type guard: Check if message is stats
+   * CRITICAL FIX: Must check for non-empty array to avoid treating empty stats arrays as stats messages
    */
   isStatsMessage(message: any): message is { stats: any[] } {
-    return message && Array.isArray(message.stats);
+    return message && Array.isArray(message.stats) && message.stats.length > 0;
   }
 
   /**
    * Type guard: Check if message is incidents
+   * CRITICAL FIX: Must check for non-empty array to avoid treating empty incidents arrays as incident messages
    */
   isIncidentsMessage(message: any): message is { incidents: any[] } {
-    return message && Array.isArray(message.incidents);
+    return message && Array.isArray(message.incidents) && message.incidents.length > 0;
   }
 
   /**
    * Type guard: Check if message is tlive
+   * CRITICAL FIX: Must check for non-empty array to avoid treating empty tlive arrays as tlive messages
    */
   isTliveMessage(message: any): message is { tlive: any[] } {
-    return message && Array.isArray(message.tlive);
+    return message && Array.isArray(message.tlive) && message.tlive.length > 0;
   }
 }
 
