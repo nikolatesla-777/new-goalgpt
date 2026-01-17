@@ -12,6 +12,7 @@ import { pool } from '../database/connection';
 import { MatchMinuteService } from '../services/thesports/match/matchMinute.service';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
+import { broadcastEvent } from '../routes/websocket.routes';
 
 export class MatchMinuteWorker {
   private matchMinuteService: MatchMinuteService;
@@ -144,6 +145,20 @@ export class MatchMinuteWorker {
               updatedCount++;
 
               logger.debug(`[MinuteEngine] Updated ${matchId}: minute ${existingMinute} → ${newMinute}`);
+
+              // CRITICAL FIX: Broadcast MINUTE_UPDATE event to frontend
+              // This ensures real-time minute progression without page refresh
+              try {
+                broadcastEvent({
+                  type: 'MINUTE_UPDATE',
+                  matchId,
+                  minute: newMinute,
+                  statusId: statusId || 2, // Use actual status or default to FIRST_HALF
+                  timestamp: Date.now(),
+                } as any);
+              } catch (broadcastError: any) {
+                logger.warn(`[MinuteEngine] Failed to broadcast minute update for ${matchId}: ${broadcastError.message}`);
+              }
             } catch (error: any) {
               logger.error(`[MinuteEngine] Failed to update ${matchId}:`, error);
               skippedCount++;

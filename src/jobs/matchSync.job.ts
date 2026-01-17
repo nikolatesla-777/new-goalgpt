@@ -19,6 +19,7 @@ import { logEvent } from '../utils/obsLogger';
 import { AIPredictionService } from '../services/ai/aiPrediction.service';
 import { predictionSettlementService } from '../services/ai/predictionSettlement.service';
 import { matchStatsRepository } from '../repositories/matchStats.repository';
+import { broadcastEvent } from '../routes/websocket.routes';
 
 // REFACTOR: Direct database writes (orchestrator removed)
 interface FieldUpdate {
@@ -118,6 +119,59 @@ export class MatchSyncWorker {
       values.push(matchId);
 
       await pool.query(query, values);
+
+      // CRITICAL FIX: Broadcast WebSocket events after database write
+      // This ensures frontend receives real-time updates even when data comes from API (not MQTT)
+      const hasScoreUpdate = fieldsUpdated.some(f => f === 'home_score_display' || f === 'away_score_display');
+      const hasStatusUpdate = fieldsUpdated.some(f => f === 'status_id');
+      const hasMinuteUpdate = fieldsUpdated.some(f => f === 'minute');
+
+      try {
+        if (hasScoreUpdate || hasStatusUpdate) {
+          // Get updated values from updates array
+          const homeScoreUpdate = updates.find(u => u.field === 'home_score_display');
+          const awayScoreUpdate = updates.find(u => u.field === 'away_score_display');
+          const statusUpdate = updates.find(u => u.field === 'status_id');
+
+          if (hasScoreUpdate) {
+            broadcastEvent({
+              type: 'SCORE_CHANGE',
+              matchId,
+              homeScore: homeScoreUpdate?.value,
+              awayScore: awayScoreUpdate?.value,
+              statusId: statusUpdate?.value,
+              timestamp: Date.now(),
+            } as any);
+          }
+
+          if (hasStatusUpdate) {
+            broadcastEvent({
+              type: 'MATCH_STATE_CHANGE',
+              matchId,
+              statusId: statusUpdate?.value,
+              newStatus: statusUpdate?.value,
+              timestamp: Date.now(),
+            } as any);
+          }
+        }
+
+        if (hasMinuteUpdate) {
+          const minuteUpdate = updates.find(u => u.field === 'minute');
+          const statusUpdate = updates.find(u => u.field === 'status_id');
+
+          broadcastEvent({
+            type: 'MINUTE_UPDATE',
+            matchId,
+            minute: minuteUpdate?.value,
+            statusId: statusUpdate?.value || 2, // Default to FIRST_HALF if not provided
+            timestamp: Date.now(),
+          } as any);
+        }
+      } catch (broadcastError: any) {
+        // Don't fail the update if broadcasting fails
+        logger.warn(`[MatchSync.directWrite] Failed to broadcast event for ${matchId}: ${broadcastError.message}`);
+      }
+
       return { status: 'success', fieldsUpdated };
     } catch (error: any) {
       logger.error(`[MatchSync.directWrite] Failed to update ${matchId}:`, error);

@@ -17,6 +17,7 @@ import { predictionSettlementService } from '../services/ai/predictionSettlement
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
+import { broadcastEvent } from '../routes/websocket.routes';
 
 // REFACTOR: Direct database writes (orchestrator removed)
 interface FieldUpdate {
@@ -89,6 +90,57 @@ export class MatchDataSyncWorker {
       values.push(matchId);
 
       await pool.query(query, values);
+
+      // CRITICAL FIX: Broadcast WebSocket events after database write
+      // This ensures frontend receives real-time updates
+      const hasScoreUpdate = fieldsUpdated.some(f => f === 'home_score_display' || f === 'away_score_display');
+      const hasStatusUpdate = fieldsUpdated.some(f => f === 'status_id');
+      const hasMinuteUpdate = fieldsUpdated.some(f => f === 'minute');
+
+      try {
+        if (hasScoreUpdate || hasStatusUpdate) {
+          const homeScoreUpdate = updates.find(u => u.field === 'home_score_display');
+          const awayScoreUpdate = updates.find(u => u.field === 'away_score_display');
+          const statusUpdate = updates.find(u => u.field === 'status_id');
+
+          if (hasScoreUpdate) {
+            broadcastEvent({
+              type: 'SCORE_CHANGE',
+              matchId,
+              homeScore: homeScoreUpdate?.value,
+              awayScore: awayScoreUpdate?.value,
+              statusId: statusUpdate?.value,
+              timestamp: Date.now(),
+            } as any);
+          }
+
+          if (hasStatusUpdate) {
+            broadcastEvent({
+              type: 'MATCH_STATE_CHANGE',
+              matchId,
+              statusId: statusUpdate?.value,
+              newStatus: statusUpdate?.value,
+              timestamp: Date.now(),
+            } as any);
+          }
+        }
+
+        if (hasMinuteUpdate) {
+          const minuteUpdate = updates.find(u => u.field === 'minute');
+          const statusUpdate = updates.find(u => u.field === 'status_id');
+
+          broadcastEvent({
+            type: 'MINUTE_UPDATE',
+            matchId,
+            minute: minuteUpdate?.value,
+            statusId: statusUpdate?.value || 2,
+            timestamp: Date.now(),
+          } as any);
+        }
+      } catch (broadcastError: any) {
+        logger.warn(`[MatchDataSync.directWrite] Failed to broadcast event for ${matchId}: ${broadcastError.message}`);
+      }
+
       return { status: 'success', fieldsUpdated };
     } catch (error: any) {
       logger.error(`[MatchDataSync.directWrite] Failed to update ${matchId}:`, error);
