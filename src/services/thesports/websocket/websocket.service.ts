@@ -2005,6 +2005,9 @@ export class WebSocketService {
     const startTime = Date.now();
     const matchId = parsedScore.matchId;
 
+    // TEMPORARY: Log all MQTT direct write attempts for monitoring
+    logger.info(`[MQTT Direct Write] 📥 Attempting ${matchId}: ${parsedScore.home.score}-${parsedScore.away.score}, status=${parsedScore.statusId}, minute=${parsedScore.minute}`);
+
     try {
       // Prepare score arrays (7-element format per TheSports API)
       const homeScores = [
@@ -2089,10 +2092,13 @@ export class WebSocketService {
 
       if (result.rowCount === 0) {
         // Update rejected due to stale data OR match not found
-        logger.debug(`[MQTT Direct Write] Update rejected for ${matchId} (stale or not found)`);
-        logEvent('debug', 'mqtt.direct_write.rejected', {
+        // TEMPORARY: Use warn level to monitor MQTT acceptance rate
+        logger.warn(`[MQTT Direct Write] ⚠️ Update rejected for ${matchId} (stale or not found)`);
+        logEvent('warn', 'mqtt.direct_write.rejected', {
           matchId,
           reason: 'stale_or_not_found',
+          providerUpdateTime,
+          ingestionTs,
         });
         return;
       }
