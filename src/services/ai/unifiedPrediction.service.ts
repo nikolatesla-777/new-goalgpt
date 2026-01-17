@@ -163,13 +163,28 @@ class UnifiedPredictionService {
         -- Valid Live Data from Single Source of Truth (ts_matches)
         -- If match is finished (8), use regular score. If live, use display score.
         -- CRITICAL FIX (2026-01-17): Parse from JSONB array if display/regular score is NULL
+        -- CRITICAL FIX (2026-01-17 #2): If match_id is NULL (no JOIN), parse score_at_prediction
         CASE
-            WHEN m.status_id = 8 THEN COALESCE(m.home_score_regular, (m.home_scores->>0)::INTEGER, 0)
-            ELSE COALESCE(m.home_score_display, (m.home_scores->>0)::INTEGER, 0)
+            -- If no match JOIN (m.external_id IS NULL), parse score_at_prediction ("2-0" → 2)
+            WHEN m.external_id IS NULL AND p.score_at_prediction IS NOT NULL THEN
+                COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 1), '')::INTEGER, 0)
+            -- If match is finished, use regular score
+            WHEN m.status_id = 8 THEN
+                COALESCE(m.home_score_regular, (m.home_scores->>0)::INTEGER, 0)
+            -- If match is live, use display score
+            ELSE
+                COALESCE(m.home_score_display, (m.home_scores->>0)::INTEGER, 0)
         END as home_score_display,
         CASE
-            WHEN m.status_id = 8 THEN COALESCE(m.away_score_regular, (m.away_scores->>0)::INTEGER, 0)
-            ELSE COALESCE(m.away_score_display, (m.away_scores->>0)::INTEGER, 0)
+            -- If no match JOIN (m.external_id IS NULL), parse score_at_prediction ("2-0" → 0)
+            WHEN m.external_id IS NULL AND p.score_at_prediction IS NOT NULL THEN
+                COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 2), '')::INTEGER, 0)
+            -- If match is finished, use regular score
+            WHEN m.status_id = 8 THEN
+                COALESCE(m.away_score_regular, (m.away_scores->>0)::INTEGER, 0)
+            -- If match is live, use display score
+            ELSE
+                COALESCE(m.away_score_display, (m.away_scores->>0)::INTEGER, 0)
         END as away_score_display,
         m.status_id as live_match_status, m.minute as live_match_minute,
         -- Competition & Country Data
