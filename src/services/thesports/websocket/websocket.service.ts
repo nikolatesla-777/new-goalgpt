@@ -2031,8 +2031,9 @@ export class WebSocketService {
       const homeScoreDisplay = parsedScore.home.score;
       const awayScoreDisplay = parsedScore.away.score;
 
-      // Optimistic locking: Only update if provider_update_time is fresher
-      // OR if provider_update_time is NULL (first write)
+      // CRITICAL FIX (2026-01-17): Field-level timestamp check for MQTT
+      // MQTT is real-time source - should override API even if provider_update_time is older
+      // Check individual field timestamps to allow MQTT updates when field data is stale
       const query = `
         UPDATE ts_matches
         SET
@@ -2058,9 +2059,16 @@ export class WebSocketService {
           minute_timestamp = $8
         WHERE external_id = $9
           AND (
+            -- Classic optimistic lock: provider_update_time is stale
             provider_update_time IS NULL
             OR provider_update_time < $7
             OR $7 IS NULL
+            -- MQTT PRIORITY FIX: Allow if ANY field timestamp is older than MQTT ingestion time
+            -- This ensures MQTT (real-time) overrides stale API data
+            OR $8 > COALESCE(home_score_timestamp, 0)
+            OR $8 > COALESCE(away_score_timestamp, 0)
+            OR $8 > COALESCE(status_id_timestamp, 0)
+            OR $8 > COALESCE(minute_timestamp, 0)
           )
         RETURNING external_id, home_score_display, away_score_display, status_id, minute
       `;
