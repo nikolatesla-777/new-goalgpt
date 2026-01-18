@@ -147,39 +147,57 @@ export async function getMatchesDetailLive(matchIds: string[]): Promise<Map<stri
 
     logger.debug(`[AIPredictionsLiveData] Fetching ${uncached.length} matches (${matchIds.length} total, ${result.size} cached)`);
 
-    // Fetch uncached matches in parallel with timeout
-    const batchMatchIds = uncached.join(',');
-
-    const response = await withTimeout(
-      theSportsAPI.get<DetailLiveResponse>('/match/detail_live', {
-        match_id: batchMatchIds,
-      }),
-      API_TIMEOUT_MS
+    // CRITICAL FIX: Fetch each match individually in parallel (TheSports API doesn't support batch well)
+    // Use Promise.allSettled to prevent one failure from blocking others
+    const fetchPromises = uncached.map(matchId =>
+      withTimeout(
+        theSportsAPI.get<DetailLiveResponse>('/match/detail_live', {
+          match_id: matchId, // Single match ID per request
+        }),
+        API_TIMEOUT_MS
+      ).then(response => ({ matchId, response, success: true }))
+       .catch(error => ({ matchId, error, success: false }))
     );
 
-    // Process results
-    if (response.results && Array.isArray(response.results)) {
-      logger.debug(`[AIPredictionsLiveData] Received ${response.results.length} matches from API`);
+    const fetchResults = await Promise.allSettled(fetchPromises);
 
-      for (const match of response.results) {
-        result.set(match.id, match);
+    let successCount = 0;
+    let failCount = 0;
 
-        // Cache it
-        cache.set(match.id, {
-          data: match,
-          expiry: now + CACHE_TTL_MS,
-        });
+    for (const promiseResult of fetchResults) {
+      if (promiseResult.status === 'fulfilled') {
+        const { matchId, response, success } = promiseResult.value;
+
+        if (success && response.results && response.results.length > 0) {
+          const match = response.results[0];
+          result.set(match.id, match);
+
+          // Cache it
+          cache.set(match.id, {
+            data: match,
+            expiry: now + CACHE_TTL_MS,
+          });
+
+          successCount++;
+        } else {
+          // Cache null for not found
+          cache.set(matchId, {
+            data: null,
+            expiry: now + CACHE_TTL_MS,
+          });
+          failCount++;
+        }
+      } else {
+        // Promise rejected
+        failCount++;
       }
     }
 
-    // Cache null results for matches not found
-    for (const matchId of uncached) {
-      if (!result.has(matchId)) {
-        cache.set(matchId, {
-          data: null,
-          expiry: now + CACHE_TTL_MS,
-        });
-      }
+    if (successCount > 0) {
+      logger.debug(`[AIPredictionsLiveData] Successfully fetched ${successCount}/${uncached.length} matches`);
+    }
+    if (failCount > 0) {
+      logger.warn(`[AIPredictionsLiveData] Failed to fetch ${failCount}/${uncached.length} matches`);
     }
 
     return result;
