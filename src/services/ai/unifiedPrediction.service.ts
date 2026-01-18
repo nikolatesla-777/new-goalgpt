@@ -249,12 +249,18 @@ class UnifiedPredictionService {
 
                 try {
                     const liveMatches = await getMatchesDetailLive(matchIds);
+                    console.log(`[DEBUG-FETCH] Received ${liveMatches.size} live matches from service`);
+                    if (liveMatches.size > 0) {
+                        console.log(`[DEBUG-FETCH] Match IDs in response: ${Array.from(liveMatches.keys()).join(', ')}`);
+                    }
 
                     // Merge live data into predictions
                     let mergedCount = 0;
                     for (const prediction of predictions) {
                         const liveMatch = liveMatches.get(prediction.match_id);
+                        console.log(`[DEBUG-FETCH] Looking for match_id=${prediction.match_id}, found=${!!liveMatch}`);
                         if (liveMatch) {
+                            console.log(`[DEBUG-FETCH] Live match data:`, JSON.stringify(liveMatch));
                             // Calculate minute using kickoff timestamps
                             const calculatedMinute = calculateMatchMinute(
                                 liveMatch.status_id,
