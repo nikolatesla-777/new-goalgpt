@@ -41,9 +41,6 @@ import { config } from './config';
 import { WebSocketService } from './services/thesports/websocket/websocket.service';
 import { initializeFirebase } from './config/firebase.config';
 import { theSportsAPI } from './core/TheSportsAPIManager'; // Phase 3A: Singleton migration
-import { MatchWatchdogWorker } from './jobs/matchWatchdog.job';
-import { MatchDetailLiveService } from './services/thesports/match/matchDetailLive.service';
-import { MatchRecentService } from './services/thesports/match/matchRecent.service';
 import { unifiedPredictionService } from './services/ai/unifiedPrediction.service';
 import { PredictionOrchestrator } from './services/orchestration/PredictionOrchestrator';
 import type { PredictionCreatedEvent, PredictionUpdatedEvent, PredictionDeletedEvent } from './services/orchestration/predictionEvents';
@@ -51,13 +48,8 @@ import type { PredictionCreatedEvent, PredictionUpdatedEvent, PredictionDeletedE
 // Workers - Correct existing files from src/jobs
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
 import { TeamLogoSyncWorker } from './jobs/teamLogoSync.job';
-import { MatchSyncWorker } from './jobs/matchSync.job';
-import { DailyMatchSyncWorker } from './jobs/dailyMatchSync.job';
 import { LineupRefreshJob } from './jobs/lineupRefresh.job';
 import { PostMatchProcessorJob } from './jobs/postMatchProcessor.job';
-import { DataUpdateWorker } from './jobs/dataUpdate.job';
-import { MatchMinuteWorker } from './jobs/matchMinute.job';
-import { MatchDataSyncWorker } from './jobs/matchDataSync.job';
 import { CompetitionSyncWorker } from './jobs/competitionSync.job';
 import { PlayerSyncWorker } from './jobs/playerSync.job';
 
@@ -123,14 +115,8 @@ fastify.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' }); // Phase
 // Initialize background workers
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
 let teamLogoSyncWorker: TeamLogoSyncWorker | null = null;
-let matchSyncWorker: MatchSyncWorker | null = null;
-let dailyMatchSyncWorker: DailyMatchSyncWorker | null = null;
 let lineupRefreshJob: LineupRefreshJob | null = null;
 let postMatchProcessorJob: PostMatchProcessorJob | null = null;
-let dataUpdateWorker: DataUpdateWorker | null = null;
-let matchMinuteWorker: MatchMinuteWorker | null = null;
-let matchWatchdogWorker: MatchWatchdogWorker | null = null;
-let matchDataSyncWorker: MatchDataSyncWorker | null = null;
 let competitionSyncWorker: CompetitionSyncWorker | null = null;
 let playerSyncWorker: PlayerSyncWorker | null = null;
 let websocketService: WebSocketService | null = null;
@@ -172,20 +158,6 @@ const start = async () => {
     teamLogoSyncWorker.start();
     logger.info('✅ TeamLogoSync Worker started (interval: 24h)');
 
-    // PHASE 6 FIX: MatchSync Worker DISABLED
-    // MQTT/WebSocket is the sole data source for live scores
-    // API polling worker was causing race conditions and overriding MQTT data
-    /*
-    matchSyncWorker = new MatchSyncWorker();
-    matchSyncWorker.start();
-    logger.info('✅ MatchSync Worker started (interval: 30s)');
-    */
-    logger.info('⚠️ MatchSync Worker DISABLED (MQTT-only mode)');
-
-    dailyMatchSyncWorker = new DailyMatchSyncWorker();
-    dailyMatchSyncWorker.start();
-    logger.info('✅ DailyMatchSync Worker started (interval: 1h)');
-
     lineupRefreshJob = new LineupRefreshJob();
     lineupRefreshJob.start();
     logger.info('✅ LineupRefresh Job started (interval: 5m)');
@@ -193,54 +165,6 @@ const start = async () => {
     postMatchProcessorJob = new PostMatchProcessorJob();
     postMatchProcessorJob.start();
     logger.info('✅ PostMatchProcessor Job started (interval: 2m)');
-
-    // PHASE 7: DataUpdate Worker DISABLED - replaced by HTTP endpoint + 5s cron
-    /*
-    dataUpdateWorker = new DataUpdateWorker();
-    dataUpdateWorker.start();
-    logger.info('✅ DataUpdate Worker started (interval: 20s)');
-    */
-
-    // PHASE 7: State Update Endpoint (5s interval) - Minimal architecture
-    setInterval(async () => {
-      try {
-        const response = await fetch('http://localhost:3000/api/matches/update-live-states', {
-          method: 'POST',
-        });
-        const result = await response.json();
-        if (result.updated > 0) {
-          logger.debug(`[Cron:StateUpdate] Updated ${result.updated} matches in ${result.duration_ms}ms`);
-        }
-      } catch (error: any) {
-        logger.error('[Cron:StateUpdate] Failed:', error.message);
-      }
-    }, 5000); // 5 seconds
-    logger.info('✅ State Update Cron started (interval: 5s) - ENDPOINT MODE');
-
-    try {
-      matchMinuteWorker = new MatchMinuteWorker();
-      matchMinuteWorker.start();
-      logger.info('✅ MatchMinute Worker started (interval: 30s)');
-    } catch (err: any) {
-      logger.error('❌ Failed to start Match Minute Worker:', err);
-    }
-
-    // Match Data Sync Worker (automatically saves statistics, incidents, trend for live matches)
-    matchDataSyncWorker = new MatchDataSyncWorker();
-    matchDataSyncWorker.start();
-    logger.info('✅ MatchDataSync Worker started (interval: 60s)');
-
-    // PHASE 6 FIX: Match Watchdog Worker DISABLED
-    // Watchdog was incorrectly auto-finishing live matches (Galatasaray bug)
-    // Match finish should only happen via MQTT updates
-    /*
-    const matchDetailLiveService = new MatchDetailLiveService();
-    const matchRecentService = new MatchRecentService();
-    matchWatchdogWorker = new MatchWatchdogWorker(matchDetailLiveService, matchRecentService);
-    matchWatchdogWorker.start();
-    logger.info('✅ MatchWatchdog Worker started (interval: 30s)');
-    */
-    logger.info('⚠️ MatchWatchdog Worker DISABLED (MQTT-only mode)');
 
     // Competition Sync Worker (syncs competition/league data)
     competitionSyncWorker = new CompetitionSyncWorker();
@@ -253,7 +177,7 @@ const start = async () => {
     logger.info('✅ PlayerSync Worker started (interval: 24h)');
 
     logger.info('========================================');
-    logger.info('🎉 All 12 Background Workers Started!');
+    logger.info('🎉 All Background Workers Started!');
     logger.info('========================================');
 
     // Send Telegram startup notification (if configured)
@@ -406,14 +330,8 @@ const shutdown = async () => {
     logger.info('[Shutdown] Stopping workers...');
     if (teamDataSyncWorker) teamDataSyncWorker.stop();
     if (teamLogoSyncWorker) teamLogoSyncWorker.stop();
-    // if (matchSyncWorker) matchSyncWorker.stop(); // PHASE 7: DISABLED
-    if (dailyMatchSyncWorker) dailyMatchSyncWorker.stop();
     if (lineupRefreshJob) lineupRefreshJob.stop();
     if (postMatchProcessorJob) postMatchProcessorJob.stop();
-    // if (dataUpdateWorker) dataUpdateWorker.stop(); // PHASE 7: DISABLED (replaced by endpoint)
-    if (matchMinuteWorker) matchMinuteWorker.stop();
-    if (matchDataSyncWorker) matchDataSyncWorker.stop();
-    // if (matchWatchdogWorker) matchWatchdogWorker.stop(); // PHASE 7: DISABLED
     if (competitionSyncWorker) competitionSyncWorker.stop();
     if (playerSyncWorker) playerSyncWorker.stop();
 

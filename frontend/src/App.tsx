@@ -1,15 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AIPredictionsProvider } from './context/AIPredictionsContext';
 import { FavoritesProvider } from './context/FavoritesContext';
 import { PredictionToast } from './components/ui/PredictionToast';
-
-// Helper component for match tab redirects (absolute navigation)
-function MatchTabRedirect({ tab }: { tab: string }) {
-  const { matchId } = useParams<{ matchId: string }>();
-  return <Navigate to={`/match/${matchId}?tab=${tab}`} replace />;
-}
 
 // EAGER LOAD: Main layout (needed immediately)
 import { AdminLayout } from './components/admin';
@@ -23,9 +17,6 @@ const AdminBotDetail = lazy(() => import('./components/admin').then(m => ({ defa
 const AdminManualPredictions = lazy(() => import('./components/admin').then(m => ({ default: m.AdminManualPredictions })));
 const AIPredictionsPage = lazy(() => import('./components/ai/AIPredictionsPage').then(m => ({ default: m.AIPredictionsPage })));
 const AIAnalysisLab = lazy(() => import('./components/ai-lab').then(m => ({ default: m.AIAnalysisLab })));
-
-// Match Detail (heavy page with charts)
-const MatchDetailPage = lazy(() => import('./pages/MatchDetailPage').then(m => ({ default: m.MatchDetailPage })));
 
 // Team Detail
 const TeamDetailLayout = lazy(() => import('./components/team-detail/TeamDetailLayout').then(m => ({ default: m.TeamDetailLayout })));
@@ -79,28 +70,6 @@ function App() {
               <Route path="/admin/bots" element={<Suspense fallback={<LoadingFallback />}><AdminBots /></Suspense>} />
               <Route path="/admin/bots/:botName" element={<Suspense fallback={<LoadingFallback />}><AdminBotDetail /></Suspense>} />
               <Route path="/admin/manual-predictions" element={<Suspense fallback={<LoadingFallback />}><AdminManualPredictions /></Suspense>} />
-
-              {/* Match Detail - Single route with query param tabs */}
-              <Route
-                path="/match/:matchId"
-                element={
-                  <ErrorBoundary>
-                    <Suspense fallback={<LoadingFallback />}>
-                      <MatchDetailPage />
-                    </Suspense>
-                  </ErrorBoundary>
-                }
-              />
-
-              {/* Redirects for old bookmarked URLs (backwards compatibility) */}
-              {/* CRITICAL FIX: Use absolute navigation to avoid /match/ID/stats?tab=stats double path */}
-              <Route path="/match/:matchId/stats" element={<MatchTabRedirect tab="stats" />} />
-              <Route path="/match/:matchId/events" element={<MatchTabRedirect tab="events" />} />
-              <Route path="/match/:matchId/h2h" element={<MatchTabRedirect tab="h2h" />} />
-              <Route path="/match/:matchId/standings" element={<MatchTabRedirect tab="standings" />} />
-              <Route path="/match/:matchId/lineup" element={<MatchTabRedirect tab="lineup" />} />
-              <Route path="/match/:matchId/trend" element={<MatchTabRedirect tab="trend" />} />
-              <Route path="/match/:matchId/ai" element={<MatchTabRedirect tab="ai" />} />
 
               {/* Team Detail with Nested Routes for Tabs */}
               <Route path="/team/:teamId" element={
