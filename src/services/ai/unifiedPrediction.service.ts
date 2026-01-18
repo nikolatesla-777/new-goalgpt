@@ -240,10 +240,10 @@ class UnifiedPredictionService {
                 .filter((p: any) => p.match_id && p.result === 'pending') // Only fetch for pending predictions
                 .map((p: any) => p.match_id);
 
-            logger.debug(`[UnifiedPredictionService] Total predictions: ${predictions.length}, Pending with match_id: ${matchIds.length}`);
+            console.log(`[DEBUG-CONSOLE] Total predictions: ${predictions.length}, Pending with match_id: ${matchIds.length}`);
 
             if (matchIds.length > 0) {
-                logger.debug(`[UnifiedPredictionService] Attempting to fetch live data for: ${matchIds.join(', ')}`);
+                console.log(`[DEBUG-CONSOLE] Attempting to fetch live data for: ${matchIds.join(', ')}`);
 
                 try {
                     const liveMatches = await getMatchesDetailLive(matchIds);
