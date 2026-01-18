@@ -263,6 +263,8 @@ export class WebSocketService {
               matchId: parsedScore.matchId,
               homeScore: parsedScore.home.score,
               awayScore: parsedScore.away.score,
+              minute: parsedScore.minute,
+              statusId: parsedScore.statusId,
               timestamp: Date.now(),
             }, mqttReceivedTs);
 

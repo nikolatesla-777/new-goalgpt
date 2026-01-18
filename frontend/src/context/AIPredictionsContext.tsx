@@ -212,38 +212,77 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
       if (data.success && data.data) {
         const { predictions: preds, stats: s, bots, pagination } = data.data;
 
-        // Map to context format
-        const predsList: AIPrediction[] = preds.map((p: any) => ({
-          id: p.id,
-          external_id: p.external_id,
-          canonical_bot_name: p.canonical_bot_name,
-          match_id: p.match_id,
-          home_team_name: p.home_team_name,
-          away_team_name: p.away_team_name,
-          home_team_logo: p.home_team_logo,
-          away_team_logo: p.away_team_logo,
-          league_name: p.league_name,
-          competition_id: p.competition_id,
-          country_id: p.country_id,
-          score_at_prediction: p.score_at_prediction,
-          minute_at_prediction: p.minute_at_prediction,
-          prediction: p.prediction,
-          prediction_threshold: p.prediction_threshold,
-          result: p.result,
-          final_score: p.final_score,
-          result_reason: p.result_reason,
-          resulted_at: p.resulted_at,
-          access_type: p.access_type,
-          source: p.source,
-          created_at: p.created_at,
-          home_score_display: p.home_score_display,
-          away_score_display: p.away_score_display,
-          live_match_status: p.live_match_status,
-          live_match_minute: p.live_match_minute,
-          country_name: p.country_name,
-          country_logo: p.country_logo,
-          competition_logo: p.competition_logo,
-        }));
+        // SMART MERGE: Preserve WebSocket data (MQTT priority)
+        // If WebSocket updated a prediction, keep those values instead of API data
+        const existingPredictionsMap = new Map(
+          predictions.map(pred => [pred.id, pred])
+        );
+
+        const predsList: AIPrediction[] = preds.map((p: any) => {
+          const existing = existingPredictionsMap.get(p.id);
+
+          // Base prediction from API
+          const apiPrediction: AIPrediction = {
+            id: p.id,
+            external_id: p.external_id,
+            canonical_bot_name: p.canonical_bot_name,
+            match_id: p.match_id,
+            home_team_name: p.home_team_name,
+            away_team_name: p.away_team_name,
+            home_team_logo: p.home_team_logo,
+            away_team_logo: p.away_team_logo,
+            league_name: p.league_name,
+            competition_id: p.competition_id,
+            country_id: p.country_id,
+            score_at_prediction: p.score_at_prediction,
+            minute_at_prediction: p.minute_at_prediction,
+            prediction: p.prediction,
+            prediction_threshold: p.prediction_threshold,
+            result: p.result,
+            final_score: p.final_score,
+            result_reason: p.result_reason,
+            resulted_at: p.resulted_at,
+            access_type: p.access_type,
+            source: p.source,
+            created_at: p.created_at,
+            home_score_display: p.home_score_display,
+            away_score_display: p.away_score_display,
+            live_match_status: p.live_match_status,
+            live_match_minute: p.live_match_minute,
+            country_name: p.country_name,
+            country_logo: p.country_logo,
+            competition_logo: p.competition_logo,
+          };
+
+          // If we have existing WebSocket data for this prediction, preserve it
+          // WebSocket data (MQTT) is more recent than API data (30s cache)
+          if (existing && existing.match_id === p.match_id) {
+            // Check if WebSocket updated live data (has non-null values that differ from API)
+            const hasWebSocketScore = existing.home_score_display != null &&
+              existing.away_score_display != null &&
+              (existing.home_score_display !== p.home_score_display ||
+               existing.away_score_display !== p.away_score_display);
+
+            const hasWebSocketMinute = existing.live_match_minute != null &&
+              existing.live_match_minute !== p.live_match_minute;
+
+            const hasWebSocketStatus = existing.live_match_status != null &&
+              existing.live_match_status !== p.live_match_status;
+
+            // Preserve WebSocket data (MQTT priority)
+            if (hasWebSocketScore || hasWebSocketMinute || hasWebSocketStatus) {
+              return {
+                ...apiPrediction,
+                home_score_display: hasWebSocketScore ? existing.home_score_display : apiPrediction.home_score_display,
+                away_score_display: hasWebSocketScore ? existing.away_score_display : apiPrediction.away_score_display,
+                live_match_minute: hasWebSocketMinute ? existing.live_match_minute : apiPrediction.live_match_minute,
+                live_match_status: hasWebSocketStatus ? existing.live_match_status : apiPrediction.live_match_status,
+              };
+            }
+          }
+
+          return apiPrediction;
+        });
 
         // Create match -> prediction map
         const matchMap = new Map<string, AIPrediction>();
@@ -341,9 +380,64 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
 
   const handleWebSocketMessage = useCallback((message: any) => {
     switch (message.type) {
-      // REMOVED: TheSports match updates (score, minute, status)
-      // This page no longer shows live match data
-      // Only static prediction data from ai_predictions table
+      // MQTT PRIORITY: Real-time match updates from WebSocket (instant)
+      // API FALLBACK: REST endpoint polling (30s cache)
+
+      case 'SCORE_CHANGE':
+        // Update live scores for matching predictions (MQTT priority)
+        setPredictions(prev => prev.map(p => {
+          if (p.match_id === message.matchId && p.result === 'pending') {
+            return {
+              ...p,
+              home_score_display: message.homeScore,
+              away_score_display: message.awayScore,
+              live_match_minute: message.minute ?? p.live_match_minute,
+              live_match_status: message.statusId ?? p.live_match_status,
+            };
+          }
+          return p;
+        }));
+
+        setPredictionsByMatch(prev => {
+          const next = new Map(prev);
+          const pred = next.get(message.matchId);
+          if (pred && pred.result === 'pending') {
+            next.set(message.matchId, {
+              ...pred,
+              home_score_display: message.homeScore,
+              away_score_display: message.awayScore,
+              live_match_minute: message.minute ?? pred.live_match_minute,
+              live_match_status: message.statusId ?? pred.live_match_status,
+            });
+          }
+          return next;
+        });
+        break;
+
+      case 'MATCH_STATE_CHANGE':
+        // Update match status (MQTT priority)
+        setPredictions(prev => prev.map(p => {
+          if (p.match_id === message.matchId && p.result === 'pending') {
+            return {
+              ...p,
+              live_match_status: message.statusId,
+            };
+          }
+          return p;
+        }));
+
+        setPredictionsByMatch(prev => {
+          const next = new Map(prev);
+          const pred = next.get(message.matchId);
+          if (pred && pred.result === 'pending') {
+            next.set(message.matchId, {
+              ...pred,
+              live_match_status: message.statusId,
+            });
+          }
+          return next;
+        });
+        break;
 
       case 'PREDICTION_SETTLED':
         // Phase 5: Real-time prediction result update
