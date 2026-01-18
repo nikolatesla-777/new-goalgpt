@@ -245,6 +245,7 @@ class UnifiedPredictionService {
                     const liveMatches = await getMatchesDetailLive(matchIds);
 
                     // Merge live data into predictions
+                    let mergedCount = 0;
                     for (const prediction of predictions) {
                         const liveMatch = liveMatches.get(prediction.match_id);
                         if (liveMatch) {
@@ -260,7 +261,14 @@ class UnifiedPredictionService {
                             prediction.away_score_display = liveMatch.away_score_display;
                             prediction.live_match_status = liveMatch.status_id;
                             prediction.live_match_minute = calculatedMinute ?? liveMatch.minute;
+
+                            mergedCount++;
+                            logger.debug(`[UnifiedPredictionService] Merged live data for match ${prediction.match_id}: ${prediction.home_score_display}-${prediction.away_score_display}, status=${prediction.live_match_status}, minute=${prediction.live_match_minute}`);
                         }
+                    }
+
+                    if (mergedCount > 0) {
+                        logger.info(`[UnifiedPredictionService] Successfully merged live data for ${mergedCount} predictions`);
                     }
                 } catch (error) {
                     // Fallback to static data if live fetch fails
