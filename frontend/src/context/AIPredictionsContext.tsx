@@ -425,11 +425,23 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
     fetchPredictions();
   }, [fetchPredictions]);
 
-  // Polling every 30 seconds
+  // Auto-refresh for live scores (5s interval if pending predictions exist)
+  // TheSports API detail_live recommended frequency: 2 seconds
+  // We use 5s to balance between freshness and API load
   useEffect(() => {
-    const interval = setInterval(fetchPredictions, 30000);
+    const hasPendingPredictions = predictions.some(p => p.result === 'pending');
+
+    if (!hasPendingPredictions) {
+      // No pending predictions, no need for frequent polling
+      return;
+    }
+
+    const interval = setInterval(() => {
+      fetchPredictions();
+    }, 5000); // 5 seconds (TheSports API caches for 2s on backend)
+
     return () => clearInterval(interval);
-  }, [fetchPredictions]);
+  }, [predictions, fetchPredictions]);
 
   // ============================================================================
   // CONTEXT VALUE
