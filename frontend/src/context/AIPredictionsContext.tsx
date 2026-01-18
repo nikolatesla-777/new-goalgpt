@@ -385,8 +385,22 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
 
       case 'SCORE_CHANGE':
         // Update live scores for matching predictions (MQTT priority)
+        console.log('[AIPredictions] SCORE_CHANGE:', {
+          matchId: message.matchId,
+          score: `${message.homeScore}-${message.awayScore}`,
+          minute: message.minute,
+          statusId: message.statusId
+        });
+
         setPredictions(prev => prev.map(p => {
           if (p.match_id === message.matchId && p.result === 'pending') {
+            console.log('[AIPredictions] Updating prediction:', {
+              bot: p.canonical_bot_name,
+              teams: `${p.home_team_name} vs ${p.away_team_name}`,
+              oldScore: `${p.home_score_display}-${p.away_score_display}`,
+              newScore: `${message.homeScore}-${message.awayScore}`,
+              minute: message.minute
+            });
             return {
               ...p,
               home_score_display: message.homeScore,
