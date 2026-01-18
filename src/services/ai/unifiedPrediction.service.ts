@@ -269,7 +269,12 @@ class UnifiedPredictionService {
                             prediction.live_match_minute = calculatedMinute ?? liveMatch.minute;
 
                             mergedCount++;
-                            logger.debug(`[UnifiedPredictionService] Merged live data for match ${prediction.match_id}: ${prediction.home_score_display}-${prediction.away_score_display}, status=${prediction.live_match_status}, minute=${prediction.live_match_minute}`);
+                            console.log(`[DEBUG-MERGE] Match ${prediction.match_id}:`);
+                            console.log(`  - home_score_display: ${prediction.home_score_display}`);
+                            console.log(`  - away_score_display: ${prediction.away_score_display}`);
+                            console.log(`  - live_match_status: ${prediction.live_match_status}`);
+                            console.log(`  - live_match_minute: ${prediction.live_match_minute}`);
+                            console.log(`  - Object keys: ${Object.keys(prediction).join(', ')}`);
                         }
                     }
 
