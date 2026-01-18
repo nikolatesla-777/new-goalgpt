@@ -208,7 +208,16 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
             );
         }
 
-        // NOT STARTED or UNKNOWN (vs)
+        // NOT STARTED or UNKNOWN - Show live minute if available
+        if (currentMinute) {
+            return (
+                <div className="px-2.5 py-1 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                    <span className="text-[11px] font-black tracking-wider">{currentMinute}'</span>
+                </div>
+            );
+        }
+
+        // No data - show vs
         return (
             <div className="px-2.5 py-1 rounded-md bg-white/5 text-gray-500 border border-white/10">
                 <span className="text-[11px] font-bold tracking-wider">vs</span>
