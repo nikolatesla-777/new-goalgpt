@@ -32,6 +32,13 @@ const CompOverviewTab = lazy(() => import('./components/competition-detail/tabs'
 const CompFixturesTab = lazy(() => import('./components/competition-detail/tabs').then(m => ({ default: m.FixturesTab })));
 const CompStandingsTab = lazy(() => import('./components/competition-detail/tabs').then(m => ({ default: m.StandingsTab })));
 
+// Livescore (NEW)
+const LivescoreLayout = lazy(() => import('./components/livescore').then(m => ({ default: m.LivescoreLayout })));
+const LivescoreLiveTab = lazy(() => import('./components/livescore').then(m => ({ default: m.LiveTab })));
+const LivescoreFinishedTab = lazy(() => import('./components/livescore').then(m => ({ default: m.FinishedTab })));
+const LivescoreUpcomingTab = lazy(() => import('./components/livescore').then(m => ({ default: m.UpcomingTab })));
+const LivescoreAITab = lazy(() => import('./components/livescore').then(m => ({ default: m.AITab })));
+
 // Player Card
 const PlayerCardPage = lazy(() => import('./components/player/PlayerCardPage').then(m => ({ default: m.PlayerCardPage })));
 
@@ -70,6 +77,23 @@ function App() {
               <Route path="/admin/bots" element={<Suspense fallback={<LoadingFallback />}><AdminBots /></Suspense>} />
               <Route path="/admin/bots/:botName" element={<Suspense fallback={<LoadingFallback />}><AdminBotDetail /></Suspense>} />
               <Route path="/admin/manual-predictions" element={<Suspense fallback={<LoadingFallback />}><AdminManualPredictions /></Suspense>} />
+
+              {/* Livescore with Nested Routes for Tabs (NEW) */}
+              <Route path="/livescore" element={
+                <ErrorBoundary>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <LivescoreLayout />
+                  </Suspense>
+                </ErrorBoundary>
+              }>
+                {/* Default redirect to live tab */}
+                <Route index element={<Navigate to="live" replace />} />
+                {/* Tab routes */}
+                <Route path="live" element={<Suspense fallback={<LoadingFallback />}><LivescoreLiveTab /></Suspense>} />
+                <Route path="finished" element={<Suspense fallback={<LoadingFallback />}><LivescoreFinishedTab /></Suspense>} />
+                <Route path="upcoming" element={<Suspense fallback={<LoadingFallback />}><LivescoreUpcomingTab /></Suspense>} />
+                <Route path="ai" element={<Suspense fallback={<LoadingFallback />}><LivescoreAITab /></Suspense>} />
+              </Route>
 
               {/* Team Detail with Nested Routes for Tabs */}
               <Route path="/team/:teamId" element={
