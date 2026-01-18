@@ -8,7 +8,6 @@
 
 import { pool } from '../../database/connection';
 import { logger } from '../../utils/logger';
-import { getMatchesDetailLive, calculateMatchMinute } from './aiPredictionsLiveData.service';
 
 export interface PredictionFilter {
     status?: 'all' | 'pending' | 'matched' | 'won' | 'lost';
@@ -239,37 +238,8 @@ class UnifiedPredictionService {
                 )
             }));
 
-            // Fetch live data from TheSports API detail_live (2s cache)
-            const predictions = predictionsResult.rows;
-            const matchIds = predictions
-                .filter((p: any) => p.match_id && p.result === 'pending') // Only fetch for pending predictions
-                .map((p: any) => p.match_id);
-
-            if (matchIds.length > 0) {
-                const liveMatches = await getMatchesDetailLive(matchIds);
-
-                // Merge live data into predictions
-                for (const prediction of predictions) {
-                    const liveMatch = liveMatches.get(prediction.match_id);
-                    if (liveMatch) {
-                        // Calculate minute using kickoff timestamps
-                        const calculatedMinute = calculateMatchMinute(
-                            liveMatch.status_id,
-                            liveMatch.first_half_kickoff_ts,
-                            liveMatch.second_half_kickoff_ts
-                        );
-
-                        // Update with live data
-                        prediction.home_score_display = liveMatch.home_score_display;
-                        prediction.away_score_display = liveMatch.away_score_display;
-                        prediction.live_match_status = liveMatch.status_id;
-                        prediction.live_match_minute = calculatedMinute ?? liveMatch.minute;
-                    }
-                }
-            }
-
             return {
-                predictions,
+                predictions: predictionsResult.rows,
                 stats,
                 bots,
                 pagination: {
