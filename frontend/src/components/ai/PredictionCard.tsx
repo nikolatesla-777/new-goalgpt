@@ -222,75 +222,23 @@ export function PredictionCard({ prediction, isVip = false, isFavorite = false, 
                 onClick={handleClick}
                 className="group relative bg-[#121212] rounded-2xl border border-white/5 shadow-lg transition-all duration-300 hover:border-green-500/30 hover:shadow-green-500/10 cursor-pointer overflow-hidden"
             >
-                {/* Match Info Banner - Always visible */}
-                {isPending ? (
-                    /* PENDING predictions */
-                    <>
-                        {/* Live data available (match is currently playing) */}
-                        {prediction.live_match_status && (prediction.live_match_status === 2 || prediction.live_match_status === 4) ? (
-                            <div className="bg-gradient-to-r from-red-500/20 to-orange-500/20 border-b border-red-500/30 px-4 py-2 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                                    <span className="text-xs font-bold text-red-400 uppercase tracking-wider">
-                                        CANLI MAÇ
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-3 text-xs font-bold">
-                                    <span className="text-white">
-                                        {prediction.home_score_display ?? 0} - {prediction.away_score_display ?? 0}
-                                    </span>
-                                    {prediction.live_match_minute && (
-                                        <span className="text-green-400">
-                                            {prediction.live_match_minute}'
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            /* No live data yet - show prediction context */
-                            <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-blue-500/20 px-4 py-2 flex items-center justify-between">
-                                <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">
-                                    Tahmin Anı
-                                </span>
-                                <div className="flex items-center gap-3 text-xs font-bold">
-                                    <span className="text-white">
-                                        {prediction.score_at_prediction || '0-0'}
-                                    </span>
-                                    <span className="text-blue-400">
-                                        {prediction.minute_at_prediction}'
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-                    </>
-                ) : (
-                    /* WON/LOST predictions - show final result */
-                    <div className={`border-b px-4 py-2 flex items-center justify-between ${
-                        isWinner
-                            ? 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20'
-                            : 'bg-gradient-to-r from-red-500/10 to-rose-500/10 border-red-500/20'
-                    }`}>
+                {/* Live Match Banner - Only for PENDING predictions with live data */}
+                {isPending && prediction.live_match_status && (prediction.live_match_status === 2 || prediction.live_match_status === 4) && (
+                    <div className="bg-gradient-to-r from-red-500/20 to-orange-500/20 border-b border-red-500/30 px-4 py-2 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <span className={`text-xs font-bold uppercase tracking-wider ${
-                                isWinner ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                                {isWinner ? '✓ KAZANDI' : '✗ KAYBETTİ'}
-                            </span>
-                            <span className="text-xs text-gray-500 font-medium">
-                                • MAÇ BİTTİ
+                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-xs font-bold text-red-400 uppercase tracking-wider">
+                                CANLI MAÇ
                             </span>
                         </div>
                         <div className="flex items-center gap-3 text-xs font-bold">
-                            <span className="text-gray-400">
-                                Tahmin: {prediction.score_at_prediction || '0-0'} ({prediction.minute_at_prediction}')
+                            <span className="text-white">
+                                {prediction.home_score_display ?? 0} - {prediction.away_score_display ?? 0}
                             </span>
-                            {(prediction.final_score || (prediction.home_score_display != null && prediction.away_score_display != null)) && (
-                                <>
-                                    <span className="text-gray-600">→</span>
-                                    <span className="text-white">
-                                        Sonuç: {prediction.final_score || `${prediction.home_score_display}-${prediction.away_score_display}`}
-                                    </span>
-                                </>
+                            {prediction.live_match_minute && (
+                                <span className="text-green-400">
+                                    {prediction.live_match_minute}'
+                                </span>
                             )}
                         </div>
                     </div>
