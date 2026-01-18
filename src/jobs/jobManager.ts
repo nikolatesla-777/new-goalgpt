@@ -159,6 +159,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Check match status via detail_live API and update stuck/outdated matches',
   },
+  {
+    name: 'Prediction Matcher',
+    schedule: '*/5 * * * *', // Every 5 minutes
+    handler: async () => {
+      const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
+      await predictionMatcherService.matchUnmatchedPredictions();
+    },
+    enabled: true,
+    description: 'Match predictions with NULL match_id to actual matches using team names and date',
+  },
 ];
 
 /**

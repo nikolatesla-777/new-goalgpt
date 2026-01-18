@@ -869,5 +869,75 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         }
     });
 
+    /**
+     * POST /api/predictions/match-unmatched
+     *
+     * Manually trigger prediction matcher to match all unmatched predictions
+     * Requires admin authentication
+     */
+    fastify.post('/api/predictions/match-unmatched', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
+        try {
+            const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
+
+            logger.info('[Predictions] Manually triggering prediction matcher...');
+            const results = await predictionMatcherService.matchUnmatchedPredictions();
+
+            const successCount = results.filter(r => r.matchFound).length;
+
+            return reply.status(200).send({
+                success: true,
+                message: `Matched ${successCount}/${results.length} predictions`,
+                total: results.length,
+                matched: successCount,
+                results: results
+            });
+        } catch (error) {
+            logger.error('[Predictions] Match unmatched predictions error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
+    /**
+     * POST /api/predictions/match/:externalId
+     *
+     * Match a specific prediction by external ID
+     * Requires admin authentication
+     */
+    fastify.post('/api/predictions/match/:externalId', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{
+        Params: { externalId: string }
+    }>, reply: FastifyReply) => {
+        try {
+            const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
+
+            const { externalId } = request.params;
+
+            logger.info(`[Predictions] Manually matching prediction ${externalId}...`);
+            const result = await predictionMatcherService.matchByExternalId(externalId);
+
+            if (result.matchFound) {
+                return reply.status(200).send({
+                    success: true,
+                    message: 'Prediction matched successfully',
+                    result: result
+                });
+            } else {
+                return reply.status(404).send({
+                    success: false,
+                    message: 'No matching match found',
+                    result: result
+                });
+            }
+        } catch (error) {
+            logger.error('[Predictions] Match prediction error:', error);
+            return reply.status(500).send({
+                success: false,
+                error: error instanceof Error ? error.message : 'Internal server error'
+            });
+        }
+    });
+
     logger.info('[Routes] AI Prediction routes registered');
 }
