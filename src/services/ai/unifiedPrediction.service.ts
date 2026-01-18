@@ -233,14 +233,18 @@ class UnifiedPredictionService {
                 )
             }));
 
-            // Fetch live data from TheSports API detail_live (2s cache, 5s timeout)
+            // Fetch live data from TheSports API detail_live (2s cache, 10s timeout)
             // CRITICAL: Non-blocking - if API fails, predictions continue with static data
             const predictions = predictionsResult.rows;
             const matchIds = predictions
                 .filter((p: any) => p.match_id && p.result === 'pending') // Only fetch for pending predictions
                 .map((p: any) => p.match_id);
 
+            logger.debug(`[UnifiedPredictionService] Total predictions: ${predictions.length}, Pending with match_id: ${matchIds.length}`);
+
             if (matchIds.length > 0) {
+                logger.debug(`[UnifiedPredictionService] Attempting to fetch live data for: ${matchIds.join(', ')}`);
+
                 try {
                     const liveMatches = await getMatchesDetailLive(matchIds);
 
