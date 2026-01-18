@@ -233,12 +233,32 @@ class UnifiedPredictionService {
                 )
             }));
 
-            // Fetch live data from TheSports API detail_live (30s cache, 3s timeout)
+            // Fetch live data from TheSports API detail_live (30s cache, 5s timeout)
             // CRITICAL: Non-blocking - if API fails, predictions continue with static data
             // OPTIMIZATION: Only fetch if we have pending predictions (max 50 to prevent overload)
+            // SKIP: If no pending predictions, skip entirely to speed up response
             const predictions = predictionsResult.rows;
-            const matchIds = predictions
-                .filter((p: any) => p.match_id && p.result === 'pending') // Only fetch for pending predictions
+
+            // OPTIMIZATION: Skip live data fetch if no pending predictions
+            const pendingPredictions = predictions.filter((p: any) => p.result === 'pending');
+
+            if (pendingPredictions.length === 0) {
+                logger.debug('[UnifiedPredictionService] No pending predictions, skipping live data fetch');
+                return {
+                    predictions,
+                    stats,
+                    bots,
+                    pagination: {
+                        page,
+                        limit,
+                        total,
+                        totalPages: Math.ceil(total / limit)
+                    }
+                };
+            }
+
+            const matchIds = pendingPredictions
+                .filter((p: any) => p.match_id) // Only those with match_id
                 .map((p: any) => p.match_id)
                 .slice(0, 50); // Limit to prevent API overload
 
