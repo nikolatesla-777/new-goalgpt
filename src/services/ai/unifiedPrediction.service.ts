@@ -146,8 +146,7 @@ class UnifiedPredictionService {
             ? `WHERE ${conditions.join(' AND ')}`
             : '';
 
-        // Main query - NO TheSports data (isolated from ts_matches)
-        // Only use ai_predictions table - static prediction data only
+        // Main query - JOIN with ts_matches to get live minute and status
         const query = `
       SELECT
         p.id, p.external_id, p.canonical_bot_name,
@@ -158,10 +157,14 @@ class UnifiedPredictionService {
         p.match_id, p.match_time, p.match_status,
         p.access_type, p.created_at, p.resulted_at,
         p.result, p.final_score, p.result_reason, p.source,
-        -- Static score from prediction time (will be overwritten by live data if available)
-        COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 1), '')::INTEGER, 0) as home_score_display,
-        COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 2), '')::INTEGER, 0) as away_score_display
+        -- Live scores from ts_matches (fallback to static if NULL)
+        COALESCE(m.home_score_display, NULLIF(SPLIT_PART(p.score_at_prediction, '-', 1), '')::INTEGER, 0) as home_score_display,
+        COALESCE(m.away_score_display, NULLIF(SPLIT_PART(p.score_at_prediction, '-', 2), '')::INTEGER, 0) as away_score_display,
+        -- Live minute and status from ts_matches
+        m.minute as live_match_minute,
+        m.status_id as live_match_status
       FROM ai_predictions p
+      LEFT JOIN ts_matches m ON p.match_id = m.external_id
       ${whereClause}
       ORDER BY p.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -233,69 +236,9 @@ class UnifiedPredictionService {
                 )
             }));
 
-            // Fetch live data from TheSports API detail_live (30s cache, 5s timeout)
-            // CRITICAL: Non-blocking - if API fails, predictions continue with static data
-            // OPTIMIZATION: Only fetch if we have pending predictions (max 50 to prevent overload)
-            // SKIP: If no pending predictions, skip entirely to speed up response
+            // Live data now comes directly from ts_matches JOIN in the query
+            // No need for additional API call - database has latest MQTT data
             const predictions = predictionsResult.rows;
-
-            // OPTIMIZATION: Skip live data fetch if no pending predictions
-            const pendingPredictions = predictions.filter((p: any) => p.result === 'pending');
-
-            if (pendingPredictions.length === 0) {
-                logger.debug('[UnifiedPredictionService] No pending predictions, skipping live data fetch');
-                return {
-                    predictions,
-                    stats,
-                    bots,
-                    pagination: {
-                        page,
-                        limit,
-                        total,
-                        totalPages: Math.ceil(total / limit)
-                    }
-                };
-            }
-
-            const matchIds = pendingPredictions
-                .filter((p: any) => p.match_id) // Only those with match_id
-                .map((p: any) => p.match_id)
-                .slice(0, 50); // Limit to prevent API overload
-
-            if (matchIds.length > 0) {
-                try {
-                    const liveMatches = await getMatchesDetailLive(matchIds);
-
-                    // Merge live data into predictions
-                    let mergedCount = 0;
-                    for (const prediction of predictions) {
-                        const liveMatch = liveMatches.get(prediction.match_id);
-                        if (liveMatch) {
-                            // Calculate minute using kickoff timestamps
-                            const calculatedMinute = calculateMatchMinute(
-                                liveMatch.status_id,
-                                liveMatch.first_half_kickoff_ts,
-                                liveMatch.second_half_kickoff_ts
-                            );
-
-                            // Update with live data
-                            prediction.home_score_display = liveMatch.home_score_display;
-                            prediction.away_score_display = liveMatch.away_score_display;
-                            prediction.live_match_status = liveMatch.status_id;
-                            prediction.live_match_minute = calculatedMinute ?? liveMatch.minute;
-
-                            mergedCount++;
-                        }
-                    }
-
-                    if (mergedCount > 0) {
-                        logger.info(`[UnifiedPredictionService] Successfully merged live data for ${mergedCount} predictions`);
-                    }
-                } catch (error) {
-                    // Fallback to static data if live fetch fails
-                    logger.warn('[UnifiedPredictionService] Live data fetch failed, using static data:', error);
-                }
-            }
 
             return {
                 predictions,

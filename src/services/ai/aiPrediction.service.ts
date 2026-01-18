@@ -858,6 +858,9 @@ export class AIPredictionService {
                 -- Match data
                 m.status_id as match_status_id,
                 m.minute as match_minute,
+                -- Frontend compatibility aliases (PredictionCard expects these field names)
+                m.status_id as live_match_status,
+                m.minute as live_match_minute,
                 -- CRITICAL FIX (2026-01-17): Parse from JSONB array if home_score_display is NULL
                 COALESCE(m.home_score_display, (m.home_scores->>0)::INTEGER) as home_score_display,
                 COALESCE(m.away_score_display, (m.away_scores->>0)::INTEGER) as away_score_display,
