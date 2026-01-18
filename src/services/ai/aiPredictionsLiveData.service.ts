@@ -28,7 +28,7 @@ interface DetailLiveResponse {
 // In-memory cache with 2-second TTL (as recommended by TheSports)
 const cache = new Map<string, { data: DetailLiveMatch | null; expiry: number }>();
 const CACHE_TTL_MS = 2000; // 2 seconds
-const API_TIMEOUT_MS = 5000; // 5 seconds timeout
+const API_TIMEOUT_MS = 10000; // 10 seconds timeout (TheSports API can be slow)
 
 /**
  * Promise with timeout wrapper
