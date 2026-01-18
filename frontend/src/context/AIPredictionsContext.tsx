@@ -341,79 +341,9 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
 
   const handleWebSocketMessage = useCallback((message: any) => {
     switch (message.type) {
-      case 'SCORE_CHANGE':
-      case 'GOAL':
-        // Update live scores
-        setPredictions(prev => prev.map(p => {
-          if (p.match_id === message.matchId) {
-            return {
-              ...p,
-              home_score_display: message.optimistic?.homeScore ?? p.home_score_display,
-              away_score_display: message.optimistic?.awayScore ?? p.away_score_display,
-              live_match_minute: message.optimistic?.minute ?? p.live_match_minute,
-            };
-          }
-          return p;
-        }));
-
-        setPredictionsByMatch(prev => {
-          const next = new Map(prev);
-          const pred = next.get(message.matchId);
-          if (pred) {
-            next.set(message.matchId, {
-              ...pred,
-              home_score_display: message.optimistic?.homeScore ?? pred.home_score_display,
-              away_score_display: message.optimistic?.awayScore ?? pred.away_score_display,
-              live_match_minute: message.optimistic?.minute ?? pred.live_match_minute,
-            });
-          }
-          return next;
-        });
-        break;
-
-      case 'MATCH_STATE_CHANGE':
-        // Update match status
-        setPredictions(prev => prev.map(p => {
-          if (p.match_id === message.matchId) {
-            return {
-              ...p,
-              live_match_status: message.optimistic?.statusId ?? message.newStatus ?? p.live_match_status,
-              live_match_minute: message.optimistic?.minute ?? p.live_match_minute,
-            };
-          }
-          return p;
-        }));
-
-        // If match ended, refresh after delay for final results
-        if (message.newStatus === 8 || message.optimistic?.statusId === 8) {
-          setTimeout(() => fetchPredictions(), 3000);
-        }
-        break;
-
-      case 'MINUTE_UPDATE':
-        // Update match minute only (no score change, no refetch)
-        setPredictions(prev => prev.map(p => {
-          if (p.match_id === message.matchId) {
-            return {
-              ...p,
-              live_match_minute: message.optimistic?.minute ?? message.minute ?? p.live_match_minute,
-            };
-          }
-          return p;
-        }));
-
-        setPredictionsByMatch(prev => {
-          const next = new Map(prev);
-          const pred = next.get(message.matchId);
-          if (pred) {
-            next.set(message.matchId, {
-              ...pred,
-              live_match_minute: message.optimistic?.minute ?? message.minute ?? pred.live_match_minute,
-            });
-          }
-          return next;
-        });
-        break;
+      // REMOVED: TheSports match updates (score, minute, status)
+      // This page no longer shows live match data
+      // Only static prediction data from ai_predictions table
 
       case 'PREDICTION_SETTLED':
         // Phase 5: Real-time prediction result update

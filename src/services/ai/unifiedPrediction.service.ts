@@ -145,58 +145,28 @@ class UnifiedPredictionService {
             ? `WHERE ${conditions.join(' AND ')}`
             : '';
 
-        // Main query - JOIN with ts_matches, ts_teams, ts_competitions for complete data
-        // Phase 2: Updated to use new 29-column schema
+        // Main query - NO TheSports data (isolated from ts_matches)
+        // Only use ai_predictions table - static prediction data only
         const query = `
       SELECT
         p.id, p.external_id, p.canonical_bot_name,
         p.league_name, p.home_team_name, p.away_team_name,
-        -- Prefer dynamic logos from teams table, fallback to prediction table
-        COALESCE(th.logo_url, p.home_team_logo) as home_team_logo,
-        COALESCE(ta.logo_url, p.away_team_logo) as away_team_logo,
+        p.home_team_logo, p.away_team_logo,
         p.score_at_prediction, p.minute_at_prediction,
-        -- Phase 2: New prediction columns
         p.prediction, p.prediction_threshold,
         p.match_id, p.match_time, p.match_status,
         p.access_type, p.created_at, p.resulted_at,
         p.result, p.final_score, p.result_reason, p.source,
-        -- Valid Live Data from Single Source of Truth (ts_matches)
-        -- If match is finished (8), use regular score. If live, use display score.
-        -- CRITICAL FIX (2026-01-17): Parse from JSONB array if display/regular score is NULL
-        -- CRITICAL FIX (2026-01-17 #2): If match_id is NULL (no JOIN), parse score_at_prediction
-        CASE
-            -- If no match JOIN (m.external_id IS NULL), parse score_at_prediction ("2-0" → 2)
-            WHEN m.external_id IS NULL AND p.score_at_prediction IS NOT NULL THEN
-                COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 1), '')::INTEGER, 0)
-            -- If match is finished, use regular score
-            WHEN m.status_id = 8 THEN
-                COALESCE(m.home_score_regular, (m.home_scores->>0)::INTEGER, 0)
-            -- If match is live, use display score
-            ELSE
-                COALESCE(m.home_score_display, (m.home_scores->>0)::INTEGER, 0)
-        END as home_score_display,
-        CASE
-            -- If no match JOIN (m.external_id IS NULL), parse score_at_prediction ("2-0" → 0)
-            WHEN m.external_id IS NULL AND p.score_at_prediction IS NOT NULL THEN
-                COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 2), '')::INTEGER, 0)
-            -- If match is finished, use regular score
-            WHEN m.status_id = 8 THEN
-                COALESCE(m.away_score_regular, (m.away_scores->>0)::INTEGER, 0)
-            -- If match is live, use display score
-            ELSE
-                COALESCE(m.away_score_display, (m.away_scores->>0)::INTEGER, 0)
-        END as away_score_display,
-        m.status_id as live_match_status, m.minute as live_match_minute,
-        -- Competition & Country Data
-        COALESCE(cnt.name, 'World') as country_name,
-        cnt.logo as country_logo,
-        c.logo_url as competition_logo
+        -- Static score from prediction time (no live updates)
+        COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 1), '')::INTEGER, 0) as home_score_display,
+        COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 2), '')::INTEGER, 0) as away_score_display,
+        -- No live data (TheSports connection removed)
+        NULL::integer as live_match_status,
+        NULL::integer as live_match_minute,
+        NULL::text as country_name,
+        NULL::text as country_logo,
+        NULL::text as competition_logo
       FROM ai_predictions p
-      LEFT JOIN ts_matches m ON p.match_id = m.external_id
-      LEFT JOIN ts_teams th ON m.home_team_id = th.external_id
-      LEFT JOIN ts_teams ta ON m.away_team_id = ta.external_id
-      LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-      LEFT JOIN ts_countries cnt ON c.country_id = cnt.external_id
       ${whereClause}
       ORDER BY p.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
