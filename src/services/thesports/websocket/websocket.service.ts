@@ -32,8 +32,8 @@ export class WebSocketService {
   private mqttReceivedTimestamps: Map<string, number> = new Map(); // Key: matchId:eventType, Value: mqttReceivedTs
 
   // Track match states for "false end" detection
-  // Map: matchId -> { status: MatchState, lastStatus8Time: number | null }
-  private matchStates = new Map<string, { status: MatchState; lastStatus8Time: number | null }>();
+  // Map: matchId -> { status: MatchState, lastStatus8Time: number | null, minute?: number | null }
+  private matchStates = new Map<string, { status: MatchState; lastStatus8Time: number | null; minute?: number | null }>();
 
   // Keepalive timers for matches that hit status 8 (potential false end)
   // Map: matchId -> NodeJS.Timeout
@@ -267,6 +267,29 @@ export class WebSocketService {
               statusId: parsedScore.statusId,
               timestamp: Date.now(),
             }, mqttReceivedTs);
+
+            // CRITICAL: Detect minute changes and broadcast separately
+            // This enables frontend to update minute badge even when score doesn't change
+            const previousMinute = this.matchStates.get(parsedScore.matchId)?.minute;
+            const currentMinuteValue = parsedScore.minute;
+
+            if (currentMinuteValue != null && previousMinute != null && currentMinuteValue !== previousMinute) {
+              logger.info(`[WebSocket] Minute changed for ${parsedScore.matchId}: ${previousMinute}' → ${currentMinuteValue}'`);
+
+              this.emitEvent({
+                type: 'MINUTE_UPDATE',
+                matchId: parsedScore.matchId,
+                minute: currentMinuteValue,
+                statusId: parsedScore.statusId,
+                timestamp: Date.now(),
+              }, mqttReceivedTs);
+            }
+
+            // Update minute in match states for future comparison
+            const state = this.matchStates.get(parsedScore.matchId);
+            if (state) {
+              state.minute = currentMinuteValue;
+            }
 
             // AUTO SETTLEMENT: Trigger instant settlement on score change
             // CRITICAL: Use calculated minute from ParsedScore (from MQTT messageTimestamp)

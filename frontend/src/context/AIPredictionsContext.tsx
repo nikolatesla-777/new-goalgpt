@@ -454,6 +454,40 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
         });
         break;
 
+      case 'MINUTE_UPDATE':
+        // Update live match minute (MQTT priority)
+        // This enables real-time minute badge updates even when score doesn't change
+        console.log('[AIPredictions] ⏱️ MINUTE_UPDATE:', {
+          matchId: message.matchId,
+          minute: message.minute,
+          statusId: message.statusId
+        });
+
+        setPredictions(prev => prev.map(p => {
+          if (p.match_id === message.matchId && p.result === 'pending') {
+            return {
+              ...p,
+              live_match_minute: message.minute,
+              live_match_status: message.statusId ?? p.live_match_status,
+            };
+          }
+          return p;
+        }));
+
+        setPredictionsByMatch(prev => {
+          const next = new Map(prev);
+          const pred = next.get(message.matchId);
+          if (pred && pred.result === 'pending') {
+            next.set(message.matchId, {
+              ...pred,
+              live_match_minute: message.minute,
+              live_match_status: message.statusId ?? pred.live_match_status,
+            });
+          }
+          return next;
+        });
+        break;
+
       case 'PREDICTION_SETTLED':
         // Phase 5: Real-time prediction result update
         const settlementEvent = message as PredictionSettledEvent;
