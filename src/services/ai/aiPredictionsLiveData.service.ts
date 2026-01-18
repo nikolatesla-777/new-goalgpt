@@ -242,7 +242,6 @@ export async function getMatchesDetailLive(matchIds: string[]): Promise<Map<stri
 
         // Enforce cache size limit after batch insert
         enforceCacheSizeLimit();
-        }
       }
 
       if (successCount > 0) {
