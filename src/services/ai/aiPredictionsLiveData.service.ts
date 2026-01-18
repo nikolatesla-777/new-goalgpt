@@ -147,57 +147,60 @@ export async function getMatchesDetailLive(matchIds: string[]): Promise<Map<stri
 
     logger.debug(`[AIPredictionsLiveData] Fetching ${uncached.length} matches (${matchIds.length} total, ${result.size} cached)`);
 
-    // CRITICAL FIX: Fetch each match individually in parallel (TheSports API doesn't support batch well)
-    // Use Promise.allSettled to prevent one failure from blocking others
-    const fetchPromises = uncached.map(matchId =>
-      withTimeout(
-        theSportsAPI.get<DetailLiveResponse>('/match/detail_live', {
-          match_id: matchId, // Single match ID per request
-        }),
-        API_TIMEOUT_MS
-      ).then(response => ({ matchId, response, success: true }))
-       .catch(error => ({ matchId, error, success: false }))
-    );
-
-    const fetchResults = await Promise.allSettled(fetchPromises);
-
+    // CRITICAL FIX: TheSports API returns ALL live matches (ignores match_id param!)
+    // Solution: Fetch once and filter locally
     let successCount = 0;
     let failCount = 0;
 
-    for (const promiseResult of fetchResults) {
-      if (promiseResult.status === 'fulfilled') {
-        const { matchId, response, success } = promiseResult.value;
+    try {
+      const response = await withTimeout(
+        theSportsAPI.get<DetailLiveResponse>('/match/detail_live'),
+        API_TIMEOUT_MS
+      );
 
-        if (success && response.results && response.results.length > 0) {
-          const match = response.results[0];
-          result.set(match.id, match);
+      if (response.results && Array.isArray(response.results)) {
+        logger.debug(`[AIPredictionsLiveData] Received ${response.results.length} live matches from API`);
 
-          // Cache it
-          cache.set(match.id, {
-            data: match,
-            expiry: now + CACHE_TTL_MS,
-          });
-
-          successCount++;
-        } else {
-          // Cache null for not found
-          cache.set(matchId, {
-            data: null,
-            expiry: now + CACHE_TTL_MS,
-          });
-          failCount++;
+        // Build a lookup map from all live matches
+        const liveMatchesMap = new Map<string, DetailLiveMatch>();
+        for (const match of response.results) {
+          liveMatchesMap.set(match.id, match);
         }
-      } else {
-        // Promise rejected
-        failCount++;
-      }
-    }
 
-    if (successCount > 0) {
-      logger.debug(`[AIPredictionsLiveData] Successfully fetched ${successCount}/${uncached.length} matches`);
-    }
-    if (failCount > 0) {
-      logger.warn(`[AIPredictionsLiveData] Failed to fetch ${failCount}/${uncached.length} matches`);
+        // Find our requested matches in the response
+        for (const matchId of uncached) {
+          const match = liveMatchesMap.get(matchId);
+
+          if (match) {
+            result.set(match.id, match);
+
+            // Cache it
+            cache.set(match.id, {
+              data: match,
+              expiry: now + CACHE_TTL_MS,
+            });
+
+            successCount++;
+          } else {
+            // Cache null for not found
+            cache.set(matchId, {
+              data: null,
+              expiry: now + CACHE_TTL_MS,
+            });
+            failCount++;
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        logger.debug(`[AIPredictionsLiveData] Successfully fetched ${successCount}/${uncached.length} matches`);
+      }
+      if (failCount > 0) {
+        logger.debug(`[AIPredictionsLiveData] ${failCount}/${uncached.length} matches not found in live feed`);
+      }
+    } catch (error: any) {
+      const errorMsg = error.message || 'Unknown error';
+      logger.warn(`[AIPredictionsLiveData] Failed to fetch live matches: ${errorMsg}`);
     }
 
     return result;
