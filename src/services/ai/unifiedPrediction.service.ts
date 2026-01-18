@@ -94,6 +94,8 @@ class UnifiedPredictionService {
      * Get predictions with unified filtering
      */
     async getPredictions(filter: PredictionFilter = {}): Promise<UnifiedPredictionResponse> {
+        console.log('[DEBUG-CONSOLE] ===== getPredictions CALLED =====', { filter });
+
         const {
             status = 'all',
             bot,
