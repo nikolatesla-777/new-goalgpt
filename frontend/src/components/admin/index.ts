@@ -9,6 +9,5 @@ export { AdminPredictions } from './AdminPredictions';
 export { AdminLogs } from './AdminLogs';
 export { AdminBots } from './AdminBots';
 export { AdminBotDetail } from './AdminBotDetail';
-export { AdminLivescore } from './AdminLivescore';
 export { AdminManualPredictions } from './AdminManualPredictions';
 

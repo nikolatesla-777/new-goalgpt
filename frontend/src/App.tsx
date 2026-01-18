@@ -13,15 +13,6 @@ function MatchTabRedirect({ tab }: { tab: string }) {
 
 // EAGER LOAD: Main layout (needed immediately)
 import { AdminLayout } from './components/admin';
-import {
-  LivescoreLayout,
-  DiaryTab,
-  LiveTab,
-  FinishedTab,
-  NotStartedTab,
-  AIMatchesTab,
-  FavoritesTab,
-} from './components/livescore';
 
 // LAZY LOAD: Heavy components (load on demand)
 const AdminKomutaMerkezi = lazy(() => import('./components/admin').then(m => ({ default: m.AdminKomutaMerkezi })));
@@ -75,19 +66,6 @@ function App() {
             <Route element={<AdminLayout />}>
               {/* Komuta Merkezi (Dashboard) is now the homepage */}
               <Route path="/" element={<Suspense fallback={<LoadingFallback />}><AdminKomutaMerkezi /></Suspense>} />
-
-              {/* Livescore with Nested Routes for Tabs */}
-              <Route path="/livescore" element={<LivescoreLayout />}>
-                {/* Default redirect to diary tab */}
-                <Route index element={<Navigate to="diary" replace />} />
-                {/* Tab routes */}
-                <Route path="diary" element={<DiaryTab />} />
-                <Route path="live" element={<LiveTab />} />
-                <Route path="finished" element={<FinishedTab />} />
-                <Route path="not-started" element={<NotStartedTab />} />
-                <Route path="favorites" element={<FavoritesTab />} />
-                <Route path="ai" element={<AIMatchesTab />} />
-              </Route>
 
               {/* New Premium AI Page */}
               <Route path="/ai-predictions" element={<Suspense fallback={<LoadingFallback />}><AIPredictionsPage /></Suspense>} />
