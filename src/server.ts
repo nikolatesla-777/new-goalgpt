@@ -45,11 +45,11 @@ import { unifiedPredictionService } from './services/ai/unifiedPrediction.servic
 import { PredictionOrchestrator } from './services/orchestration/PredictionOrchestrator';
 import type { PredictionCreatedEvent, PredictionUpdatedEvent, PredictionDeletedEvent } from './services/orchestration/predictionEvents';
 
-// Workers - Entity Sync (will be consolidated into entitySync.job.ts)
+// Workers - TeamData and TeamLogo use unique service patterns
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
 import { TeamLogoSyncWorker } from './jobs/teamLogoSync.job';
-import { CompetitionSyncWorker } from './jobs/competitionSync.job';
-import { PlayerSyncWorker } from './jobs/playerSync.job';
+// Entity Sync - Consolidated job for all other entity syncs
+import { startEntitySyncJobs, stopEntitySyncJobs } from './jobs/entitySync.job';
 
 dotenv.config();
 
@@ -110,11 +110,9 @@ fastify.register(partnersRoutes, { prefix: '/api/partners' }); // Phase 3: Partn
 fastify.register(commentsRoutes, { prefix: '/api/comments' }); // Phase 3: Match Comments system routes
 fastify.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' }); // Phase 3: Daily Rewards system routes
 
-// Initialize background workers (consolidated - LineupRefresh and PostMatchProcessor removed)
+// Initialize background workers (consolidated - most entity syncs now in entitySync.job.ts)
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
 let teamLogoSyncWorker: TeamLogoSyncWorker | null = null;
-let competitionSyncWorker: CompetitionSyncWorker | null = null;
-let playerSyncWorker: PlayerSyncWorker | null = null;
 let websocketService: WebSocketService | null = null;
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -154,15 +152,9 @@ const start = async () => {
     teamLogoSyncWorker.start();
     logger.info('✅ TeamLogoSync Worker started (interval: 24h)');
 
-    // Competition Sync Worker (syncs competition/league data)
-    competitionSyncWorker = new CompetitionSyncWorker();
-    competitionSyncWorker.start();
-    logger.info('✅ CompetitionSync Worker started (interval: 24h)');
-
-    // Player Sync Worker (syncs player data)
-    playerSyncWorker = new PlayerSyncWorker();
-    playerSyncWorker.start();
-    logger.info('✅ PlayerSync Worker started (interval: 24h)');
+    // Unified Entity Sync Jobs (Category, Country, Competition, Team, Player, etc.)
+    startEntitySyncJobs();
+    logger.info('✅ Entity Sync Jobs started (10 entities with scheduled cron)');
 
     logger.info('========================================');
     logger.info('🎉 All Background Workers Started!');
@@ -318,8 +310,7 @@ const shutdown = async () => {
     logger.info('[Shutdown] Stopping workers...');
     if (teamDataSyncWorker) teamDataSyncWorker.stop();
     if (teamLogoSyncWorker) teamLogoSyncWorker.stop();
-    if (competitionSyncWorker) competitionSyncWorker.stop();
-    if (playerSyncWorker) playerSyncWorker.stop();
+    stopEntitySyncJobs(); // Stop all entity sync cron jobs
 
     // CRITICAL: Wait for in-flight operations to complete
     // Workers stopped, but their reconcile queues/pending ops may still be running
