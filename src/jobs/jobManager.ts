@@ -119,6 +119,45 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Archive/delete old transaction logs',
   },
+  {
+    name: 'Stuck Match Finisher',
+    schedule: '*/10 * * * *', // Every 10 minutes
+    handler: async () => {
+      const { pool } = await import('../database/connection');
+      const nowTs = Math.floor(Date.now() / 1000);
+
+      // Finish matches that are 90+ minutes and started 2+ hours ago
+      const result = await pool.query(`
+        UPDATE ts_matches
+        SET
+          status_id = 8,
+          minute = CASE WHEN minute >= 90 THEN minute ELSE 90 END,
+          status_id_source = 'auto_finish',
+          status_id_timestamp = $1,
+          updated_at = NOW()
+        WHERE status_id IN (2, 3, 4, 5, 7)
+          AND match_time < $2
+          AND (minute >= 90 OR match_time < $3)
+        RETURNING external_id
+      `, [nowTs, nowTs - 7200, nowTs - 14400]); // 2 hours, 4 hours
+
+      if (result.rowCount && result.rowCount > 0) {
+        logger.info(`✅ Auto-finished ${result.rowCount} stuck matches`);
+      }
+    },
+    enabled: true,
+    description: 'Auto-finish matches stuck in live status (90+ min or 4+ hours old)',
+  },
+  {
+    name: 'Prediction Matcher',
+    schedule: '*/5 * * * *', // Every 5 minutes
+    handler: async () => {
+      const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
+      await predictionMatcherService.matchUnmatchedPredictions();
+    },
+    enabled: true,
+    description: 'Match predictions with NULL match_id to actual matches using team names and date',
+  },
 ];
 
 /**

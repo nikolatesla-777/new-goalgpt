@@ -45,11 +45,9 @@ import { unifiedPredictionService } from './services/ai/unifiedPrediction.servic
 import { PredictionOrchestrator } from './services/orchestration/PredictionOrchestrator';
 import type { PredictionCreatedEvent, PredictionUpdatedEvent, PredictionDeletedEvent } from './services/orchestration/predictionEvents';
 
-// Workers - Correct existing files from src/jobs
+// Workers - Entity Sync (will be consolidated into entitySync.job.ts)
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
 import { TeamLogoSyncWorker } from './jobs/teamLogoSync.job';
-import { LineupRefreshJob } from './jobs/lineupRefresh.job';
-import { PostMatchProcessorJob } from './jobs/postMatchProcessor.job';
 import { CompetitionSyncWorker } from './jobs/competitionSync.job';
 import { PlayerSyncWorker } from './jobs/playerSync.job';
 
@@ -112,11 +110,9 @@ fastify.register(partnersRoutes, { prefix: '/api/partners' }); // Phase 3: Partn
 fastify.register(commentsRoutes, { prefix: '/api/comments' }); // Phase 3: Match Comments system routes
 fastify.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' }); // Phase 3: Daily Rewards system routes
 
-// Initialize background workers
+// Initialize background workers (consolidated - LineupRefresh and PostMatchProcessor removed)
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
 let teamLogoSyncWorker: TeamLogoSyncWorker | null = null;
-let lineupRefreshJob: LineupRefreshJob | null = null;
-let postMatchProcessorJob: PostMatchProcessorJob | null = null;
 let competitionSyncWorker: CompetitionSyncWorker | null = null;
 let playerSyncWorker: PlayerSyncWorker | null = null;
 let websocketService: WebSocketService | null = null;
@@ -157,14 +153,6 @@ const start = async () => {
     teamLogoSyncWorker = new TeamLogoSyncWorker();
     teamLogoSyncWorker.start();
     logger.info('✅ TeamLogoSync Worker started (interval: 24h)');
-
-    lineupRefreshJob = new LineupRefreshJob();
-    lineupRefreshJob.start();
-    logger.info('✅ LineupRefresh Job started (interval: 5m)');
-
-    postMatchProcessorJob = new PostMatchProcessorJob();
-    postMatchProcessorJob.start();
-    logger.info('✅ PostMatchProcessor Job started (interval: 2m)');
 
     // Competition Sync Worker (syncs competition/league data)
     competitionSyncWorker = new CompetitionSyncWorker();
@@ -330,8 +318,6 @@ const shutdown = async () => {
     logger.info('[Shutdown] Stopping workers...');
     if (teamDataSyncWorker) teamDataSyncWorker.stop();
     if (teamLogoSyncWorker) teamLogoSyncWorker.stop();
-    if (lineupRefreshJob) lineupRefreshJob.stop();
-    if (postMatchProcessorJob) postMatchProcessorJob.stop();
     if (competitionSyncWorker) competitionSyncWorker.stop();
     if (playerSyncWorker) playerSyncWorker.stop();
 
