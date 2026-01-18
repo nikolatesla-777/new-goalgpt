@@ -68,7 +68,7 @@ function parseDetailLiveMatch(raw: RawDetailLiveMatch): DetailLiveMatch | null {
 // In-memory cache with 30-second TTL (prevents memory overflow from 191 match responses)
 const cache = new Map<string, { data: DetailLiveMatch | null; expiry: number }>();
 const CACHE_TTL_MS = 30000; // 30 seconds (TheSports recommends 2s, but we fetch ALL matches so need longer cache)
-const API_TIMEOUT_MS = 10000; // 10 seconds timeout (TheSports API can be slow)
+const API_TIMEOUT_MS = 3000; // 3 seconds timeout (aggressive to prevent page hang)
 const MAX_CACHE_SIZE = 500; // Prevent unbounded cache growth
 
 /**

@@ -176,7 +176,7 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [filter, setFilter] = useState<PredictionFilter>({ limit: 100 });
+  const [filter, setFilter] = useState<PredictionFilter>({ limit: 20 }); // Reduced for faster initial load
   const [lastSettlement, setLastSettlement] = useState<PredictionSettledEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -199,7 +199,7 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
       if (filter.date) params.append('date', filter.date);
       if (filter.access && filter.access !== 'all') params.append('access', filter.access);
       params.append('page', page.toString());
-      params.append('limit', (filter.limit || 100).toString());
+      params.append('limit', (filter.limit || 20).toString());
 
       const res = await fetch(`${API_BASE}/predictions/unified?${params}`);
 
@@ -519,9 +519,8 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
     fetchPredictions();
   }, [fetchPredictions]);
 
-  // Auto-refresh for live scores (5s interval if pending predictions exist)
-  // TheSports API detail_live recommended frequency: 2 seconds
-  // We use 5s to balance between freshness and API load
+  // Auto-refresh for live scores (60s interval if pending predictions exist)
+  // MQTT WebSocket provides instant updates, API polling is just fallback
   useEffect(() => {
     const hasPendingPredictions = predictions.some(p => p.result === 'pending');
 
@@ -532,7 +531,7 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
 
     const interval = setInterval(() => {
       fetchPredictions();
-    }, 5000); // 5 seconds (TheSports API caches for 2s on backend)
+    }, 60000); // 60 seconds (WebSocket handles real-time, this is just backup)
 
     return () => clearInterval(interval);
   }, [predictions, fetchPredictions]);
