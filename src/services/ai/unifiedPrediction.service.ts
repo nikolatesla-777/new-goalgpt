@@ -94,8 +94,6 @@ class UnifiedPredictionService {
      * Get predictions with unified filtering
      */
     async getPredictions(filter: PredictionFilter = {}): Promise<UnifiedPredictionResponse> {
-        console.log('[DEBUG-CONSOLE] ===== getPredictions CALLED =====', { filter });
-
         const {
             status = 'all',
             bot,
@@ -242,25 +240,15 @@ class UnifiedPredictionService {
                 .filter((p: any) => p.match_id && p.result === 'pending') // Only fetch for pending predictions
                 .map((p: any) => p.match_id);
 
-            console.log(`[DEBUG-CONSOLE] Total predictions: ${predictions.length}, Pending with match_id: ${matchIds.length}`);
-
             if (matchIds.length > 0) {
-                console.log(`[DEBUG-CONSOLE] Attempting to fetch live data for: ${matchIds.join(', ')}`);
-
                 try {
                     const liveMatches = await getMatchesDetailLive(matchIds);
-                    console.log(`[DEBUG-FETCH] Received ${liveMatches.size} live matches from service`);
-                    if (liveMatches.size > 0) {
-                        console.log(`[DEBUG-FETCH] Match IDs in response: ${Array.from(liveMatches.keys()).join(', ')}`);
-                    }
 
                     // Merge live data into predictions
                     let mergedCount = 0;
                     for (const prediction of predictions) {
                         const liveMatch = liveMatches.get(prediction.match_id);
-                        console.log(`[DEBUG-FETCH] Looking for match_id=${prediction.match_id}, found=${!!liveMatch}`);
                         if (liveMatch) {
-                            console.log(`[DEBUG-FETCH] Live match data:`, JSON.stringify(liveMatch));
                             // Calculate minute using kickoff timestamps
                             const calculatedMinute = calculateMatchMinute(
                                 liveMatch.status_id,
@@ -275,12 +263,6 @@ class UnifiedPredictionService {
                             prediction.live_match_minute = calculatedMinute ?? liveMatch.minute;
 
                             mergedCount++;
-                            console.log(`[DEBUG-MERGE] Match ${prediction.match_id}:`);
-                            console.log(`  - home_score_display: ${prediction.home_score_display}`);
-                            console.log(`  - away_score_display: ${prediction.away_score_display}`);
-                            console.log(`  - live_match_status: ${prediction.live_match_status}`);
-                            console.log(`  - live_match_minute: ${prediction.live_match_minute}`);
-                            console.log(`  - Object keys: ${Object.keys(prediction).join(', ')}`);
                         }
                     }
 
