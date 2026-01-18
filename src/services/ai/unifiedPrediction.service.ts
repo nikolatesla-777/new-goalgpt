@@ -158,15 +158,9 @@ class UnifiedPredictionService {
         p.match_id, p.match_time, p.match_status,
         p.access_type, p.created_at, p.resulted_at,
         p.result, p.final_score, p.result_reason, p.source,
-        -- Static score from prediction time (no live updates)
+        -- Static score from prediction time (will be overwritten by live data if available)
         COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 1), '')::INTEGER, 0) as home_score_display,
-        COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 2), '')::INTEGER, 0) as away_score_display,
-        -- No live data (TheSports connection removed)
-        NULL::integer as live_match_status,
-        NULL::integer as live_match_minute,
-        NULL::text as country_name,
-        NULL::text as country_logo,
-        NULL::text as competition_logo
+        COALESCE(NULLIF(SPLIT_PART(p.score_at_prediction, '-', 2), '')::INTEGER, 0) as away_score_display
       FROM ai_predictions p
       ${whereClause}
       ORDER BY p.created_at DESC
