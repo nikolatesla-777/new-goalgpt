@@ -65,10 +65,11 @@ function parseDetailLiveMatch(raw: RawDetailLiveMatch): DetailLiveMatch | null {
   };
 }
 
-// In-memory cache with 2-second TTL (as recommended by TheSports)
+// In-memory cache with 30-second TTL (prevents memory overflow from 191 match responses)
 const cache = new Map<string, { data: DetailLiveMatch | null; expiry: number }>();
-const CACHE_TTL_MS = 2000; // 2 seconds
+const CACHE_TTL_MS = 30000; // 30 seconds (TheSports recommends 2s, but we fetch ALL matches so need longer cache)
 const API_TIMEOUT_MS = 10000; // 10 seconds timeout (TheSports API can be slow)
+const MAX_CACHE_SIZE = 500; // Prevent unbounded cache growth
 
 /**
  * Promise with timeout wrapper
@@ -138,6 +139,7 @@ export async function getMatchDetailLive(matchId: string): Promise<DetailLiveMat
       data: match,
       expiry: Date.now() + CACHE_TTL_MS,
     });
+    enforceCacheSizeLimit();
 
     return match;
   } catch (error: any) {
@@ -149,6 +151,7 @@ export async function getMatchDetailLive(matchId: string): Promise<DetailLiveMat
       data: null,
       expiry: Date.now() + CACHE_TTL_MS,
     });
+    enforceCacheSizeLimit();
 
     return null;
   }
@@ -236,6 +239,10 @@ export async function getMatchesDetailLive(matchIds: string[]): Promise<Map<stri
             failCount++;
           }
         }
+
+        // Enforce cache size limit after batch insert
+        enforceCacheSizeLimit();
+        }
       }
 
       if (successCount > 0) {
@@ -285,6 +292,26 @@ export function cleanupExpiredCache(): void {
   if (cleaned > 0) {
     logger.debug(`[AIPredictionsLiveData] Cleaned ${cleaned} expired cache entries`);
   }
+}
+
+/**
+ * Enforce cache size limit by removing oldest entries
+ */
+function enforceCacheSizeLimit(): void {
+  if (cache.size <= MAX_CACHE_SIZE) {
+    return;
+  }
+
+  // Sort by expiry time and remove oldest entries
+  const entries = Array.from(cache.entries());
+  entries.sort((a, b) => a[1].expiry - b[1].expiry);
+
+  const toRemove = cache.size - MAX_CACHE_SIZE;
+  for (let i = 0; i < toRemove; i++) {
+    cache.delete(entries[i][0]);
+  }
+
+  logger.warn(`[AIPredictionsLiveData] Cache size limit reached, removed ${toRemove} oldest entries`);
 }
 
 // Auto-cleanup every 10 seconds
