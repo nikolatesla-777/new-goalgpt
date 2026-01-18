@@ -21,8 +21,48 @@ interface DetailLiveMatch {
   second_half_kickoff_ts: number | null;
 }
 
+// Raw format from TheSports API (MQTT-like structure)
+interface RawDetailLiveMatch {
+  id: string;
+  score?: any[]; // [match_id, status_id, home_scores, away_scores, timestamp, ...]
+  stats?: any[];
+  incidents?: any[];
+  tlive?: any[];
+}
+
 interface DetailLiveResponse {
-  results: DetailLiveMatch[];
+  results: RawDetailLiveMatch[];
+}
+
+/**
+ * Parse raw TheSports detail_live response to our expected format
+ * Score array format: [match_id, status_id, home_score_array, away_score_array, timestamp, ...]
+ * Score arrays: [regular, extra_time, penalty, ..., total] - we use position 4 for total
+ */
+function parseDetailLiveMatch(raw: RawDetailLiveMatch): DetailLiveMatch | null {
+  if (!raw.score || !Array.isArray(raw.score) || raw.score.length < 5) {
+    logger.warn(`[AIPredictionsLiveData] Invalid score format for match ${raw.id}`);
+    return null;
+  }
+
+  const statusId = raw.score[1];
+  const homeScoreArray = raw.score[2];
+  const awayScoreArray = raw.score[3];
+  const timestamp = raw.score[4];
+
+  // Extract total goals from position 4 in score arrays
+  const homeScore = Array.isArray(homeScoreArray) && homeScoreArray.length > 4 ? homeScoreArray[4] : 0;
+  const awayScore = Array.isArray(awayScoreArray) && awayScoreArray.length > 4 ? awayScoreArray[4] : 0;
+
+  return {
+    id: raw.id,
+    status_id: statusId,
+    minute: null, // Will be calculated using kickoff timestamps
+    home_score_display: homeScore,
+    away_score_display: awayScore,
+    first_half_kickoff_ts: null, // Not available in this endpoint
+    second_half_kickoff_ts: null, // Not available in this endpoint
+  };
 }
 
 // In-memory cache with 2-second TTL (as recommended by TheSports)
@@ -89,8 +129,9 @@ export async function getMatchDetailLive(matchId: string): Promise<DetailLiveMat
       API_TIMEOUT_MS
     );
 
-    // Extract match from results
-    const match = response.results?.[0] || null;
+    // Extract and parse match from results
+    const rawMatch = response.results?.[0];
+    const match = rawMatch ? parseDetailLiveMatch(rawMatch) : null;
 
     // Cache result (even if null)
     cache.set(matchId, {
@@ -161,11 +202,16 @@ export async function getMatchesDetailLive(matchIds: string[]): Promise<Map<stri
       if (response.results && Array.isArray(response.results)) {
         logger.debug(`[AIPredictionsLiveData] Received ${response.results.length} live matches from API`);
 
-        // Build a lookup map from all live matches
+        // Build a lookup map from all live matches (parse raw format)
         const liveMatchesMap = new Map<string, DetailLiveMatch>();
-        for (const match of response.results) {
-          liveMatchesMap.set(match.id, match);
+        for (const rawMatch of response.results) {
+          const parsed = parseDetailLiveMatch(rawMatch);
+          if (parsed) {
+            liveMatchesMap.set(parsed.id, parsed);
+          }
         }
+
+        logger.debug(`[AIPredictionsLiveData] Successfully parsed ${liveMatchesMap.size} matches`);
 
         // Find our requested matches in the response
         for (const matchId of uncached) {
