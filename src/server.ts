@@ -50,6 +50,9 @@ import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
 import { TeamLogoSyncWorker } from './jobs/teamLogoSync.job';
 // Entity Sync - Consolidated job for all other entity syncs
 import { startEntitySyncJobs, stopEntitySyncJobs } from './jobs/entitySync.job';
+// Match Workers - Critical for live match updates and minute calculation
+import { MatchSyncWorker } from './jobs/matchSync.job';
+import { MatchMinuteWorker } from './jobs/matchMinute.job';
 
 dotenv.config();
 
@@ -114,6 +117,9 @@ fastify.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' }); // Phase
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
 let teamLogoSyncWorker: TeamLogoSyncWorker | null = null;
 let websocketService: WebSocketService | null = null;
+// Match workers - Critical for live updates
+let matchSyncWorker: MatchSyncWorker | null = null;
+let matchMinuteWorker: MatchMinuteWorker | null = null;
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = '0.0.0.0';
@@ -155,6 +161,16 @@ const start = async () => {
     // Unified Entity Sync Jobs (Category, Country, Competition, Team, Player, etc.)
     startEntitySyncJobs();
     logger.info('✅ Entity Sync Jobs started (10 entities with scheduled cron)');
+
+    // CRITICAL: Match Sync Worker - Handles live match updates from REST API
+    matchSyncWorker = new MatchSyncWorker();
+    matchSyncWorker.start();
+    logger.info('✅ MatchSync Worker started (interval: 1min incremental + 3s live reconcile)');
+
+    // CRITICAL: Match Minute Worker - Calculates minutes from kickoff timestamps
+    matchMinuteWorker = new MatchMinuteWorker();
+    matchMinuteWorker.start();
+    logger.info('✅ MatchMinute Worker started (interval: 30s minute calculation)');
 
     logger.info('========================================');
     logger.info('🎉 All Background Workers Started!');
@@ -310,6 +326,8 @@ const shutdown = async () => {
     logger.info('[Shutdown] Stopping workers...');
     if (teamDataSyncWorker) teamDataSyncWorker.stop();
     if (teamLogoSyncWorker) teamLogoSyncWorker.stop();
+    if (matchSyncWorker) matchSyncWorker.stop();
+    if (matchMinuteWorker) matchMinuteWorker.stop();
     stopEntitySyncJobs(); // Stop all entity sync cron jobs
 
     // CRITICAL: Wait for in-flight operations to complete
