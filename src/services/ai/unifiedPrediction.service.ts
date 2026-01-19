@@ -347,20 +347,18 @@ class UnifiedPredictionService {
 
             await pool.query(`
         UPDATE ai_predictions
-        SET 
+        SET
           match_id = $1,
-          match_uuid = $2,
-          confidence = $3,
-          home_team_id = $4,
-          away_team_id = $5,
-          match_time = $6,
-          match_status = $7,
-          home_team_logo = $8,
-          away_team_logo = $9
-        WHERE id = $10
+          confidence = $2,
+          home_team_id = $3,
+          away_team_id = $4,
+          match_time = $5,
+          match_status = $6,
+          home_team_logo = $7,
+          away_team_logo = $8
+        WHERE id = $9
       `, [
                 matchId,
-                matchUuid,
                 confidence,
                 homeTeamId,
                 awayTeamId,
