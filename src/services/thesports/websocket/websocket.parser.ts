@@ -650,9 +650,11 @@ export class WebSocketParser {
 
     const messageTimestamp = Number(tuple[4] ?? 0);
 
-    // IMPORTANT: Index 4 is the MQTT message timestamp, NOT the real kickoff time.
-    // Real kickoff time (1st half) must be sourced from HTTP detail_live or stored separately when confirmed.
-    const liveKickoffTime: number | null = null;
+    // CRITICAL FIX (2026-01-19): Per TheSports API documentation, score[4] IS the kickoff timestamp.
+    // Formula: First half minute = (current_timestamp - first_half_kickoff_timestamp) / 60 + 1
+    // Where first_half_kickoff_timestamp = score[4]
+    // Previous comment was incorrect - score[4] IS the kickoff timestamp for the current half.
+    const liveKickoffTime: number | null = messageTimestamp > 0 ? messageTimestamp : null;
 
     if (!matchId || matchId.trim() === '') {
       throw new Error('Missing or invalid match_id in score tuple');

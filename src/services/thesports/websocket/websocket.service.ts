@@ -179,9 +179,12 @@ export class WebSocketService {
               await this.updateMatchStatusInDatabase(parsedScore.matchId, parsedScore.statusId, providerUpdateTime);
 
               // CRITICAL: Track first half kickoff when status changes to 2 (1H)
+              // CRITICAL FIX (2026-01-19): Use API kickoff timestamp (score[4]) instead of server Date.now()
               if (nextState === 2 && (previousState === null || previousState === 1)) {
-                const firstHalfKickoffTs = Math.floor(Date.now() / 1000);
-                logger.info(`[WebSocket] Match ${parsedScore.matchId}: First half started! Recording kickoff timestamp: ${firstHalfKickoffTs}`);
+                const apiKickoffTs = parsedScore.liveKickoffTime ?? parsedScore.messageTimestamp ?? null;
+                const firstHalfKickoffTs = apiKickoffTs ?? Math.floor(Date.now() / 1000);
+                const source = apiKickoffTs ? 'api' : 'fallback';
+                logger.info(`[WebSocket] Match ${parsedScore.matchId}: First half started! Recording kickoff timestamp: ${firstHalfKickoffTs} (source=${source})`);
 
                 await pool.query(
                   'UPDATE ts_matches SET first_half_kickoff_ts = $1 WHERE external_id = $2 AND first_half_kickoff_ts IS NULL',
@@ -192,9 +195,12 @@ export class WebSocketService {
               }
 
               // CRITICAL: Track second half kickoff when status changes from 3 (HT) to 4 (2H)
+              // CRITICAL FIX (2026-01-19): Use API kickoff timestamp (score[4]) instead of server Date.now()
               if (previousState === 3 && nextState === 4) {
-                const secondHalfKickoffTs = Math.floor(Date.now() / 1000);
-                logger.info(`[WebSocket] Match ${parsedScore.matchId}: Second half started! Recording kickoff timestamp: ${secondHalfKickoffTs}`);
+                const apiKickoffTs = parsedScore.liveKickoffTime ?? parsedScore.messageTimestamp ?? null;
+                const secondHalfKickoffTs = apiKickoffTs ?? Math.floor(Date.now() / 1000);
+                const source = apiKickoffTs ? 'api' : 'fallback';
+                logger.info(`[WebSocket] Match ${parsedScore.matchId}: Second half started! Recording kickoff timestamp: ${secondHalfKickoffTs} (source=${source})`);
 
                 await pool.query(
                   'UPDATE ts_matches SET second_half_kickoff_ts = $1 WHERE external_id = $2 AND second_half_kickoff_ts IS NULL',
@@ -939,13 +945,19 @@ export class WebSocketService {
 
   /**
    * Best-effort extraction of live kickoff time from parsed payload.
-   * IMPORTANT: We do NOT derive this from message timestamps.
-   * We only persist when the provider explicitly sends a kickoff/start epoch.
+   *
+   * CRITICAL FIX (2026-01-19): Per TheSports API documentation:
+   * - score[4] = first_half_kickoff_timestamp (for status 2)
+   * - score[4] = second_half_kickoff_timestamp (for status 4)
+   * Formula: minute = (current_timestamp - kickoff_timestamp) / 60 + 1
+   *
+   * The parser now sets liveKickoffTime = messageTimestamp (score[4]).
    */
   private extractLiveKickoffTimeSeconds(parsedScore: any): number | null {
     const candidates = [
       parsedScore?.liveKickoffTime,
       parsedScore?.live_kickoff_time,
+      parsedScore?.messageTimestamp, // CRITICAL: score[4] from TheSports API
       parsedScore?.kickoffTime,
       parsedScore?.kickoff_time,
       (parsedScore as any)?.match?.live_kickoff_time,
