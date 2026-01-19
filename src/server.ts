@@ -35,6 +35,7 @@ import { partnersRoutes } from './routes/partners.routes';
 import { commentsRoutes } from './routes/comments.routes';
 import { dailyRewardsRoutes } from './routes/dailyRewards.routes';
 import forumRoutes from './routes/forum.routes';
+import { footyStatsRoutes } from './routes/footystats.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -116,6 +117,7 @@ fastify.register(partnersRoutes, { prefix: '/api/partners' }); // Phase 3: Partn
 fastify.register(commentsRoutes, { prefix: '/api/comments' }); // Phase 3: Match Comments system routes
 fastify.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' }); // Phase 3: Daily Rewards system routes
 fastify.register(forumRoutes, { prefix: '/api/forum' }); // Match Detail Forum (comments, chat, polls)
+fastify.register(footyStatsRoutes, { prefix: '/api' }); // FootyStats integration (AI Lab data source)
 
 // Initialize background workers (consolidated - most entity syncs now in entitySync.job.ts)
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
