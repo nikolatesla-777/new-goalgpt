@@ -147,11 +147,15 @@ class UnifiedPredictionService {
             : '';
 
         // Main query - JOIN with ts_matches to get live minute and status
+        // CRITICAL FIX: Add JOINs for teams, competitions, and countries to get logos/flags
+        // This ensures AI Predictions page has same data richness as Livescore Diary
         const query = `
       SELECT
         p.id, p.external_id, p.canonical_bot_name,
         p.league_name, p.home_team_name, p.away_team_name,
-        p.home_team_logo, p.away_team_logo,
+        -- Prefer live logos from ts_teams, fallback to stored logos (if any)
+        COALESCE(th.logo_url, p.home_team_logo) as home_team_logo,
+        COALESCE(ta.logo_url, p.away_team_logo) as away_team_logo,
         p.score_at_prediction, p.minute_at_prediction,
         p.prediction, p.prediction_threshold,
         p.match_id, p.match_time, p.match_status,
@@ -162,9 +166,18 @@ class UnifiedPredictionService {
         COALESCE(m.away_score_display, NULLIF(SPLIT_PART(p.score_at_prediction, '-', 2), '')::INTEGER, 0) as away_score_display,
         -- Live minute and status from ts_matches
         m.minute as live_match_minute,
-        m.status_id as live_match_status
+        m.status_id as live_match_status,
+        -- Enhanced Data (Country & Competition)
+        c.name as competition_name,
+        c.logo_url as competition_logo,
+        co.name as country_name,
+        co.logo_url as country_logo
       FROM ai_predictions p
       LEFT JOIN ts_matches m ON p.match_id = m.external_id
+      LEFT JOIN ts_teams th ON m.home_team_id = th.external_id
+      LEFT JOIN ts_teams ta ON m.away_team_id = ta.external_id
+      LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
+      LEFT JOIN ts_countries co ON c.country_id = co.external_id
       ${whereClause}
       ORDER BY p.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
