@@ -69,14 +69,14 @@ export function LiveTab() {
           height: '64px',
           margin: '0 auto 16px',
           borderRadius: '50%',
-          backgroundColor: '#1e293b',
+          backgroundColor: '#e2e8f0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          <Circle size={32} weight="fill" color="#475569" />
+          <Circle size={32} weight="fill" color="#64748b" />
         </div>
-        <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px' }}>
+        <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px', color: '#334155' }}>
           Su anda canli mac yok
         </p>
         <p style={{ fontSize: '0.875rem' }}>

@@ -72,12 +72,12 @@ export function AITab() {
         <div style={{
           width: '48px',
           height: '48px',
-          border: '3px solid #334155',
+          border: '3px solid #cbd5e1',
           borderTop: '3px solid #f59e0b',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
         }} />
-        <span style={{ color: '#94a3b8' }}>AI tahminli maclar yukleniyor...</span>
+        <span style={{ color: '#64748b' }}>AI tahminli maclar yukleniyor...</span>
         <style>{`
           @keyframes spin {
             from { transform: rotate(0deg); }
@@ -116,12 +116,13 @@ export function AITab() {
         {/* Total */}
         <div style={{
           padding: '16px',
-          backgroundColor: '#1e293b',
+          backgroundColor: '#f1f5f9',
           borderRadius: '12px',
           textAlign: 'center',
+          border: '1px solid #e2e8f0',
         }}>
-          <Robot size={24} color="#94a3b8" style={{ marginBottom: '8px' }} />
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#f8fafc' }}>
+          <Robot size={24} color="#64748b" style={{ marginBottom: '8px' }} />
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1e293b' }}>
             {stats.total}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Toplam</div>
@@ -130,60 +131,61 @@ export function AITab() {
         {/* Won */}
         <div style={{
           padding: '16px',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
+          backgroundColor: '#f0fdf4',
           borderRadius: '12px',
           textAlign: 'center',
-          border: '1px solid rgba(34, 197, 94, 0.2)',
+          border: '1px solid #bbf7d0',
         }}>
-          <Trophy size={24} color="#22c55e" style={{ marginBottom: '8px' }} />
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#22c55e' }}>
+          <Trophy size={24} color="#16a34a" style={{ marginBottom: '8px' }} />
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#16a34a' }}>
             {stats.won}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#22c55e' }}>Kazanan</div>
+          <div style={{ fontSize: '0.75rem', color: '#16a34a' }}>Kazanan</div>
         </div>
 
         {/* Lost */}
         <div style={{
           padding: '16px',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          backgroundColor: '#fef2f2',
           borderRadius: '12px',
           textAlign: 'center',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
+          border: '1px solid #fecaca',
         }}>
-          <XCircle size={24} color="#ef4444" style={{ marginBottom: '8px' }} />
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#ef4444' }}>
+          <XCircle size={24} color="#dc2626" style={{ marginBottom: '8px' }} />
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#dc2626' }}>
             {stats.lost}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#ef4444' }}>Kaybeden</div>
+          <div style={{ fontSize: '0.75rem', color: '#dc2626' }}>Kaybeden</div>
         </div>
 
         {/* Pending */}
         <div style={{
           padding: '16px',
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
+          backgroundColor: '#fffbeb',
           borderRadius: '12px',
           textAlign: 'center',
-          border: '1px solid rgba(245, 158, 11, 0.2)',
+          border: '1px solid #fde68a',
         }}>
-          <Clock size={24} color="#f59e0b" style={{ marginBottom: '8px' }} />
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#f59e0b' }}>
+          <Clock size={24} color="#d97706" style={{ marginBottom: '8px' }} />
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#d97706' }}>
             {stats.pending}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#f59e0b' }}>Bekleyen</div>
+          <div style={{ fontSize: '0.75rem', color: '#d97706' }}>Bekleyen</div>
         </div>
 
         {/* Win Rate */}
         <div style={{
           padding: '16px',
-          backgroundColor: '#1e293b',
+          backgroundColor: '#fefce8',
           borderRadius: '12px',
           textAlign: 'center',
+          border: '1px solid #fef08a',
         }}>
-          <Star size={24} color="#fbbf24" style={{ marginBottom: '8px' }} />
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#fbbf24' }}>
+          <Star size={24} color="#ca8a04" style={{ marginBottom: '8px' }} />
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#ca8a04' }}>
             %{stats.winRate}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Basari</div>
+          <div style={{ fontSize: '0.75rem', color: '#a16207' }}>Basari</div>
         </div>
       </div>
 
@@ -191,16 +193,16 @@ export function AITab() {
       <div style={{
         marginBottom: '16px',
         padding: '12px 16px',
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        backgroundColor: '#fffbeb',
         borderRadius: '8px',
-        border: '1px solid rgba(245, 158, 11, 0.2)',
+        border: '1px solid #fde68a',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Robot size={18} color="#f59e0b" />
-          <span style={{ color: '#fbbf24', fontWeight: '600' }}>
+          <Robot size={18} color="#d97706" />
+          <span style={{ color: '#92400e', fontWeight: '600' }}>
             {aiMatches.length} macta AI tahmini var
           </span>
         </div>
@@ -232,14 +234,14 @@ export function AITab() {
             height: '64px',
             margin: '0 auto 16px',
             borderRadius: '50%',
-            backgroundColor: '#1e293b',
+            backgroundColor: '#e2e8f0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-            <Robot size={32} color="#475569" />
+            <Robot size={32} color="#64748b" />
           </div>
-          <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px' }}>
+          <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px', color: '#334155' }}>
             Bugun AI tahmini yok
           </p>
           <p style={{ fontSize: '0.875rem' }}>

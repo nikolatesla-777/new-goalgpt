@@ -59,7 +59,7 @@ export function DiaryTab() {
 
   return (
     <div>
-      {/* Stats Summary */}
+      {/* Stats Summary - Light theme */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
@@ -68,11 +68,13 @@ export function DiaryTab() {
       }}>
         <div style={{
           padding: '16px',
-          backgroundColor: '#1e293b',
+          backgroundColor: '#fff',
           borderRadius: '12px',
           textAlign: 'center',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
         }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#f8fafc' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1e293b' }}>
             {matches.length}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Toplam</div>
@@ -80,41 +82,41 @@ export function DiaryTab() {
 
         <div style={{
           padding: '16px',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
+          backgroundColor: '#f0fdf4',
           borderRadius: '12px',
           textAlign: 'center',
-          border: '1px solid rgba(34, 197, 94, 0.2)',
+          border: '1px solid #bbf7d0',
         }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#22c55e' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#16a34a' }}>
             {liveMatches.length}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#22c55e' }}>Canli</div>
+          <div style={{ fontSize: '0.75rem', color: '#16a34a' }}>Canli</div>
         </div>
 
         <div style={{
           padding: '16px',
-          backgroundColor: 'rgba(100, 116, 139, 0.1)',
+          backgroundColor: '#f1f5f9',
           borderRadius: '12px',
           textAlign: 'center',
-          border: '1px solid rgba(100, 116, 139, 0.2)',
+          border: '1px solid #cbd5e1',
         }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#94a3b8' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#475569' }}>
             {finishedMatches.length}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Biten</div>
+          <div style={{ fontSize: '0.75rem', color: '#475569' }}>Biten</div>
         </div>
 
         <div style={{
           padding: '16px',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          backgroundColor: '#eff6ff',
           borderRadius: '12px',
           textAlign: 'center',
-          border: '1px solid rgba(59, 130, 246, 0.2)',
+          border: '1px solid #bfdbfe',
         }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#3b82f6' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2563eb' }}>
             {upcomingMatches.length}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#3b82f6' }}>Baslamamis</div>
+          <div style={{ fontSize: '0.75rem', color: '#2563eb' }}>Baslamamis</div>
         </div>
       </div>
 
@@ -129,14 +131,14 @@ export function DiaryTab() {
             height: '64px',
             margin: '0 auto 16px',
             borderRadius: '50%',
-            backgroundColor: '#1e293b',
+            backgroundColor: '#e2e8f0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-            <CalendarBlank size={32} color="#475569" />
+            <CalendarBlank size={32} color="#64748b" />
           </div>
-          <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px' }}>
+          <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px', color: '#334155' }}>
             Bu tarihte mac yok
           </p>
           <p style={{ fontSize: '0.875rem' }}>

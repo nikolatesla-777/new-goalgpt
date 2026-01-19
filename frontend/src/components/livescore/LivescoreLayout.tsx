@@ -358,8 +358,13 @@ function LivescoreLayoutInner() {
         </nav>
       </div>
 
-      {/* Content Area */}
-      <div style={{ padding: '16px' }}>
+      {/* Content Area - Light theme for MatchCard compatibility */}
+      <div style={{
+        padding: '16px',
+        backgroundColor: '#f8fafc',
+        minHeight: 'calc(100vh - 200px)',
+        borderRadius: '12px 12px 0 0',
+      }}>
         <Outlet />
       </div>
 

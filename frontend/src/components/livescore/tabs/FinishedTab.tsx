@@ -69,14 +69,14 @@ export function FinishedTab() {
           height: '64px',
           margin: '0 auto 16px',
           borderRadius: '50%',
-          backgroundColor: '#1e293b',
+          backgroundColor: '#e2e8f0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          <CheckCircle size={32} weight="fill" color="#475569" />
+          <CheckCircle size={32} weight="fill" color="#64748b" />
         </div>
-        <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px' }}>
+        <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px', color: '#334155' }}>
           Henuz biten mac yok
         </p>
         <p style={{ fontSize: '0.875rem' }}>
@@ -95,12 +95,12 @@ export function FinishedTab() {
         gap: '8px',
         marginBottom: '16px',
         padding: '12px 16px',
-        backgroundColor: 'rgba(100, 116, 139, 0.1)',
+        backgroundColor: '#f1f5f9',
         borderRadius: '8px',
-        border: '1px solid rgba(100, 116, 139, 0.2)',
+        border: '1px solid #cbd5e1',
       }}>
-        <CheckCircle size={18} weight="fill" color="#64748b" />
-        <span style={{ color: '#94a3b8', fontWeight: '600' }}>
+        <CheckCircle size={18} weight="fill" color="#475569" />
+        <span style={{ color: '#475569', fontWeight: '600' }}>
           {finishedMatches.length} mac tamamlandi
         </span>
       </div>

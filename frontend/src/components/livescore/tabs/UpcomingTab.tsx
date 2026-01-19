@@ -25,12 +25,12 @@ export function UpcomingTab() {
         <div style={{
           width: '48px',
           height: '48px',
-          border: '3px solid #334155',
+          border: '3px solid #cbd5e1',
           borderTop: '3px solid #3b82f6',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
         }} />
-        <span style={{ color: '#94a3b8' }}>Baslamamis maclar yukleniyor...</span>
+        <span style={{ color: '#64748b' }}>Baslamamis maclar yukleniyor...</span>
         <style>{`
           @keyframes spin {
             from { transform: rotate(0deg); }
@@ -69,14 +69,14 @@ export function UpcomingTab() {
           height: '64px',
           margin: '0 auto 16px',
           borderRadius: '50%',
-          backgroundColor: '#1e293b',
+          backgroundColor: '#e2e8f0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          <Clock size={32} weight="fill" color="#475569" />
+          <Clock size={32} weight="fill" color="#64748b" />
         </div>
-        <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px' }}>
+        <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px', color: '#334155' }}>
           Baslamamis mac yok
         </p>
         <p style={{ fontSize: '0.875rem' }}>
@@ -95,12 +95,12 @@ export function UpcomingTab() {
         gap: '8px',
         marginBottom: '16px',
         padding: '12px 16px',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        backgroundColor: '#eff6ff',
         borderRadius: '8px',
-        border: '1px solid rgba(59, 130, 246, 0.2)',
+        border: '1px solid #bfdbfe',
       }}>
-        <Clock size={18} weight="fill" color="#3b82f6" />
-        <span style={{ color: '#60a5fa', fontWeight: '600' }}>
+        <Clock size={18} weight="fill" color="#2563eb" />
+        <span style={{ color: '#1d4ed8', fontWeight: '600' }}>
           {upcomingMatches.length} mac bekliyor
         </span>
       </div>
