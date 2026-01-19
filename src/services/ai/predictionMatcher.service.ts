@@ -26,12 +26,13 @@ export class PredictionMatcherService {
   /**
    * Match all unmatched predictions (match_id IS NULL)
    * Uses team names and creation date to find matches
+   * Processes in batches to avoid connection pool exhaustion
    */
   async matchUnmatchedPredictions(): Promise<PredictionMatchResult[]> {
     try {
       logger.info('[PredictionMatcher] Starting to match unmatched predictions...');
 
-      // Get all predictions with NULL match_id
+      // Get all predictions with NULL match_id (limit to recent ones)
       const unmatchedQuery = `
         SELECT
           id,
@@ -43,8 +44,9 @@ export class PredictionMatcherService {
           minute_at_prediction
         FROM ai_predictions
         WHERE match_id IS NULL
+          AND created_at > NOW() - INTERVAL '7 days'
         ORDER BY created_at DESC
-        LIMIT 100
+        LIMIT 50
       `;
 
       const result = await pool.query(unmatchedQuery);
@@ -56,32 +58,46 @@ export class PredictionMatcherService {
         return [];
       }
 
+      // Process in batches of 5 to avoid connection pool exhaustion
+      const BATCH_SIZE = 5;
       const matchResults: PredictionMatchResult[] = [];
 
-      for (const prediction of unmatchedPredictions) {
-        try {
-          const matchResult = await this.matchSinglePrediction(
-            prediction.id,
-            prediction.external_id,
-            prediction.home_team_name,
-            prediction.away_team_name,
-            prediction.league_name,
-            prediction.created_at,
-            prediction.minute_at_prediction
-          );
+      for (let i = 0; i < unmatchedPredictions.length; i += BATCH_SIZE) {
+        const batch = unmatchedPredictions.slice(i, i + BATCH_SIZE);
 
-          matchResults.push(matchResult);
+        logger.info(`[PredictionMatcher] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(unmatchedPredictions.length / BATCH_SIZE)}`);
 
-        } catch (error: any) {
-          logger.error(`[PredictionMatcher] Error matching prediction ${prediction.id}:`, error);
-          matchResults.push({
-            predictionId: prediction.id,
-            predictionExternalId: prediction.external_id,
-            homeTeam: prediction.home_team_name,
-            awayTeam: prediction.away_team_name,
-            matchFound: false,
-            error: error.message
-          });
+        // Process batch sequentially (not parallel) to control connection usage
+        for (const prediction of batch) {
+          try {
+            const matchResult = await this.matchSinglePrediction(
+              prediction.id,
+              prediction.external_id,
+              prediction.home_team_name,
+              prediction.away_team_name,
+              prediction.league_name,
+              prediction.created_at,
+              prediction.minute_at_prediction
+            );
+
+            matchResults.push(matchResult);
+
+          } catch (error: any) {
+            logger.error(`[PredictionMatcher] Error matching prediction ${prediction.id}:`, error);
+            matchResults.push({
+              predictionId: prediction.id,
+              predictionExternalId: prediction.external_id,
+              homeTeam: prediction.home_team_name,
+              awayTeam: prediction.away_team_name,
+              matchFound: false,
+              error: error.message
+            });
+          }
+        }
+
+        // Small delay between batches to let connections close
+        if (i + BATCH_SIZE < unmatchedPredictions.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
