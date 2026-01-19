@@ -179,16 +179,6 @@ const jobs: JobDefinition[] = [
     description: 'Refresh today\'s diary every 10 minutes per TheSports API recommendation',
   },
   {
-    name: 'Diary Refresh (10min)',
-    schedule: '*/10 * * * *', // Every 10 minutes
-    handler: async () => {
-      const { runDailyDiarySync } = await import('./dailyDiarySync.job');
-      await runDailyDiarySync();
-    },
-    enabled: true,
-    description: 'Refresh match diary every 10 minutes',
-  },
-  {
     name: 'H2H Pre-Sync',
     schedule: '*/30 * * * *', // Every 30 minutes
     handler: async () => {

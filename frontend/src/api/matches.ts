@@ -427,17 +427,18 @@ export async function getMatchById(matchId: string): Promise<Match> {
 /**
  * Get match analysis (H2H - Head to Head) - Legacy endpoint
  */
-export async function getMatchAnalysis(matchId: string): Promise<any> {
+export async function getMatchAnalysis(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/analysis`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -446,17 +447,18 @@ export async function getMatchAnalysis(matchId: string): Promise<any> {
  * Get match H2H data (from database with API fallback)
  * Returns structured H2H data including summary, previous matches, and recent form
  */
-export async function getMatchH2H(matchId: string): Promise<any> {
+export async function getMatchH2H(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/h2h`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -464,17 +466,18 @@ export async function getMatchH2H(matchId: string): Promise<any> {
 /**
  * Get match trend (minute-by-minute data)
  */
-export async function getMatchTrend(matchId: string): Promise<any> {
+export async function getMatchTrend(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/trend`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -482,17 +485,18 @@ export async function getMatchTrend(matchId: string): Promise<any> {
 /**
  * Get match half-time stats
  */
-export async function getMatchHalfStats(matchId: string): Promise<any> {
+export async function getMatchHalfStats(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/half-stats`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -500,17 +504,18 @@ export async function getMatchHalfStats(matchId: string): Promise<any> {
 /**
  * Get match lineup
  */
-export async function getMatchLineup(matchId: string): Promise<any> {
+export async function getMatchLineup(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/lineup`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -520,17 +525,18 @@ export async function getMatchLineup(matchId: string): Promise<any> {
  * GET /api/matches/:match_id/live-stats
  * Returns comprehensive match statistics (basic + detailed)
  */
-export async function getMatchLiveStats(matchId: string): Promise<any> {
+export async function getMatchLiveStats(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/live-stats`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -539,17 +545,18 @@ export async function getMatchLiveStats(matchId: string): Promise<any> {
  * Get match incidents (goals, cards, substitutions)
  * GET /api/matches/:match_id/incidents
  */
-export async function getMatchIncidents(matchId: string): Promise<any> {
+export async function getMatchIncidents(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/incidents`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -557,14 +564,14 @@ export async function getMatchIncidents(matchId: string): Promise<any> {
 /**
  * Get match team stats (from live stats feed for real-time data)
  */
-export async function getMatchTeamStats(matchId: string): Promise<any> {
+export async function getMatchTeamStats(matchId: string, signal?: AbortSignal): Promise<any> {
   // Try live stats first (for currently live matches)
   const liveUrl = `${API_BASE_URL}/matches/${matchId}/live-stats`;
   const teamStatsUrl = `${API_BASE_URL}/matches/${matchId}/team-stats`;
 
   try {
     // First try live stats (more comprehensive for live matches)
-    const liveResponse = await fetch(liveUrl);
+    const liveResponse = await fetch(liveUrl, { signal });
     if (liveResponse.ok) {
       const liveData: ApiResponse<any> = await liveResponse.json();
       if (liveData.data?.stats?.length > 0) {
@@ -573,13 +580,14 @@ export async function getMatchTeamStats(matchId: string): Promise<any> {
     }
 
     // Fallback to team-stats endpoint
-    const response = await fetch(teamStatsUrl);
+    const response = await fetch(teamStatsUrl, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -588,17 +596,18 @@ export async function getMatchTeamStats(matchId: string): Promise<any> {
  * Get match player stats (for ratings and detailed stats)
  * GET /api/matches/:match_id/player-stats
  */
-export async function getMatchPlayerStats(matchId: string): Promise<any> {
+export async function getMatchPlayerStats(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/player-stats`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -608,11 +617,11 @@ export async function getMatchPlayerStats(matchId: string): Promise<any> {
  * Get match detail live (score, events, stats)
  * API returns all live matches, so we filter for the specific matchId
  */
-export async function getMatchDetailLive(matchId: string): Promise<any> {
+export async function getMatchDetailLive(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/detail-live`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -636,7 +645,8 @@ export async function getMatchDetailLive(matchId: string): Promise<any> {
     // Match not found in live results (may have ended or not started)
     console.warn(`[getMatchDetailLive] ❌ Match ${matchId} not found in ${results.length} results`);
     return { incidents: [], stats: [], score: null, tlive: [] };
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return { incidents: [], stats: [], score: null, tlive: [] };
     console.error('[getMatchDetailLive] Error:', error);
     throw error;
   }
@@ -645,17 +655,18 @@ export async function getMatchDetailLive(matchId: string): Promise<any> {
 /**
  * Get season standings
  */
-export async function getSeasonStandings(seasonId: string): Promise<any> {
+export async function getSeasonStandings(seasonId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/seasons/${seasonId}/standings`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -666,11 +677,11 @@ export async function getSeasonStandings(seasonId: string): Promise<any> {
  * Get team by ID
  * Returns team info, competition, and recent form
  */
-export async function getTeamById(teamId: string): Promise<any> {
+export async function getTeamById(teamId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/teams/${teamId}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error('Team not found');
@@ -679,7 +690,8 @@ export async function getTeamById(teamId: string): Promise<any> {
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -687,20 +699,21 @@ export async function getTeamById(teamId: string): Promise<any> {
 /**
  * Get team fixtures (past and upcoming matches)
  */
-export async function getTeamFixtures(teamId: string, seasonId?: string): Promise<any> {
+export async function getTeamFixtures(teamId: string, seasonId?: string, signal?: AbortSignal): Promise<any> {
   let url = `${API_BASE_URL}/teams/${teamId}/fixtures`;
   if (seasonId) {
     url += `?season_id=${seasonId}`;
   }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -708,20 +721,21 @@ export async function getTeamFixtures(teamId: string, seasonId?: string): Promis
 /**
  * Get team standings position
  */
-export async function getTeamStandings(teamId: string, seasonId?: string): Promise<any> {
+export async function getTeamStandings(teamId: string, seasonId?: string, signal?: AbortSignal): Promise<any> {
   let url = `${API_BASE_URL}/teams/${teamId}/standings`;
   if (seasonId) {
     url += `?season_id=${seasonId}`;
   }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -730,11 +744,11 @@ export async function getTeamStandings(teamId: string, seasonId?: string): Promi
 /**
  * Search teams by name
  */
-export async function searchTeams(query: string): Promise<any> {
+export async function searchTeams(query: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/teams/search?q=${encodeURIComponent(query)}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -742,7 +756,8 @@ export async function searchTeams(query: string): Promise<any> {
     return data.data; // Backend returns array directly in data property?
     // Checking controller: reply.send({ success: true, data: result.rows... })
     // Yes, data.data will be the array of teams
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return [];
     throw error;
   }
 }
@@ -750,11 +765,11 @@ export async function searchTeams(query: string): Promise<any> {
 /**
  * Get players by team ID (Squad)
  */
-export async function getPlayersByTeam(teamId: string): Promise<any> {
+export async function getPlayersByTeam(teamId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/teams/${teamId}/players`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -762,7 +777,8 @@ export async function getPlayersByTeam(teamId: string): Promise<any> {
     return data.data; // Backend returns { players: [...] } or just array?
     // Controller player.controller.ts: return reply.send({ players: result.rows });
     // So data.data will be { players: [...] }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -770,11 +786,11 @@ export async function getPlayersByTeam(teamId: string): Promise<any> {
 /**
  * Get player details by ID
  */
-export async function getPlayerById(playerId: string): Promise<any> {
+export async function getPlayerById(playerId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/players/${playerId}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -787,7 +803,8 @@ export async function getPlayerById(playerId: string): Promise<any> {
     // It does NOT wrap in success/data standard envelope in that specific controller method.
     // But fastify might not auto-wrap.
     // Let's assume raw return for now based on code I saw.
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -796,11 +813,11 @@ export async function getPlayerById(playerId: string): Promise<any> {
 /**
  * Get league by ID
  */
-export async function getLeagueById(leagueId: string): Promise<any> {
+export async function getLeagueById(leagueId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/leagues/${leagueId}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error('League not found');
@@ -809,7 +826,8 @@ export async function getLeagueById(leagueId: string): Promise<any> {
     }
     const data: ApiResponse<any> = await response.json();
     return data; // Backend returns { league: ..., currentSeason: ... }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -817,7 +835,7 @@ export async function getLeagueById(leagueId: string): Promise<any> {
 /**
  * Get league fixtures
  */
-export async function getLeagueFixtures(leagueId: string, params?: { limit?: number; status?: 'upcoming' | 'finished' | 'live' }): Promise<any> {
+export async function getLeagueFixtures(leagueId: string, params?: { limit?: number; status?: 'upcoming' | 'finished' | 'live' }, signal?: AbortSignal): Promise<any> {
   let url = `${API_BASE_URL}/leagues/${leagueId}/fixtures`;
   const queryParams = new URLSearchParams();
 
@@ -828,13 +846,14 @@ export async function getLeagueFixtures(leagueId: string, params?: { limit?: num
   if (queryString) url += `?${queryString}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data; // returns { fixtures: [...] }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -842,17 +861,18 @@ export async function getLeagueFixtures(leagueId: string, params?: { limit?: num
 /**
  * Get league standings
  */
-export async function getLeagueStandings(leagueId: string): Promise<any> {
+export async function getLeagueStandings(leagueId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/leagues/${leagueId}/standings`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data; // returns { standings: [...], season_id: ... }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -860,17 +880,18 @@ export async function getLeagueStandings(leagueId: string): Promise<any> {
 /**
  * Get league teams
  */
-export async function getLeagueTeams(leagueId: string): Promise<any> {
+export async function getLeagueTeams(leagueId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/leagues/${leagueId}/teams`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data; // returns { teams: [...] }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }
@@ -879,17 +900,18 @@ export async function getLeagueTeams(leagueId: string): Promise<any> {
  * Get matched AI predictions
  * Returns predictions joined with match data
  */
-export async function getMatchedPredictions(limit = 100): Promise<any> {
+export async function getMatchedPredictions(limit = 100, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/predictions/matched?limit=${limit}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const data: ApiResponse<any> = await response.json();
     return data; // returns { predictions: [...] }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') return null;
     throw error;
   }
 }

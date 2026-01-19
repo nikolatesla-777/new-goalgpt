@@ -77,7 +77,38 @@ export class WebSocketService {
     // Cleanup old events every 5 minutes
     this.cleanupInterval = setInterval(() => {
       this.eventDetector.cleanupOldEvents();
+      this.cleanupStaleMatches(); // Clean up old match states to prevent memory leak
     }, 5 * 60 * 1000);
+  }
+
+  /**
+   * Clean up stale match states to prevent unbounded memory growth
+   * Removes matches that ended more than 24 hours ago
+   */
+  private cleanupStaleMatches(): void {
+    const now = Date.now();
+    const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+    let cleanedCount = 0;
+
+    for (const [matchId, state] of this.matchStates) {
+      // Only clean up matches that have ended (status 8) and are old enough
+      if (state.lastStatus8Time && (now - state.lastStatus8Time) > MAX_AGE_MS) {
+        this.matchStates.delete(matchId);
+
+        // Also clean up any associated keepalive timer
+        const timer = this.matchKeepaliveTimers.get(matchId);
+        if (timer) {
+          clearTimeout(timer);
+          this.matchKeepaliveTimers.delete(matchId);
+        }
+
+        cleanedCount++;
+      }
+    }
+
+    if (cleanedCount > 0) {
+      logger.info(`[WebSocket] Cleaned up ${cleanedCount} stale match states. Remaining: ${this.matchStates.size}`);
+    }
   }
 
   /**
