@@ -96,6 +96,27 @@ class CacheService {
   }
 
   /**
+   * Delete all keys matching a pattern (prefix)
+   * For in-memory cache, we check if key starts with pattern
+   */
+  async deletePattern(pattern: string): Promise<number> {
+    let deleted = 0;
+    const prefix = pattern.replace(/\*$/, ''); // Remove trailing * if present
+
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key);
+        deleted++;
+      }
+    }
+
+    if (deleted > 0) {
+      logger.debug(`[Cache] deletePattern: removed ${deleted} keys matching "${pattern}"`);
+    }
+    return deleted;
+  }
+
+  /**
    * Clear all cache
    */
   clear(): void {
