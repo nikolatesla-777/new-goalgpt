@@ -502,11 +502,13 @@ export class MatchWatchdogWorker {
               logger.info(`[Watchdog] 🏁 Processing finish for ${finish.matchId} (${finish.reason})...`);
 
               // Force status=8 (FINISHED) via orchestrator with actual scores
+              // CRITICAL FIX: Preserve existing minute instead of hardcoding 90
+              // Overtime matches can be at 105+, penalty matches at 120+
               const result = await this.updateMatchDirect(
                 finish.matchId,
                 [
                   { field: 'status_id', value: 8, source: 'computed', priority: 10, timestamp: nowTs },
-                  { field: 'minute', value: 90, source: 'computed', priority: 10, timestamp: nowTs },
+                  { field: 'minute', value: finish.minute ?? 90, source: 'computed', priority: 10, timestamp: nowTs },
                 ],
                 'proactive-finish'
               );
