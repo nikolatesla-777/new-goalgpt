@@ -176,17 +176,7 @@ const jobs: JobDefinition[] = [
       await runDailyDiarySync();
     },
     enabled: true,
-    description: 'Refresh today\'s diary every 10 minutes per TheSports API recommendation',
-  },
-  {
-    name: 'Diary Refresh (10min)',
-    schedule: '*/10 * * * *', // Every 10 minutes
-    handler: async () => {
-      const { runDailyDiarySync } = await import('./dailyDiarySync.job');
-      await runDailyDiarySync();
-    },
-    enabled: true,
-    description: 'Refresh match diary every 10 minutes',
+    description: 'Refresh today\'s diary every 10 minutes per TheSports API recommendation (fetches both today and tomorrow for timezone fix)',
   },
 ];
 
