@@ -294,6 +294,7 @@ export function MatchCard({ match }: MatchCardProps) {
             fontWeight: '500',
             fontSize: '0.875rem',
             flex: 1,
+            color: '#1f2937',
           }}>
             {(() => {
               const name = (match as any).home_team_name || match.home_team?.name;
@@ -473,6 +474,7 @@ export function MatchCard({ match }: MatchCardProps) {
             fontSize: '0.875rem',
             flex: 1,
             textAlign: 'right',
+            color: '#1f2937',
           }}>
             {(() => {
               const name = (match as any).away_team_name || match.away_team?.name;
