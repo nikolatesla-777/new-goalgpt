@@ -199,8 +199,13 @@ export function LivescoreProvider({ children, initialDate }: LivescoreProviderPr
       const matchesData = matchesResponse.results || [];
       const predictionsData = predictionsResponse.predictions || [];
 
-      // Filter predictions by selected date
-      const dayStart = new Date(dateForAPI).getTime() / 1000;
+      // Filter predictions by selected date (Turkey timezone UTC+3)
+      // CRITICAL FIX: Use Turkey timezone for date boundaries
+      // Turkey midnight = UTC midnight - 3 hours = previous day 21:00 UTC
+      const [year, month, day] = dateForAPI.split('-').map(Number);
+      // Create date at midnight Turkey time (which is 21:00 UTC previous day)
+      const turkeyMidnight = new Date(Date.UTC(year, month - 1, day, -3, 0, 0));
+      const dayStart = Math.floor(turkeyMidnight.getTime() / 1000);
       const dayEnd = dayStart + 24 * 60 * 60;
 
       const filteredPredictions = predictionsData.filter((p: MatchedPrediction) => {
@@ -209,9 +214,10 @@ export function LivescoreProvider({ children, initialDate }: LivescoreProviderPr
       });
 
       // Create prediction map for enrichment
+      // CRITICAL: Ensure consistent string keys for matching
       const predMap = new Map<string, MatchedPrediction>();
       filteredPredictions.forEach((p: MatchedPrediction) => {
-        const matchId = p.match_external_id || p.match_id;
+        const matchId = String(p.match_external_id || p.match_id || '');
         if (matchId) {
           predMap.set(matchId, p);
         }
@@ -219,7 +225,8 @@ export function LivescoreProvider({ children, initialDate }: LivescoreProviderPr
 
       // Enrich matches with prediction info
       const enrichedMatches: MatchWithPrediction[] = matchesData.map((match: Match) => {
-        const prediction = predMap.get(match.id);
+        const matchIdStr = String(match.id);
+        const prediction = predMap.get(matchIdStr);
         return {
           ...match,
           prediction,
