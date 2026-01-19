@@ -54,6 +54,8 @@ import { startEntitySyncJobs, stopEntitySyncJobs } from './jobs/entitySync.job';
 // Match Workers - Critical for live match updates and minute calculation
 import { MatchSyncWorker } from './jobs/matchSync.job';
 import { MatchMinuteWorker } from './jobs/matchMinute.job';
+// Cold Start Handler - Fixes kickoff timestamps on server restart
+import { coldStartKickoffBackfill } from './jobs/coldStartKickoff.job';
 
 dotenv.config();
 
@@ -138,6 +140,14 @@ const start = async () => {
       logger.warn('⚠️  Firebase Admin SDK initialization failed:', firebaseErr.message);
       logger.warn('    OAuth authentication will not work without Firebase credentials');
       logger.warn('    See: docs/PHASE-2-SETUP-GUIDE.md for setup instructions');
+    }
+
+    // Cold Start: Backfill missing kickoff timestamps
+    // Prevents MinuteEngine errors after server restarts
+    try {
+      await coldStartKickoffBackfill();
+    } catch (coldStartErr: any) {
+      logger.warn('⚠️  Cold Start kickoff backfill failed:', coldStartErr.message);
     }
 
     await fastify.listen({ port: PORT, host: HOST });
