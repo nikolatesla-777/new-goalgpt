@@ -536,6 +536,25 @@ export async function getMatchLiveStats(matchId: string): Promise<any> {
 }
 
 /**
+ * Get match incidents (goals, cards, substitutions)
+ * GET /api/matches/:match_id/incidents
+ */
+export async function getMatchIncidents(matchId: string): Promise<any> {
+  const url = `${API_BASE_URL}/matches/${matchId}/incidents`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data: ApiResponse<any> = await response.json();
+    return data.data;
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
  * Get match team stats (from live stats feed for real-time data)
  */
 export async function getMatchTeamStats(matchId: string): Promise<any> {
