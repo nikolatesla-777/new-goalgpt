@@ -171,7 +171,7 @@ class UnifiedPredictionService {
         c.name as competition_name,
         c.logo_url as competition_logo,
         co.name as country_name,
-        co.logo_url as country_logo
+        co.logo as country_logo
       FROM ai_predictions p
       LEFT JOIN ts_matches m ON p.match_id = m.external_id
       LEFT JOIN ts_teams th ON m.home_team_id = th.external_id
