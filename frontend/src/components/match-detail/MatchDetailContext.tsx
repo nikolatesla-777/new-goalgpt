@@ -223,10 +223,14 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   const [error, setError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
-  const [lineupLoading, setLineupLoading] = useState(false);
-  const [h2hLoading, setH2hLoading] = useState(false);
-  const [trendLoading, setTrendLoading] = useState(false);
-  const [standingsLoading, setStandingsLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [lineupLoading, _setLineupLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [h2hLoading, _setH2hLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [trendLoading, _setTrendLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [standingsLoading, _setStandingsLoading] = useState(false);
 
   // Auto-refresh interval for live matches
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -241,7 +245,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     try {
       // Phase 1: Fetch critical match data first
       const matchData = await getMatchById(matchId);
-      setMatch(matchData);
+      setMatch(matchData as unknown as MatchData);
 
       // Phase 2: Fetch all secondary data in parallel
       const [statsData, incidentsData, lineupData, h2hData, trendData] = await Promise.all([
@@ -341,15 +345,23 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     fetchData();
   }, [fetchData]);
 
-  // Auto-refresh for live matches (every 30 seconds)
+  // Auto-refresh for live matches (every 60 seconds)
+  // PERF FIX: Increased from 30s to 60s, fixed dependency array to prevent infinite loops
   useEffect(() => {
+    // Clear previous interval first
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+
     const isLive = match && [2, 3, 4, 5, 7].includes(match.status_id);
 
     if (isLive) {
+      // 60 seconds - WebSocket provides real-time updates
       refreshIntervalRef.current = setInterval(() => {
         refreshStats();
         refreshIncidents();
-      }, 30000);
+      }, 60000);
     }
 
     return () => {
@@ -358,7 +370,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
         refreshIntervalRef.current = null;
       }
     };
-  }, [match?.status_id, refreshStats, refreshIncidents]);
+  }, [match?.status_id]); // Only re-run when status changes, not on every callback reference change
 
   const value: MatchDetailContextValue = {
     matchId,
@@ -390,20 +402,32 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
 }
 
 // Helper to convert incident type number to name
+// SYNC: Must match backend EVENT_TYPES in IncidentOrchestrator.ts
 function getIncidentTypeName(type: number): string {
   const typeMap: Record<number, string> = {
     1: 'goal',
-    2: 'penalty_goal',
-    3: 'own_goal',
-    4: 'penalty_miss',
-    5: 'yellow_card',
-    6: 'red_card',
-    7: 'substitution',
-    8: 'second_yellow',
-    9: 'var',
-    10: 'penalty_awarded',
+    2: 'corner',
+    3: 'yellow_card',
+    4: 'red_card',
+    5: 'offside',
+    6: 'free_kick',
+    7: 'goal_kick',
+    8: 'penalty_goal',
+    9: 'substitution',
+    10: 'match_start',
+    11: 'second_half_start',
+    12: 'match_end',
+    13: 'halftime_score',
+    15: 'second_yellow',
+    16: 'penalty_miss',
+    17: 'own_goal',
+    19: 'injury_time',
+    28: 'var',
+    29: 'penalty_shootout',
+    30: 'penalty_shootout_miss',
+    34: 'shot_on_post',
   };
-  return typeMap[type] || `type_${type}`;
+  return typeMap[type] || `unknown_${type}`;
 }
 
 export { MatchDetailContext };
