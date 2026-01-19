@@ -12,7 +12,7 @@
 
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
-import { TheSportsAPI } from '../services/thesports/client/thesportsApi';
+import { theSportsAPI } from '../core/TheSportsAPIManager';
 import { TeamDataService } from '../services/thesports/team/teamData.service';
 import { CompetitionService } from '../services/thesports/competition/competition.service';
 
@@ -83,9 +83,9 @@ function calculateDisplayScore(
 /**
  * Fetch diary from TheSports API
  */
-async function fetchDiary(api: TheSportsAPI, dateStr: string): Promise<any> {
+async function fetchDiary(dateStr: string): Promise<any> {
   try {
-    const response = await api.get('/match/diary', { date: dateStr });
+    const response = await theSportsAPI.get('/match/diary', { date: dateStr });
     return response;
   } catch (error: any) {
     logger.error(`Failed to fetch diary for ${dateStr}: ${error.message}`);
@@ -179,7 +179,6 @@ async function main() {
   logger.info('🔧 FIX ALL DIARY MATCHES - Starting comprehensive sync');
   logger.info('='.repeat(60));
 
-  const api = TheSportsAPI.getInstance();
   const teamDataService = new TeamDataService();
   const competitionService = new CompetitionService();
 
@@ -198,7 +197,7 @@ async function main() {
 
   for (const dateStr of datesToFetch) {
     logger.info(`🔄 Fetching diary for ${dateStr}...`);
-    const response = await fetchDiary(api, dateStr);
+    const response = await fetchDiary(dateStr);
 
     const matchCount = response.results?.length || 0;
     logger.info(`   Found ${matchCount} matches`);
