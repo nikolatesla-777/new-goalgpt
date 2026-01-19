@@ -8,21 +8,18 @@
  */
 
 import dotenv from 'dotenv';
-import { TheSportsClient } from '../services/thesports/client/thesports-client';
-import { DailyMatchSyncWorker } from '../jobs/dailyMatchSync.job';
+import { runDailyDiarySync } from '../jobs/dailyDiarySync.job';
 import { logger } from '../utils/logger';
 
 dotenv.config();
 
 async function main() {
-  logger.info('🚀 Starting manual Daily Diary Sync (3-day window)...');
-  
+  logger.info('🚀 Starting manual Daily Diary Sync...');
+
   try {
-    const client = new TheSportsClient();
-    const worker = new DailyMatchSyncWorker(client);
-    
-    await worker.syncThreeDayWindow({ reason: 'MANUAL_SCRIPT' });
-    
+    // Run the standard daily sync logic
+    await runDailyDiarySync();
+
     logger.info('✅ Manual sync completed successfully');
     process.exit(0);
   } catch (error: any) {
