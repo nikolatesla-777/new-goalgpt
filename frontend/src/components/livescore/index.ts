@@ -1,2 +1,2 @@
 export { LivescoreLayout } from './LivescoreLayout';
-export { LiveTab, FinishedTab, UpcomingTab, AITab } from './tabs';
+export { LiveTab, FinishedTab, UpcomingTab, AITab, DiaryTab } from './tabs';

@@ -16,6 +16,7 @@ import { Circle, WifiHigh, WifiSlash, ArrowClockwise, CalendarBlank, CaretLeft, 
 // Inner component that uses the context
 function LivescoreLayoutInner() {
   const {
+    matches,
     liveMatches,
     finishedMatches,
     upcomingMatches,
@@ -277,6 +278,21 @@ function LivescoreLayoutInner() {
           overflowX: 'auto',
           paddingBottom: '4px',
         }}>
+          <NavLink
+            to="diary"
+            style={({ isActive }) => getTabStyle(isActive)}
+          >
+            Bulten
+            <span style={{
+              padding: '2px 8px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              fontSize: '0.75rem',
+            }}>
+              {matches.length}
+            </span>
+          </NavLink>
+
           <NavLink
             to="live"
             style={({ isActive }) => getTabStyle(isActive)}
