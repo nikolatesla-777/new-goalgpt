@@ -12,6 +12,7 @@
     "create-admin": "tsx src/database/create-admin.ts",
     "test-connection": "tsx src/database/test-connection.ts",
     "sync:diary": "tsx src/scripts/run-daily-diary-sync.ts",
+    "fix:diary": "tsx src/scripts/fix-all-diary-matches.ts",
     "test:phase3a": "tsx src/scripts/test-phase3a-live-optimistic-locking.ts",
     "test:phase3b": "tsx src/scripts/test-phase3b-madde2-3.ts",
     "test:phase3b-minute": "tsx src/scripts/test-phase3b-minute.ts",
