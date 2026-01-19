@@ -6,6 +6,75 @@
 
 import { useMatchDetail } from '../MatchDetailContext';
 
+// Shared component for team recent form card
+interface TeamFormCardProps {
+  teamName: string | undefined;
+  teamId: string | undefined;
+  recentForm: any[];
+}
+
+function TeamFormCard({ teamName, teamId, recentForm }: TeamFormCardProps) {
+  return (
+    <div style={{
+      backgroundColor: 'white',
+      borderRadius: '12px',
+      overflow: 'hidden'
+    }}>
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: '1px solid #e5e7eb',
+        fontWeight: '600',
+        fontSize: '13px',
+        color: '#374151'
+      }}>
+        {teamName} Son Form
+      </div>
+      {recentForm.slice(0, 5).map((m, idx) => {
+        const isHome = m.home_team?.id === teamId;
+        const teamScore = isHome ? m.home_score : m.away_score;
+        const oppScore = isHome ? m.away_score : m.home_score;
+        const result = teamScore > oppScore ? 'W' : teamScore < oppScore ? 'L' : 'D';
+        const resultColor = result === 'W' ? '#22c55e' : result === 'L' ? '#ef4444' : '#eab308';
+
+        return (
+          <div
+            key={m.id || idx}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '10px 16px',
+              borderBottom: idx < Math.min(recentForm.length, 5) - 1 ? '1px solid #f3f4f6' : 'none',
+              fontSize: '13px'
+            }}
+          >
+            <div style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '6px',
+              backgroundColor: resultColor,
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: '600',
+              fontSize: '12px',
+              marginRight: '10px'
+            }}>
+              {result === 'W' ? 'G' : result === 'L' ? 'M' : 'B'}
+            </div>
+            <div style={{ flex: 1, color: '#6b7280' }}>
+              {isHome ? m.away_team?.name : m.home_team?.name}
+            </div>
+            <div style={{ fontWeight: '500' }}>
+              {teamScore}-{oppScore}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function H2HTab() {
   const { h2h, h2hLoading, match } = useMatchDetail();
 
@@ -147,123 +216,16 @@ export function H2HTab() {
 
       {/* Recent Form */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-        {/* Home Team Form */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          overflow: 'hidden'
-        }}>
-          <div style={{
-            padding: '12px 16px',
-            borderBottom: '1px solid #e5e7eb',
-            fontWeight: '600',
-            fontSize: '13px',
-            color: '#374151'
-          }}>
-            {match?.home_team?.name} Son Form
-          </div>
-          {homeRecentForm.slice(0, 5).map((m, idx) => {
-            const isHome = m.home_team?.id === match?.home_team_id;
-            const teamScore = isHome ? m.home_score : m.away_score;
-            const oppScore = isHome ? m.away_score : m.home_score;
-            const result = teamScore > oppScore ? 'W' : teamScore < oppScore ? 'L' : 'D';
-            const resultColor = result === 'W' ? '#22c55e' : result === 'L' ? '#ef4444' : '#eab308';
-
-            return (
-              <div
-                key={m.id || idx}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '10px 16px',
-                  borderBottom: idx < Math.min(homeRecentForm.length, 5) - 1 ? '1px solid #f3f4f6' : 'none',
-                  fontSize: '13px'
-                }}
-              >
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '6px',
-                  backgroundColor: resultColor,
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: '600',
-                  fontSize: '12px',
-                  marginRight: '10px'
-                }}>
-                  {result === 'W' ? 'G' : result === 'L' ? 'M' : 'B'}
-                </div>
-                <div style={{ flex: 1, color: '#6b7280' }}>
-                  {isHome ? m.away_team?.name : m.home_team?.name}
-                </div>
-                <div style={{ fontWeight: '500' }}>
-                  {teamScore}-{oppScore}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Away Team Form */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          overflow: 'hidden'
-        }}>
-          <div style={{
-            padding: '12px 16px',
-            borderBottom: '1px solid #e5e7eb',
-            fontWeight: '600',
-            fontSize: '13px',
-            color: '#374151'
-          }}>
-            {match?.away_team?.name} Son Form
-          </div>
-          {awayRecentForm.slice(0, 5).map((m, idx) => {
-            const isHome = m.home_team?.id === match?.away_team_id;
-            const teamScore = isHome ? m.home_score : m.away_score;
-            const oppScore = isHome ? m.away_score : m.home_score;
-            const result = teamScore > oppScore ? 'W' : teamScore < oppScore ? 'L' : 'D';
-            const resultColor = result === 'W' ? '#22c55e' : result === 'L' ? '#ef4444' : '#eab308';
-
-            return (
-              <div
-                key={m.id || idx}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '10px 16px',
-                  borderBottom: idx < Math.min(awayRecentForm.length, 5) - 1 ? '1px solid #f3f4f6' : 'none',
-                  fontSize: '13px'
-                }}
-              >
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '6px',
-                  backgroundColor: resultColor,
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: '600',
-                  fontSize: '12px',
-                  marginRight: '10px'
-                }}>
-                  {result === 'W' ? 'G' : result === 'L' ? 'M' : 'B'}
-                </div>
-                <div style={{ flex: 1, color: '#6b7280' }}>
-                  {isHome ? m.away_team?.name : m.home_team?.name}
-                </div>
-                <div style={{ fontWeight: '500' }}>
-                  {teamScore}-{oppScore}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <TeamFormCard
+          teamName={match?.home_team?.name}
+          teamId={match?.home_team_id}
+          recentForm={homeRecentForm}
+        />
+        <TeamFormCard
+          teamName={match?.away_team?.name}
+          teamId={match?.away_team_id}
+          recentForm={awayRecentForm}
+        />
       </div>
     </div>
   );

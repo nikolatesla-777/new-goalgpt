@@ -471,6 +471,88 @@ function ChatSection({ matchId }: { matchId: string }) {
 // POLL SECTION
 // ============================================
 
+// Vote option component - moved outside to prevent re-creation on every render
+interface VoteOptionProps {
+  label: string;
+  teamName?: string;
+  votes: number;
+  percent: number;
+  value: 'home' | 'draw' | 'away';
+  color: string;
+  myVote?: 'home' | 'draw' | 'away' | null;
+  isActive: boolean;
+  voting: boolean;
+  onVote: (vote: 'home' | 'draw' | 'away') => void;
+}
+
+function VoteOption({ label, teamName, votes, percent, value, color, myVote, isActive, voting, onVote }: VoteOptionProps) {
+  const isSelected = myVote === value;
+
+  return (
+    <button
+      onClick={() => onVote(value)}
+      disabled={voting || !isActive}
+      style={{
+        width: '100%',
+        padding: '16px',
+        backgroundColor: isSelected ? `${color}15` : 'white',
+        border: isSelected ? `2px solid ${color}` : '2px solid #e5e7eb',
+        borderRadius: '12px',
+        cursor: isActive ? 'pointer' : 'default',
+        textAlign: 'left',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Progress Background */}
+      <div style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: `${percent}%`,
+        backgroundColor: `${color}20`,
+        transition: 'width 0.3s ease'
+      }} />
+
+      {/* Content */}
+      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontWeight: '600', fontSize: '15px', color: '#1f2937', marginBottom: '4px' }}>
+            {teamName || label}
+          </div>
+          <div style={{ fontSize: '13px', color: '#6b7280' }}>
+            {votes} oy
+          </div>
+        </div>
+        <div style={{ fontSize: '20px', fontWeight: '700', color }}>
+          %{percent}
+        </div>
+      </div>
+
+      {/* Selected indicator */}
+      {isSelected && (
+        <div style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          width: '20px',
+          height: '20px',
+          borderRadius: '50%',
+          backgroundColor: color,
+          color: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px'
+        }}>
+          ✓
+        </div>
+      )}
+    </button>
+  );
+}
+
 function PollSection({ matchId, match }: { matchId: string; match: any }) {
   const [poll, setPoll] = useState<Poll | null>(null);
   const [loading, setLoading] = useState(true);
@@ -540,88 +622,6 @@ function PollSection({ matchId, match }: { matchId: string; match: any }) {
   const drawPercent = Math.round((poll.option_draw_votes / total) * 100);
   const awayPercent = Math.round((poll.option_away_votes / total) * 100);
 
-  const VoteOption = ({
-    label,
-    teamName,
-    votes,
-    percent,
-    value,
-    color
-  }: {
-    label: string;
-    teamName?: string;
-    votes: number;
-    percent: number;
-    value: 'home' | 'draw' | 'away';
-    color: string;
-  }) => (
-    <button
-      onClick={() => handleVote(value)}
-      disabled={voting || !poll.is_active}
-      style={{
-        width: '100%',
-        padding: '16px',
-        backgroundColor: poll.my_vote === value ? `${color}15` : 'white',
-        border: poll.my_vote === value ? `2px solid ${color}` : '2px solid #e5e7eb',
-        borderRadius: '12px',
-        cursor: poll.is_active ? 'pointer' : 'default',
-        textAlign: 'left',
-        position: 'relative',
-        overflow: 'hidden'
-      }}
-    >
-      {/* Progress Background */}
-      <div style={{
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: `${percent}%`,
-        backgroundColor: `${color}20`,
-        transition: 'width 0.3s ease'
-      }} />
-
-      {/* Content */}
-      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontWeight: '600', fontSize: '15px', color: '#1f2937', marginBottom: '4px' }}>
-            {teamName || label}
-          </div>
-          <div style={{ fontSize: '13px', color: '#6b7280' }}>
-            {votes} oy
-          </div>
-        </div>
-        <div style={{
-          fontSize: '20px',
-          fontWeight: '700',
-          color: color
-        }}>
-          %{percent}
-        </div>
-      </div>
-
-      {/* Selected indicator */}
-      {poll.my_vote === value && (
-        <div style={{
-          position: 'absolute',
-          top: '8px',
-          right: '8px',
-          width: '20px',
-          height: '20px',
-          borderRadius: '50%',
-          backgroundColor: color,
-          color: 'white',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '12px'
-        }}>
-          ✓
-        </div>
-      )}
-    </button>
-  );
-
   return (
     <div style={{
       backgroundColor: 'white',
@@ -648,6 +648,10 @@ function PollSection({ matchId, match }: { matchId: string; match: any }) {
           percent={homePercent}
           value="home"
           color="#3b82f6"
+          myVote={poll.my_vote}
+          isActive={poll.is_active}
+          voting={voting}
+          onVote={handleVote}
         />
         <VoteOption
           label="Beraberlik"
@@ -655,6 +659,10 @@ function PollSection({ matchId, match }: { matchId: string; match: any }) {
           percent={drawPercent}
           value="draw"
           color="#eab308"
+          myVote={poll.my_vote}
+          isActive={poll.is_active}
+          voting={voting}
+          onVote={handleVote}
         />
         <VoteOption
           label="Deplasman Kazanir"
@@ -663,6 +671,10 @@ function PollSection({ matchId, match }: { matchId: string; match: any }) {
           percent={awayPercent}
           value="away"
           color="#ef4444"
+          myVote={poll.my_vote}
+          isActive={poll.is_active}
+          voting={voting}
+          onVote={handleVote}
         />
       </div>
 

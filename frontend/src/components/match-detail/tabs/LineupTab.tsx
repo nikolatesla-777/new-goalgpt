@@ -7,50 +7,17 @@
 import { useNavigate } from 'react-router-dom';
 import { useMatchDetail } from '../MatchDetailContext';
 
-export function LineupTab() {
-  const navigate = useNavigate();
-  const { lineup, lineupLoading, match } = useMatchDetail();
+// Player card component - moved outside to prevent re-creation on every render
+interface PlayerCardProps {
+  player: any;
+  teamColor: string;
+  onPlayerClick: (playerId: string) => void;
+}
 
-  if (lineupLoading) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
-        Kadrolar yukleniyor...
-      </div>
-    );
-  }
-
-  if (!lineup || (lineup.home.length === 0 && lineup.away.length === 0)) {
-    return (
-      <div style={{
-        padding: '40px',
-        textAlign: 'center',
-        color: '#6b7280',
-        backgroundColor: 'white',
-        borderRadius: '12px'
-      }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
-        <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
-          Kadro Bilgisi Bulunamadi
-        </div>
-        <div style={{ fontSize: '14px' }}>
-          {match?.status_id === 1
-            ? 'Kadro bilgisi mac yaklastikca yayinlanacak.'
-            : 'Bu mac icin kadro verisi yok.'}
-        </div>
-      </div>
-    );
-  }
-
-  // Separate starters and subs
-  const homeStarters = lineup.home.filter(p => p.is_starter !== false);
-  const homeSubs = lineup.home_subs || lineup.home.filter(p => p.is_starter === false);
-  const awayStarters = lineup.away.filter(p => p.is_starter !== false);
-  const awaySubs = lineup.away_subs || lineup.away.filter(p => p.is_starter === false);
-
-  const PlayerCard = ({ player, teamColor }: { player: any; teamColor: string }) => (
+function PlayerCard({ player, teamColor, onPlayerClick }: PlayerCardProps) {
+  return (
     <div
-      onClick={() => player.player_id && navigate(`/player/${player.player_id}`)}
+      onClick={() => player.player_id && onPlayerClick(player.player_id)}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -108,6 +75,95 @@ export function LineupTab() {
       )}
     </div>
   );
+}
+
+// Team lineup section component
+interface TeamLineupSectionProps {
+  title: string;
+  players: any[];
+  teamColor: string;
+  subsColor: string;
+  onPlayerClick: (playerId: string) => void;
+}
+
+function TeamLineupSection({ title, players, teamColor, subsColor, onPlayerClick }: TeamLineupSectionProps) {
+  return (
+    <div>
+      <div style={{
+        fontSize: '14px',
+        fontWeight: '600',
+        color: title === 'Yedekler' ? '#6b7280' : '#374151',
+        marginBottom: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        {title !== 'Yedekler' && (
+          <div style={{
+            width: '4px',
+            height: '16px',
+            backgroundColor: teamColor,
+            borderRadius: '2px'
+          }} />
+        )}
+        {title}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {players.map((player, idx) => (
+          <PlayerCard
+            key={player.player_id || idx}
+            player={player}
+            teamColor={title === 'Yedekler' ? subsColor : teamColor}
+            onPlayerClick={onPlayerClick}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function LineupTab() {
+  const navigate = useNavigate();
+  const { lineup, lineupLoading, match } = useMatchDetail();
+
+  const handlePlayerClick = (playerId: string) => navigate(`/player/${playerId}`);
+
+  if (lineupLoading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+        Kadrolar yukleniyor...
+      </div>
+    );
+  }
+
+  if (!lineup || (lineup.home.length === 0 && lineup.away.length === 0)) {
+    return (
+      <div style={{
+        padding: '40px',
+        textAlign: 'center',
+        color: '#6b7280',
+        backgroundColor: 'white',
+        borderRadius: '12px'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+        <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
+          Kadro Bilgisi Bulunamadi
+        </div>
+        <div style={{ fontSize: '14px' }}>
+          {match?.status_id === 1
+            ? 'Kadro bilgisi mac yaklastikca yayinlanacak.'
+            : 'Bu mac icin kadro verisi yok.'}
+        </div>
+      </div>
+    );
+  }
+
+  // Separate starters and subs
+  const homeStarters = lineup.home.filter(p => p.is_starter !== false);
+  const homeSubs = lineup.home_subs || lineup.home.filter(p => p.is_starter === false);
+  const awayStarters = lineup.away.filter(p => p.is_starter !== false);
+  const awaySubs = lineup.away_subs || lineup.away.filter(p => p.is_starter === false);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -146,104 +202,40 @@ export function LineupTab() {
       </div>
 
       {/* Starting XI */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '16px'
-      }}>
-        {/* Home Team */}
-        <div>
-          <div style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            color: '#374151',
-            marginBottom: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <div style={{
-              width: '4px',
-              height: '16px',
-              backgroundColor: '#3b82f6',
-              borderRadius: '2px'
-            }} />
-            Ilk 11
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {homeStarters.map((player, idx) => (
-              <PlayerCard key={player.player_id || idx} player={player} teamColor="#3b82f6" />
-            ))}
-          </div>
-        </div>
-
-        {/* Away Team */}
-        <div>
-          <div style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            color: '#374151',
-            marginBottom: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <div style={{
-              width: '4px',
-              height: '16px',
-              backgroundColor: '#ef4444',
-              borderRadius: '2px'
-            }} />
-            Ilk 11
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {awayStarters.map((player, idx) => (
-              <PlayerCard key={player.player_id || idx} player={player} teamColor="#ef4444" />
-            ))}
-          </div>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <TeamLineupSection
+          title="Ilk 11"
+          players={homeStarters}
+          teamColor="#3b82f6"
+          subsColor="#93c5fd"
+          onPlayerClick={handlePlayerClick}
+        />
+        <TeamLineupSection
+          title="Ilk 11"
+          players={awayStarters}
+          teamColor="#ef4444"
+          subsColor="#fca5a5"
+          onPlayerClick={handlePlayerClick}
+        />
       </div>
 
       {/* Substitutes */}
       {(homeSubs.length > 0 || awaySubs.length > 0) && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '16px'
-        }}>
-          {/* Home Subs */}
-          <div>
-            <div style={{
-              fontSize: '14px',
-              fontWeight: '600',
-              color: '#6b7280',
-              marginBottom: '12px'
-            }}>
-              Yedekler
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {homeSubs.map((player, idx) => (
-                <PlayerCard key={player.player_id || idx} player={player} teamColor="#93c5fd" />
-              ))}
-            </div>
-          </div>
-
-          {/* Away Subs */}
-          <div>
-            <div style={{
-              fontSize: '14px',
-              fontWeight: '600',
-              color: '#6b7280',
-              marginBottom: '12px'
-            }}>
-              Yedekler
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {awaySubs.map((player, idx) => (
-                <PlayerCard key={player.player_id || idx} player={player} teamColor="#fca5a5" />
-              ))}
-            </div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <TeamLineupSection
+            title="Yedekler"
+            players={homeSubs}
+            teamColor="#3b82f6"
+            subsColor="#93c5fd"
+            onPlayerClick={handlePlayerClick}
+          />
+          <TeamLineupSection
+            title="Yedekler"
+            players={awaySubs}
+            teamColor="#ef4444"
+            subsColor="#fca5a5"
+            onPlayerClick={handlePlayerClick}
+          />
         </div>
       )}
     </div>
