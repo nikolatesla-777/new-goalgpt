@@ -20,6 +20,7 @@ import { AIPredictionService } from '../services/ai/aiPrediction.service';
 import { predictionSettlementService } from '../services/ai/predictionSettlement.service';
 import { matchStatsRepository } from '../repositories/matchStats.repository';
 import { broadcastEvent } from '../routes/websocket.routes';
+import { matchDetailSyncService } from '../services/thesports/match/matchDetailSync.service';
 
 // REFACTOR: Direct database writes (orchestrator removed)
 interface FieldUpdate {
@@ -47,6 +48,7 @@ export class MatchSyncWorker {
   private isReconciling = false;
   private liveTickInterval: NodeJS.Timeout | null = null;
   private predictionResultInterval: NodeJS.Timeout | null = null;
+  private matchDetailSyncInterval: NodeJS.Timeout | null = null; // Match Detail page sync
   private aiPredictionService: AIPredictionService;
 
   // Reconcile backpressure constants
@@ -602,6 +604,46 @@ export class MatchSyncWorker {
       }
     }, 30000); // Every 30 seconds
 
+    // Match Detail Sync: Sync detailed match data every 30 seconds for Match Detail page
+    // This populates ts_match_stats, ts_match_incidents tables for DB-first architecture
+    this.matchDetailSyncInterval = setInterval(async () => {
+      try {
+        // Get all live matches
+        const liveMatchesResult = await pool.query(`
+          SELECT external_id
+          FROM ts_matches
+          WHERE status_id = ANY($1)
+          ORDER BY match_time ASC
+          LIMIT 100
+        `, [this.LIVE_STATUS_IDS]);
+
+        if (liveMatchesResult.rows.length === 0) {
+          return;
+        }
+
+        let totalStats = 0;
+        let totalIncidents = 0;
+
+        // Sync each live match (with throttling)
+        for (const row of liveMatchesResult.rows) {
+          try {
+            const result = await matchDetailSyncService.syncMatchDetail(row.external_id);
+            totalStats += result.stats;
+            totalIncidents += result.incidents;
+            await sleep(100); // 100ms between each match to avoid API overload
+          } catch (err: any) {
+            logger.warn(`[MatchDetailSync] Error syncing ${row.external_id}: ${err.message}`);
+          }
+        }
+
+        if (totalStats > 0 || totalIncidents > 0) {
+          logger.info(`[MatchDetailSync] Synced ${liveMatchesResult.rows.length} matches: ${totalStats} stats, ${totalIncidents} incidents`);
+        }
+      } catch (err) {
+        logger.error('[MatchDetailSync] Error in sync interval:', err);
+      }
+    }, 30000); // Every 30 seconds
+
     // Run immediately on start (but wait 10 seconds to let bootstrap complete)
     setTimeout(() => {
       this.syncMatches();
@@ -650,6 +692,12 @@ export class MatchSyncWorker {
       clearInterval(this.predictionResultInterval);
       this.predictionResultInterval = null;
       logger.info('Prediction result interval stopped');
+    }
+
+    if (this.matchDetailSyncInterval) {
+      clearInterval(this.matchDetailSyncInterval);
+      this.matchDetailSyncInterval = null;
+      logger.info('Match detail sync interval stopped');
     }
   }
 }

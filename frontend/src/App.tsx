@@ -44,6 +44,17 @@ const LivescoreAITab = lazy(() => import('./components/livescore').then(m => ({ 
 // Player Card
 const PlayerCardPage = lazy(() => import('./components/player/PlayerCardPage').then(m => ({ default: m.PlayerCardPage })));
 
+// Match Detail
+const MatchDetailLayout = lazy(() => import('./components/match-detail/MatchDetailLayout').then(m => ({ default: m.MatchDetailLayout })));
+const MatchStatsTab = lazy(() => import('./components/match-detail/tabs').then(m => ({ default: m.StatsTab })));
+const MatchEventsTab = lazy(() => import('./components/match-detail/tabs').then(m => ({ default: m.EventsTab })));
+const MatchH2HTab = lazy(() => import('./components/match-detail/tabs').then(m => ({ default: m.H2HTab })));
+const MatchStandingsTab = lazy(() => import('./components/match-detail/tabs').then(m => ({ default: m.StandingsTab })));
+const MatchLineupTab = lazy(() => import('./components/match-detail/tabs').then(m => ({ default: m.LineupTab })));
+const MatchTrendTab = lazy(() => import('./components/match-detail/tabs').then(m => ({ default: m.TrendTab })));
+const MatchAITab = lazy(() => import('./components/match-detail/tabs').then(m => ({ default: m.AITab })));
+const MatchForumTab = lazy(() => import('./components/match-detail/tabs').then(m => ({ default: m.ForumTab })));
+
 // Loading fallback component
 function LoadingFallback() {
   return (
@@ -124,6 +135,27 @@ function App() {
                   </Suspense>
                 </ErrorBoundary>
               } />
+
+              {/* Match Detail with Nested Routes for Tabs */}
+              <Route path="/match/:matchId" element={
+                <ErrorBoundary>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <MatchDetailLayout />
+                  </Suspense>
+                </ErrorBoundary>
+              }>
+                {/* Default redirect to stats tab */}
+                <Route index element={<Navigate to="stats" replace />} />
+                {/* Tab routes */}
+                <Route path="stats" element={<Suspense fallback={<LoadingFallback />}><MatchStatsTab /></Suspense>} />
+                <Route path="events" element={<Suspense fallback={<LoadingFallback />}><MatchEventsTab /></Suspense>} />
+                <Route path="h2h" element={<Suspense fallback={<LoadingFallback />}><MatchH2HTab /></Suspense>} />
+                <Route path="standings" element={<Suspense fallback={<LoadingFallback />}><MatchStandingsTab /></Suspense>} />
+                <Route path="lineup" element={<Suspense fallback={<LoadingFallback />}><MatchLineupTab /></Suspense>} />
+                <Route path="trend" element={<Suspense fallback={<LoadingFallback />}><MatchTrendTab /></Suspense>} />
+                <Route path="ai" element={<Suspense fallback={<LoadingFallback />}><MatchAITab /></Suspense>} />
+                <Route path="forum" element={<Suspense fallback={<LoadingFallback />}><MatchForumTab /></Suspense>} />
+              </Route>
 
               {/* Competition Detail with Nested Routes for Tabs */}
               <Route path="/competition/:id" element={
