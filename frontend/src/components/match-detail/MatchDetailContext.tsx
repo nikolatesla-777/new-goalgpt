@@ -140,6 +140,10 @@ export interface TrendPoint {
   away_dangerous_attacks?: number;
   home_shots?: number;
   away_shots?: number;
+  home_shots_on_target?: number;
+  away_shots_on_target?: number;
+  home_corners?: number;
+  away_corners?: number;
 }
 
 export interface Standing {
@@ -225,7 +229,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   const [standingsLoading, setStandingsLoading] = useState(false);
 
   // Auto-refresh interval for live matches
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch all data in parallel (eager loading)
   const fetchData = useCallback(async () => {
