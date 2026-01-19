@@ -13,7 +13,7 @@ import { Star } from '@phosphor-icons/react';
 
 export function FavoritesTab() {
   const { matches, isLoading, error } = useLivescore();
-  const { favorites, favoritesCount } = useFavorites();
+  const { favorites } = useFavorites();
 
   // Filter matches that are in favorites
   const favoriteMatches = useMemo(() => {
