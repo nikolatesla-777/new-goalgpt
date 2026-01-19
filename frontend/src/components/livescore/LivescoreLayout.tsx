@@ -11,7 +11,8 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useLivescore, LivescoreProvider } from '../../context/LivescoreContext';
-import { Circle, WifiHigh, WifiSlash, ArrowClockwise, CalendarBlank, CaretLeft, CaretRight } from '@phosphor-icons/react';
+import { useFavorites } from '../../context/FavoritesContext';
+import { Circle, WifiHigh, WifiSlash, ArrowClockwise, CalendarBlank, CaretLeft, CaretRight, Star } from '@phosphor-icons/react';
 
 // Inner component that uses the context
 function LivescoreLayoutInner() {
@@ -28,6 +29,11 @@ function LivescoreLayoutInner() {
     setSelectedDate,
     refresh,
   } = useLivescore();
+
+  const { favorites } = useFavorites();
+
+  // Count favorite matches for the selected date
+  const favoriteMatchesCount = matches.filter(m => favorites.has(m.id)).length;
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -306,6 +312,23 @@ function LivescoreLayoutInner() {
               fontSize: '0.75rem',
             }}>
               {liveMatches.length}
+            </span>
+          </NavLink>
+
+          <NavLink
+            to="favorites"
+            style={({ isActive }) => getTabStyle(isActive)}
+          >
+            <Star size={14} weight="fill" color={favoriteMatchesCount > 0 ? '#f59e0b' : '#64748b'} />
+            Favorilerim
+            <span style={{
+              padding: '2px 8px',
+              borderRadius: '10px',
+              backgroundColor: favoriteMatchesCount > 0 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(255,255,255,0.1)',
+              fontSize: '0.75rem',
+              color: favoriteMatchesCount > 0 ? '#fbbf24' : 'inherit',
+            }}>
+              {favoriteMatchesCount}
             </span>
           </NavLink>
 

@@ -36,6 +36,7 @@ const CompStandingsTab = lazy(() => import('./components/competition-detail/tabs
 const LivescoreLayout = lazy(() => import('./components/livescore').then(m => ({ default: m.LivescoreLayout })));
 const LivescoreDiaryTab = lazy(() => import('./components/livescore').then(m => ({ default: m.DiaryTab })));
 const LivescoreLiveTab = lazy(() => import('./components/livescore').then(m => ({ default: m.LiveTab })));
+const LivescoreFavoritesTab = lazy(() => import('./components/livescore').then(m => ({ default: m.FavoritesTab })));
 const LivescoreFinishedTab = lazy(() => import('./components/livescore').then(m => ({ default: m.FinishedTab })));
 const LivescoreUpcomingTab = lazy(() => import('./components/livescore').then(m => ({ default: m.UpcomingTab })));
 const LivescoreAITab = lazy(() => import('./components/livescore').then(m => ({ default: m.AITab })));
@@ -92,6 +93,7 @@ function App() {
                 {/* Tab routes */}
                 <Route path="diary" element={<Suspense fallback={<LoadingFallback />}><LivescoreDiaryTab /></Suspense>} />
                 <Route path="live" element={<Suspense fallback={<LoadingFallback />}><LivescoreLiveTab /></Suspense>} />
+                <Route path="favorites" element={<Suspense fallback={<LoadingFallback />}><LivescoreFavoritesTab /></Suspense>} />
                 <Route path="finished" element={<Suspense fallback={<LoadingFallback />}><LivescoreFinishedTab /></Suspense>} />
                 <Route path="upcoming" element={<Suspense fallback={<LoadingFallback />}><LivescoreUpcomingTab /></Suspense>} />
                 <Route path="ai" element={<Suspense fallback={<LoadingFallback />}><LivescoreAITab /></Suspense>} />

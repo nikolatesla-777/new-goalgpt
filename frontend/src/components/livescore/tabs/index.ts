@@ -1,4 +1,5 @@
 export { LiveTab } from './LiveTab';
+export { FavoritesTab } from './FavoritesTab';
 export { FinishedTab } from './FinishedTab';
 export { UpcomingTab } from './UpcomingTab';
 export { AITab } from './AITab';
