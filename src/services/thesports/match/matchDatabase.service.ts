@@ -41,12 +41,16 @@ export class MatchDatabaseService {
       }
 
       // Parse date to get start and end of day (Unix timestamps)
-      // CRITICAL: Use local timezone for date boundaries, but match_time is stored as UTC
+      // CRITICAL: TSI (Turkey Standard Time, UTC+3) based day boundaries
+      // For Turkish users, "January 19" means 00:00-23:59:59 in TSI
       const year = parseInt(dateStr.substring(0, 4));
       const month = parseInt(dateStr.substring(4, 6)) - 1; // Month is 0-indexed
       const day = parseInt(dateStr.substring(6, 8));
 
-      // TSİ (UTC+3) day boundaries: convert local midnight to UTC by subtracting 3 hours
+      // TSI (UTC+3) day boundaries: convert TSI midnight to UTC by subtracting 3 hours
+      // TSI 00:00:00 on day X = UTC 21:00:00 on day X-1
+      // TSI 23:59:59 on day X = UTC 20:59:59 on day X
+      // This is the CORRECT range for Turkish users (filters out previous day's late matches)
       const TSI_OFFSET_SECONDS = 3 * 3600;
       const startOfDayUTC = new Date(Date.UTC(year, month, day, 0, 0, 0) - TSI_OFFSET_SECONDS * 1000);
       const endOfDayUTC = new Date(Date.UTC(year, month, day, 23, 59, 59) - TSI_OFFSET_SECONDS * 1000);
@@ -140,14 +144,14 @@ export class MatchDatabaseService {
       `;
 
       const params: any[] = [startUnix, endUnix];
-      
+
       // CRITICAL FIX: Add status filter if provided
       if (statusFilter && statusFilter.length > 0) {
         query += ` AND m.status_id = ANY($${params.length + 1})`;
         params.push(statusFilter);
         logger.info(`🔍 [MatchDatabase] Filtering by status: ${statusFilter.join(', ')}`);
       }
-      
+
       query += ` ORDER BY m.match_time ASC, c.name ASC`;
 
       const result = await pool.query(query, params);
@@ -384,7 +388,7 @@ export class MatchDatabaseService {
       const matches = result.rows || [];
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchDatabase.service.ts:274',message:'getLiveMatches query result',data:{matchCount:matches.length,queryDuration:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'matchDatabase.service.ts:274', message: 'getLiveMatches query result', data: { matchCount: matches.length, queryDuration: Date.now() }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
       // #endregion
 
       logger.info(`✅ [MatchDatabase] Found ${matches.length} strictly live matches in database (status_id IN 2,3,4,5,7, NO TIME WINDOW)`);
@@ -524,7 +528,7 @@ export class MatchDatabaseService {
 
       const now = Math.floor(Date.now() / 1000);
       const minTime = now - (safeMaxMinutesAgo * 60);
-      
+
       // CRITICAL FIX: Use TSİ-based today start (same as findShouldBeLiveMatches)
       // This ensures consistency between MatchWatchdogWorker and API endpoint
       const TSI_OFFSET_SECONDS = 3 * 3600;
@@ -534,7 +538,7 @@ export class MatchDatabaseService {
       const day = nowDate.getUTCDate();
       // TSİ midnight = UTC midnight - 3 hours
       const todayStart = Math.floor((Date.UTC(year, month, day, 0, 0, 0) - TSI_OFFSET_SECONDS * 1000) / 1000);
-      
+
       // CRITICAL FIX: Use max of todayStart and minTime to ensure we catch all today's matches
       // This matches the logic in findShouldBeLiveMatches
       const effectiveMinTime = Math.max(minTime, todayStart);

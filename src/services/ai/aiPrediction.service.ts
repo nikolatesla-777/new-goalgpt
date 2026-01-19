@@ -856,6 +856,7 @@ export class AIPredictionService {
                     ELSE p.result
                 END as prediction_result,
                 -- Match data
+                m.match_time,
                 m.status_id as match_status_id,
                 m.minute as match_minute,
                 -- Frontend compatibility aliases (PredictionCard expects these field names)

@@ -149,17 +149,6 @@ const jobs: JobDefinition[] = [
     description: 'Auto-finish matches stuck in live status (90+ min or 4+ hours old)',
   },
   {
-    name: 'Proactive Status Checker',
-    schedule: '*/30 * * * * *', // Every 30 seconds
-    handler: async () => {
-      const { ProactiveMatchStatusCheckWorker } = await import('./proactiveMatchStatusCheck.job');
-      const worker = new ProactiveMatchStatusCheckWorker();
-      await worker.checkTodayMatches();
-    },
-    enabled: true,
-    description: 'Check match status via detail_live API and update stuck/outdated matches',
-  },
-  {
     name: 'Prediction Matcher',
     schedule: '*/5 * * * *', // Every 5 minutes
     handler: async () => {
@@ -168,6 +157,36 @@ const jobs: JobDefinition[] = [
     },
     enabled: true,
     description: 'Match predictions with NULL match_id to actual matches using team names and date',
+  },
+  {
+    name: 'Daily Diary Sync (Midnight)',
+    schedule: '0 21 * * *', // Daily at 21:00 UTC = 00:00 TSİ (Turkey)
+    handler: async () => {
+      const { runDailyDiarySync } = await import('./dailyDiarySync.job');
+      await runDailyDiarySync();
+    },
+    enabled: true,
+    description: 'Full diary sync at midnight TSİ for new day',
+  },
+  {
+    name: 'Diary Refresh (10min)',
+    schedule: '*/10 * * * *', // Every 10 minutes (TheSports API recommendation)
+    handler: async () => {
+      const { runDailyDiarySync } = await import('./dailyDiarySync.job');
+      await runDailyDiarySync();
+    },
+    enabled: true,
+    description: 'Refresh today\'s diary every 10 minutes per TheSports API recommendation',
+  },
+  {
+    name: 'Diary Refresh (10min)',
+    schedule: '*/10 * * * *', // Every 10 minutes
+    handler: async () => {
+      const { runDailyDiarySync } = await import('./dailyDiarySync.job');
+      await runDailyDiarySync();
+    },
+    enabled: true,
+    description: 'Refresh match diary every 10 minutes',
   },
 ];
 

@@ -1,16 +1,16 @@
 /**
- * FinishedTab
+ * UpcomingTab
  *
- * Displays finished matches (status 8)
+ * Displays upcoming matches (status 1 - NOT_STARTED)
  * Uses LivescoreContext for data
  */
 
 import { useLivescore } from '../../../context/LivescoreContext';
 import { MatchList } from '../../MatchList';
-import { CheckCircle } from '@phosphor-icons/react';
+import { Clock } from '@phosphor-icons/react';
 
-export function FinishedTab() {
-  const { finishedMatches, isLoading, error } = useLivescore();
+export function UpcomingTab() {
+  const { upcomingMatches, isLoading, error } = useLivescore();
 
   if (isLoading) {
     return (
@@ -25,12 +25,12 @@ export function FinishedTab() {
         <div style={{
           width: '48px',
           height: '48px',
-          border: '3px solid #334155',
+          border: '3px solid #cbd5e1',
           borderTop: '3px solid #3b82f6',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
         }} />
-        <span style={{ color: '#94a3b8' }}>Biten maclar yukleniyor...</span>
+        <span style={{ color: '#64748b' }}>Baslamamis maclar yukleniyor...</span>
         <style>{`
           @keyframes spin {
             from { transform: rotate(0deg); }
@@ -57,7 +57,7 @@ export function FinishedTab() {
     );
   }
 
-  if (finishedMatches.length === 0) {
+  if (upcomingMatches.length === 0) {
     return (
       <div style={{
         padding: '3rem',
@@ -74,13 +74,13 @@ export function FinishedTab() {
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-          <CheckCircle size={32} weight="fill" color="#64748b" />
+          <Clock size={32} weight="fill" color="#64748b" />
         </div>
         <p style={{ fontSize: '1.125rem', fontWeight: '500', marginBottom: '8px', color: '#334155' }}>
-          Henuz biten mac yok
+          Baslamamis mac yok
         </p>
         <p style={{ fontSize: '0.875rem' }}>
-          Maclar bittiginde burada gorunecek
+          Gun icinde baslayacak maclar burada gorunecek
         </p>
       </div>
     );
@@ -88,27 +88,27 @@ export function FinishedTab() {
 
   return (
     <div>
-      {/* Finished indicator */}
+      {/* Upcoming indicator */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
         marginBottom: '16px',
         padding: '12px 16px',
-        backgroundColor: '#f1f5f9',
+        backgroundColor: '#eff6ff',
         borderRadius: '8px',
-        border: '1px solid #cbd5e1',
+        border: '1px solid #bfdbfe',
       }}>
-        <CheckCircle size={18} weight="fill" color="#475569" />
-        <span style={{ color: '#475569', fontWeight: '600' }}>
-          {finishedMatches.length} mac tamamlandi
+        <Clock size={18} weight="fill" color="#2563eb" />
+        <span style={{ color: '#1d4ed8', fontWeight: '600' }}>
+          {upcomingMatches.length} mac bekliyor
         </span>
       </div>
 
       {/* Match List - using prefetchedMatches to avoid double fetching */}
       <MatchList
-        view="finished"
-        prefetchedMatches={finishedMatches}
+        view="not_started"
+        prefetchedMatches={upcomingMatches}
         skipInternalUpdates={true}
         isLoading={isLoading}
       />
@@ -116,4 +116,4 @@ export function FinishedTab() {
   );
 }
 
-export default FinishedTab;
+export default UpcomingTab;

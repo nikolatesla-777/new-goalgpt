@@ -51,6 +51,13 @@ const SparklesIcon = () => (
     </svg>
 );
 
+const LivescoreIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9.563C9 9.252 9.252 9 9.563 9h4.874c.311 0 .563.252.563.563v4.874c0 .311-.252.563-.563.563H9.564A.562.562 0 019 14.437V9.564z" />
+    </svg>
+);
+
 interface NavItem {
     path: string;
     label: string;
@@ -59,9 +66,10 @@ interface NavItem {
 
 const navSections: { label: string; items: NavItem[] }[] = [
     {
-        label: 'Genel Bakış',
+        label: 'Genel Bakis',
         items: [
             { path: '/', label: 'Komuta Merkezi', icon: DashboardIcon },
+            { path: '/livescore', label: 'Canli Skor', icon: LivescoreIcon },
         ],
     },
     {
@@ -70,14 +78,14 @@ const navSections: { label: string; items: NavItem[] }[] = [
             { path: '/ai-predictions', label: 'Yapay Zeka', icon: SparklesIcon },
             { path: '/ai-lab', label: 'AI Analiz Lab', icon: SparklesIcon },
             { path: '/admin/predictions', label: 'Tahmin Listesi', icon: PredictionsIcon },
-            { path: '/admin/logs', label: 'İstek Logları', icon: LogsIcon },
+            { path: '/admin/logs', label: 'Istek Loglari', icon: LogsIcon },
             { path: '/admin/manual-predictions', label: 'Manuel Tahmin', icon: ManualIcon },
         ],
     },
     {
-        label: 'Yönetim',
+        label: 'Yonetim',
         items: [
-            { path: '/admin/bots', label: 'Bot Kuralları', icon: BotsIcon },
+            { path: '/admin/bots', label: 'Bot Kurallari', icon: BotsIcon },
             { path: '/admin/settings', label: 'Ayarlar', icon: SettingsIcon },
         ],
     },

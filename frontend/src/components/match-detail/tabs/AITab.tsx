@@ -1,193 +1,231 @@
 /**
- * AI Tab - PHASE 6 INTEGRATED
+ * AI Tab
  *
- * Displays AI predictions for the match.
- * HOTFIX: Removed useLivescore dependency - Match Detail page lacks LivescoreProvider.
- * Now uses direct API call only.
+ * Shows AI predictions for the match
  */
 
-import { useMemo, useState, useEffect } from 'react';
-import { Robot, Trophy, WarningCircle } from '@phosphor-icons/react';
-import type { Match, AIPredictionOnMatch } from '../../../api/matches';
+import { useState, useEffect } from 'react';
+import { useMatchDetail } from '../MatchDetailContext';
 
 interface Prediction {
   id: string;
-  match_id: string;
-  prediction: string;
-  prediction_type: string;
-  prediction_value: string;
-  overall_confidence: number;
   bot_name: string;
-  minute_at_prediction: number;
-  score_at_prediction: string;
-  result: string | null;
-  prediction_result: string | null;
+  prediction_type: string;
+  predicted_outcome: string;
+  confidence: number;
+  odds: number;
+  result: 'pending' | 'win' | 'lose' | 'void';
+  reasoning?: string;
   created_at: string;
-  access_type?: 'VIP' | 'FREE';
 }
 
-interface AITabProps {
-  data: any; // DEPRECATED: Kept for backward compatibility
-  match: Match;
-}
-
-export function AITab({ match }: AITabProps) {
-  // HOTFIX: Direct API call only - removed useLivescore() which crashed outside LivescoreProvider
-  const [aiPrediction, setAiPrediction] = useState<AIPredictionOnMatch | null>(null);
+export function AITab() {
+  const { matchId, match } = useMatchDetail();
+  const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!match.id) return;
+    const fetchPredictions = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/predictions/match/${matchId}`);
+        if (!response.ok) throw new Error('Tahminler yuklenemedi');
+        const data = await response.json();
+        setPredictions(data.predictions || []);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    setLoading(true);
-    fetch(`/api/predictions/match/${match.id}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.predictions && data.predictions.length > 0) {
-          setAiPrediction(data.predictions[0]);
-        }
-      })
-      .catch(err => console.error('[AITab] API error:', err))
-      .finally(() => setLoading(false));
-  }, [match.id]);
+    fetchPredictions();
+  }, [matchId]);
 
-  // Transform to legacy Prediction format
-  const predictions = useMemo(() => {
-    if (!aiPrediction) return [];
-    return [{
-      id: aiPrediction.id,
-      match_id: match.id,
-      prediction: aiPrediction.prediction,
-      prediction_type: aiPrediction.prediction,
-      prediction_value: aiPrediction.prediction,
-      overall_confidence: (aiPrediction.prediction_threshold || 0.5) * 100,
-      bot_name: aiPrediction.canonical_bot_name,
-      minute_at_prediction: aiPrediction.minute_at_prediction,
-      score_at_prediction: aiPrediction.score_at_prediction,
-      result: aiPrediction.result,
-      prediction_result: aiPrediction.result === 'won' ? 'winner' : aiPrediction.result === 'lost' ? 'loser' : null,
-      created_at: aiPrediction.created_at,
-      access_type: aiPrediction.access_type,
-    }] as Prediction[];
-  }, [aiPrediction, match.id]);
-
-  // Show loading spinner while fetching
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-12 text-center">
-        <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-        <p className="text-gray-600">AI tahminleri yükleniyor...</p>
+      <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+        AI tahminleri yukleniyor...
       </div>
     );
   }
 
-  if (predictions.length === 0) {
+  if (error || predictions.length === 0) {
     return (
-      <div className="bg-gradient-to-br from-white via-gray-50 to-white rounded-2xl p-12 text-center border border-gray-200/50 shadow-lg">
-        <div className="flex flex-col items-center justify-center">
-          <div className="relative mb-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-3xl flex items-center justify-center shadow-inner">
-              <Robot size={40} weight="duotone" className="text-gray-400" />
-            </div>
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-indigo-500 rounded-full border-4 border-white"></div>
-          </div>
-          <h3 className="text-2xl font-black text-gray-800 mb-3 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-            Tahmin Bulunamadı
-          </h3>
-          <p className="text-gray-600 max-w-md mx-auto leading-relaxed">
-            Bu maç için henüz yapay zeka tarafından oluşturulmuş güvenilir bir tahmin bulunmuyor.
-          </p>
+      <div style={{
+        padding: '40px',
+        textAlign: 'center',
+        color: '#6b7280',
+        backgroundColor: 'white',
+        borderRadius: '12px'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🤖</div>
+        <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
+          {error || 'AI Tahmini Bulunamadi'}
+        </div>
+        <div style={{ fontSize: '14px' }}>
+          Bu mac icin henuz AI tahmini yapilmamis.
         </div>
       </div>
     );
   }
 
+  const getResultColor = (result: string) => {
+    switch (result) {
+      case 'win': return { bg: '#dcfce7', text: '#16a34a', label: 'Kazandi' };
+      case 'lose': return { bg: '#fee2e2', text: '#dc2626', label: 'Kaybetti' };
+      case 'void': return { bg: '#f3f4f6', text: '#6b7280', label: 'Iptal' };
+      default: return { bg: '#fef3c7', text: '#d97706', label: 'Bekliyor' };
+    }
+  };
+
+  const getPredictionTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'match_result': 'Mac Sonucu',
+      'over_under': 'Alt/Ust',
+      'both_teams_score': 'KG Var/Yok',
+      'correct_score': 'Skor Tahmini',
+      'first_half': 'Ilk Yari',
+      'half_time_full_time': 'IY/MS',
+    };
+    return labels[type] || type;
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-      <div className="divide-y divide-gray-100">
-        {predictions.map((prediction) => {
-          const isWinner = prediction.prediction_result === 'winner';
-          const isLoser = prediction.prediction_result === 'loser';
-          const isPending = !prediction.prediction_result || prediction.prediction_result === 'pending';
-          const scoreAtPrediction = prediction.score_at_prediction || '0-0';
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {predictions.map((prediction) => {
+        const resultStyle = getResultColor(prediction.result);
 
-          return (
-            <div
-              key={prediction.id}
-              className="p-3 sm:p-4 hover:bg-gray-50 transition-colors duration-150"
-            >
-              <div className="flex items-center justify-between gap-3 md:gap-4 flex-wrap sm:flex-nowrap">
-                {/* Left Side: Bot Info */}
-                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                      <Robot size={14} weight="fill" className="text-white sm:w-[18px] sm:h-[18px]" />
-                    </div>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1 md:gap-2 flex-wrap text-xs sm:text-sm">
-                      <span className="font-bold text-gray-900 truncate">
-                        {prediction.bot_name || 'GoalGPT AI'}
-                      </span>
-                      {prediction.minute_at_prediction && (
-                        <>
-                          <span className="text-gray-300">-</span>
-                          <span className="text-gray-600 font-medium whitespace-nowrap">
-                            {prediction.minute_at_prediction}. Dakika
-                          </span>
-                        </>
-                      )}
-                      {scoreAtPrediction && (
-                        <>
-                          <span className="text-gray-300">-</span>
-                          <span className="text-gray-500 font-medium whitespace-nowrap">Skor</span>
-                          <span className="font-semibold text-gray-700 whitespace-nowrap">{scoreAtPrediction}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
+        return (
+          <div
+            key={prediction.id}
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              border: '1px solid #e5e7eb'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 16px',
+              backgroundColor: '#f9fafb',
+              borderBottom: '1px solid #e5e7eb'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  backgroundColor: '#3b82f6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px'
+                }}>
+                  🤖
                 </div>
-
-                {/* Center: Prediction Detail */}
-                <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 order-3 sm:order-2 w-full sm:w-auto justify-center sm:justify-start">
-                  <div className="px-2 py-1 sm:px-3 sm:py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200/50">
-                    <span className="text-xs sm:text-sm font-bold text-gray-800 whitespace-nowrap">
-                      {prediction.prediction || prediction.prediction_value || prediction.prediction_type}
-                    </span>
+                <div>
+                  <div style={{ fontWeight: '600', fontSize: '14px', color: '#1f2937' }}>
+                    {prediction.bot_name}
                   </div>
-                  {prediction.access_type && (
-                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${prediction.access_type === 'VIP' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {prediction.access_type}
-                    </span>
-                  )}
-                </div>
-
-                {/* Right Side: Status Badge */}
-                <div className="flex-shrink-0 order-2 sm:order-3">
-                  {isPending && (
-                    <div className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-amber-50 rounded-lg border border-amber-200">
-                      <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
-                      <span className="text-[10px] sm:text-xs font-bold text-amber-700 whitespace-nowrap">BEKLİYOR</span>
-                    </div>
-                  )}
-                  {isWinner && (
-                    <div className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
-                      <Trophy size={12} weight="fill" className="text-emerald-600 sm:w-[14px] sm:h-[14px]" />
-                      <span className="text-[10px] sm:text-xs font-bold text-emerald-700 whitespace-nowrap">KAZANDI</span>
-                    </div>
-                  )}
-                  {isLoser && (
-                    <div className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 bg-red-50 rounded-lg border border-red-200">
-                      <WarningCircle size={12} weight="fill" className="text-red-600 sm:w-[14px] sm:h-[14px]" />
-                      <span className="text-[10px] sm:text-xs font-bold text-red-700 whitespace-nowrap">KAYBETTİ</span>
-                    </div>
-                  )}
+                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                    {getPredictionTypeLabel(prediction.prediction_type)}
+                  </div>
                 </div>
               </div>
+              <div style={{
+                padding: '4px 10px',
+                borderRadius: '12px',
+                backgroundColor: resultStyle.bg,
+                color: resultStyle.text,
+                fontSize: '12px',
+                fontWeight: '600'
+              }}>
+                {resultStyle.label}
+              </div>
             </div>
-          );
-        })}
-      </div>
+
+            {/* Content */}
+            <div style={{ padding: '16px' }}>
+              {/* Prediction */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '12px'
+              }}>
+                <div style={{
+                  fontSize: '18px',
+                  fontWeight: '700',
+                  color: '#1f2937'
+                }}>
+                  {prediction.predicted_outcome}
+                </div>
+                <div style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#dbeafe',
+                  color: '#1d4ed8',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}>
+                  @{prediction.odds?.toFixed(2) || '1.00'}
+                </div>
+              </div>
+
+              {/* Confidence Bar */}
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: '6px',
+                  fontSize: '12px',
+                  color: '#6b7280'
+                }}>
+                  <span>Guven</span>
+                  <span style={{ fontWeight: '600', color: '#374151' }}>
+                    %{Math.round(prediction.confidence * 100)}
+                  </span>
+                </div>
+                <div style={{
+                  height: '8px',
+                  backgroundColor: '#f3f4f6',
+                  borderRadius: '4px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${prediction.confidence * 100}%`,
+                    height: '100%',
+                    backgroundColor: prediction.confidence >= 0.7 ? '#22c55e' :
+                      prediction.confidence >= 0.5 ? '#eab308' : '#ef4444',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              </div>
+
+              {/* Reasoning */}
+              {prediction.reasoning && (
+                <div style={{
+                  padding: '12px',
+                  backgroundColor: '#f9fafb',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  color: '#4b5563',
+                  lineHeight: '1.5'
+                }}>
+                  {prediction.reasoning}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

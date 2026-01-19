@@ -1,95 +1,232 @@
 /**
- * H2H Tab - SIMPLIFIED
+ * H2H Tab
  *
- * Displays head-to-head statistics and previous matches between teams.
- * Now receives data via props (no Context).
+ * Shows head-to-head history between teams
  */
 
-import { UsersThree, Question } from '@phosphor-icons/react';
+import { useMatchDetail } from '../MatchDetailContext';
 
-interface H2HTabProps {
-  data: any;
-  match: any;
+// Shared component for team recent form card
+interface TeamFormCardProps {
+  teamName: string | undefined;
+  teamId: string | undefined;
+  recentForm: any[];
 }
 
-export function H2HTab({ data, match }: H2HTabProps) {
-  // Enhanced empty state with team info
-  if (!data) {
-    const homeTeamName = match?.home_team?.name || 'Ev Sahibi';
-    const awayTeamName = match?.away_team?.name || 'Deplasman';
+function TeamFormCard({ teamName, teamId, recentForm }: TeamFormCardProps) {
+  return (
+    <div style={{
+      backgroundColor: 'white',
+      borderRadius: '12px',
+      overflow: 'hidden'
+    }}>
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: '1px solid #e5e7eb',
+        fontWeight: '600',
+        fontSize: '13px',
+        color: '#374151'
+      }}>
+        {teamName} Son Form
+      </div>
+      {recentForm.slice(0, 5).map((m, idx) => {
+        const isHome = m.home_team?.id === teamId;
+        const teamScore = isHome ? m.home_score : m.away_score;
+        const oppScore = isHome ? m.away_score : m.home_score;
+        const result = teamScore > oppScore ? 'W' : teamScore < oppScore ? 'L' : 'D';
+        const resultColor = result === 'W' ? '#22c55e' : result === 'L' ? '#ef4444' : '#eab308';
 
+        return (
+          <div
+            key={m.id || idx}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '10px 16px',
+              borderBottom: idx < Math.min(recentForm.length, 5) - 1 ? '1px solid #f3f4f6' : 'none',
+              fontSize: '13px'
+            }}
+          >
+            <div style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '6px',
+              backgroundColor: resultColor,
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: '600',
+              fontSize: '12px',
+              marginRight: '10px'
+            }}>
+              {result === 'W' ? 'G' : result === 'L' ? 'M' : 'B'}
+            </div>
+            <div style={{ flex: 1, color: '#6b7280' }}>
+              {isHome ? m.away_team?.name : m.home_team?.name}
+            </div>
+            <div style={{ fontWeight: '500' }}>
+              {teamScore}-{oppScore}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function H2HTab() {
+  const { h2h, h2hLoading, match } = useMatchDetail();
+
+  if (h2hLoading) {
     return (
-      <div className="bg-gradient-to-br from-white via-gray-50 to-white rounded-2xl p-8 md:p-12 text-center border border-gray-200/50 shadow-lg">
-        <div className="flex flex-col items-center justify-center">
-          <div className="relative mb-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-indigo-200 rounded-3xl flex items-center justify-center shadow-inner">
-              <UsersThree size={40} weight="duotone" className="text-indigo-500" />
-            </div>
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gray-400 rounded-full border-4 border-white flex items-center justify-center">
-              <Question size={12} weight="bold" className="text-white" />
-            </div>
-          </div>
-          <h3 className="text-xl font-bold text-gray-800 mb-3">
-            Karşılıklı Maç Geçmişi Bulunamadı
-          </h3>
-          <p className="text-gray-600 max-w-md mx-auto leading-relaxed mb-4">
-            <span className="font-semibold text-blue-600">{homeTeamName}</span> ve{' '}
-            <span className="font-semibold text-red-500">{awayTeamName}</span> takımları
-            arasında daha önce kayıtlı bir karşılaşma bulunmuyor.
-          </p>
-          <div className="bg-gray-100 rounded-lg px-4 py-2 text-xs text-gray-500">
-            Bu takımlar ilk kez karşılaşıyor olabilir veya veriler henüz yüklenmemiş olabilir.
-          </div>
+      <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+        H2H verisi yukleniyor...
+      </div>
+    );
+  }
+
+  if (!h2h || !h2h.summary) {
+    return (
+      <div style={{
+        padding: '40px',
+        textAlign: 'center',
+        color: '#6b7280',
+        backgroundColor: 'white',
+        borderRadius: '12px'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🤝</div>
+        <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
+          H2H Verisi Bulunamadi
+        </div>
+        <div style={{ fontSize: '14px' }}>
+          Bu takimlar arasindaki gecmis maclar bulunamadi.
         </div>
       </div>
     );
   }
 
-  const summary = data.summary;
-  const h2hMatches = data.h2hMatches || [];
+  const { summary, h2hMatches = [], homeRecentForm = [], awayRecentForm = [] } = h2h;
+  const total = summary.total || 1;
 
   return (
-    <div className="flex flex-col gap-3 sm:gap-4">
-      {/* H2H Summary */}
-      {summary && summary.total > 0 && (
-        <div className="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-gray-100 text-center">
-          <h3 className="m-0 mb-3 sm:mb-4 font-semibold text-sm sm:text-base">Karşılıklı Maçlar Özeti</h3>
-          <div className="flex justify-center gap-4 sm:gap-6">
-            <div className="text-center">
-              <div className="font-bold text-blue-600 text-lg sm:text-2xl">{summary.homeWins}</div>
-              <div className="text-gray-600 text-xs sm:text-sm mt-1">Ev Kazandı</div>
-            </div>
-            <div className="text-center">
-              <div className="font-bold text-gray-400 text-lg sm:text-2xl">{summary.draws}</div>
-              <div className="text-gray-600 text-xs sm:text-sm mt-1">Berabere</div>
-            </div>
-            <div className="text-center">
-              <div className="font-bold text-red-500 text-lg sm:text-2xl">{summary.awayWins}</div>
-              <div className="text-gray-600 text-xs sm:text-sm mt-1">Dep Kazandı</div>
-            </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Summary Card */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '20px'
+      }}>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#374151' }}>
+          Karsılasma Ozeti
+        </h3>
+
+        {/* Stats Bars */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
+            <span style={{ color: '#3b82f6', fontWeight: '600' }}>
+              {match?.home_team?.name} ({summary.homeWins})
+            </span>
+            <span style={{ color: '#6b7280' }}>Beraberlik ({summary.draws})</span>
+            <span style={{ color: '#ef4444', fontWeight: '600' }}>
+              {match?.away_team?.name} ({summary.awayWins})
+            </span>
           </div>
-          <div className="mt-3 text-gray-600 text-xs sm:text-sm">
-            Toplam {summary.total} maç
+          <div style={{
+            display: 'flex',
+            height: '12px',
+            borderRadius: '6px',
+            overflow: 'hidden',
+            backgroundColor: '#f3f4f6'
+          }}>
+            <div style={{
+              width: `${(summary.homeWins / total) * 100}%`,
+              backgroundColor: '#3b82f6',
+              transition: 'width 0.3s'
+            }} />
+            <div style={{
+              width: `${(summary.draws / total) * 100}%`,
+              backgroundColor: '#9ca3af',
+              transition: 'width 0.3s'
+            }} />
+            <div style={{
+              width: `${(summary.awayWins / total) * 100}%`,
+              backgroundColor: '#ef4444',
+              transition: 'width 0.3s'
+            }} />
           </div>
         </div>
-      )}
+
+        <div style={{
+          textAlign: 'center',
+          fontSize: '13px',
+          color: '#6b7280'
+        }}>
+          Toplam {summary.total} mac oynandi
+        </div>
+      </div>
 
       {/* Previous H2H Matches */}
       {h2hMatches.length > 0 && (
-        <div className="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-gray-100">
-          <h4 className="m-0 mb-3 font-semibold text-sm sm:text-base">Son Karşılaşmalar</h4>
-          <div className="flex flex-col gap-2">
-            {h2hMatches.slice(0, 5).map((match: any, idx: number) => (
-              <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center gap-2">
-                <span className="text-xs sm:text-sm text-gray-600 truncate">{match.date || match.match_time}</span>
-                <span className="font-semibold text-sm sm:text-base whitespace-nowrap">{match.home_score ?? '-'} - {match.away_score ?? '-'}</span>
-              </div>
-            ))}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            padding: '16px',
+            borderBottom: '1px solid #e5e7eb',
+            fontWeight: '600',
+            fontSize: '14px',
+            color: '#374151'
+          }}>
+            Onceki Karsilasmalar
           </div>
+          {h2hMatches.slice(0, 5).map((m, idx) => (
+            <div
+              key={m.id || idx}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderBottom: idx < Math.min(h2hMatches.length, 5) - 1 ? '1px solid #f3f4f6' : 'none'
+              }}
+            >
+              <div style={{ flex: 1, fontSize: '14px' }}>
+                {m.home_team?.name}
+              </div>
+              <div style={{
+                padding: '4px 12px',
+                backgroundColor: '#f3f4f6',
+                borderRadius: '8px',
+                fontWeight: '600',
+                fontSize: '14px'
+              }}>
+                {m.home_score} - {m.away_score}
+              </div>
+              <div style={{ flex: 1, textAlign: 'right', fontSize: '14px' }}>
+                {m.away_team?.name}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Note: If !data is true, the enhanced empty state above is shown instead */}
+      {/* Recent Form */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <TeamFormCard
+          teamName={match?.home_team?.name}
+          teamId={match?.home_team_id}
+          recentForm={homeRecentForm}
+        />
+        <TeamFormCard
+          teamName={match?.away_team?.name}
+          teamId={match?.away_team_id}
+          recentForm={awayRecentForm}
+        />
+      </div>
     </div>
   );
 }

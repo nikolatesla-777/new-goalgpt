@@ -6,7 +6,7 @@
  * Strategy:
  * 1. Database-first (FAST - ~50ms)
  * 2. Check staleness (30s for live, 5min for finished)
- * 3. Fallback to TheSports API if stale
+ * 3. Fallback to TheSports API if stale (with 5s timeout)
  * 4. Graceful error handling (never crash, return empty array)
  *
  * Performance: 10,000ms → 300ms (97% faster than old getMatchDetailLive)
@@ -17,6 +17,23 @@ import { theSportsAPI } from '../../../core/TheSportsAPIManager';
 import { logger } from '../../../utils/logger';
 import { MatchDetailLiveResponse } from '../../../types/thesports/match';
 import { IncidentOrchestrator } from '../../orchestration/IncidentOrchestrator';
+
+// Short timeout for incidents API - we prefer quick empty response over slow full response
+const INCIDENTS_API_TIMEOUT_MS = 5000;
+
+// Timeout wrapper for API calls
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    setTimeout(() => reject(new Error(`API timeout after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } catch (error) {
+    logger.warn(`[MatchIncidents] API call timed out, returning fallback`);
+    return fallback;
+  }
+}
 
 export class MatchIncidentsService {
   /**
@@ -57,9 +74,18 @@ export class MatchIncidentsService {
       if (dbResult.rows.length === 0) {
         logger.warn(`[MatchIncidents] Match ${matchId} not found in database, fetching from API`);
 
-        // Match not in database - fetch from API
+        // Match not in database - fetch from API with timeout
         try {
-          const apiData = await theSportsAPI.get<any>('/match/detail_live', { match_id: matchId });
+          const apiData = await withTimeout(
+            theSportsAPI.get<any>('/match/detail_live', { match_id: matchId }),
+            INCIDENTS_API_TIMEOUT_MS,
+            null
+          );
+
+          if (!apiData) {
+            logger.warn(`[MatchIncidents] API timeout for ${matchId}, returning empty`);
+            return { incidents: [] };
+          }
 
           // CRITICAL FIX: results IS the incidents array (not results[0].incidents)
           // TheSports API returns: { "results": [{ "type": 1, "time": 5, ... }, ...] }
@@ -110,7 +136,17 @@ export class MatchIncidentsService {
       logger.info(`[MatchIncidents] Fetching fresh incidents for ${matchId} (stale: ${Math.round(staleness / 1000)}s, live: ${isLive})`);
 
       try {
-        const apiData = await theSportsAPI.get<any>('/match/detail_live', { match_id: matchId });
+        const apiData = await withTimeout(
+          theSportsAPI.get<any>('/match/detail_live', { match_id: matchId }),
+          INCIDENTS_API_TIMEOUT_MS,
+          null
+        );
+
+        if (!apiData) {
+          // Timeout - return stale data from DB
+          logger.warn(`[MatchIncidents] API timeout for ${matchId}, using stale database data (${incidents.length} incidents)`);
+          return { incidents };
+        }
 
         // CRITICAL FIX: results IS the incidents array (not results[0].incidents)
         // TheSports API returns: { "results": [{ "type": 1, "time": 5, ... }, ...] }

@@ -1,8 +1,20 @@
 #!/bin/bash
 # VPS Deploy Script - Simple and guaranteed to work
 
+# Default branch to main if not provided
+BRANCH=${1:-main}
+
+echo "🚀 Deploying branch: $BRANCH"
+
 cd /var/www/goalgpt
-git pull origin main
+
+# Fetch latest changes
+git fetch origin
+
+# Checkout specific branch
+git checkout $BRANCH
+git pull origin $BRANCH
+
 npm install
 
 # Ensure logs directory exists
@@ -39,4 +51,4 @@ cd frontend
 npm install
 npm run build
 cp -r dist/* /var/www/goalgpt-frontend/
-echo "✅ Deploy completed"
+echo "✅ Deploy completed for branch: $BRANCH"
