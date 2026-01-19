@@ -158,6 +158,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Match predictions with NULL match_id to actual matches using team names and date',
   },
+  {
+    name: 'Daily Diary Sync',
+    schedule: '0 21 * * *', // Daily at 21:00 UTC = 00:00 TSİ (Turkey)
+    handler: async () => {
+      const { runDailyDiarySync } = await import('./dailyDiarySync.job');
+      await runDailyDiarySync();
+    },
+    enabled: true,
+    description: 'Sync today\'s match diary from TheSports API at midnight TSİ',
+  },
 ];
 
 /**
