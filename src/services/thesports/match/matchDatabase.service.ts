@@ -41,18 +41,19 @@ export class MatchDatabaseService {
       }
 
       // Parse date to get start and end of day (Unix timestamps)
-      // CRITICAL: Match TheSports API behavior for consistency
-      // When user requests date=20260119, they should see the same matches
-      // that TheSports API returns for that date parameter
-      // API uses ~16:00 UTC as day boundary (approximately 24-hour window)
+      // CRITICAL: TSI (Turkey Standard Time, UTC+3) based day boundaries
+      // For Turkish users, "January 19" means 00:00-23:59:59 in TSI
       const year = parseInt(dateStr.substring(0, 4));
       const month = parseInt(dateStr.substring(4, 6)) - 1; // Month is 0-indexed
       const day = parseInt(dateStr.substring(6, 8));
 
-      // TheSports API returns matches starting from ~16:00 UTC on (day-1)
-      // to ~16:00 UTC on (day). Align with API for consistent counts.
-      const startOfDayUTC = new Date(Date.UTC(year, month, day - 1, 16, 0, 0));
-      const endOfDayUTC = new Date(Date.UTC(year, month, day, 16, 0, 0));
+      // TSI (UTC+3) day boundaries: convert TSI midnight to UTC by subtracting 3 hours
+      // TSI 00:00:00 on day X = UTC 21:00:00 on day X-1
+      // TSI 23:59:59 on day X = UTC 20:59:59 on day X
+      // This is the CORRECT range for Turkish users (filters out previous day's late matches)
+      const TSI_OFFSET_SECONDS = 3 * 3600;
+      const startOfDayUTC = new Date(Date.UTC(year, month, day, 0, 0, 0) - TSI_OFFSET_SECONDS * 1000);
+      const endOfDayUTC = new Date(Date.UTC(year, month, day, 23, 59, 59) - TSI_OFFSET_SECONDS * 1000);
 
       const startUnix = Math.floor(startOfDayUTC.getTime() / 1000);
       const endUnix = Math.floor(endOfDayUTC.getTime() / 1000);
