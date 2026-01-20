@@ -2112,26 +2112,38 @@ async function getMatchFromDb(matchId: string): Promise<any> {
         m.season_id,
         m.match_time,
         m.status_id,
-        m.home_score,
-        m.away_score,
         m.minute,
         m.incidents,
+        -- CRITICAL FIX: Use COALESCE to get score from multiple sources (same as getMatchById)
+        COALESCE(
+          m.home_score_display,
+          (m.home_scores->0)::INTEGER,
+          m.home_score_regular,
+          0
+        ) as home_score,
+        COALESCE(
+          m.away_score_display,
+          (m.away_scores->0)::INTEGER,
+          m.away_score_regular,
+          0
+        ) as away_score,
         COALESCE(m.home_score_overtime, 0) as home_score_overtime,
         COALESCE(m.away_score_overtime, 0) as away_score_overtime,
         COALESCE(m.home_score_penalties, 0) as home_score_penalties,
         COALESCE(m.away_score_penalties, 0) as away_score_penalties,
-        COALESCE(m.home_red_cards, 0) as home_red_cards,
-        COALESCE(m.away_red_cards, 0) as away_red_cards,
-        COALESCE(m.home_yellow_cards, 0) as home_yellow_cards,
-        COALESCE(m.away_yellow_cards, 0) as away_yellow_cards,
-        COALESCE(m.home_corners, 0) as home_corners,
-        COALESCE(m.away_corners, 0) as away_corners,
+        COALESCE(m.home_red_cards, (m.home_scores->>2)::INTEGER, 0) as home_red_cards,
+        COALESCE(m.away_red_cards, (m.away_scores->>2)::INTEGER, 0) as away_red_cards,
+        COALESCE(m.home_yellow_cards, (m.home_scores->>3)::INTEGER, 0) as home_yellow_cards,
+        COALESCE(m.away_yellow_cards, (m.away_scores->>3)::INTEGER, 0) as away_yellow_cards,
+        COALESCE(m.home_corners, (m.home_scores->>4)::INTEGER, 0) as home_corners,
+        COALESCE(m.away_corners, (m.away_scores->>4)::INTEGER, 0) as away_corners,
+        -- CRITICAL FIX: Column is logo_url not logo
         ht.name as home_team_name,
-        ht.logo as home_team_logo,
+        ht.logo_url as home_team_logo,
         at.name as away_team_name,
-        at.logo as away_team_logo,
+        at.logo_url as away_team_logo,
         c.name as competition_name,
-        c.logo as competition_logo,
+        c.logo_url as competition_logo,
         c.country_id
       FROM ts_matches m
       LEFT JOIN ts_teams ht ON ht.external_id = m.home_team_id
