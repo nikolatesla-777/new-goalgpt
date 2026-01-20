@@ -13,6 +13,7 @@ import { MatchEvent } from '../services/thesports/websocket/event-detector';
 import { EventLatencyMonitor } from '../services/thesports/websocket/eventLatencyMonitor';
 import { liveMatchCache } from '../services/thesports/match/liveMatchCache.service';
 import { generateMinuteText } from '../utils/matchMinuteText';
+import { memoryCache } from '../utils/cache/memoryCache';
 import { PredictionSettledData, setOnPredictionSettled } from '../services/ai/predictionSettlement.service';
 
 // Store active WebSocket connections
@@ -70,10 +71,12 @@ export function broadcastEvent(event: MatchEvent, mqttReceivedTs?: number): void
     latencyMonitor.recordBroadcastSent(event.type, event.matchId, mqttReceivedTs);
   }
 
-  // Phase 6: Cache Invalidation - Invalidate on score-related events
+  /// Phase 6: Cache Invalidation - Invalidate on score-related events
   const cacheInvalidatingEvents = ['SCORE_CHANGE', 'GOAL', 'GOAL_CANCELLED', 'MATCH_STATE_CHANGE', 'MINUTE_UPDATE'];
   if (cacheInvalidatingEvents.includes(event.type)) {
     liveMatchCache.invalidateMatch(event.matchId, event.type);
+    // Phase 5: Also invalidate memory cache for getMatchFull endpoint
+    memoryCache.invalidateMatch(event.matchId);
     logger.debug(`[WebSocket Route] Cache invalidated for ${event.matchId} (${event.type})`);
   }
 

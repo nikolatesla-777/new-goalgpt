@@ -31,6 +31,7 @@ import { liveMatchCache } from '../services/thesports/match/liveMatchCache.servi
 import { matchStatsRepository } from '../repositories/matchStats.repository';
 import { getDiaryCache, setDiaryCache, getSmartTTL } from '../utils/matchCache';
 import { pool } from '../database/connection';
+import { memoryCache, cacheKeys } from '../utils/cache/memoryCache';
 // SINGLETON: Use shared API client instead of creating new instances
 import { theSportsAPI } from '../core';
 
@@ -1956,10 +1957,36 @@ export const getMatchFull = async (
     return;
   }
 
-  logger.info(`[getMatchFull] Fetching full match data for: ${match_id}`);
+  // ============================================================
+  // PHASE 5: MEMORY CACHE CHECK (L2 Cache - <1ms)
+  // ============================================================
+  const cacheKey = cacheKeys.matchFull(match_id);
+  const cached = memoryCache.get<any>('matchFull', cacheKey);
+
+  if (cached) {
+    const duration = Date.now() - startTime;
+    logger.debug(`[getMatchFull] CACHE HIT for ${match_id} (${duration}ms)`);
+
+    reply.send({
+      success: true,
+      data: cached,
+      meta: {
+        duration_ms: duration,
+        match_found: !!cached.match,
+        source: 'memory_cache',
+        timestamp: new Date().toISOString(),
+      }
+    });
+    return;
+  }
+
+  // ============================================================
+  // CACHE MISS - Fetch from database
+  // ============================================================
+  logger.info(`[getMatchFull] CACHE MISS for ${match_id}, fetching from DB`);
 
   try {
-    // Global timeout wrapper - 3s max for entire operation (increased from 2s for DB latency)
+    // Global timeout wrapper - 3s max for entire operation
     const globalTimeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Global timeout')), 3000)
     );
@@ -1967,7 +1994,7 @@ export const getMatchFull = async (
     const fetchAllData = async () => {
       // Fetch all data in parallel (server-side)
       const [matchResult, statsResult, incidentsResult, lineupResult, h2hResult, trendResult] = await Promise.all([
-        // Match basic info (DB only - fast) - log errors for debugging
+        // Match basic info (DB only - fast)
         getMatchFromDb(match_id).catch((err) => {
           logger.error(`[getMatchFull] Match fetch failed for ${match_id}:`, err.message);
           return null;
@@ -2005,7 +2032,7 @@ export const getMatchFull = async (
     // Race against global timeout
     const result = await Promise.race([fetchAllData(), globalTimeout]) as any;
 
-    // Fetch standings separately (non-blocking, extends response slightly)
+    // Fetch standings separately (non-blocking)
     let standings: any[] = [];
     if (result.match?.season_id) {
       try {
@@ -2016,24 +2043,37 @@ export const getMatchFull = async (
       }
     }
 
+    // Build final response data
+    const responseData = {
+      ...result,
+      standings,
+    };
+
+    // ============================================================
+    // PHASE 5: CACHE THE RESULT (status-aware TTL)
+    // ============================================================
+    if (result.match) {
+      const statusId = result.match.status_id;
+      memoryCache.set('matchFull', cacheKey, responseData, statusId);
+      logger.debug(`[getMatchFull] Cached ${match_id} with status ${statusId}`);
+    }
+
     const duration = Date.now() - startTime;
 
     // Log warning if match not found
     if (!result.match) {
-      logger.warn(`[getMatchFull] Match not found in DB for ${match_id} (completed in ${duration}ms)`);
+      logger.warn(`[getMatchFull] Match not found in DB for ${match_id} (${duration}ms)`);
     } else {
-      logger.info(`[getMatchFull] Completed in ${duration}ms for ${match_id}`);
+      logger.info(`[getMatchFull] Completed in ${duration}ms for ${match_id} (source: database)`);
     }
 
     reply.send({
       success: true,
-      data: {
-        ...result,
-        standings,
-      },
+      data: responseData,
       meta: {
         duration_ms: duration,
         match_found: !!result.match,
+        source: 'database',
         timestamp: new Date().toISOString(),
       }
     });
@@ -2057,6 +2097,7 @@ export const getMatchFull = async (
         meta: {
           duration_ms: duration,
           timeout: true,
+          source: 'timeout',
           timestamp: new Date().toISOString(),
         }
       });
