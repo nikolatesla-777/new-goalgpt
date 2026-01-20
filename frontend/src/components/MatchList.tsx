@@ -136,6 +136,9 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
         console.log('[AI Filter] Total predictions:', aiData.predictions?.length || 0);
         console.log('[AI Filter] Filtered predictions:', filteredPredictions.length);
 
+        // CRITICAL DEBUG: Show popup to verify filter is working (TEMPORARY)
+        alert(`🔍 AI TAHMİN FİLTRESİ ÇALIŞIYOR\n\nSeçili Tarih: ${selectedDateStr}\nToplam Tahmin: ${aiData.predictions?.length || 0}\nFiltrelenen: ${filteredPredictions.length}\n\nTSİ Aralığı:\n${new Date(dayStartUTC * 1000).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}\n-\n${new Date(dayEndUTC * 1000).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}`);
+
         // Map AI predictions to Match objects
         // The API returns predictions with joined match data
         const mappedMatches = filteredPredictions.map((p: any) => {
