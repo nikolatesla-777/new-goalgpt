@@ -121,7 +121,15 @@ export class MatchIncidentsService {
 
       // CRITICAL FIX: If incidents is empty, ALWAYS fetch from API
       // This ensures events are never missing due to empty database cache
+      // PERF FIX Phase 3: Skip API call for NOT_STARTED matches (status_id=1)
+      // - NOT_STARTED matches can't have incidents yet
+      // - This saves ~2s API timeout for matches that haven't started
       if (incidents.length === 0) {
+        // Skip API call for NOT_STARTED matches - no incidents exist yet
+        if (match.status_id === 1) {
+          logger.debug(`[MatchIncidents] Skipping API for NOT_STARTED match ${matchId} (no incidents possible)`);
+          return { incidents: [] };
+        }
         logger.info(`[MatchIncidents] Database incidents empty for ${matchId}, fetching from API`);
         // Fall through to STEP 3
       } else if (staleness < maxStalenessMs) {
