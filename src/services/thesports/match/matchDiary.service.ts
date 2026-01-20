@@ -112,10 +112,11 @@ export class MatchDiaryService {
         resultsExtra = response.results_extra;
       }
 
-      if (results.length === 0 || total === 0) {
+      if (results.length === 0) {
         // No more results - stop pagination
+        // CRITICAL: Don't check total === 0, TheSports API returns total=0 even when results exist
         hasMore = false;
-        logger.debug(`[MatchDiary] Page ${page}: No more results (total=${total})`);
+        logger.debug(`[MatchDiary] Page ${page}: No more results (${results.length} results, total=${total})`);
       } else {
         allResults = allResults.concat(results);
         logger.info(`[MatchDiary] Page ${page}: Fetched ${results.length} matches (total so far: ${allResults.length})`);
