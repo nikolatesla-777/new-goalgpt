@@ -272,6 +272,9 @@ class PredictionSettlementService {
    *
    * Status 3 (HALF_TIME) geldiğinde çağrılır
    * Sadece minute <= 45 olan tahminleri sonuçlandırır
+   *
+   * BUGFIX (2026-01-20): Verify match status from DB before settling
+   * This prevents false settlements from stale/incorrect status data
    */
   private async handleHalftime(event: SettlementEvent): Promise<SettlementResult> {
     const client = await pool.connect();
@@ -279,6 +282,22 @@ class PredictionSettlementService {
 
     try {
       await client.query('BEGIN');
+
+      // BUGFIX: Verify match is actually at halftime before settling
+      const matchCheck = await client.query(`
+        SELECT status_id FROM ts_matches WHERE external_id = $1
+      `, [event.matchId]);
+
+      if (matchCheck.rows.length > 0) {
+        const actualStatus = matchCheck.rows[0].status_id;
+        // Only allow halftime settlement if match is at status 3 or later
+        // Status 3 = HT, 4 = 2nd half, 5 = OT, 7 = Penalties, 8 = Ended
+        if (actualStatus !== null && actualStatus < 3) {
+          await client.query('COMMIT');
+          logger.warn(`[Settlement] HT: Match ${event.matchId} is NOT at halftime (status=${actualStatus}). Skipping settlement.`);
+          return { settled: 0, winners: 0, losers: 0, skipped: true, reason: 'match_not_at_halftime' };
+        }
+      }
 
       // Sadece IY tahminlerini al (minute <= 45)
       // Phase 2: prediction_threshold kolonunu direkt kullan
@@ -368,6 +387,8 @@ class PredictionSettlementService {
    *
    * Status 8 (END) geldiğinde çağrılır
    * Sadece minute > 45 olan tahminleri sonuçlandırır
+   *
+   * BUGFIX (2026-01-20): Verify match status from DB before settling
    */
   private async handleFulltime(event: SettlementEvent): Promise<SettlementResult> {
     const client = await pool.connect();
@@ -375,6 +396,21 @@ class PredictionSettlementService {
 
     try {
       await client.query('BEGIN');
+
+      // BUGFIX: Verify match has actually ended before settling
+      const matchCheck = await client.query(`
+        SELECT status_id FROM ts_matches WHERE external_id = $1
+      `, [event.matchId]);
+
+      if (matchCheck.rows.length > 0) {
+        const actualStatus = matchCheck.rows[0].status_id;
+        // Only allow fulltime settlement if match is at status 8 (ended)
+        if (actualStatus !== null && actualStatus !== 8) {
+          await client.query('COMMIT');
+          logger.warn(`[Settlement] FT: Match ${event.matchId} has NOT ended (status=${actualStatus}). Skipping settlement.`);
+          return { settled: 0, winners: 0, losers: 0, skipped: true, reason: 'match_not_ended' };
+        }
+      }
 
       // Veritabanından gerçek final skorunu al (COALESCE ile NULL kontrolü)
       // home_scores JSON dizisi: [0]=current, [4]=regular time score
