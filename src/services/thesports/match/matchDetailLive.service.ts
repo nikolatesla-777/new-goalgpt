@@ -704,8 +704,9 @@ export class MatchDetailLiveService {
                  $7, $8,
                  NOW(), NOW()
                )
-               ON CONFLICT (external_id) DO UPDATE SET 
+               ON CONFLICT (external_id) DO UPDATE SET
                  status_id = EXCLUDED.status_id,
+                 match_time = EXCLUDED.match_time,
                  home_score_regular = EXCLUDED.home_score_regular,
                  away_score_regular = EXCLUDED.away_score_regular,
                  updated_at = NOW()
