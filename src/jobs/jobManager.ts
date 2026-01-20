@@ -188,6 +188,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Pre-sync H2H data for NOT_STARTED matches (ensures H2H tab has data before match starts)',
   },
+  {
+    name: 'Live Stats Sync',
+    schedule: '* * * * *', // Every minute
+    handler: async () => {
+      const { runStatsSync } = await import('./statsSync.job');
+      await runStatsSync();
+    },
+    enabled: true,
+    description: 'Phase 6: Sync live match stats from TheSports API to database (proactive caching)',
+  },
 ];
 
 /**
