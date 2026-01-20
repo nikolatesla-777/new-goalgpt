@@ -1,21 +1,18 @@
 /**
  * Match Detail Modal
- * 
+ *
  * Modal component for displaying detailed match information
  * Includes tabs: H2H, Standings, Stats, Lineup, Trend
+ *
+ * PERF FIX: Uses unified endpoint (getMatchFull) instead of individual API calls
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Match } from '../../api/matches';
 import {
-    getMatchTeamStats,
-    getMatchLiveStats,
-    getMatchLineup,
-    getSeasonStandings,
-    getMatchTrend,
+    getMatchFull,
     getMatchHalfStats,
     getMatchPlayerStats,
-    getMatchH2H,
 } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
 
@@ -28,93 +25,74 @@ type TabType = 'stats' | 'h2h' | 'standings' | 'lineup';
 
 export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>('stats');
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [data, setData] = useState<any>(null);
-    const [trendData, setTrendData] = useState<any>(null);
+
+    // PERF FIX: Single unified data state instead of per-tab fetching
+    const [fullData, setFullData] = useState<any>(null);
+    const [halfStatsData, setHalfStatsData] = useState<any>(null);
+    const [playerStatsData, setPlayerStatsData] = useState<any>(null);
 
     const matchId = (match as any).external_id || (match as any).match_id || match.id;
-    const seasonId = match.season_id;
 
+    // PERF FIX: Fetch all data once when modal opens using unified endpoint
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchAllData = async () => {
             setLoading(true);
             setError(null);
-            setData(null);
-            setTrendData(null);
 
             try {
-                let result;
-                switch (activeTab) {
-                    case 'stats':
-                        // Fetch combined stats (live-stats endpoint includes both basic and detailed stats)
-                        // Also fetch half time stats for period selection
-                        const [liveStatsResult, halfStatsResult, trendResult] = await Promise.allSettled([
-                            getMatchLiveStats(matchId).catch(() => null), // Fail gracefully, fallback to teamStats
-                            getMatchHalfStats(matchId).catch(() => null), // Don't fail if half stats fails
-                            getMatchTrend(matchId).catch(() => null) // Don't fail if trend fails
-                        ]);
+                // Single API call for all basic data
+                const [mainData, halfStats, playerStats] = await Promise.all([
+                    getMatchFull(matchId),
+                    getMatchHalfStats(matchId).catch(() => null),
+                    getMatchPlayerStats(matchId).catch(() => null),
+                ]);
 
-                        // If liveStats failed, fallback to teamStats
-                        let fullTimeData = null;
-                        if (liveStatsResult.status === 'fulfilled' && liveStatsResult.value) {
-                            fullTimeData = {
-                                stats: liveStatsResult.value.stats || [],
-                                incidents: liveStatsResult.value.incidents || [],
-                            };
-                        } else {
-                            // Fallback to getMatchTeamStats
-                            try {
-                                const teamStats = await getMatchTeamStats(matchId);
-                                fullTimeData = teamStats;
-                            } catch {
-                                fullTimeData = null;
-                            }
-                        }
-
-                        result = {
-                            fullTime: fullTimeData,
-                            halfTime: halfStatsResult.status === 'fulfilled' ? halfStatsResult.value : null,
-                        };
-                        setTrendData(trendResult.status === 'fulfilled' ? trendResult.value : null);
-                        break;
-                    case 'h2h':
-                        result = await getMatchH2H(matchId);
-                        setTrendData(null);
-                        break;
-                    case 'standings':
-                        if (seasonId) {
-                            result = await getSeasonStandings(seasonId);
-                        } else {
-                            result = null; // No season_id
-                        }
-                        setTrendData(null);
-                        break;
-                    case 'lineup':
-                        // Fetch Lineup and Player Stats together
-                        const [lineupResult, playerStatsResult] = await Promise.all([
-                            getMatchLineup(matchId),
-                            getMatchPlayerStats(matchId).catch(() => null) // Don't fail if stats missing
-                        ]);
-                        result = {
-                            lineup: lineupResult,
-                            stats: playerStatsResult
-                        };
-                        setTrendData(null);
-                        break;
-                }
-                setData(result);
+                setFullData(mainData);
+                setHalfStatsData(halfStats);
+                setPlayerStatsData(playerStats);
             } catch (err: any) {
-                console.error('Tab data fetch error:', err);
+                console.error('Modal data fetch error:', err);
                 setError(err.message || 'Veri yüklenirken hata oluştu');
-                setData(null); // Ensure data is null on error
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchData();
-    }, [activeTab, matchId, seasonId]);
+        fetchAllData();
+    }, [matchId]);
+
+    // PERF FIX: Derive tab data from cached fullData instead of refetching
+    const tabData = useMemo(() => {
+        if (!fullData) return null;
+
+        switch (activeTab) {
+            case 'stats':
+                return {
+                    fullTime: {
+                        stats: fullData.stats || [],
+                        incidents: fullData.incidents || [],
+                    },
+                    halfTime: halfStatsData,
+                };
+            case 'h2h':
+                return fullData.h2h;
+            case 'standings':
+                return { standings: fullData.standings || [] };
+            case 'lineup':
+                return {
+                    lineup: fullData.lineup,
+                    stats: playerStatsData,
+                };
+            default:
+                return null;
+        }
+    }, [activeTab, fullData, halfStatsData, playerStatsData]);
+
+    const trendData = useMemo(() => {
+        return activeTab === 'stats' ? fullData?.trend : null;
+    }, [activeTab, fullData]);
 
     const tabs: { id: TabType; label: string }[] = [
         { id: 'stats', label: 'İstatistikler' },
@@ -283,16 +261,16 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                         </div>
                     )}
 
-                    {!loading && !error && data && (
+                    {!loading && !error && tabData && (
                         <div>
-                            {activeTab === 'stats' && <StatsContent data={data} match={match} trendData={trendData} />}
-                            {activeTab === 'h2h' && <H2HContent data={data} />}
-                            {activeTab === 'standings' && <StandingsContent data={data} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
-                            {activeTab === 'lineup' && <LineupContent data={data} />}
+                            {activeTab === 'stats' && <StatsContent data={tabData} match={match} trendData={trendData} />}
+                            {activeTab === 'h2h' && <H2HContent data={tabData} />}
+                            {activeTab === 'standings' && <StandingsContent data={tabData} homeTeamId={match.home_team_id} awayTeamId={match.away_team_id} />}
+                            {activeTab === 'lineup' && <LineupContent data={tabData} />}
                         </div>
                     )}
 
-                    {!loading && !error && !data && (
+                    {!loading && !error && !tabData && (
                         <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
                             Veri bulunamadı
                         </div>

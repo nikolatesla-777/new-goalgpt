@@ -169,44 +169,6 @@ async function retryFetch(url: string, options?: RequestInit, retries = 3, delay
 }
 
 /**
- * Get recent matches
- */
-export async function getRecentMatches(params?: {
-  page?: number;
-  limit?: number;
-  date?: string;
-}): Promise<MatchRecentResponse> {
-  const queryParams = new URLSearchParams();
-  if (params?.page) queryParams.append('page', params.page.toString());
-  if (params?.limit) queryParams.append('limit', params.limit.toString());
-  if (params?.date) queryParams.append('date', params.date);
-
-  const url = `${API_BASE_URL}/matches/recent?${queryParams}`;
-  const response = await retryFetch(url);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    if (response.status === 502 || response.status === 503 || response.status === 504) {
-      throw new Error(`HTTP ${response.status}: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
-    }
-    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
-  }
-
-  const data: ApiResponse<MatchRecentResponse> = await response.json();
-
-  if (!data.success) {
-    throw new Error(data.message || 'Failed to fetch recent matches');
-  }
-
-  // Check for TheSports API error
-  if (data.data.err) {
-    throw new Error(data.data.err);
-  }
-
-  return data.data;
-}
-
-/**
  * Get live matches
  * Returns matches with status_id IN (2, 3, 4, 5, 7) that started within the last 4 hours
  * NO date filtering - only status and time-based filtering
@@ -389,123 +351,13 @@ export async function getUnifiedMatches(params?: {
   }
 }
 
-/**
- * Get single match by ID
- * Fetches match directly from database by external_id (works for any date)
- */
-export async function getMatchById(matchId: string): Promise<Match> {
-  const url = `${API_BASE_URL}/matches/${matchId}`;
-
-  try {
-    const response = await retryFetch(url);
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error('Match not found');
-      }
-      const errorText = await response.text();
-      if (response.status === 502 || response.status === 503 || response.status === 504) {
-        throw new Error(`HTTP ${response.status}: Backend hazır değil. Lütfen birkaç saniye sonra tekrar deneyin.`);
-      }
-      throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
-    }
-
-    const data: ApiResponse<Match> = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to fetch match');
-    }
-
-    return data.data;
-  } catch (error: any) {
-    throw error;
-  }
-}
-
 // ===== MATCH DETAIL API FUNCTIONS =====
-
-/**
- * Get match analysis (H2H - Head to Head) - Legacy endpoint
- */
-export async function getMatchAnalysis(matchId: string, signal?: AbortSignal): Promise<any> {
-  const url = `${API_BASE_URL}/matches/${matchId}/analysis`;
-
-  try {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data: ApiResponse<any> = await response.json();
-    return data.data;
-  } catch (error: any) {
-    if (error.name === 'AbortError') return null;
-    throw error;
-  }
-}
-
-/**
- * Get match H2H data (from database with API fallback)
- * Returns structured H2H data including summary, previous matches, and recent form
- */
-export async function getMatchH2H(matchId: string, signal?: AbortSignal): Promise<any> {
-  const url = `${API_BASE_URL}/matches/${matchId}/h2h`;
-
-  try {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data: ApiResponse<any> = await response.json();
-    return data.data;
-  } catch (error: any) {
-    if (error.name === 'AbortError') return null;
-    throw error;
-  }
-}
-
-/**
- * Get match trend (minute-by-minute data)
- */
-export async function getMatchTrend(matchId: string, signal?: AbortSignal): Promise<any> {
-  const url = `${API_BASE_URL}/matches/${matchId}/trend`;
-
-  try {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data: ApiResponse<any> = await response.json();
-    return data.data;
-  } catch (error: any) {
-    if (error.name === 'AbortError') return null;
-    throw error;
-  }
-}
 
 /**
  * Get match half-time stats
  */
 export async function getMatchHalfStats(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/half-stats`;
-
-  try {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data: ApiResponse<any> = await response.json();
-    return data.data;
-  } catch (error: any) {
-    if (error.name === 'AbortError') return null;
-    throw error;
-  }
-}
-
-/**
- * Get match lineup
- */
-export async function getMatchLineup(matchId: string, signal?: AbortSignal): Promise<any> {
-  const url = `${API_BASE_URL}/matches/${matchId}/lineup`;
 
   try {
     const response = await fetch(url, { signal });
@@ -562,101 +414,11 @@ export async function getMatchIncidents(matchId: string, signal?: AbortSignal): 
 }
 
 /**
- * Get match team stats (from live stats feed for real-time data)
- */
-export async function getMatchTeamStats(matchId: string, signal?: AbortSignal): Promise<any> {
-  // Try live stats first (for currently live matches)
-  const liveUrl = `${API_BASE_URL}/matches/${matchId}/live-stats`;
-  const teamStatsUrl = `${API_BASE_URL}/matches/${matchId}/team-stats`;
-
-  try {
-    // First try live stats (more comprehensive for live matches)
-    const liveResponse = await fetch(liveUrl, { signal });
-    if (liveResponse.ok) {
-      const liveData: ApiResponse<any> = await liveResponse.json();
-      if (liveData.data?.stats?.length > 0) {
-        return liveData.data;
-      }
-    }
-
-    // Fallback to team-stats endpoint
-    const response = await fetch(teamStatsUrl, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data: ApiResponse<any> = await response.json();
-    return data.data;
-  } catch (error: any) {
-    if (error.name === 'AbortError') return null;
-    throw error;
-  }
-}
-
-/**
  * Get match player stats (for ratings and detailed stats)
  * GET /api/matches/:match_id/player-stats
  */
 export async function getMatchPlayerStats(matchId: string, signal?: AbortSignal): Promise<any> {
   const url = `${API_BASE_URL}/matches/${matchId}/player-stats`;
-
-  try {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data: ApiResponse<any> = await response.json();
-    return data.data;
-  } catch (error: any) {
-    if (error.name === 'AbortError') return null;
-    throw error;
-  }
-}
-
-
-/**
- * Get match detail live (score, events, stats)
- * API returns all live matches, so we filter for the specific matchId
- */
-export async function getMatchDetailLive(matchId: string, signal?: AbortSignal): Promise<any> {
-  const url = `${API_BASE_URL}/matches/${matchId}/detail-live`;
-
-  try {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data: ApiResponse<any> = await response.json();
-
-    // API returns array of all live matches, find the specific match
-    const results = data.data?.results || [];
-    const matchData = results.find((m: any) => m.id === matchId);
-
-    if (matchData) {
-      const result = {
-        incidents: matchData.incidents || [],
-        stats: matchData.stats || [],
-        score: matchData.score || null,
-        tlive: matchData.tlive || []
-      };
-      console.log(`[getMatchDetailLive] ✓ Found ${result.incidents.length} incidents for ${matchId}`);
-      return result;
-    }
-
-    // Match not found in live results (may have ended or not started)
-    console.warn(`[getMatchDetailLive] ❌ Match ${matchId} not found in ${results.length} results`);
-    return { incidents: [], stats: [], score: null, tlive: [] };
-  } catch (error: any) {
-    if (error.name === 'AbortError') return { incidents: [], stats: [], score: null, tlive: [] };
-    console.error('[getMatchDetailLive] Error:', error);
-    throw error;
-  }
-}
-
-/**
- * Get season standings
- */
-export async function getSeasonStandings(seasonId: string, signal?: AbortSignal): Promise<any> {
-  const url = `${API_BASE_URL}/seasons/${seasonId}/standings`;
 
   try {
     const response = await fetch(url, { signal });
@@ -871,25 +633,6 @@ export async function getLeagueStandings(leagueId: string, signal?: AbortSignal)
     }
     const data: ApiResponse<any> = await response.json();
     return data; // returns { standings: [...], season_id: ... }
-  } catch (error: any) {
-    if (error.name === 'AbortError') return null;
-    throw error;
-  }
-}
-
-/**
- * Get league teams
- */
-export async function getLeagueTeams(leagueId: string, signal?: AbortSignal): Promise<any> {
-  const url = `${API_BASE_URL}/leagues/${leagueId}/teams`;
-
-  try {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data: ApiResponse<any> = await response.json();
-    return data; // returns { teams: [...] }
   } catch (error: any) {
     if (error.name === 'AbortError') return null;
     throw error;
