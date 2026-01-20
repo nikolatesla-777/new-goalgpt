@@ -72,3 +72,52 @@ export function isToday(date: Date): boolean {
   );
 }
 
+/**
+ * TSI (Turkish Time, UTC+3) Timezone Utilities
+ * CRITICAL: All date operations should use TSI to ensure consistency
+ */
+const TSI_OFFSET_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+
+/**
+ * Get current date in TSI (UTC+3) timezone as YYYY-MM-DD string
+ */
+export function getTSIDate(): string {
+  const tsiMs = Date.now() + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
+
+  const year = tsiDate.getUTCFullYear();
+  const month = String(tsiDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(tsiDate.getUTCDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Convert any date to TSI (UTC+3) timezone and format as YYYY-MM-DD
+ */
+export function toTSIDate(date: Date): string {
+  const tsiMs = date.getTime() + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
+
+  const year = tsiDate.getUTCFullYear();
+  const month = String(tsiDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(tsiDate.getUTCDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Format date using TSI (UTC+3) timezone - YYYY-MM-DD
+ * Use this instead of formatTheSportsDate for consistent TSI dates
+ */
+export function formatTSIDate(date: Date): string {
+  return toTSIDate(date);
+}
+
+/**
+ * Get TSI date string in YYYYMMDD format (TheSports API format)
+ */
+export function getTSIDateString(): string {
+  return getTSIDate().replace(/-/g, '');
+}
+

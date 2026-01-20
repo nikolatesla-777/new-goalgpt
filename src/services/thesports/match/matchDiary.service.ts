@@ -14,7 +14,7 @@ import { TeamDataService } from '../team/teamData.service';
 import { MatchEnricherService } from './matchEnricher.service';
 import { TeamLogoService } from '../team/teamLogo.service';
 import { CompetitionService } from '../competition/competition.service';
-import { formatTheSportsDate } from '../../../utils/thesports/timestamp.util';
+import { formatTheSportsDate, getTSIDateString } from '../../../utils/thesports/timestamp.util';
 
 export class MatchDiaryService {
   private client = theSportsAPI;
@@ -48,18 +48,18 @@ export class MatchDiaryService {
         if (params.date.length === 8 && /^\d{8}$/.test(params.date)) {
           dateStr = params.date;
         } else {
-          dateStr = formatTheSportsDate(new Date()).replace(/-/g, '');
+          dateStr = getTSIDateString(); // Use TSI timezone
           logger.warn(`Using today's date instead: ${dateStr}`);
         }
       }
     } else {
-      dateStr = formatTheSportsDate(new Date()).replace(/-/g, '');
+      dateStr = getTSIDateString(); // Use TSI timezone
     }
-    
+
     // Final validation: Ensure dateStr is exactly 8 digits
     if (!/^\d{8}$/.test(dateStr)) {
       logger.error(`Date format validation failed: ${dateStr}. Using today's date.`);
-      dateStr = formatTheSportsDate(new Date()).replace(/-/g, '');
+      dateStr = getTSIDateString(); // Use TSI timezone
     }
     const cacheKey = this.buildCacheKey(dateStr);
 
