@@ -105,11 +105,36 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
         const dayStartUTC = new Date(Date.UTC(year, month, day, 0, 0, 0)).getTime() / 1000 - TSI_OFFSET_SECONDS;
         const dayEndUTC = new Date(Date.UTC(year, month, day, 23, 59, 59)).getTime() / 1000 - TSI_OFFSET_SECONDS;
 
+        // DEBUG: Log filter boundaries
+        console.log('[AI Filter] Selected date:', selectedDateStr);
+        console.log('[AI Filter] Parsed:', { year, month, day });
+        console.log('[AI Filter] TSI boundaries:', {
+          start: new Date(dayStartUTC * 1000).toISOString(),
+          end: new Date(dayEndUTC * 1000).toISOString(),
+          startUnix: dayStartUTC,
+          endUnix: dayEndUTC
+        });
+
         // Filter predictions by match_time within selected date
         const filteredPredictions = (aiData.predictions || []).filter((p: any) => {
           const matchTime = Number(p.match_time); // Ensure numeric comparison
-          return matchTime >= dayStartUTC && matchTime <= dayEndUTC;
+          const isInRange = matchTime >= dayStartUTC && matchTime <= dayEndUTC;
+
+          // DEBUG: Log each match
+          if (!isInRange) {
+            console.log('[AI Filter] REJECTED:', {
+              teams: `${p.home_team_name} vs ${p.away_team_name}`,
+              matchTime: new Date(matchTime * 1000).toISOString(),
+              unix: matchTime,
+              reason: matchTime < dayStartUTC ? 'too early' : 'too late'
+            });
+          }
+
+          return isInRange;
         });
+
+        console.log('[AI Filter] Total predictions:', aiData.predictions?.length || 0);
+        console.log('[AI Filter] Filtered predictions:', filteredPredictions.length);
 
         // Map AI predictions to Match objects
         // The API returns predictions with joined match data
