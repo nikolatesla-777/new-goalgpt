@@ -203,6 +203,7 @@ export async function runDailyDiarySync(): Promise<void> {
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
           ON CONFLICT (external_id) DO UPDATE SET
             status_id = EXCLUDED.status_id,
+            match_time = EXCLUDED.match_time,
             home_scores = EXCLUDED.home_scores,
             away_scores = EXCLUDED.away_scores,
             home_score_display = EXCLUDED.home_score_display,
