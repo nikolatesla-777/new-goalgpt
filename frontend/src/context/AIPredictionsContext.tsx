@@ -457,12 +457,7 @@ export function AIPredictionsProvider({ children }: AIPredictionsProviderProps) 
       case 'MINUTE_UPDATE':
         // Update live match minute (MQTT priority)
         // This enables real-time minute badge updates even when score doesn't change
-        console.log('[AIPredictions] ⏱️ MINUTE_UPDATE:', {
-          matchId: message.matchId,
-          minute: message.minute,
-          statusId: message.statusId
-        });
-
+        // PERF FIX: Removed verbose console.log that was spamming for ALL matches
         setPredictions(prev => prev.map(p => {
           if (p.match_id === message.matchId && p.result === 'pending') {
             return {
