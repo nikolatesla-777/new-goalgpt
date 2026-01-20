@@ -61,14 +61,22 @@ export function AIPredictionsPage() {
 
     // Filter by date - CRITICAL: Use TSI timezone (UTC+3)
     const filteredByDate = useMemo(() => {
-        // Get current TSI time
-        const tsiMs = Date.now() + (3 * 60 * 60 * 1000); // UTC+3
-        const tsiNow = new Date(tsiMs);
+        // CRITICAL FIX: Calculate TSI boundaries correctly
+        // TSI is UTC+3, so TSI midnight = UTC 21:00 previous day
+        const tsiOffsetMs = 3 * 60 * 60 * 1000; // 3 hours in ms
+        const tsiNowMs = Date.now() + tsiOffsetMs;
+        const tsiNow = new Date(tsiNowMs);
 
-        // Calculate TSI dates (using UTC methods to avoid local timezone issues)
-        const today = new Date(Date.UTC(tsiNow.getUTCFullYear(), tsiNow.getUTCMonth(), tsiNow.getUTCDate()));
+        // Get TSI date components
+        const tsiYear = tsiNow.getUTCFullYear();
+        const tsiMonth = tsiNow.getUTCMonth();
+        const tsiDate = tsiNow.getUTCDate();
+
+        // Calculate TSI midnight boundaries in UTC
+        // Example: TSI 2026-01-20 00:00 = UTC 2026-01-19 21:00
+        const today = new Date(Date.UTC(tsiYear, tsiMonth, tsiDate) - tsiOffsetMs);
         const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const monthStart = new Date(Date.UTC(tsiNow.getUTCFullYear(), tsiNow.getUTCMonth(), 1));
+        const monthStart = new Date(Date.UTC(tsiYear, tsiMonth, 1) - tsiOffsetMs);
 
         return allPredictions.filter(p => {
             const predDate = new Date(p.created_at);
