@@ -24,6 +24,7 @@ import {
   getMatchH2H,
   getMatchById,
   getUnifiedMatches,
+  getMatchFull,
 } from '../controllers/match.controller';
 import {
   forceRefreshStuckMatches,
@@ -161,6 +162,15 @@ export default async function matchRoutes(
    * NOTE: Must be registered before /:match_id route to avoid route conflicts
    */
   fastify.get('/:match_id/incidents', getMatchIncidents);
+
+  /**
+   * GET /api/matches/:match_id/full
+   * PERF FIX Phase 2: Unified endpoint - returns ALL match detail data in single call
+   * Reduces frontend from 6 API calls to 1 API call
+   * Server-side parallel fetch with 2s global timeout
+   * NOTE: Must be registered before /:match_id route to avoid route conflicts
+   */
+  fastify.get('/:match_id/full', getMatchFull);
 
   /**
    * POST /api/matches/force-refresh-stuck

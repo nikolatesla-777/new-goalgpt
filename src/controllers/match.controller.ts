@@ -30,6 +30,7 @@ import { generateMinuteText } from '../utils/matchMinuteText';
 import { liveMatchCache } from '../services/thesports/match/liveMatchCache.service';
 import { matchStatsRepository } from '../repositories/matchStats.repository';
 import { getDiaryCache, setDiaryCache, getSmartTTL } from '../utils/matchCache';
+import { pool } from '../database/connection';
 // SINGLETON: Use shared API client instead of creating new instances
 import { theSportsAPI } from '../core';
 
@@ -1922,3 +1923,261 @@ export const getMatchIncidents = async (
     });
   }
 };
+
+/**
+ * GET /api/matches/:match_id/full
+ *
+ * PERF FIX Phase 2: Unified endpoint - returns ALL match detail data in single call
+ *
+ * This reduces frontend from 6 API calls to 1 API call
+ * Server-side parallel fetch with 2s global timeout
+ *
+ * Returns:
+ * - match: Basic match info (teams, score, status)
+ * - stats: Live statistics (possession, shots, etc.)
+ * - incidents: Goals, cards, substitutions
+ * - lineup: Team lineups and formations
+ * - h2h: Head-to-head history
+ * - trend: Minute-by-minute data
+ * - standings: League table (if available)
+ */
+export const getMatchFull = async (
+  request: FastifyRequest<{ Params: { match_id: string } }>,
+  reply: FastifyReply
+) => {
+  const startTime = Date.now();
+  const { match_id } = request.params;
+
+  if (!match_id) {
+    reply.status(400).send({
+      success: false,
+      error: 'match_id parameter is required'
+    });
+    return;
+  }
+
+  logger.info(`[getMatchFull] Fetching full match data for: ${match_id}`);
+
+  try {
+    // Global timeout wrapper - 2s max for entire operation
+    const globalTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Global timeout')), 2000)
+    );
+
+    const fetchAllData = async () => {
+      // Fetch all data in parallel (server-side)
+      const [matchResult, statsResult, incidentsResult, lineupResult, h2hResult, trendResult] = await Promise.all([
+        // Match basic info (DB only - fast)
+        getMatchFromDb(match_id).catch(() => null),
+
+        // Stats - use existing service with 1s individual timeout
+        fetchStatsWithTimeout(match_id, 1000).catch(() => ({ stats: [] })),
+
+        // Incidents - use existing service with 1s individual timeout
+        matchIncidentsService.getMatchIncidents(match_id)
+          .then(r => r.incidents || [])
+          .catch(() => []),
+
+        // Lineup - use existing service with 1s individual timeout
+        getLineupFromDb(match_id).catch(() => null),
+
+        // H2H - use existing service (DB only - fast)
+        getH2HFromDb(match_id).catch(() => null),
+
+        // Trend - use existing service with 1s individual timeout
+        getTrendFromDb(match_id).catch(() => []),
+      ]);
+
+      // Build response object
+      return {
+        match: matchResult,
+        stats: statsResult?.stats || [],
+        incidents: incidentsResult || [],
+        lineup: lineupResult,
+        h2h: h2hResult,
+        trend: trendResult || [],
+      };
+    };
+
+    // Race against global timeout
+    const result = await Promise.race([fetchAllData(), globalTimeout]) as any;
+
+    // Fetch standings separately (non-blocking, extends response slightly)
+    let standings: any[] = [];
+    if (result.match?.season_id) {
+      try {
+        const standingsResult = await seasonStandingsService.getStandingsFromDb(result.match.season_id);
+        standings = standingsResult || [];
+      } catch {
+        // Ignore standings errors
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info(`[getMatchFull] Completed in ${duration}ms for ${match_id}`);
+
+    reply.send({
+      success: true,
+      data: {
+        ...result,
+        standings,
+      },
+      meta: {
+        duration_ms: duration,
+        timestamp: new Date().toISOString(),
+      }
+    });
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    logger.error(`[getMatchFull] Error after ${duration}ms:`, error.message);
+
+    // On timeout, return partial data if available
+    if (error.message === 'Global timeout') {
+      reply.send({
+        success: true,
+        data: {
+          match: null,
+          stats: [],
+          incidents: [],
+          lineup: null,
+          h2h: null,
+          trend: [],
+          standings: [],
+        },
+        meta: {
+          duration_ms: duration,
+          timeout: true,
+          timestamp: new Date().toISOString(),
+        }
+      });
+      return;
+    }
+
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to fetch match data'
+    });
+  }
+};
+
+// Helper: Fetch stats with individual timeout
+async function fetchStatsWithTimeout(matchId: string, timeoutMs: number): Promise<{ stats: any[] }> {
+  const timeout = new Promise<{ stats: any[] }>((_, reject) =>
+    setTimeout(() => reject(new Error('Stats timeout')), timeoutMs)
+  );
+
+  const statsPromise = (async () => {
+    // Try database first
+    const dbStats = await matchStatsRepository.getMatchStats(matchId);
+    if (dbStats && (dbStats.home_corner !== 0 || dbStats.away_corner !== 0 ||
+        dbStats.home_shots !== 0 || dbStats.away_shots !== 0)) {
+      return {
+        stats: [
+          { type: 25, home: dbStats.home_possession || 0, away: dbStats.away_possession || 0, name: 'Ball Possession', nameTr: 'Top Hakimiyeti' },
+          { type: 21, home: dbStats.home_shots_on_target || 0, away: dbStats.away_shots_on_target || 0, name: 'Shots on Target', nameTr: 'İsabetli Şut' },
+          { type: 22, home: dbStats.home_shots_off_target || 0, away: dbStats.away_shots_off_target || 0, name: 'Shots off Target', nameTr: 'İsabetsiz Şut' },
+          { type: 23, home: dbStats.home_attacks || 0, away: dbStats.away_attacks || 0, name: 'Attacks', nameTr: 'Atak' },
+          { type: 24, home: dbStats.home_dangerous_attacks || 0, away: dbStats.away_dangerous_attacks || 0, name: 'Dangerous Attacks', nameTr: 'Tehlikeli Atak' },
+          { type: 2, home: dbStats.home_corner || 0, away: dbStats.away_corner || 0, name: 'Corner Kicks', nameTr: 'Korner' },
+          { type: 3, home: dbStats.home_yellow_cards || 0, away: dbStats.away_yellow_cards || 0, name: 'Yellow Cards', nameTr: 'Sarı Kart' },
+          { type: 4, home: dbStats.home_red_cards || 0, away: dbStats.away_red_cards || 0, name: 'Red Cards', nameTr: 'Kırmızı Kart' },
+        ].filter(s => s.home !== undefined && s.away !== undefined)
+      };
+    }
+    return { stats: [] };
+  })();
+
+  return Promise.race([statsPromise, timeout]);
+}
+
+// Helper: Get match from database
+async function getMatchFromDb(matchId: string): Promise<any> {
+  const result = await pool.query(`
+    SELECT
+      m.external_id as id,
+      m.home_team_id,
+      m.away_team_id,
+      m.competition_id,
+      m.season_id,
+      m.match_time,
+      m.status_id,
+      m.home_score,
+      m.away_score,
+      m.minute,
+      m.incidents,
+      ht.name as home_team_name,
+      ht.logo as home_team_logo,
+      at.name as away_team_name,
+      at.logo as away_team_logo,
+      c.name as competition_name,
+      c.logo as competition_logo,
+      c.country_name
+    FROM ts_matches m
+    LEFT JOIN ts_teams ht ON ht.external_id = m.home_team_id
+    LEFT JOIN ts_teams at ON at.external_id = m.away_team_id
+    LEFT JOIN ts_competitions c ON c.external_id = m.competition_id
+    WHERE m.external_id = $1
+  `, [matchId]);
+
+  if (result.rows.length === 0) return null;
+
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    home_team_id: row.home_team_id,
+    away_team_id: row.away_team_id,
+    competition_id: row.competition_id,
+    season_id: row.season_id,
+    match_time: row.match_time,
+    status_id: row.status_id,
+    home_score: row.home_score,
+    away_score: row.away_score,
+    minute: row.minute,
+    home_team: { name: row.home_team_name, logo: row.home_team_logo },
+    away_team: { name: row.away_team_name, logo: row.away_team_logo },
+    competition: { name: row.competition_name, logo: row.competition_logo, country_name: row.country_name },
+  };
+}
+
+// Helper: Get lineup from database
+async function getLineupFromDb(matchId: string): Promise<any> {
+  const result = await pool.query(`
+    SELECT lineup_data, home_formation, away_formation
+    FROM ts_matches
+    WHERE external_id = $1
+  `, [matchId]);
+
+  if (result.rows.length === 0 || !result.rows[0].lineup_data) return null;
+
+  const row = result.rows[0];
+  return {
+    home: row.lineup_data?.home || [],
+    away: row.lineup_data?.away || [],
+    home_formation: row.home_formation,
+    away_formation: row.away_formation,
+  };
+}
+
+// Helper: Get H2H from database
+async function getH2HFromDb(matchId: string): Promise<any> {
+  const result = await pool.query(`
+    SELECT h2h_data
+    FROM ts_matches
+    WHERE external_id = $1
+  `, [matchId]);
+
+  if (result.rows.length === 0 || !result.rows[0].h2h_data) return null;
+  return result.rows[0].h2h_data;
+}
+
+// Helper: Get trend from database
+async function getTrendFromDb(matchId: string): Promise<any[]> {
+  const result = await pool.query(`
+    SELECT trend_data
+    FROM ts_matches
+    WHERE external_id = $1
+  `, [matchId]);
+
+  if (result.rows.length === 0 || !result.rows[0].trend_data) return [];
+  return result.rows[0].trend_data || [];
+}

@@ -915,3 +915,58 @@ export async function getMatchedPredictions(limit = 100, signal?: AbortSignal): 
     throw error;
   }
 }
+
+/**
+ * PERF FIX Phase 2: Get ALL match detail data in a single API call
+ * Replaces 6 separate API calls with 1 unified call
+ *
+ * Returns:
+ * - match: Basic match info
+ * - stats: Live statistics
+ * - incidents: Goals, cards, substitutions
+ * - lineup: Team lineups
+ * - h2h: Head-to-head history
+ * - trend: Minute-by-minute data
+ * - standings: League table
+ */
+export interface MatchFullResponse {
+  match: Match | null;
+  stats: any[];
+  incidents: any[];
+  lineup: any | null;
+  h2h: any | null;
+  trend: any[];
+  standings: any[];
+}
+
+export async function getMatchFull(matchId: string): Promise<MatchFullResponse> {
+  const url = `${API_BASE_URL}/matches/${matchId}/full`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const result = await response.json();
+    return result.data || {
+      match: null,
+      stats: [],
+      incidents: [],
+      lineup: null,
+      h2h: null,
+      trend: [],
+      standings: [],
+    };
+  } catch (error: any) {
+    console.error('[getMatchFull] Error:', error);
+    return {
+      match: null,
+      stats: [],
+      incidents: [],
+      lineup: null,
+      h2h: null,
+      trend: [],
+      standings: [],
+    };
+  }
+}
