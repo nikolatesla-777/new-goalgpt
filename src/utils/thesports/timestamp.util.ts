@@ -105,7 +105,6 @@ export function isToday(date: Date): boolean {
  * TSI (Turkish Time, UTC+3) Timezone Utilities
  * CRITICAL: All date operations should use TSI to ensure consistency
  */
-const TSI_OFFSET_MS = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
 
 /**
  * Get current date in TSI (UTC+3) timezone as YYYY-MM-DD string
