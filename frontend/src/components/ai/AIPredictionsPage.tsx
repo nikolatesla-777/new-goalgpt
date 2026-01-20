@@ -59,12 +59,16 @@ export function AIPredictionsPage() {
         );
     }, [contextPredictions]);
 
-    // Filter by date
+    // Filter by date - CRITICAL: Use TSI timezone (UTC+3)
     const filteredByDate = useMemo(() => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        // Get current TSI time
+        const tsiMs = Date.now() + (3 * 60 * 60 * 1000); // UTC+3
+        const tsiNow = new Date(tsiMs);
+
+        // Calculate TSI dates (using UTC methods to avoid local timezone issues)
+        const today = new Date(Date.UTC(tsiNow.getUTCFullYear(), tsiNow.getUTCMonth(), tsiNow.getUTCDate()));
         const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthStart = new Date(Date.UTC(tsiNow.getUTCFullYear(), tsiNow.getUTCMonth(), 1));
 
         return allPredictions.filter(p => {
             const predDate = new Date(p.created_at);
