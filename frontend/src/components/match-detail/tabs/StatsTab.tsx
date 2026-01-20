@@ -42,7 +42,10 @@ export function StatsTab() {
     );
   }
 
-  if (stats.length === 0) {
+  // PERF FIX: Check if all stats are 0 (API might return empty/placeholder data)
+  const hasRealData = stats.some(s => (s.home || 0) > 0 || (s.away || 0) > 0);
+
+  if (stats.length === 0 || !hasRealData) {
     return (
       <div style={{
         padding: '40px',
@@ -58,7 +61,7 @@ export function StatsTab() {
         <div style={{ fontSize: '14px' }}>
           {match?.status_id === 1
             ? 'Mac basladiktan sonra istatistikler gosterilecek.'
-            : 'Bu mac icin istatistik verisi yok.'}
+            : 'Bu mac icin istatistik verisi henuz mevcut degil.'}
         </div>
       </div>
     );
