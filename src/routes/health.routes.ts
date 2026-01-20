@@ -5,7 +5,7 @@
  */
 
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { getHealth, getReady, getHealthDetailed, getSyncStatus, forceSyncLiveMatches } from '../controllers/health.controller';
+import { getHealth, getReady, getHealthDetailed, getSyncStatus, forceSyncLiveMatches, getCacheStats, clearCache } from '../controllers/health.controller';
 
 export async function healthRoutes(
   fastify: FastifyInstance,
@@ -40,6 +40,19 @@ export async function healthRoutes(
    * Force sync live matches from API to database
    */
   fastify.post('/sync/force', forceSyncLiveMatches);
+
+  /**
+   * GET /cache/stats
+   * Memory cache statistics and performance metrics
+   * Phase 5: Added for cache monitoring
+   */
+  fastify.get('/cache/stats', getCacheStats);
+
+  /**
+   * POST /cache/clear
+   * Clear all memory caches (emergency only)
+   */
+  fastify.post('/cache/clear', clearCache);
 }
 
 

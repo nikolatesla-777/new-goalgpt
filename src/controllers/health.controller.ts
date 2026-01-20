@@ -8,6 +8,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { pool } from '../database/connection';
 import { config } from '../config';
 import { logEvent } from '../utils/obsLogger';
+import { memoryCache } from '../utils/cache/memoryCache';
 
 // Track server start time for uptime calculation
 const serverStartTime = Date.now();
@@ -294,5 +295,97 @@ export async function forceSyncLiveMatches(
       timestamp: new Date().toISOString(),
     });
   }
+}
+
+/**
+ * GET /cache/stats
+ * Memory cache statistics for monitoring
+ * Phase 5: Added for cache performance monitoring
+ */
+export async function getCacheStats(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    const stats = memoryCache.getDetailedStats();
+
+    reply.send({
+      ok: true,
+      cache: stats.caches,
+      totals: stats.totals,
+      memory: {
+        estimateMB: stats.memoryEstimateMB,
+        note: 'Rough estimate based on ~2KB per entry',
+      },
+      recommendations: generateCacheRecommendations(stats),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    reply.code(500).send({
+      ok: false,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+/**
+ * POST /cache/clear
+ * Clear all memory caches (emergency only)
+ */
+export async function clearCache(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  try {
+    memoryCache.clearAll();
+
+    reply.send({
+      ok: true,
+      message: 'All memory caches cleared',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    reply.code(500).send({
+      ok: false,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+/**
+ * Generate recommendations based on cache stats
+ */
+function generateCacheRecommendations(stats: any): string[] {
+  const recommendations: string[] = [];
+
+  // Check overall hit rate
+  if (stats.totals.hitRate < 50 && stats.totals.hits + stats.totals.misses > 100) {
+    recommendations.push('Low cache hit rate (<50%). Consider increasing TTL or cache size.');
+  }
+
+  // Check individual caches
+  for (const [name, cacheStats] of Object.entries(stats.caches) as [string, any][]) {
+    if (cacheStats.hitRate < 30 && cacheStats.hits + cacheStats.misses > 50) {
+      recommendations.push(`Cache "${name}" has low hit rate (${cacheStats.hitRate}%). Review TTL settings.`);
+    }
+
+    // Check if cache is near capacity
+    if (cacheStats.keys >= cacheStats.config.maxKeys * 0.9) {
+      recommendations.push(`Cache "${name}" is near capacity (${cacheStats.keys}/${cacheStats.config.maxKeys}). Consider increasing maxKeys.`);
+    }
+  }
+
+  // Check memory usage
+  if (stats.memoryEstimateMB > 40) {
+    recommendations.push('Memory usage is high. Consider reducing cache sizes or TTLs.');
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push('Cache performance is healthy.');
+  }
+
+  return recommendations;
 }
 
