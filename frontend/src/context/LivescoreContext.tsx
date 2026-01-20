@@ -13,6 +13,7 @@ import { getUnifiedMatches, getMatchedPredictions } from '../api/matches';
 import type { Match, MatchDiary } from '../api/matches';
 import { useSocket, type ScoreChangeEvent, type MatchStateChangeEvent, type MinuteUpdateEvent, type PredictionSettledEvent } from '../hooks/useSocket';
 import { isLiveMatch, isFinishedMatch, MatchState } from '../utils/matchStatus';
+import { getTodayInTurkeyYYYYMMDD } from '../utils/dateUtils';
 
 // AI Prediction type (from matched predictions API)
 export interface MatchedPrediction {
@@ -94,26 +95,6 @@ export function useLivescore() {
   return context;
 }
 
-// Get today's date in YYYYMMDD format (Turkey timezone)
-function getTodayTurkey(): string {
-  const now = new Date();
-  // Turkey is UTC+3
-  const turkeyOffset = 3 * 60;
-  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const turkeyMinutes = utcMinutes + turkeyOffset;
-
-  let date = new Date(now);
-  if (turkeyMinutes >= 24 * 60) {
-    date.setUTCDate(date.getUTCDate() + 1);
-  }
-
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-
-  return `${year}${month}${day}`;
-}
-
 // Convert YYYYMMDD to YYYY-MM-DD
 function formatDateForAPI(date: string): string {
   if (date.includes('-')) return date;
@@ -132,7 +113,7 @@ export function LivescoreProvider({ children, initialDate }: LivescoreProviderPr
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [selectedDate, setSelectedDate] = useState(initialDate || getTodayTurkey());
+  const [selectedDate, setSelectedDate] = useState(initialDate || getTodayInTurkeyYYYYMMDD());
   const [lastSettlement, setLastSettlement] = useState<PredictionSettledEvent | null>(null);
 
   // Refs for debouncing

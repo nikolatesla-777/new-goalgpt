@@ -13,6 +13,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useLivescore, LivescoreProvider } from '../../context/LivescoreContext';
 import { useFavorites } from '../../context/FavoritesContext';
 import { Circle, WifiHigh, WifiSlash, ArrowClockwise, CalendarBlank, CaretLeft, CaretRight, Star } from '@phosphor-icons/react';
+import { getTodayInTurkeyYYYYMMDD, navigateDateTSI } from '../../utils/dateUtils';
 
 // Inner component that uses the context
 function LivescoreLayoutInner() {
@@ -38,44 +39,35 @@ function LivescoreLayoutInner() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Format date for display (YYYYMMDD -> "18 Ocak 2026")
+  // Uses explicit month names to avoid browser timezone issues
   const formatDisplayDate = (dateStr: string): string => {
-    const year = dateStr.slice(0, 4);
-    const month = dateStr.slice(4, 6);
-    const day = dateStr.slice(6, 8);
-    const date = new Date(`${year}-${month}-${day}`);
+    const year = parseInt(dateStr.slice(0, 4));
+    const monthIndex = parseInt(dateStr.slice(4, 6)) - 1; // JS months are 0-indexed
+    const day = parseInt(dateStr.slice(6, 8));
 
-    return date.toLocaleDateString('tr-TR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
+    // Turkish month names for consistent display
+    const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+                    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    return `${day} ${months[monthIndex]} ${year}`;
   };
 
-  // Navigate date
+  // Navigate date using TSI timezone
   const navigateDate = (direction: 'prev' | 'next') => {
-    const year = parseInt(selectedDate.slice(0, 4));
-    const month = parseInt(selectedDate.slice(4, 6)) - 1;
-    const day = parseInt(selectedDate.slice(6, 8));
-
-    const date = new Date(year, month, day);
-    date.setDate(date.getDate() + (direction === 'next' ? 1 : -1));
-
-    const newDate = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+    const days = direction === 'next' ? 1 : -1;
+    const newDate = navigateDateTSI(selectedDate, days);
     setSelectedDate(newDate);
   };
 
-  // Check if today
+  // Check if today (using TSI timezone)
   const isToday = (): boolean => {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    return selectedDate === todayStr;
+    const todayTSI = getTodayInTurkeyYYYYMMDD();
+    return selectedDate === todayTSI;
   };
 
-  // Go to today
+  // Go to today (using TSI timezone)
   const goToToday = () => {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    setSelectedDate(todayStr);
+    const todayTSI = getTodayInTurkeyYYYYMMDD();
+    setSelectedDate(todayTSI);
   };
 
   // Handle refresh
