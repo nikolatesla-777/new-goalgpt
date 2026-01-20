@@ -91,10 +91,14 @@ export function MatchList({ view, date, sortBy = 'league', favoriteMatches, pref
         const { getTodayInTurkey } = await import('../utils/dateUtils');
         const selectedDateStr = date || getTodayInTurkey();
 
+        // CRITICAL FIX: Handle both YYYY-MM-DD and YYYYMMDD formats
+        // getTodayInTurkey() returns YYYY-MM-DD, but date picker may return YYYYMMDD
+        const dateOnly = selectedDateStr.replace(/-/g, ''); // Remove dashes: YYYY-MM-DD -> YYYYMMDD
+
         // Parse selected date to get day boundaries (TSI timezone)
-        const year = parseInt(selectedDateStr.substring(0, 4));
-        const month = parseInt(selectedDateStr.substring(4, 6)) - 1;
-        const day = parseInt(selectedDateStr.substring(6, 8));
+        const year = parseInt(dateOnly.substring(0, 4));
+        const month = parseInt(dateOnly.substring(4, 6)) - 1;
+        const day = parseInt(dateOnly.substring(6, 8));
 
         // TSI (UTC+3) day boundaries
         const TSI_OFFSET_SECONDS = 3 * 3600;
