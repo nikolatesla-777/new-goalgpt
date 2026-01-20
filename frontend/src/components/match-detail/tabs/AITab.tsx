@@ -20,7 +20,7 @@ interface Prediction {
 }
 
 export function AITab() {
-  const { matchId, match } = useMatchDetail();
+  const { matchId, match: _match } = useMatchDetail();
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

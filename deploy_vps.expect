@@ -1,0 +1,44 @@
+#!/usr/bin/expect -f
+
+set timeout 300
+set host "142.93.103.128"
+set user "root"
+set password "Qawsed.3535"
+set branch "claude/review-codebase-kf6qI"
+
+spawn ssh $user@$host
+
+expect {
+    "yes/no" {
+        send "yes\r"
+        exp_continue
+    }
+    "assword:" {
+        send "$password\r"
+    }
+}
+
+expect "#"
+send "cd /var/www/goalgpt\r"
+
+expect "#"
+send "git fetch origin\r"
+
+expect "#"
+send "git checkout $branch\r"
+
+expect "#"
+send "git pull origin $branch\r"
+
+expect "#"
+send "chmod +x deploy.sh\r"
+
+expect "#"
+send "./deploy.sh $branch\r"
+
+# Wait for the script to finish (looking for the success message or just end of prompt)
+expect "Deploy completed"
+expect "#"
+send "exit\r"
+
+expect eof

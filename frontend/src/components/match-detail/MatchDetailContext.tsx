@@ -223,10 +223,10 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
   const [error, setError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
-  const [lineupLoading, setLineupLoading] = useState(false);
-  const [h2hLoading, setH2hLoading] = useState(false);
-  const [trendLoading, setTrendLoading] = useState(false);
-  const [standingsLoading, setStandingsLoading] = useState(false);
+  const [lineupLoading, _setLineupLoading] = useState(false);
+  const [h2hLoading, _setH2hLoading] = useState(false);
+  const [trendLoading, _setTrendLoading] = useState(false);
+  const [standingsLoading, _setStandingsLoading] = useState(false);
 
   // Auto-refresh interval for live matches
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -241,7 +241,7 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
     try {
       // Phase 1: Fetch critical match data first
       const matchData = await getMatchById(matchId);
-      setMatch(matchData);
+      setMatch(matchData as unknown as MatchData);
 
       // Phase 2: Fetch all secondary data in parallel
       const [statsData, incidentsData, lineupData, h2hData, trendData] = await Promise.all([

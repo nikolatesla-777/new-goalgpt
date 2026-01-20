@@ -201,16 +201,48 @@ export function LivescoreProvider({ children, initialDate }: LivescoreProviderPr
 
       // Filter predictions by selected date (Turkey timezone UTC+3)
       // CRITICAL FIX: Use Turkey timezone for date boundaries
-      // Turkey midnight = UTC midnight - 3 hours = previous day 21:00 UTC
+      // Example: Turkey 2026-01-20 00:00 TSI = 2026-01-19 21:00 UTC
+      //          Turkey 2026-01-20 23:59 TSI = 2026-01-20 20:59 UTC
       const [year, month, day] = dateForAPI.split('-').map(Number);
-      // Create date at midnight Turkey time (which is 21:00 UTC previous day)
-      const turkeyMidnight = new Date(Date.UTC(year, month - 1, day, -3, 0, 0));
-      const dayStart = Math.floor(turkeyMidnight.getTime() / 1000);
-      const dayEnd = dayStart + 24 * 60 * 60;
+      // Create date at midnight UTC for the selected day
+      const midnightUTC = Date.UTC(year, month - 1, day, 0, 0, 0);
+      // Subtract 3 hours (TSI offset) to get Turkey midnight in UTC
+      const TSI_OFFSET_MS = 3 * 60 * 60 * 1000;
+      const dayStartMs = midnightUTC - TSI_OFFSET_MS;
+      const dayEndMs = dayStartMs + (24 * 60 * 60 * 1000);
+
+      const dayStart = Math.floor(dayStartMs / 1000);
+      const dayEnd = Math.floor(dayEndMs / 1000);
+
+      console.log('[LivescoreContext] Date filter:', {
+        selectedDate: dateForAPI,
+        dayStart: new Date(dayStart * 1000).toISOString(),
+        dayEnd: new Date(dayEnd * 1000).toISOString(),
+        dayStartTSI: new Date(dayStart * 1000).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }),
+        dayEndTSI: new Date(dayEnd * 1000).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }),
+      });
 
       const filteredPredictions = predictionsData.filter((p: MatchedPrediction) => {
         const matchTime = Number(p.match_time);
-        return matchTime >= dayStart && matchTime < dayEnd;
+        const isInRange = matchTime >= dayStart && matchTime < dayEnd;
+
+        if (!isInRange) {
+          console.log('[LivescoreContext] Filtered OUT prediction:', {
+            homeTeam: p.home_team_name,
+            awayTeam: p.away_team_name,
+            matchTime: new Date(matchTime * 1000).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }),
+            matchTimeUnix: matchTime,
+            dayStart,
+            dayEnd,
+          });
+        }
+
+        return isInRange;
+      });
+
+      console.log('[LivescoreContext] Predictions filtered:', {
+        total: predictionsData.length,
+        filtered: filteredPredictions.length,
       });
 
       // Create prediction map for enrichment
