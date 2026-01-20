@@ -27,10 +27,13 @@ export interface MatchDiaryResponse {
       };
     };
   };
+  total?: number; // Total number of matches available (for pagination)
   err?: string; // TheSports API error message
 }
 
 export interface MatchDiaryParams {
-  date?: string; // YYYY-MM-DD format (default: today)
+  date?: string; // YYYYMMDD format (default: today)
+  page?: number; // Page number (default: 1)
+  limit?: number; // Results per page (default: 500)
 }
 
