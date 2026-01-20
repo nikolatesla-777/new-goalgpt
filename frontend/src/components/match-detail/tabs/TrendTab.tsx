@@ -18,7 +18,15 @@ export function TrendTab() {
     );
   }
 
-  if (!trend || trend.length === 0) {
+  // PERF FIX: Check if all trend data is 0 (API might return empty/placeholder data)
+  const hasRealTrendData = trend && trend.length > 0 && trend.some(t =>
+    (t.home_attacks || 0) > 0 || (t.away_attacks || 0) > 0 ||
+    (t.home_dangerous_attacks || 0) > 0 || (t.away_dangerous_attacks || 0) > 0 ||
+    (t.home_possession !== undefined && t.home_possession !== 50) ||
+    (t.away_possession !== undefined && t.away_possession !== 50)
+  );
+
+  if (!trend || trend.length === 0 || !hasRealTrendData) {
     return (
       <div style={{
         padding: '40px',
@@ -34,7 +42,7 @@ export function TrendTab() {
         <div style={{ fontSize: '14px' }}>
           {match?.status_id === 1
             ? 'Mac basladiktan sonra dakika dakika veriler gosterilecek.'
-            : 'Bu mac icin trend verisi yok.'}
+            : 'Bu mac icin trend verisi henuz mevcut degil.'}
         </div>
       </div>
     );

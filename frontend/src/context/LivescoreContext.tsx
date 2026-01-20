@@ -195,35 +195,11 @@ export function LivescoreProvider({ children, initialDate }: LivescoreProviderPr
       const dayStart = Math.floor(dayStartMs / 1000);
       const dayEnd = Math.floor(dayEndMs / 1000);
 
-      console.log('[LivescoreContext] Date filter:', {
-        selectedDate: dateForAPI,
-        dayStart: new Date(dayStart * 1000).toISOString(),
-        dayEnd: new Date(dayEnd * 1000).toISOString(),
-        dayStartTSI: new Date(dayStart * 1000).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }),
-        dayEndTSI: new Date(dayEnd * 1000).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }),
-      });
-
+      // PERF FIX: Removed verbose console.logs that were causing performance issues
+      // Filter predictions by selected date range (Turkey timezone)
       const filteredPredictions = predictionsData.filter((p: MatchedPrediction) => {
         const matchTime = Number(p.match_time);
-        const isInRange = matchTime >= dayStart && matchTime < dayEnd;
-
-        if (!isInRange) {
-          console.log('[LivescoreContext] Filtered OUT prediction:', {
-            homeTeam: p.home_team_name,
-            awayTeam: p.away_team_name,
-            matchTime: new Date(matchTime * 1000).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' }),
-            matchTimeUnix: matchTime,
-            dayStart,
-            dayEnd,
-          });
-        }
-
-        return isInRange;
-      });
-
-      console.log('[LivescoreContext] Predictions filtered:', {
-        total: predictionsData.length,
-        filtered: filteredPredictions.length,
+        return matchTime >= dayStart && matchTime < dayEnd;
       });
 
       // Create prediction map for enrichment
