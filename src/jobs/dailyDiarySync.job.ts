@@ -18,21 +18,11 @@ import { MatchSyncService } from '../services/thesports/match/matchSync.service'
 import { TeamDataService } from '../services/thesports/team/teamData.service';
 import { CompetitionService } from '../services/thesports/competition/competition.service';
 import { pool } from '../database/connection';
+import { getTodayTSI } from '../utils/thesports/timestamp.util';
 
 // TSİ (Turkey) offset: UTC+3
 const TSI_OFFSET_MS = 3 * 60 * 60 * 1000;
 const TSI_OFFSET_SECONDS = 3 * 60 * 60;
-
-/**
- * Get today's date in TSİ timezone as YYYYMMDD
- */
-function getTodayTSI(): string {
-  const nowTSI = new Date(Date.now() + TSI_OFFSET_MS);
-  const year = nowTSI.getUTCFullYear();
-  const month = String(nowTSI.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(nowTSI.getUTCDate()).padStart(2, '0');
-  return `${year}${month}${day}`;
-}
 
 /**
  * Get tomorrow's date in TSİ timezone as YYYYMMDD

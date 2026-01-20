@@ -19,13 +19,36 @@ export function convertJSToUnixDate(date: Date): number {
 }
 
 /**
+ * TSI (Turkey Standard Time) offset: UTC+3 = 3 hours in milliseconds
+ */
+const TSI_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
  * Format date to TheSports API format (YYYY-MM-DD)
+ * CRITICAL: Uses TSI (Turkey Standard Time, UTC+3) regardless of server timezone
  */
 export function formatTheSportsDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  // Convert to TSI timezone
+  const tsiMs = date.getTime() + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
+
+  const year = tsiDate.getUTCFullYear();
+  const month = String(tsiDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(tsiDate.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Get today's date in TSI timezone as YYYYMMDD
+ */
+export function getTodayTSI(): string {
+  const tsiMs = Date.now() + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
+
+  const year = tsiDate.getUTCFullYear();
+  const month = String(tsiDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(tsiDate.getUTCDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
 }
 
 /**
@@ -61,14 +84,20 @@ export function getDateDaysFromNow(days: number): Date {
 }
 
 /**
- * Check if date is today
+ * Check if date is today (in TSI timezone)
+ * CRITICAL: Uses TSI (Turkey Standard Time, UTC+3) regardless of server timezone
  */
 export function isToday(date: Date): boolean {
-  const today = new Date();
+  const nowTsiMs = Date.now() + TSI_OFFSET_MS;
+  const todayTsi = new Date(nowTsiMs);
+
+  const dateTsiMs = date.getTime() + TSI_OFFSET_MS;
+  const dateTsi = new Date(dateTsiMs);
+
   return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
+    dateTsi.getUTCDate() === todayTsi.getUTCDate() &&
+    dateTsi.getUTCMonth() === todayTsi.getUTCMonth() &&
+    dateTsi.getUTCFullYear() === todayTsi.getUTCFullYear()
   );
 }
 

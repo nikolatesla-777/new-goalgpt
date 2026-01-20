@@ -37,11 +37,16 @@ export class RecentSyncService {
   /**
    * Incremental sync: Only fetch matches that have changed since last sync
    * Uses /match/recent/list with time parameter (Last Sync Timestamp + 1)
+   *
+   * CRITICAL: Implements proper pagination per TheSports API documentation:
+   * - First time: Full data via page parameter (loop until total=0 or empty results)
+   * - Subsequent: Incremental update via time parameter (recommended: 1min/request)
    */
   async syncIncremental(lastSyncTimestamp?: Date): Promise<{ synced: number; errors: number }> {
     return withSyncLock(SyncType.RECENT, async () => {
       // Get last sync timestamp from database or use provided
       let lastSyncUnix: number;
+      let isFirstSync = false;
 
       if (lastSyncTimestamp) {
         lastSyncUnix = Math.floor(lastSyncTimestamp.getTime() / 1000);
@@ -51,39 +56,71 @@ export class RecentSyncService {
           // Use MAX(updated_at) from database + 1 second
           lastSyncUnix = syncState.last_updated_at + 1;
         } else {
-          // First sync: Use 1 hour ago
-          const oneHourAgo = new Date();
-          oneHourAgo.setHours(oneHourAgo.getHours() - 1);
-          lastSyncUnix = Math.floor(oneHourAgo.getTime() / 1000);
+          // First sync: Use 24 hours ago and fetch ALL pages
+          isFirstSync = true;
+          const oneDayAgo = new Date();
+          oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+          lastSyncUnix = Math.floor(oneDayAgo.getTime() / 1000);
+          logger.info('[RecentSync] First sync detected - will fetch ALL pages');
         }
       }
 
       const currentUnix = getCurrentUnixTimestamp();
+      logger.info(`[RecentSync] Incremental sync: ${lastSyncUnix} -> ${currentUnix} (time param: ${lastSyncUnix + 1})`);
 
-      logger.info(`Incremental sync: ${lastSyncUnix} -> ${currentUnix} (time param: ${lastSyncUnix + 1})`);
+      // PAGINATION FIX: Fetch ALL pages until no more results
+      // TheSports API: "Page increases by 1, loop to get the interface, total is 0, and the loop ends"
+      let allResults: any[] = [];
+      let page = 1;
+      const limit = 500; // Recommended limit per page
+      const maxPages = 20; // Safety limit to prevent infinite loops
+      let hasMore = true;
 
-      // Fetch recent matches with time parameter (CRITICAL: Last Sync + 1)
-      // TheSports API: time parameter fetches matches updated AFTER this timestamp
-      const response = await this.client.get<MatchRecentResponse>(
-        '/match/recent/list',
-        {
-          page: 1,
-          limit: 1000, // Fetch more to catch all changes
-          time: lastSyncUnix + 1, // CRITICAL: Last sync timestamp + 1
+      while (hasMore && page <= maxPages) {
+        const response = await this.client.get<MatchRecentResponse>(
+          '/match/recent/list',
+          {
+            page,
+            limit,
+            time: lastSyncUnix + 1, // CRITICAL: Last sync timestamp + 1
+          }
+        );
+
+        // Check for errors
+        if (response.err) {
+          logger.warn(`[RecentSync] TheSports API error for match/recent/list page ${page}: ${response.err}`);
+          break;
         }
-      );
 
-      // Check for errors
-      if (response.err) {
-        logger.warn(`TheSports API error for match/recent/list: ${response.err}`);
-        return { synced: 0, errors: 1 };
+        const results = response.results || [];
+        const total = response.total ?? 0;
+
+        if (results.length === 0 || total === 0) {
+          // No more results - stop pagination
+          hasMore = false;
+          logger.debug(`[RecentSync] Page ${page}: No more results (total=${total})`);
+        } else {
+          allResults = allResults.concat(results);
+          logger.info(`[RecentSync] Page ${page}: Fetched ${results.length} matches (total so far: ${allResults.length})`);
+
+          // Check if we've fetched all available matches
+          if (results.length < limit) {
+            // Last page - fewer results than limit
+            hasMore = false;
+          } else {
+            page++;
+          }
+        }
       }
 
-      const results = response.results || [];
-      logger.info(`Found ${results.length} changed matches since last sync (time=${lastSyncUnix + 1})`);
+      if (page > maxPages) {
+        logger.warn(`[RecentSync] Hit max page limit (${maxPages}). Some matches may be missed.`);
+      }
 
-      if (results.length === 0) {
-        logger.debug('No matches to sync');
+      logger.info(`[RecentSync] Found ${allResults.length} changed matches since last sync (time=${lastSyncUnix + 1})`);
+
+      if (allResults.length === 0) {
+        logger.debug('[RecentSync] No matches to sync');
         return { synced: 0, errors: 0 };
       }
 
@@ -91,26 +128,27 @@ export class RecentSyncService {
       let synced = 0;
       let errors = 0;
 
-      for (const match of results) {
+      for (const match of allResults) {
         try {
           const matchData: MatchSyncData = this.mapApiMatchToSyncData(match);
           await this.matchSyncService.syncMatch(matchData);
           synced++;
         } catch (error: any) {
-          logger.error(`Failed to sync match ${match.id || 'unknown'}:`, error.message);
+          logger.error(`[RecentSync] Failed to sync match ${match.id || 'unknown'}:`, error.message);
           errors++;
         }
       }
 
       // Update sync state with latest updated_at
-      if (results.length > 0) {
-        const maxUpdatedAt = Math.max(...results.map(m => m.updated_at || 0));
+      if (allResults.length > 0) {
+        const maxUpdatedAt = Math.max(...allResults.map(m => m.updated_at || 0));
         if (maxUpdatedAt > 0) {
           await this.syncStateRepository.updateLastSyncTime('match', maxUpdatedAt);
+          logger.info(`[RecentSync] Updated sync state to ${maxUpdatedAt} (${new Date(maxUpdatedAt * 1000).toISOString()})`);
         }
       }
 
-      logger.info(`Match incremental sync completed: ${synced} synced, ${errors} errors`);
+      logger.info(`[RecentSync] Match incremental sync completed: ${synced} synced, ${errors} errors`);
       return { synced, errors };
     });
   }
