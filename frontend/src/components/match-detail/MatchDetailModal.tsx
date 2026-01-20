@@ -7,7 +7,7 @@
  * PERF FIX: Uses unified endpoint (getMatchFull) instead of individual API calls
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { Match } from '../../api/matches';
 import {
     getMatchFull,
@@ -15,6 +15,7 @@ import {
     getMatchPlayerStats,
 } from '../../api/matches';
 import { MatchTrendChart } from './MatchTrendChart';
+import { getMatchCache, setMatchCache } from '../../utils/matchCache';
 
 interface MatchDetailModalProps {
     match: Match;
@@ -35,10 +36,46 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
 
     const matchId = (match as any).external_id || (match as any).match_id || match.id;
 
-    // PERF FIX: Fetch all data once when modal opens using unified endpoint
+    // Track if component is still mounted (for async operations)
+    const mountedRef = useRef(true);
     useEffect(() => {
-        const fetchAllData = async () => {
-            setLoading(true);
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
+
+    // PERF FIX Phase 4: Stale-while-revalidate pattern with client-side cache
+    // 1. Check cache first → show cached data instantly (<10ms)
+    // 2. If stale, fetch fresh data in background
+    // 3. Update UI when fresh data arrives
+    useEffect(() => {
+        const fetchAllData = async (skipCache = false) => {
+            // Step 1: Check cache first (only on initial load)
+            if (!skipCache) {
+                const cached = getMatchCache(matchId, match.status_id);
+                if (cached) {
+                    // Show cached data immediately
+                    setFullData(cached.data.fullData);
+                    setHalfStatsData(cached.data.halfStats);
+                    setPlayerStatsData(cached.data.playerStats);
+                    setLoading(false);
+
+                    // If cache is fresh, we're done
+                    if (!cached.isStale) {
+                        return;
+                    }
+
+                    // If stale, continue to fetch fresh data in background
+                    // (don't set loading=true, user sees cached data)
+                }
+            }
+
+            // Step 2: Fetch fresh data
+            if (!mountedRef.current) return;
+
+            // Only show loading if no cached data
+            if (!fullData) {
+                setLoading(true);
+            }
             setError(null);
 
             try {
@@ -49,19 +86,35 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
                     getMatchPlayerStats(matchId).catch(() => null),
                 ]);
 
+                if (!mountedRef.current) return;
+
+                // Update state with fresh data
                 setFullData(mainData);
                 setHalfStatsData(halfStats);
                 setPlayerStatsData(playerStats);
+
+                // Step 3: Update cache with fresh data
+                setMatchCache(matchId, {
+                    fullData: mainData,
+                    halfStats,
+                    playerStats,
+                });
             } catch (err: any) {
+                if (!mountedRef.current) return;
                 console.error('Modal data fetch error:', err);
-                setError(err.message || 'Veri yüklenirken hata oluştu');
+                // Only show error if we don't have cached data
+                if (!fullData) {
+                    setError(err.message || 'Veri yüklenirken hata oluştu');
+                }
             } finally {
-                setLoading(false);
+                if (mountedRef.current) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchAllData();
-    }, [matchId]);
+    }, [matchId, match.status_id]);
 
     // PERF FIX: Derive tab data from cached fullData instead of refetching
     const tabData = useMemo(() => {
