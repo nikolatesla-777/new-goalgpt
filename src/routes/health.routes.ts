@@ -5,7 +5,7 @@
  */
 
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
-import { getHealth, getReady, getHealthDetailed, getSyncStatus, forceSyncLiveMatches, getCacheStats, clearCache } from '../controllers/health.controller';
+import { getHealth, getReady, getHealthDetailed, getSyncStatus, forceSyncLiveMatches, getCacheStats, clearCache, getPerformanceDashboard } from '../controllers/health.controller';
 
 export async function healthRoutes(
   fastify: FastifyInstance,
@@ -53,6 +53,13 @@ export async function healthRoutes(
    * Clear all memory caches (emergency only)
    */
   fastify.post('/cache/clear', clearCache);
+
+  /**
+   * GET /perf/dashboard
+   * Phase 9: Comprehensive performance monitoring dashboard
+   * Returns cache stats, job status, database stats, and data freshness
+   */
+  fastify.get('/perf/dashboard', getPerformanceDashboard);
 }
 
 
