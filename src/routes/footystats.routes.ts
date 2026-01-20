@@ -64,7 +64,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
         const teamSamples = await safeQuery<any>('SELECT id, name, external_id FROM ts_teams LIMIT 2');
         sampleTeams = teamSamples;
-      } catch (e) {}
+      } catch (e) {
+        logger.warn('[FootyStats] Debug schema query failed:', e);
+      }
 
       return {
         tables: tables.map(t => t.table_name),

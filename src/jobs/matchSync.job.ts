@@ -670,6 +670,12 @@ export class MatchSyncWorker {
       logger.info('Live reconcile interval stopped');
     }
 
+    if (this.firstHalfInterval) {
+      clearInterval(this.firstHalfInterval);
+      this.firstHalfInterval = null;
+      logger.info('First half reconcile interval stopped');
+    }
+
     if (this.secondHalfInterval) {
       clearInterval(this.secondHalfInterval);
       this.secondHalfInterval = null;

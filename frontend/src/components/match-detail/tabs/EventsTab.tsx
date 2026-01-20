@@ -9,20 +9,41 @@ import { useMatchDetail } from '../MatchDetailContext';
 import type { MatchIncident } from '../MatchDetailContext';
 
 // Combined event config
+// SYNC: Must match getIncidentTypeName() in MatchDetailContext.tsx
 const EVENT_CONFIG: Record<string, { icon: string; text: string }> = {
+  // Goals
   goal: { icon: '⚽', text: 'Gol' },
   penalty_goal: { icon: '⚽', text: 'Penalti Golu' },
   own_goal: { icon: '⚽', text: 'Kendi Kalesine Gol' },
   penalty_miss: { icon: '❌', text: 'Kacirilan Penalti' },
+  penalty_shootout: { icon: '⚽', text: 'Penalti (Seri)' },
+  penalty_shootout_miss: { icon: '❌', text: 'Penalti Kacti (Seri)' },
+
+  // Cards
   yellow_card: { icon: '🟨', text: 'Sari Kart' },
   red_card: { icon: '🟥', text: 'Kirmizi Kart' },
   second_yellow: { icon: '🟨🟥', text: 'Ikinci Sari Kart' },
+
+  // Substitution
   substitution: { icon: '🔄', text: 'Oyuncu Degisikligi' },
+
+  // VAR
   var: { icon: '📺', text: 'VAR Karari' },
-  penalty_awarded: { icon: '🎯', text: 'Penalti' },
+
+  // Match flow events
+  corner: { icon: '🚩', text: 'Korner' },
+  offside: { icon: '🚫', text: 'Ofsayt' },
+  free_kick: { icon: '⚡', text: 'Serbest Vurus' },
+  goal_kick: { icon: '🥅', text: 'Kale Vurusu' },
+  match_start: { icon: '▶️', text: 'Mac Basladi' },
+  second_half_start: { icon: '▶️', text: 'Ikinci Yari' },
+  match_end: { icon: '🏁', text: 'Mac Bitti' },
+  halftime_score: { icon: '⏸️', text: 'Devre Arasi' },
+  injury_time: { icon: '⏱️', text: 'Uzatma' },
+  shot_on_post: { icon: '🎯', text: 'Direkten Donen' },
 };
 
-const GOAL_TYPES = ['goal', 'penalty_goal', 'own_goal'];
+const GOAL_TYPES = ['goal', 'penalty_goal', 'own_goal', 'penalty_shootout'];
 
 // Shared component for event content (used by both home and away)
 interface EventContentProps {

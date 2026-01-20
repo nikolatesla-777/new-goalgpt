@@ -176,7 +176,17 @@ const jobs: JobDefinition[] = [
       await runDailyDiarySync();
     },
     enabled: true,
-    description: 'Refresh today\'s diary every 10 minutes per TheSports API recommendation (fetches both today and tomorrow for timezone fix)',
+    description: 'Refresh today\'s diary every 10 minutes per TheSports API recommendation',
+  },
+  {
+    name: 'H2H Pre-Sync',
+    schedule: '*/30 * * * *', // Every 30 minutes
+    handler: async () => {
+      const { runH2HPreSync } = await import('./h2hPreSync.job');
+      await runH2HPreSync();
+    },
+    enabled: true,
+    description: 'Pre-sync H2H data for NOT_STARTED matches (ensures H2H tab has data before match starts)',
   },
 ];
 

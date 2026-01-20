@@ -301,7 +301,7 @@ function ChatSection({ matchId }: { matchId: string }) {
 
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(fetchMessages, 5000); // Poll every 5 seconds
+    const interval = setInterval(fetchMessages, 30000); // Poll every 30 seconds (6x improvement)
     return () => clearInterval(interval);
   }, [matchId]);
 

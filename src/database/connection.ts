@@ -94,7 +94,9 @@ export async function safeQuery<T = any>(
       if (client) {
         try {
           client.release(true);
-        } catch (_) { }
+        } catch (releaseErr) {
+          logger.warn('[DB] Client release error:', releaseErr);
+        }
       }
 
       // Only retry on connection errors, not SQL errors
