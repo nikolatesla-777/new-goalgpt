@@ -1,6 +1,11 @@
 /**
  * Match Status Utilities
+ *
+ * CRITICAL: All time displays use TSI (Turkey Standard Time, UTC+3)
+ * Never use browser's local timezone for match times
  */
+
+import { formatTimestampToTSI, formatDateToTSI, isTimestampInFutureTSI } from './dateUtils';
 
 export const MatchState = {
   ABNORMAL: 0,
@@ -55,38 +60,26 @@ export function getMatchStatusText(status: number): string {
 }
 
 /**
- * Format match time from UTC timestamp to local time
- * CRITICAL: TheSports API returns UTC timestamps, we must convert to user's local time
+ * Format match time from UTC timestamp to TSI (Turkey Standard Time, UTC+3)
+ * CRITICAL: All match times MUST be displayed in TSI, regardless of user's browser timezone
  */
 export function formatMatchTime(timestamp: number): string {
-  if (!timestamp || timestamp <= 0) return 'Tarih yok';
-  
-  // Create date from UTC timestamp (seconds to milliseconds)
-  const date = new Date(timestamp * 1000);
-  
-  // Use browser's local timezone (automatic conversion)
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
+  return formatTimestampToTSI(timestamp);
 }
 
 /**
- * Check if match time is in the future (relative to user's local time)
+ * Check if match time is in the future (relative to TSI time)
  * CRITICAL: Used to validate match status - future matches cannot be "Ended"
  */
 export function isMatchInFuture(timestamp: number): boolean {
-  if (!timestamp || timestamp <= 0) return false;
-  const matchDate = new Date(timestamp * 1000);
-  const now = new Date();
-  return matchDate > now;
+  return isTimestampInFutureTSI(timestamp);
 }
 
+/**
+ * Format date from timestamp in TSI timezone (DD/MM/YYYY)
+ */
 export function formatDate(timestamp: number): string {
-  const date = new Date(timestamp * 1000);
-  const day = date.getDate().toString().padStart(2, '0');
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
+  return formatDateToTSI(timestamp);
 }
 
 /**
