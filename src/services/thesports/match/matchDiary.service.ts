@@ -74,86 +74,100 @@ export class MatchDiaryService {
       logger.info(`🔄 [MatchDiary] Force refresh - skipping cache`);
     }
 
-    // Fetch from API
-    logger.info(`🔍 [MatchDiary] Fetching match diary for date: ${dateStr} (format: YYYYMMDD)`);
-    const response = await this.client.get<MatchDiaryResponse>(
-      '/match/diary',
-      { date: dateStr }
-    );
+    // Fetch from API with PAGINATION
+    // CRITICAL: TheSports API may have default limit - fetch ALL pages
+    logger.info(`🔍 [MatchDiary] Fetching match diary for date: ${dateStr} (format: YYYYMMDD) with pagination`);
 
-    // CRITICAL: Log FULL API response structure
-    logger.info(`📦 [MatchDiary] API Response Structure:`, {
-      hasResults: !!response.results,
-      resultsType: Array.isArray(response.results) ? 'array' : typeof response.results,
-      resultsLength: response.results?.length || 0,
-      hasResultsExtra: !!response.results_extra,
-      hasCompetitionInExtra: !!response.results_extra?.competition,
-      competitionCount: response.results_extra?.competition ? Object.keys(response.results_extra.competition).length : 0,
-      hasTeamInExtra: !!response.results_extra?.team,
-      teamCount: response.results_extra?.team ? Object.keys(response.results_extra.team).length : 0,
-      hasErr: !!response.err,
-      err: response.err || null,
-    });
+    let allResults: any[] = [];
+    let page = 1;
+    const limit = 500; // Recommended limit per page
+    const maxPages = 20; // Safety limit to prevent infinite loops
+    let hasMore = true;
+    let resultsExtra: MatchDiaryResponse['results_extra'] = undefined;
 
-    // CRITICAL: Log total matches received from API
-    const totalMatches = response.results?.length || 0;
-    logger.info(`📊 [MatchDiary] API returned ${totalMatches} matches for date ${dateStr}`);
-    
-    if (totalMatches === 0) {
-      logger.warn(`⚠️ [MatchDiary] No matches found for date ${dateStr}. This might be normal if no matches are scheduled.`);
-    } else if (totalMatches < 50) {
-      logger.warn(`⚠️ [MatchDiary] Only ${totalMatches} matches found. Expected 200+ for a full day. Check if API response is limited.`);
-    } else {
-      logger.info(`✅ [MatchDiary] Good match count: ${totalMatches} matches`);
+    while (hasMore && page <= maxPages) {
+      const response = await this.client.get<MatchDiaryResponse>(
+        '/match/diary',
+        { date: dateStr, page, limit }
+      );
+
+      // Check for errors
+      if (response.err) {
+        logger.warn(`[MatchDiary] TheSports API error for diary page ${page}: ${response.err}`);
+        break;
+      }
+
+      // Check API error codes
+      if ((response as any)?.code && (response as any).code !== 200 && (response as any).code !== 0) {
+        const errorMsg = (response as any).msg || 'TheSports API error';
+        logger.warn(`[MatchDiary] API error for diary page ${page}: ${errorMsg}`);
+        break;
+      }
+
+      const results = response.results || [];
+      const total = response.total ?? 0;
+
+      // Merge results_extra from first page (contains team/competition data)
+      if (page === 1 && response.results_extra) {
+        resultsExtra = response.results_extra;
+      }
+
+      if (results.length === 0 || total === 0) {
+        // No more results - stop pagination
+        hasMore = false;
+        logger.debug(`[MatchDiary] Page ${page}: No more results (total=${total})`);
+      } else {
+        allResults = allResults.concat(results);
+        logger.info(`[MatchDiary] Page ${page}: Fetched ${results.length} matches (total so far: ${allResults.length})`);
+
+        // Check if we've fetched all available matches
+        if (results.length < limit) {
+          // Last page - fewer results than limit
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
     }
 
-    // DEBUG: Log raw API response structure - FULL MATCH OBJECT (only if THESPORTS_DEBUG=1)
-    if (process.env.THESPORTS_DEBUG === '1' && response.results && response.results.length > 0) {
-      const firstMatch = response.results[0] as any;
+    if (page > maxPages) {
+      logger.warn(`[MatchDiary] Hit max page limit (${maxPages}). Some matches may be missed.`);
+    }
+
+    logger.info(`📊 [MatchDiary] Total fetched: ${allResults.length} matches for date ${dateStr}`);
+
+    // Check if no results found
+    if (allResults.length === 0) {
+      logger.warn(`⚠️ [MatchDiary] No matches found for date ${dateStr}. This might be normal if no matches are scheduled.`);
+      return { results: [], err: undefined };
+    } else if (allResults.length < 50) {
+      logger.warn(`⚠️ [MatchDiary] Only ${allResults.length} matches found. Expected 200+ for a full day.`);
+    } else {
+      logger.info(`✅ [MatchDiary] Good match count: ${allResults.length} matches`);
+    }
+
+    // DEBUG: Log raw API match structure (only if THESPORTS_DEBUG=1)
+    if (process.env.THESPORTS_DEBUG === '1' && allResults.length > 0) {
+      const firstMatch = allResults[0] as any;
       logger.info('🔍 [DEBUG] Raw API Match Structure (FULL):', JSON.stringify(firstMatch, null, 2));
       logger.info('🔍 [DEBUG] All keys in match object:', Object.keys(firstMatch).join(', '));
     }
 
-    // Check for API error (TheSports API uses 'code' and 'msg' for errors, not 'err')
-    if ((response as any)?.code && (response as any).code !== 200 && (response as any).code !== 0) {
-      const errorMsg = (response as any).msg || 'TheSports API error';
-      const errorCode = (response as any).code;
-      
-      // Special handling for rate limit errors
-      if (errorCode === 429 || errorMsg.toLowerCase().includes('too many requests')) {
-        logger.warn(`⚠️ Rate limit exceeded for match diary. Please wait before retrying.`);
-        return {
-          results: [],
-          err: 'Çok fazla istek gönderildi. Lütfen birkaç dakika bekleyip tekrar deneyin.',
-        };
-      }
-      
-      logger.warn(`TheSports API error for match diary: ${errorMsg} (code: ${errorCode})`);
-      // Return empty results with error message
-      return {
-        results: [],
-        err: errorMsg,
-      };
-    }
-
-    // Also check for 'err' field (backward compatibility)
-    if (response.err) {
-      logger.warn(`TheSports API error for match diary: ${response.err}`);
-      // Return empty results with error message
-      return {
-        results: [],
-        err: response.err,
-      };
-    }
-
     // Extract and cache results_extra separately for team data enrichment
-    if (response.results_extra) {
-      await this.cacheResultsExtra(dateStr, response.results_extra);
-      await this.teamDataService.enrichFromResultsExtra(response.results_extra);
-      if (response.results_extra.competition) {
-        await this.competitionService.enrichFromResultsExtra(response.results_extra);
+    if (resultsExtra) {
+      await this.cacheResultsExtra(dateStr, resultsExtra);
+      await this.teamDataService.enrichFromResultsExtra(resultsExtra);
+      if (resultsExtra.competition) {
+        await this.competitionService.enrichFromResultsExtra(resultsExtra);
       }
     }
+
+    // Build response object for further processing
+    const response: MatchDiaryResponse = {
+      results: allResults as any,
+      results_extra: resultsExtra,
+      total: allResults.length,
+    };
 
     // CRITICAL FIX: Extract team names from results_extra BEFORE enrichment
     // NOTE: results_extra.team is an ARRAY, not an object!
