@@ -18,8 +18,9 @@ import { logger } from '../../../utils/logger';
 import { MatchDetailLiveResponse } from '../../../types/thesports/match';
 import { IncidentOrchestrator } from '../../orchestration/IncidentOrchestrator';
 
-// Short timeout for incidents API - we prefer quick empty response over slow full response
-const INCIDENTS_API_TIMEOUT_MS = 5000;
+// PERF FIX Phase 1: Reduced timeout from 5s to 2s (fail fast)
+// We prefer quick empty response over slow full response
+const INCIDENTS_API_TIMEOUT_MS = 2000;
 
 // Timeout wrapper for API calls
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {

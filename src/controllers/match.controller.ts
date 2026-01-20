@@ -543,13 +543,13 @@ export const getMatchDetailLive = async (
       return;
     }
 
-    // PERF FIX: Fetch from API (only for LIVE matches) with reduced 5s timeout (was 15s)
+    // PERF FIX Phase 1: Reduced timeout from 5s to 2s (fail fast)
     const params: MatchDetailLiveParams = { match_id };
     let result: any = null;
     try {
       const apiPromise = matchDetailLiveService.getMatchDetailLive(params);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('API timeout')), 5000)
+        setTimeout(() => reject(new Error('API timeout')), 2000)
       );
       result = await Promise.race([apiPromise, timeoutPromise]);
     } catch (err: any) {
@@ -1006,8 +1006,23 @@ export const getMatchTrend = async (
       }
     }
 
-    // Fetch from API
-    const result = await matchTrendService.getMatchTrend(params, matchStatus);
+    // PERF FIX Phase 1: Added 2s timeout (was unlimited - could hang forever!)
+    let result: any = null;
+    try {
+      const trendPromise = matchTrendService.getMatchTrend(params, matchStatus);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Trend API timeout')), 2000)
+      );
+      result = await Promise.race([trendPromise, timeoutPromise]);
+    } catch (err: any) {
+      logger.warn(`[MatchController] Trend API timeout for ${match_id}: ${err.message}`);
+      // Return empty on timeout
+      reply.send({
+        success: true,
+        data: { results: [] },
+      });
+      return;
+    }
 
     // Save trend data to database for persistence
     if (result?.results && Array.isArray(result.results) && result.results.length > 0) {
@@ -1401,10 +1416,10 @@ export const getMatchLiveStats = async (
       // Direct HTTP call - no overhead
       const apiUrl = `https://api.thesports.com/v1/football/match/detail_live?user=${process.env.THESPORTS_API_USER}&secret=${process.env.THESPORTS_API_SECRET}&id=${match_id}`;
 
-      // PERF FIX: Reduced timeout from 8s to 3s to prevent UI blocking
-      // If external API is slow, DB-first architecture should handle it
+      // PERF FIX Phase 1: Reduced timeout from 3s to 2s (fail fast)
+      // If external API is slow, return empty and let UI show "no data"
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
 
       const response = await fetch(apiUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
