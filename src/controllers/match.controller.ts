@@ -1959,16 +1959,19 @@ export const getMatchFull = async (
   logger.info(`[getMatchFull] Fetching full match data for: ${match_id}`);
 
   try {
-    // Global timeout wrapper - 2s max for entire operation
+    // Global timeout wrapper - 3s max for entire operation (increased from 2s for DB latency)
     const globalTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Global timeout')), 2000)
+      setTimeout(() => reject(new Error('Global timeout')), 3000)
     );
 
     const fetchAllData = async () => {
       // Fetch all data in parallel (server-side)
       const [matchResult, statsResult, incidentsResult, lineupResult, h2hResult, trendResult] = await Promise.all([
-        // Match basic info (DB only - fast)
-        getMatchFromDb(match_id).catch(() => null),
+        // Match basic info (DB only - fast) - log errors for debugging
+        getMatchFromDb(match_id).catch((err) => {
+          logger.error(`[getMatchFull] Match fetch failed for ${match_id}:`, err.message);
+          return null;
+        }),
 
         // Stats - use existing service with 1s individual timeout
         fetchStatsWithTimeout(match_id, 1000).catch(() => ({ stats: [] })),
@@ -2014,7 +2017,13 @@ export const getMatchFull = async (
     }
 
     const duration = Date.now() - startTime;
-    logger.info(`[getMatchFull] Completed in ${duration}ms for ${match_id}`);
+
+    // Log warning if match not found
+    if (!result.match) {
+      logger.warn(`[getMatchFull] Match not found in DB for ${match_id} (completed in ${duration}ms)`);
+    } else {
+      logger.info(`[getMatchFull] Completed in ${duration}ms for ${match_id}`);
+    }
 
     reply.send({
       success: true,
@@ -2024,6 +2033,7 @@ export const getMatchFull = async (
       },
       meta: {
         duration_ms: duration,
+        match_found: !!result.match,
         timestamp: new Date().toISOString(),
       }
     });
