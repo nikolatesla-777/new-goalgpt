@@ -2092,51 +2092,87 @@ async function fetchStatsWithTimeout(matchId: string, timeoutMs: number): Promis
 
 // Helper: Get match from database
 async function getMatchFromDb(matchId: string): Promise<any> {
-  const result = await pool.query(`
-    SELECT
-      m.external_id as id,
-      m.home_team_id,
-      m.away_team_id,
-      m.competition_id,
-      m.season_id,
-      m.match_time,
-      m.status_id,
-      m.home_score,
-      m.away_score,
-      m.minute,
-      m.incidents,
-      ht.name as home_team_name,
-      ht.logo as home_team_logo,
-      at.name as away_team_name,
-      at.logo as away_team_logo,
-      c.name as competition_name,
-      c.logo as competition_logo,
-      c.country_name
-    FROM ts_matches m
-    LEFT JOIN ts_teams ht ON ht.external_id = m.home_team_id
-    LEFT JOIN ts_teams at ON at.external_id = m.away_team_id
-    LEFT JOIN ts_competitions c ON c.external_id = m.competition_id
-    WHERE m.external_id = $1
-  `, [matchId]);
+  try {
+    const result = await pool.query(`
+      SELECT
+        m.external_id as id,
+        m.home_team_id,
+        m.away_team_id,
+        m.competition_id,
+        m.season_id,
+        m.match_time,
+        m.status_id,
+        m.home_score,
+        m.away_score,
+        m.minute,
+        m.incidents,
+        COALESCE(m.home_score_overtime, 0) as home_score_overtime,
+        COALESCE(m.away_score_overtime, 0) as away_score_overtime,
+        COALESCE(m.home_score_penalties, 0) as home_score_penalties,
+        COALESCE(m.away_score_penalties, 0) as away_score_penalties,
+        COALESCE(m.home_red_cards, 0) as home_red_cards,
+        COALESCE(m.away_red_cards, 0) as away_red_cards,
+        COALESCE(m.home_yellow_cards, 0) as home_yellow_cards,
+        COALESCE(m.away_yellow_cards, 0) as away_yellow_cards,
+        COALESCE(m.home_corners, 0) as home_corners,
+        COALESCE(m.away_corners, 0) as away_corners,
+        ht.name as home_team_name,
+        ht.logo as home_team_logo,
+        at.name as away_team_name,
+        at.logo as away_team_logo,
+        c.name as competition_name,
+        c.logo as competition_logo,
+        c.country_id
+      FROM ts_matches m
+      LEFT JOIN ts_teams ht ON ht.external_id = m.home_team_id
+      LEFT JOIN ts_teams at ON at.external_id = m.away_team_id
+      LEFT JOIN ts_competitions c ON c.external_id = m.competition_id
+      WHERE m.external_id = $1
+    `, [matchId]);
 
-  if (result.rows.length === 0) return null;
+    if (result.rows.length === 0) {
+      logger.warn(`[getMatchFromDb] Match not found in DB: ${matchId}`);
+      return null;
+    }
 
-  const row = result.rows[0];
-  return {
-    id: row.id,
-    home_team_id: row.home_team_id,
-    away_team_id: row.away_team_id,
-    competition_id: row.competition_id,
-    season_id: row.season_id,
-    match_time: row.match_time,
-    status_id: row.status_id,
-    home_score: row.home_score,
-    away_score: row.away_score,
-    minute: row.minute,
-    home_team: { name: row.home_team_name, logo: row.home_team_logo },
-    away_team: { name: row.away_team_name, logo: row.away_team_logo },
-    competition: { name: row.competition_name, logo: row.competition_logo, country_name: row.country_name },
-  };
+    const row = result.rows[0];
+
+    // Generate minute_text from status and minute
+    const minuteText = generateMinuteText(row.minute, row.status_id);
+
+    return {
+      id: row.id,
+      home_team_id: row.home_team_id,
+      away_team_id: row.away_team_id,
+      competition_id: row.competition_id,
+      season_id: row.season_id,
+      match_time: row.match_time,
+      status_id: row.status_id,
+      home_score: row.home_score,
+      away_score: row.away_score,
+      minute: row.minute,
+      minute_text: minuteText,
+      // Score details
+      home_score_overtime: row.home_score_overtime,
+      away_score_overtime: row.away_score_overtime,
+      home_score_penalties: row.home_score_penalties,
+      away_score_penalties: row.away_score_penalties,
+      // Cards and corners
+      home_red_cards: row.home_red_cards,
+      away_red_cards: row.away_red_cards,
+      home_yellow_cards: row.home_yellow_cards,
+      away_yellow_cards: row.away_yellow_cards,
+      home_corners: row.home_corners,
+      away_corners: row.away_corners,
+      // Team and competition info with correct field names for frontend
+      home_team: { id: row.home_team_id, name: row.home_team_name, logo_url: row.home_team_logo },
+      away_team: { id: row.away_team_id, name: row.away_team_name, logo_url: row.away_team_logo },
+      competition: { id: row.competition_id, name: row.competition_name, logo_url: row.competition_logo, country_id: row.country_id },
+    };
+  } catch (error: any) {
+    logger.error(`[getMatchFromDb] Error fetching match ${matchId}:`, error.message);
+    throw error; // Re-throw so caller can handle
+  }
 }
 
 // Helper: Get lineup from database
