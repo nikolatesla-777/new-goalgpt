@@ -144,3 +144,68 @@ export function navigateDateTSI(currentDate: string, days: number): string {
   return `${newYear}${newMonth}${newDay}`;
 }
 
+/**
+ * Get yesterday's date in Turkish timezone (YYYY-MM-DD format)
+ */
+export function getYesterdayInTurkey(): string {
+  const tsiMs = Date.now() + TSI_OFFSET_MS - (24 * 60 * 60 * 1000);
+  const tsiDate = new Date(tsiMs);
+
+  const year = tsiDate.getUTCFullYear();
+  const month = String(tsiDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(tsiDate.getUTCDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Get the start of the current month in Turkish timezone (YYYY-MM-DD format)
+ */
+export function getMonthStartInTurkey(): string {
+  const tsiMs = Date.now() + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
+
+  const year = tsiDate.getUTCFullYear();
+  const month = String(tsiDate.getUTCMonth() + 1).padStart(2, '0');
+
+  return `${year}-${month}-01`;
+}
+
+/**
+ * Check if an ISO timestamp falls within a specific TSI date
+ * @param isoTimestamp - ISO 8601 timestamp string (e.g., "2026-01-21T10:30:00Z")
+ * @param tsiDate - Date in YYYY-MM-DD format representing a day in TSI timezone
+ * @returns true if the timestamp falls within the TSI day boundaries
+ */
+export function isDateInTSIRange(isoTimestamp: string, tsiDate: string): boolean {
+  const TSI_OFFSET_SECONDS = 3 * 3600; // UTC+3
+
+  const [year, month, day] = tsiDate.split('-').map(Number);
+
+  // TSI midnight in UTC = TSI 00:00:00 - 3 hours = previous day 21:00:00 UTC
+  const dayStartUTC = Date.UTC(year, month - 1, day, 0, 0, 0) / 1000 - TSI_OFFSET_SECONDS;
+  // TSI end of day in UTC = TSI 23:59:59 - 3 hours = same day 20:59:59 UTC
+  const dayEndUTC = Date.UTC(year, month - 1, day, 23, 59, 59) / 1000 - TSI_OFFSET_SECONDS;
+
+  const timestamp = new Date(isoTimestamp).getTime() / 1000;
+
+  return timestamp >= dayStartUTC && timestamp <= dayEndUTC;
+}
+
+/**
+ * Check if an ISO timestamp is on or after a specific TSI date
+ * Used for "today" filter where we want predictions from today onwards
+ */
+export function isDateOnOrAfterTSI(isoTimestamp: string, tsiDate: string): boolean {
+  const TSI_OFFSET_SECONDS = 3 * 3600; // UTC+3
+
+  const [year, month, day] = tsiDate.split('-').map(Number);
+
+  // TSI midnight in UTC
+  const dayStartUTC = Date.UTC(year, month - 1, day, 0, 0, 0) / 1000 - TSI_OFFSET_SECONDS;
+
+  const timestamp = new Date(isoTimestamp).getTime() / 1000;
+
+  return timestamp >= dayStartUTC;
+}
+

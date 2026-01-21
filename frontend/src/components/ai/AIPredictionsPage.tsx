@@ -7,6 +7,7 @@ import { TopPicksSlider } from './TopPicksSlider';
 import { PredictionCard } from './PredictionCard';
 import { useAIPredictions } from '../../context/AIPredictionsContext';
 import { useBotStats, type BotStats } from '../../hooks/useBotStats';
+import { getTodayInTurkey, getYesterdayInTurkey, getMonthStartInTurkey, isDateInTSIRange, isDateOnOrAfterTSI } from '../../utils/dateUtils';
 
 type FeedTab = 'all' | 'favorites' | 'active' | 'won' | 'lost';
 type DateFilter = 'today' | 'yesterday' | 'month';
@@ -59,21 +60,23 @@ export function AIPredictionsPage() {
         );
     }, [contextPredictions]);
 
-    // Filter by date
+    // Filter by date using Turkish timezone (TSI = UTC+3)
+    // BUGFIX: Previously used browser's local timezone which caused inconsistent counts
     const filteredByDate = useMemo(() => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const todayTSI = getTodayInTurkey();
+        const yesterdayTSI = getYesterdayInTurkey();
+        const monthStartTSI = getMonthStartInTurkey();
 
         return allPredictions.filter(p => {
-            const predDate = new Date(p.created_at);
             if (dateFilter === 'today') {
-                return predDate >= today;
+                // Show predictions from today onwards in TSI timezone
+                return isDateOnOrAfterTSI(p.created_at, todayTSI);
             } else if (dateFilter === 'yesterday') {
-                return predDate >= yesterday && predDate < today;
+                // Show only predictions from yesterday in TSI timezone
+                return isDateInTSIRange(p.created_at, yesterdayTSI);
             } else {
-                return predDate >= monthStart;
+                // Month filter: show predictions from month start onwards
+                return isDateOnOrAfterTSI(p.created_at, monthStartTSI);
             }
         });
     }, [allPredictions, dateFilter]);
