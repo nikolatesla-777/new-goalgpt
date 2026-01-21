@@ -126,21 +126,11 @@ export interface H2HData {
   awayRecentForm: H2HMatch[];
 }
 
-export interface TrendPoint {
-  minute: number;
-  home_possession?: number;
-  away_possession?: number;
-  home_attacks?: number;
-  away_attacks?: number;
-  home_dangerous_attacks?: number;
-  away_dangerous_attacks?: number;
-  home_shots?: number;
-  away_shots?: number;
-  home_shots_on_target?: number;
-  away_shots_on_target?: number;
-  home_corners?: number;
-  away_corners?: number;
-}
+// TrendPoint supports both legacy format (detailed stats) and new API format (intensity values)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type TrendPoint = any;
+// Legacy format had: minute, home_possession, away_possession, home_attacks, etc.
+// New API format has: first_half: number[], second_half: number[], overtime?: number[]
 
 export interface Standing {
   position: number;
@@ -276,8 +266,19 @@ export function MatchDetailProvider({ matchId, children }: MatchDetailProviderPr
       // Set H2H
       setH2h(data.h2h || null);
 
-      // Set trend
-      setTrend(Array.isArray(data.trend) ? data.trend : []);
+      // Set trend - can be array or object with first_half/second_half
+      // Pass as-is, TrendTab handles both formats
+      if (data.trend) {
+        const trendData = data.trend as any;
+        // If it's an object with first_half/second_half, wrap in array for consistency
+        if (!Array.isArray(trendData) && (trendData.first_half || trendData.second_half)) {
+          setTrend([trendData]);
+        } else {
+          setTrend(Array.isArray(trendData) ? trendData : [trendData]);
+        }
+      } else {
+        setTrend([]);
+      }
 
       // Set standings
       setStandings(data.standings || []);

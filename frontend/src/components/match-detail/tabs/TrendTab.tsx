@@ -1,13 +1,122 @@
 /**
  * Trend Tab
  *
- * Shows minute-by-minute match trends (possession, attacks, etc.)
+ * Shows minute-by-minute offensive intensity trends (TheSports Trend API)
+ * - Home team = positive values (blue bars up)
+ * - Away team = negative values (red bars down)
+ * - Chart shows attacking pressure per minute
  */
 
 import { useMatchDetail } from '../MatchDetailContext';
+import { useMemo } from 'react';
+
+// Types for trend API data
+interface TrendDataPoint {
+  minute: number;
+  home_value: number;
+  away_value: number;
+}
+
+interface TrendApiData {
+  first_half?: TrendDataPoint[] | number[];
+  second_half?: TrendDataPoint[] | number[];
+  overtime?: TrendDataPoint[] | number[];
+  match_id?: string;
+}
 
 export function TrendTab() {
-  const { trend, trendLoading, match } = useMatchDetail();
+  const { trend, trendLoading, match, incidents } = useMatchDetail();
+
+  // Parse trend data into displayable format
+  const parsedTrend = useMemo(() => {
+    if (!trend || trend.length === 0) return null;
+
+    // Check if it's new format (TrendApiData with first_half/second_half)
+    const trendObj = Array.isArray(trend) ? trend[0] : trend;
+
+    if (trendObj && (trendObj.first_half || trendObj.second_half)) {
+      // New format: { first_half: number[] | TrendDataPoint[], second_half: number[] | TrendDataPoint[] }
+      const apiData = trendObj as TrendApiData;
+      const allPoints: { minute: number; value: number }[] = [];
+
+      // Process first half (minutes 1-45+)
+      if (apiData.first_half && Array.isArray(apiData.first_half)) {
+        apiData.first_half.forEach((item, idx) => {
+          if (typeof item === 'number') {
+            allPoints.push({ minute: idx + 1, value: item });
+          } else if (item && typeof item === 'object') {
+            // TrendDataPoint format
+            const value = (item.home_value || 0) - (item.away_value || 0);
+            allPoints.push({ minute: item.minute || (idx + 1), value });
+          }
+        });
+      }
+
+      // Process second half (minutes 46-90+)
+      if (apiData.second_half && Array.isArray(apiData.second_half)) {
+        apiData.second_half.forEach((item, idx) => {
+          if (typeof item === 'number') {
+            allPoints.push({ minute: idx + 46, value: item });
+          } else if (item && typeof item === 'object') {
+            const value = (item.home_value || 0) - (item.away_value || 0);
+            allPoints.push({ minute: item.minute || (idx + 46), value });
+          }
+        });
+      }
+
+      // Process overtime if exists
+      if (apiData.overtime && Array.isArray(apiData.overtime)) {
+        apiData.overtime.forEach((item, idx) => {
+          if (typeof item === 'number') {
+            allPoints.push({ minute: idx + 91, value: item });
+          } else if (item && typeof item === 'object') {
+            const value = (item.home_value || 0) - (item.away_value || 0);
+            allPoints.push({ minute: item.minute || (idx + 91), value });
+          }
+        });
+      }
+
+      return allPoints;
+    }
+
+    // Legacy format: array of TrendPoint with attacks/possession
+    if (Array.isArray(trend) && trend.length > 0 && trend[0].home_attacks !== undefined) {
+      return trend.map((t: any, idx: number) => ({
+        minute: t.minute || idx + 1,
+        value: ((t.home_attacks || 0) + (t.home_dangerous_attacks || 0)) -
+               ((t.away_attacks || 0) + (t.away_dangerous_attacks || 0))
+      }));
+    }
+
+    return null;
+  }, [trend]);
+
+  // Get goal events for markers
+  const goalEvents = useMemo(() => {
+    if (!incidents || !Array.isArray(incidents)) return [];
+    return incidents
+      .filter((inc: any) => inc.incident_type === 'goal' || inc.type === 1)
+      .map((inc: any) => ({
+        minute: inc.minute,
+        team: inc.team,
+        addedTime: inc.added_time
+      }));
+  }, [incidents]);
+
+  // Get card events for markers
+  const cardEvents = useMemo(() => {
+    if (!incidents || !Array.isArray(incidents)) return [];
+    return incidents
+      .filter((inc: any) =>
+        inc.incident_type === 'yellow_card' || inc.incident_type === 'red_card' ||
+        inc.type === 3 || inc.type === 4
+      )
+      .map((inc: any) => ({
+        minute: inc.minute,
+        team: inc.team,
+        isRed: inc.incident_type === 'red_card' || inc.type === 4
+      }));
+  }, [incidents]);
 
   if (trendLoading) {
     return (
@@ -18,28 +127,20 @@ export function TrendTab() {
     );
   }
 
-  // PERF FIX: Check if all trend data is 0 (API might return empty/placeholder data)
-  const hasRealTrendData = trend && trend.length > 0 && trend.some(t =>
-    (t.home_attacks || 0) > 0 || (t.away_attacks || 0) > 0 ||
-    (t.home_dangerous_attacks || 0) > 0 || (t.away_dangerous_attacks || 0) > 0 ||
-    (t.home_possession !== undefined && t.home_possession !== 50) ||
-    (t.away_possession !== undefined && t.away_possession !== 50)
-  );
-
-  if (!trend || trend.length === 0 || !hasRealTrendData) {
+  if (!parsedTrend || parsedTrend.length === 0) {
     return (
       <div style={{
         padding: '40px',
         textAlign: 'center',
         color: '#6b7280',
-        backgroundColor: 'white',
+        backgroundColor: '#1a2634',
         borderRadius: '12px'
       }}>
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>📈</div>
-        <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
+        <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px', color: '#e5e7eb' }}>
           Trend Verisi Bulunamadi
         </div>
-        <div style={{ fontSize: '14px' }}>
+        <div style={{ fontSize: '14px', color: '#9ca3af' }}>
           {match?.status_id === 1
             ? 'Mac basladiktan sonra dakika dakika veriler gosterilecek.'
             : 'Bu mac icin trend verisi henuz mevcut degil.'}
@@ -48,229 +149,229 @@ export function TrendTab() {
     );
   }
 
-  // Get latest values
-  const latestTrend = trend[trend.length - 1] || {};
-
-  // Calculate max values for scaling
-  const maxAttacks = Math.max(
-    ...trend.map(t => Math.max(t.home_attacks || 0, t.away_attacks || 0)),
-    1
-  );
-  const maxDangerousAttacks = Math.max(
-    ...trend.map(t => Math.max(t.home_dangerous_attacks || 0, t.away_dangerous_attacks || 0)),
+  // Calculate max value for scaling
+  const maxValue = Math.max(
+    ...parsedTrend.map(p => Math.abs(p.value)),
     1
   );
 
-  // Simple line chart component
-  const TrendChart = ({
-    title,
-    homeData,
-    awayData,
-    maxValue
-  }: {
-    title: string;
-    homeData: number[];
-    awayData: number[];
-    maxValue: number;
-  }) => {
-    const width = 100;
-    const height = 60;
-    const points = homeData.length;
+  // Bar chart dimensions
+  const chartHeight = 120;
 
-    const getPath = (data: number[]) => {
-      if (data.length === 0) return '';
-      return data.map((value, i) => {
-        const x = (i / Math.max(points - 1, 1)) * width;
-        const y = height - (value / Math.max(maxValue, 1)) * height;
-        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-      }).join(' ');
-    };
-
-    return (
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Main Trend Chart - Dark theme like screenshot */}
       <div style={{
-        backgroundColor: 'white',
+        backgroundColor: '#1a2634',
+        borderRadius: '12px',
         padding: '16px',
-        borderRadius: '12px'
+        overflow: 'hidden'
       }}>
+        {/* Team labels */}
         <div style={{
-          fontSize: '13px',
-          fontWeight: '600',
-          color: '#374151',
-          marginBottom: '12px',
-          textAlign: 'center'
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginBottom: '8px',
+          fontSize: '13px'
         }}>
-          {title}
+          <div style={{ color: '#22d3ee', fontWeight: '600' }}>
+            {match?.home_team?.name || 'Ev Sahibi'}
+          </div>
+          <div style={{ color: '#f59e0b', fontWeight: '600' }}>
+            {match?.away_team?.name || 'Deplasman'}
+          </div>
         </div>
-        <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: '80px' }}>
-          {/* Grid lines */}
-          <line x1="0" y1={height / 2} x2={width} y2={height / 2} stroke="#f3f4f6" strokeWidth="0.5" />
 
-          {/* Home line */}
-          <path
-            d={getPath(homeData)}
-            fill="none"
-            stroke="#3b82f6"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+        {/* Chart area */}
+        <div style={{
+          position: 'relative',
+          height: `${chartHeight * 2 + 20}px`,
+          backgroundColor: '#0f1923',
+          borderRadius: '8px',
+          overflow: 'hidden'
+        }}>
+          {/* Center line (HT marker) */}
+          <div style={{
+            position: 'absolute',
+            top: chartHeight,
+            left: 0,
+            right: 0,
+            height: '1px',
+            backgroundColor: '#374151'
+          }} />
 
-          {/* Away line */}
-          <path
-            d={getPath(awayData)}
-            fill="none"
-            stroke="#ef4444"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+          {/* Half-time marker */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: '50%',
+            width: '1px',
+            backgroundColor: '#4b5563',
+            zIndex: 5
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: chartHeight - 10,
+              left: '-10px',
+              backgroundColor: '#374151',
+              color: '#9ca3af',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              fontSize: '10px',
+              fontWeight: '500'
+            }}>HT</div>
+          </div>
+
+          {/* FT marker */}
+          <div style={{
+            position: 'absolute',
+            top: chartHeight - 10,
+            right: '4px',
+            backgroundColor: '#374151',
+            color: '#9ca3af',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: '500',
+            zIndex: 5
+          }}>FT</div>
+
+          {/* Bars */}
+          <svg
+            viewBox={`0 0 ${parsedTrend.length} ${chartHeight * 2}`}
+            preserveAspectRatio="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%'
+            }}
+          >
+            {parsedTrend.map((point, idx) => {
+              const normalizedValue = (point.value / maxValue) * chartHeight;
+              const isPositive = point.value >= 0;
+
+              return (
+                <rect
+                  key={idx}
+                  x={idx}
+                  y={isPositive ? chartHeight - normalizedValue : chartHeight}
+                  width={0.8}
+                  height={Math.abs(normalizedValue)}
+                  fill={isPositive ? '#22d3ee' : '#f59e0b'}
+                  opacity={0.9}
+                />
+              );
+            })}
+          </svg>
+
+          {/* Goal markers */}
+          {goalEvents.map((goal, idx) => {
+            const xPos = (goal.minute / 90) * 100;
+            const isHome = goal.team === 'home';
+            return (
+              <div
+                key={`goal-${idx}`}
+                style={{
+                  position: 'absolute',
+                  left: `${Math.min(xPos, 98)}%`,
+                  top: isHome ? '10px' : 'auto',
+                  bottom: isHome ? 'auto' : '10px',
+                  transform: 'translateX(-50%)',
+                  zIndex: 10
+                }}
+              >
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  backgroundColor: isHome ? '#22d3ee' : '#f59e0b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px'
+                }}>⚽</div>
+              </div>
+            );
+          })}
+
+          {/* Card markers */}
+          {cardEvents.map((card, idx) => {
+            const xPos = (card.minute / 90) * 100;
+            const isHome = card.team === 'home';
+            return (
+              <div
+                key={`card-${idx}`}
+                style={{
+                  position: 'absolute',
+                  left: `${Math.min(xPos, 98)}%`,
+                  top: isHome ? '30px' : 'auto',
+                  bottom: isHome ? 'auto' : '30px',
+                  transform: 'translateX(-50%)',
+                  zIndex: 10
+                }}
+              >
+                <div style={{
+                  width: '10px',
+                  height: '14px',
+                  borderRadius: '2px',
+                  backgroundColor: card.isRed ? '#ef4444' : '#fbbf24'
+                }} />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Time labels */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           marginTop: '8px',
-          fontSize: '12px'
+          fontSize: '11px',
+          color: '#6b7280'
         }}>
-          <span style={{ color: '#3b82f6', fontWeight: '600' }}>
-            {homeData[homeData.length - 1] || 0}
-          </span>
-          <span style={{ color: '#ef4444', fontWeight: '600' }}>
-            {awayData[awayData.length - 1] || 0}
-          </span>
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Current Possession */}
-      <div style={{
-        backgroundColor: 'white',
-        padding: '20px',
-        borderRadius: '12px'
-      }}>
-        <div style={{
-          fontSize: '14px',
-          fontWeight: '600',
-          color: '#374151',
-          marginBottom: '16px',
-          textAlign: 'center'
-        }}>
-          Top Hakimiyeti
-        </div>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px'
-        }}>
-          <div style={{
-            fontSize: '24px',
-            fontWeight: '700',
-            color: '#3b82f6',
-            minWidth: '60px',
-            textAlign: 'center'
-          }}>
-            {latestTrend.home_possession || 50}%
-          </div>
-          <div style={{
-            flex: 1,
-            height: '20px',
-            backgroundColor: '#f3f4f6',
-            borderRadius: '10px',
-            overflow: 'hidden',
-            display: 'flex'
-          }}>
-            <div style={{
-              width: `${latestTrend.home_possession || 50}%`,
-              backgroundColor: '#3b82f6',
-              transition: 'width 0.5s ease'
-            }} />
-            <div style={{
-              width: `${latestTrend.away_possession || 50}%`,
-              backgroundColor: '#ef4444',
-              transition: 'width 0.5s ease'
-            }} />
-          </div>
-          <div style={{
-            fontSize: '24px',
-            fontWeight: '700',
-            color: '#ef4444',
-            minWidth: '60px',
-            textAlign: 'center'
-          }}>
-            {latestTrend.away_possession || 50}%
-          </div>
+          <span>0'</span>
+          <span>15'</span>
+          <span>30'</span>
+          <span>HT</span>
+          <span>60'</span>
+          <span>75'</span>
+          <span>90'</span>
         </div>
       </div>
 
-      {/* Charts Grid */}
+      {/* Info card */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '16px'
-      }}>
-        <TrendChart
-          title="Ataklar"
-          homeData={trend.map(t => t.home_attacks || 0)}
-          awayData={trend.map(t => t.away_attacks || 0)}
-          maxValue={maxAttacks}
-        />
-        <TrendChart
-          title="Tehlikeli Ataklar"
-          homeData={trend.map(t => t.home_dangerous_attacks || 0)}
-          awayData={trend.map(t => t.away_dangerous_attacks || 0)}
-          maxValue={maxDangerousAttacks}
-        />
-      </div>
-
-      {/* Current Stats Summary */}
-      <div style={{
-        backgroundColor: 'white',
+        backgroundColor: '#1a2634',
         borderRadius: '12px',
-        overflow: 'hidden'
+        padding: '16px'
       }}>
         <div style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid #e5e7eb',
-          fontWeight: '600',
           fontSize: '14px',
-          color: '#374151'
+          fontWeight: '600',
+          color: '#e5e7eb',
+          marginBottom: '12px'
         }}>
-          Guncel Durum
+          Trend Hakkinda
         </div>
-        {[
-          { label: 'Ataklar', home: latestTrend.home_attacks, away: latestTrend.away_attacks },
-          { label: 'Tehlikeli Ataklar', home: latestTrend.home_dangerous_attacks, away: latestTrend.away_dangerous_attacks },
-          { label: 'Sutlar', home: latestTrend.home_shots, away: latestTrend.away_shots },
-          { label: 'Isabetli Sutlar', home: latestTrend.home_shots_on_target, away: latestTrend.away_shots_on_target },
-          { label: 'Kornerler', home: latestTrend.home_corners, away: latestTrend.away_corners },
-        ].filter(s => s.home !== undefined || s.away !== undefined).map((stat, idx) => (
-          <div
-            key={stat.label}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              borderBottom: idx < 4 ? '1px solid #f3f4f6' : 'none'
-            }}
-          >
-            <div style={{
-              fontWeight: '600',
-              color: (stat.home || 0) > (stat.away || 0) ? '#3b82f6' : '#374151'
-            }}>
-              {stat.home || 0}
-            </div>
-            <div style={{ fontSize: '13px', color: '#6b7280' }}>{stat.label}</div>
-            <div style={{
-              fontWeight: '600',
-              color: (stat.away || 0) > (stat.home || 0) ? '#ef4444' : '#374151'
-            }}>
-              {stat.away || 0}
-            </div>
-          </div>
-        ))}
+        <div style={{
+          fontSize: '13px',
+          color: '#9ca3af',
+          lineHeight: '1.6'
+        }}>
+          <p style={{ marginBottom: '8px' }}>
+            Bu grafik, mac boyunca takimlarin hucum yogunlugunu dakika dakika gostermektedir.
+          </p>
+          <ul style={{ marginLeft: '16px', marginBottom: '8px' }}>
+            <li><span style={{ color: '#22d3ee' }}>Mavi cizgiler</span>: Ev sahibi hucum baskisi</li>
+            <li><span style={{ color: '#f59e0b' }}>Turuncu cizgiler</span>: Deplasman hucum baskisi</li>
+          </ul>
+          <p style={{ fontSize: '12px', color: '#6b7280' }}>
+            Degerler, atak ve top kontrolune gore hesaplanmaktadir.
+          </p>
+        </div>
       </div>
 
       {/* Legend */}
@@ -279,14 +380,14 @@ export function TrendTab() {
         justifyContent: 'center',
         gap: '24px',
         fontSize: '13px',
-        color: '#6b7280'
+        color: '#9ca3af'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <div style={{ width: '12px', height: '3px', backgroundColor: '#3b82f6', borderRadius: '2px' }} />
+          <div style={{ width: '12px', height: '12px', backgroundColor: '#22d3ee', borderRadius: '2px' }} />
           {match?.home_team?.name}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <div style={{ width: '12px', height: '3px', backgroundColor: '#ef4444', borderRadius: '2px' }} />
+          <div style={{ width: '12px', height: '12px', backgroundColor: '#f59e0b', borderRadius: '2px' }} />
           {match?.away_team?.name}
         </div>
       </div>
