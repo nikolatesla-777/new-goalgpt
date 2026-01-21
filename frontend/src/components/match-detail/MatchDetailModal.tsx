@@ -51,7 +51,7 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
         const fetchAllData = async (skipCache = false) => {
             // Step 1: Check cache first (only on initial load)
             if (!skipCache) {
-                const cached = getMatchCache(matchId, match.status_id);
+                const cached = getMatchCache(matchId, match.status);
                 if (cached) {
                     // Show cached data immediately
                     setFullData(cached.data.fullData);
@@ -114,7 +114,7 @@ export function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
         };
 
         fetchAllData();
-    }, [matchId, match.status_id]);
+    }, [matchId, match.status]);
 
     // PERF FIX: Derive tab data from cached fullData instead of refetching
     const tabData = useMemo(() => {
