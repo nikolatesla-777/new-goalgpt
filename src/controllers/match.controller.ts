@@ -2112,13 +2112,22 @@ export const getMatchFull = async (
 };
 
 // Helper: Fetch stats with individual timeout
+// BUGFIX: Now uses combinedStatsService to get BOTH basic AND detailed stats
+// This ensures detailed stats (passes, tackles, interceptions) are included
 async function fetchStatsWithTimeout(matchId: string, timeoutMs: number): Promise<{ stats: any[] }> {
   const timeout = new Promise<{ stats: any[] }>((_, reject) =>
     setTimeout(() => reject(new Error('Stats timeout')), timeoutMs)
   );
 
   const statsPromise = (async () => {
-    // Try database first
+    // First, try to get combined stats from database (fast)
+    const dbCombinedStats = await combinedStatsService.getCombinedStatsFromDatabase(matchId);
+    if (dbCombinedStats && dbCombinedStats.allStats.length > 0) {
+      logger.debug(`[fetchStatsWithTimeout] DB hit for ${matchId}: ${dbCombinedStats.allStats.length} stats`);
+      return { stats: dbCombinedStats.allStats };
+    }
+
+    // Fallback: Try basic stats from matchStatsRepository
     const dbStats = await matchStatsRepository.getMatchStats(matchId);
     if (dbStats && (dbStats.home_corner !== 0 || dbStats.away_corner !== 0 ||
         dbStats.home_shots !== 0 || dbStats.away_shots !== 0)) {
