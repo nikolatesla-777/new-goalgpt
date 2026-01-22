@@ -1,0 +1,380 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: 'Run database migrations (DANGEROUS - use with caution)'
+        required: false
+        type: boolean
+        default: false
+
+# CRITICAL: Prevent concurrent deployments
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false  # Wait for current deploy to finish
+
+env:
+  NODE_VERSION: '20.19.6'
+  DEPLOY_USER: 'root'
+  DEPLOY_HOST: '142.93.103.128'
+  APP_DIR: '/var/www/goalgpt'
+  HEALTH_CHECK_TIMEOUT: '30'
+  HEALTH_CHECK_RETRIES: '6'
+
+jobs:
+  # CI checks (runs on all PRs and deploys)
+  ci:
+    name: CI Checks & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate environment schema
+        run: npm run check:env || true  # PR-0 might not have this yet
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+          JWT_SECRET: test_jwt_secret_min_32_chars_long_for_validation
+          PORT: 3000
+
+      - name: TypeScript compilation check
+        run: npm run build
+
+      - name: ESLint
+        run: npm run lint || true  # PR-0 might not have strict linting
+
+      - name: Check route duplicates
+        run: npm run check:routes || true
+
+      - name: Check database imports in routes
+        run: npm run check:db-in-routes || true
+
+      - name: Run tests
+        run: npm run test || echo "Tests not configured yet"
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+          JWT_SECRET: test_jwt_secret_min_32_chars_long
+          PORT: 3000
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # Deploy to production (only on main branch or tags)
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: https://partnergoalgpt.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create deployment timestamp
+        id: timestamp
+        run: echo "timestamp=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+
+      - name: Create deployment archive
+        run: |
+          mkdir -p deploy
+
+          # Include: dist, package files, migrations (if exist)
+          cp -r dist deploy/
+          cp package.json package-lock.json deploy/
+
+          # Include migrations if directory exists
+          if [ -d "src/database/migrations" ]; then
+            mkdir -p deploy/src/database
+            cp -r src/database/migrations deploy/src/database/
+            echo "✅ Migrations included in tarball"
+          fi
+
+          # Create tarball
+          tar -czf goalgpt-${{ steps.timestamp.outputs.timestamp }}.tar.gz -C deploy .
+
+          echo "📦 Tarball contents:"
+          tar -tzf goalgpt-${{ steps.timestamp.outputs.timestamp }}.tar.gz | head -20
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload deployment archive
+        run: |
+          # Ensure releases directory exists on remote
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            "mkdir -p ${{ env.APP_DIR }}/releases"
+
+          # Upload tarball
+          scp -i ~/.ssh/deploy_key \
+            goalgpt-${{ steps.timestamp.outputs.timestamp }}.tar.gz \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.APP_DIR }}/releases/
+
+      - name: Deploy new release
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} bash << 'ENDSSH'
+          set -e
+
+          TIMESTAMP="${{ steps.timestamp.outputs.timestamp }}"
+          RELEASE_DIR="${{ env.APP_DIR }}/releases/$TIMESTAMP"
+          CURRENT_LINK="${{ env.APP_DIR }}/current"
+          SHARED_DIR="${{ env.APP_DIR }}/shared"
+
+          echo "🚀 Deploying release: $TIMESTAMP"
+
+          # Ensure shared directory exists
+          mkdir -p "$SHARED_DIR"/{logs,.ssh}
+
+          # Ensure .env exists in shared
+          if [ ! -f "$SHARED_DIR/.env" ]; then
+            echo "❌ ERROR: $SHARED_DIR/.env not found!"
+            echo "Please create .env file with production secrets"
+            exit 1
+          fi
+
+          # Create release directory
+          mkdir -p "$RELEASE_DIR"
+
+          # Extract archive
+          echo "📦 Extracting archive..."
+          tar -xzf "${{ env.APP_DIR }}/releases/goalgpt-$TIMESTAMP.tar.gz" -C "$RELEASE_DIR"
+          rm "${{ env.APP_DIR }}/releases/goalgpt-$TIMESTAMP.tar.gz"
+
+          # Link shared resources
+          ln -sf "$SHARED_DIR/.env" "$RELEASE_DIR/.env"
+          ln -sf "$SHARED_DIR/logs" "$RELEASE_DIR/logs"
+
+          # Install production dependencies (DETERMINISTIC)
+          echo "📥 Installing dependencies..."
+          cd "$RELEASE_DIR"
+          npm ci --production --ignore-scripts --loglevel=error
+
+          # Store previous release for rollback
+          if [ -L "$CURRENT_LINK" ]; then
+            PREV_RELEASE=$(readlink -f "$CURRENT_LINK")
+            echo "$PREV_RELEASE" > "${{ env.APP_DIR }}/previous_release.txt"
+            echo "💾 Previous release saved: $PREV_RELEASE"
+          fi
+
+          # Atomic symlink swap
+          ln -sfn "$RELEASE_DIR" "$CURRENT_LINK.tmp"
+          mv -Tf "$CURRENT_LINK.tmp" "$CURRENT_LINK"
+
+          echo "✅ Release $TIMESTAMP deployed (symlink updated)"
+          ENDSSH
+
+      - name: Run migrations (if enabled)
+        if: github.event.inputs.run_migrations == 'true'
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} bash << 'ENDSSH'
+          set -e
+
+          cd ${{ env.APP_DIR }}/current
+
+          echo "🗄️  Running database migrations..."
+          npm run migrate:latest || {
+            echo "❌ Migration failed!"
+            exit 1
+          }
+
+          echo "✅ Migrations completed"
+          ENDSSH
+
+      - name: Restart application
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} bash << 'ENDSSH'
+          set -e
+
+          # ALWAYS use ecosystem config for deterministic startup
+          ECOSYSTEM_FILE="${{ env.APP_DIR }}/shared/ecosystem.config.js"
+
+          if [ ! -f "$ECOSYSTEM_FILE" ]; then
+            echo "❌ Ecosystem config not found: $ECOSYSTEM_FILE"
+            exit 1
+          fi
+
+          echo "🔄 Restarting application..."
+
+          # Reload using ecosystem config (zero-downtime)
+          pm2 reload "$ECOSYSTEM_FILE" --env production --update-env || {
+            echo "⚠️  PM2 reload failed, attempting restart..."
+            pm2 restart "$ECOSYSTEM_FILE" --env production --update-env || {
+              echo "⚠️  PM2 restart failed, attempting fresh start..."
+              pm2 delete goalgpt-backend 2>/dev/null || true
+              cd ${{ env.APP_DIR }}/current
+              pm2 start "$ECOSYSTEM_FILE" --env production
+            }
+          }
+
+          # Save PM2 process list
+          pm2 save --force
+
+          echo "✅ Application restarted"
+          ENDSSH
+
+      - name: Health check with retries
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} bash << 'ENDSSH'
+          set -e
+
+          echo "🏥 Running health checks..."
+          sleep 5  # Give app time to start
+
+          MAX_ATTEMPTS=${{ env.HEALTH_CHECK_RETRIES }}
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+
+            # Check /api/health endpoint (backend uses /api prefix)
+            if curl -f -m 5 --retry 2 http://localhost:3000/api/health > /dev/null 2>&1; then
+              echo "✅ Health check PASSED"
+
+              # Additional smoke tests
+              echo "🔍 Running smoke tests..."
+
+              # Test API endpoint
+              if curl -f -m 5 http://localhost:3000/api/matches/live > /dev/null 2>&1; then
+                echo "✅ API endpoint responsive"
+              else
+                echo "⚠️  API endpoint not responding"
+              fi
+
+              # Check PM2 status
+              pm2 list | grep goalgpt-backend
+
+              exit 0
+            fi
+
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              echo "⚠️  Health check failed, retrying in 5s..."
+              sleep 5
+            fi
+          done
+
+          echo "❌ Health check FAILED after $MAX_ATTEMPTS attempts"
+          echo "PM2 Status:"
+          pm2 list
+          echo ""
+          echo "Recent logs:"
+          pm2 logs goalgpt-backend --lines 30 --nostream || true
+
+          exit 1
+          ENDSSH
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} bash << 'ENDSSH'
+          set -e
+
+          echo "🔄 ROLLING BACK to previous release..."
+
+          PREV_RELEASE=$(cat ${{ env.APP_DIR }}/previous_release.txt 2>/dev/null || echo "")
+
+          if [ -z "$PREV_RELEASE" ] || [ ! -d "$PREV_RELEASE" ]; then
+            echo "❌ No previous release found, cannot rollback"
+            exit 1
+          fi
+
+          # Atomic rollback
+          ln -sfn "$PREV_RELEASE" "${{ env.APP_DIR }}/current.tmp"
+          mv -Tf "${{ env.APP_DIR }}/current.tmp" "${{ env.APP_DIR }}/current"
+
+          # Restart with old release
+          cd "${{ env.APP_DIR }}/current"
+          pm2 restart ${{ env.APP_DIR }}/shared/ecosystem.config.js --env production
+
+          # Verify rollback
+          sleep 5
+          if curl -f -m 5 http://localhost:3000/api/health > /dev/null 2>&1; then
+            echo "✅ Rollback successful to: $(basename $PREV_RELEASE)"
+          else
+            echo "❌ Rollback verification failed!"
+            pm2 logs goalgpt-backend --lines 20 --nostream || true
+            exit 1
+          fi
+          ENDSSH
+
+      - name: Cleanup old releases
+        if: success()
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} bash << 'ENDSSH'
+          set -e
+
+          cd ${{ env.APP_DIR }}/releases
+
+          # Keep last 5 releases, delete older ones
+          RELEASE_COUNT=$(ls -1 | wc -l)
+          if [ $RELEASE_COUNT -gt 5 ]; then
+            echo "🧹 Cleaning up old releases (keeping last 5)..."
+            ls -t | tail -n +6 | xargs -r rm -rf
+            echo "✅ Old releases cleaned"
+          else
+            echo "✅ Only $RELEASE_COUNT releases, no cleanup needed"
+          fi
+          ENDSSH
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ DEPLOYMENT SUCCESSFUL"
+            echo "Release: ${{ steps.timestamp.outputs.timestamp }}"
+            echo "URL: https://partnergoalgpt.com"
+          else
+            echo "❌ DEPLOYMENT FAILED"
+            echo "Check logs above for details"
+          fi

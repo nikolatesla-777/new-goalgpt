@@ -3,6 +3,25 @@ import { logger } from '../utils/logger';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
+/**
+ * TODO [DATABASE-REFACTOR-TRACK]:
+ * This file violates the "SQL only in repositories" architectural rule.
+ *
+ * PROBLEM:
+ * - 700+ lines of inline SQL makes this unmaintainable
+ * - SQL should live in src/database/repositories/{entity}.repository.ts
+ * - Migration logic should be separated from schema definitions
+ *
+ * PLAN (dedicated DB refactor PR):
+ * 1. Extract schema SQL to src/database/schema/*.sql files
+ * 2. Create proper migration runner that reads from schema/
+ * 3. Implement repository pattern for all DB queries
+ * 4. Use Kysely query builder for type-safe queries
+ *
+ * DO NOT REFACTOR NOW - this is intentionally deferred to the database
+ * architecture PR track. PR-0 focuses on deployment infrastructure only.
+ */
+
 async function runMigrations() {
   try {
     logger.info('Starting database migrations...');
