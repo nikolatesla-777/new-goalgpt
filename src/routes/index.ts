@@ -1,26 +1,25 @@
 /**
- * Central Route Registration
+ * Central Route Registration - PR-2: Auth Grouping
  *
- * SINGLE SOURCE OF TRUTH for all Fastify route registrations.
- * This is the ONLY file where fastify.register() should be called.
+ * Route groups with hook-level authentication.
+ * Auth is applied ONLY at ROUTE GROUP level via addHook('preHandler', ...), NOT per-route.
  *
- * Organization:
- * - Routes grouped by domain for clarity
- * - Prefixes preserved from original implementation
- * - NO auth/permission changes (deferred to PR-2)
- * - NO prefix restructuring (deferred to future PRs)
+ * Route Groups:
+ * - publicAPI - read-only endpoints, no authentication required
+ * - authAPI - user endpoints requiring JWT authentication
+ * - adminAPI - admin endpoints requiring JWT + admin role
+ * - internalAPI - internal monitoring endpoints (localhost OR X-Internal-Secret header)
+ * - wsAPI - WebSocket routes (first-message auth within 10s, handled in websocket.routes.ts)
+ * - mixedAuthAPI - routes with mixed public/protected endpoints (auth handled internally per-route)
  *
- * TECHNICAL DEBT (marked for PR-2+):
- * - Mixed auth handling (some routes have requireAuth, some don't)
- * - Inconsistent prefix patterns (/api/predictions vs no prefix for predictionRoutes)
- * - No group-level hooks yet
+ * IMPORTANT: All existing /api/* paths are preserved for backward compatibility (NO breaking changes).
  */
 
 import { FastifyInstance } from 'fastify';
 
-// ============================================================================
-// ROUTE IMPORTS
-// ============================================================================
+// Middleware
+import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
+import { requireInternal } from '../middleware/internal.middleware';
 
 // Core Match & Team Data
 import matchRoutes from './match.routes';
@@ -69,81 +68,112 @@ import { partnersRoutes } from './partners.routes';
 // ============================================================================
 
 /**
- * Register all application routes
+ * Register all application routes with hook-level authentication
  *
  * Called ONCE from server.ts bootstrap.
  * All route registration logic lives here.
  *
  * @param app - Fastify instance
  */
-export function registerRoutes(app: FastifyInstance): void {
+export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // ============================================================================
-  // HEALTH & MONITORING (must be first for readiness checks)
+  // PUBLIC API GROUP
+  // Read-only endpoints, no authentication required
+  // Prefix: /api/*
   // ============================================================================
-  app.register(healthRoutes, { prefix: '/api' });
-  app.register(metricsRoutes, { prefix: '/api/metrics' });
+  await app.register(async (publicAPI) => {
+    // No auth hook - these are public endpoints
+
+    // Health checks (must be public for load balancer)
+    publicAPI.register(healthRoutes, { prefix: '/api' });
+
+    // Core read-only data
+    publicAPI.register(matchRoutes, { prefix: '/api/matches' });
+    publicAPI.register(seasonRoutes, { prefix: '/api/seasons' });
+    publicAPI.register(teamRoutes, { prefix: '/api/teams' });
+    publicAPI.register(playerRoutes, { prefix: '/api/players' });
+    publicAPI.register(leagueRoutes, { prefix: '/api/leagues' });
+
+    // Prediction viewing (read-only)
+    publicAPI.register(predictionRoutes);
+  });
 
   // ============================================================================
-  // WEBSOCKET (real-time match updates)
+  // AUTHENTICATED API GROUP
+  // User endpoints requiring valid JWT token
+  // Prefix: /api/*
   // ============================================================================
-  app.register(websocketRoutes); // WebSocket route: /ws
+  await app.register(async (authAPI) => {
+    // Apply auth hook to ALL routes in this group
+    authAPI.addHook('preHandler', requireAuth);
+
+    // Gamification systems
+    authAPI.register(xpRoutes, { prefix: '/api/xp' });
+    authAPI.register(creditsRoutes, { prefix: '/api/credits' });
+    authAPI.register(badgesRoutes, { prefix: '/api/badges' });
+    authAPI.register(referralsRoutes, { prefix: '/api/referrals' });
+    authAPI.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' });
+
+    // Social features
+    authAPI.register(commentsRoutes, { prefix: '/api/comments' });
+    authAPI.register(forumRoutes, { prefix: '/api/forum' });
+
+    // Prediction unlock (credit-based)
+    authAPI.register(predictionUnlockRoutes, { prefix: '/api/predictions' });
+  });
 
   // ============================================================================
-  // CORE MATCH & TEAM DATA API
+  // ADMIN API GROUP
+  // Admin endpoints requiring valid JWT token + admin role
+  // Prefix: /api/*
   // ============================================================================
-  app.register(matchRoutes, { prefix: '/api/matches' });
-  app.register(seasonRoutes, { prefix: '/api/seasons' });
-  app.register(teamRoutes, { prefix: '/api/teams' });
-  app.register(playerRoutes, { prefix: '/api/players' });
-  app.register(leagueRoutes, { prefix: '/api/leagues' });
+  await app.register(async (adminAPI) => {
+    // Apply auth hooks to ALL routes in this group
+    adminAPI.addHook('preHandler', requireAuth);
+    adminAPI.addHook('preHandler', requireAdmin);
+
+    // Admin dashboard
+    adminAPI.register(dashboardRoutes);
+
+    // Admin moderation
+    adminAPI.register(announcementsRoutes, { prefix: '/api/announcements' });
+
+    // Partner management
+    adminAPI.register(partnersRoutes, { prefix: '/api/partners' });
+  });
 
   // ============================================================================
-  // AI PREDICTIONS
-  // TODO [PR-2+]: Unify prefix handling
-  // - predictionRoutes: no prefix (handles own paths)
-  // - predictionUnlockRoutes: /api/predictions prefix
+  // INTERNAL API GROUP
+  // Internal monitoring endpoints
+  // Requires X-Internal-Secret header OR localhost
+  // Prefix: /api/metrics
   // ============================================================================
-  app.register(predictionRoutes); // Mixed auth handled internally
-  app.register(predictionUnlockRoutes, { prefix: '/api/predictions' });
+  await app.register(async (internalAPI) => {
+    // Apply internal auth hook to ALL routes in this group
+    internalAPI.addHook('preHandler', requireInternal);
+
+    // Monitoring endpoints
+    internalAPI.register(metricsRoutes, { prefix: '/api/metrics' });
+  });
 
   // ============================================================================
-  // DASHBOARD & ANALYTICS
+  // WEBSOCKET ROUTES
+  // WebSocket connections with first-message authentication
+  // Prefix: /ws
   // ============================================================================
-  app.register(dashboardRoutes); // Mixed auth handled internally
+  // WebSocket auth is handled inside websocket.routes.ts
+  // First message must contain valid JWT within 10 seconds
+  app.register(websocketRoutes);
 
   // ============================================================================
-  // AUTHENTICATION & AUTHORIZATION
-  // Phase 2: OAuth, JWT, session management
+  // MIXED AUTH API GROUP
+  // Routes with mixed public/protected endpoints
+  // Auth handled internally per-route (cannot use group hooks)
+  // Prefix: /api/*
   // ============================================================================
+  // Auth routes: /login, /register are public; /me, /refresh require auth
   app.register(authRoutes, { prefix: '/api/auth' });
 
-  // ============================================================================
-  // GAMIFICATION SYSTEMS (Phase 2-3)
-  // XP, Credits, Badges, Referrals, Daily Rewards
-  // ============================================================================
-  app.register(xpRoutes, { prefix: '/api/xp' });
-  app.register(creditsRoutes, { prefix: '/api/credits' });
-  app.register(badgesRoutes, { prefix: '/api/badges' });
-  app.register(referralsRoutes, { prefix: '/api/referrals' });
-  app.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' });
-
-  // ============================================================================
-  // SOCIAL & COMMUNITY FEATURES (Phase 3)
-  // Match comments, forum discussions, user interactions
-  // ============================================================================
-  app.register(commentsRoutes, { prefix: '/api/comments' });
-  app.register(forumRoutes, { prefix: '/api/forum' });
-
-  // ============================================================================
-  // ADMIN & MODERATION (Phase 3)
-  // Admin popup announcements, moderation tools
-  // ============================================================================
-  app.register(announcementsRoutes, { prefix: '/api/announcements' });
-
-  // ============================================================================
-  // EXTERNAL INTEGRATIONS (Phase 3+)
-  // FootyStats AI Lab data source, Partner system
-  // ============================================================================
-  app.register(footyStatsRoutes, { prefix: '/api' }); // FootyStats integration
-  app.register(partnersRoutes, { prefix: '/api/partners' });
+  // FootyStats integration (may have mixed endpoints)
+  app.register(footyStatsRoutes, { prefix: '/api' });
 }

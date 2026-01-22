@@ -79,9 +79,6 @@ fastify.register(cors, {
   allowedHeaders: ['Content-Type', 'Authorization'],
 });
 
-// Register all application routes (PR-1: Central registration)
-registerRoutes(fastify);
-
 // Initialize background workers (consolidated - most entity syncs now in entitySync.job.ts)
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
 let teamLogoSyncWorker: TeamLogoSyncWorker | null = null;
@@ -95,6 +92,9 @@ const HOST = '0.0.0.0';
 
 const start = async () => {
   try {
+    // Register all application routes (PR-2: Auth grouping with hooks)
+    await registerRoutes(fastify);
+
     // Phase 2: Initialize Firebase Admin SDK (for OAuth verification)
     try {
       initializeFirebase();
