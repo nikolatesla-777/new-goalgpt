@@ -26,19 +26,18 @@ const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const JWT_ACCESS_TOKEN_EXPIRES_IN = process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || '1h';
 const JWT_REFRESH_TOKEN_EXPIRES_IN = process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || '30d';
 
-// FATAL: Require secrets in production
-if (process.env.NODE_ENV === 'production') {
-  if (!JWT_SECRET) {
-    throw new Error('FATAL: JWT_SECRET environment variable is required in production');
-  }
-  if (!JWT_REFRESH_SECRET) {
-    throw new Error('FATAL: JWT_REFRESH_SECRET environment variable is required in production');
-  }
+// SECURITY: Require secrets in ALL environments (no fallbacks)
+// This is a security-critical change - weak secrets are never acceptable
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is required. Set it in .env file.');
+}
+if (!JWT_REFRESH_SECRET) {
+  throw new Error('FATAL: JWT_REFRESH_SECRET environment variable is required. Set it in .env file.');
 }
 
-// Development fallbacks (only for local development)
-const EFFECTIVE_JWT_SECRET: string = JWT_SECRET || 'development-secret-change-in-production';
-const EFFECTIVE_JWT_REFRESH_SECRET: string = JWT_REFRESH_SECRET || 'development-refresh-secret';
+// No fallbacks - secrets must always be explicitly configured
+const EFFECTIVE_JWT_SECRET: string = JWT_SECRET;
+const EFFECTIVE_JWT_REFRESH_SECRET: string = JWT_REFRESH_SECRET;
 
 /**
  * Generate JWT access and refresh tokens

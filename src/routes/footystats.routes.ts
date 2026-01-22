@@ -9,80 +9,10 @@ import { mappingService } from '../services/footystats/mapping.service';
 import { footyStatsAPI } from '../services/footystats/footystats.client';
 import { safeQuery } from '../database/connection';
 import { logger } from '../utils/logger';
+import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 
 export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> {
-  // Debug: Test database query
-  fastify.get('/footystats/debug-db', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const tables = await safeQuery<{ table_name: string }>(
-        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name LIMIT 20`
-      );
-
-      let competitionsCount = 0;
-      let competitionColumns: string[] = [];
-      let sampleCompetitions: any[] = [];
-      let countryColumns: string[] = [];
-      let sampleCountries: any[] = [];
-      try {
-        const competitions = await safeQuery<{ count: string }>('SELECT COUNT(*) as count FROM ts_competitions');
-        competitionsCount = parseInt(competitions[0]?.count || '0');
-
-        const columns = await safeQuery<{ column_name: string }>(
-          `SELECT column_name FROM information_schema.columns WHERE table_name = 'ts_competitions' ORDER BY ordinal_position`
-        );
-        competitionColumns = columns.map(c => c.column_name);
-
-        const samples = await safeQuery<any>('SELECT * FROM ts_competitions LIMIT 3');
-        sampleCompetitions = samples;
-
-        // Check ts_countries structure
-        const countryCol = await safeQuery<{ column_name: string }>(
-          `SELECT column_name FROM information_schema.columns WHERE table_name = 'ts_countries' ORDER BY ordinal_position`
-        );
-        countryColumns = countryCol.map(c => c.column_name);
-
-        const countrySamples = await safeQuery<any>('SELECT * FROM ts_countries LIMIT 3');
-        sampleCountries = countrySamples;
-      } catch (e) {
-        // table may not exist
-      }
-
-      // Check ts_teams and ts_matches structure
-      let teamColumns: string[] = [];
-      let matchColumns: string[] = [];
-      let sampleTeams: any[] = [];
-      try {
-        const teamCol = await safeQuery<{ column_name: string }>(
-          `SELECT column_name FROM information_schema.columns WHERE table_name = 'ts_teams' ORDER BY ordinal_position`
-        );
-        teamColumns = teamCol.map(c => c.column_name);
-
-        const matchCol = await safeQuery<{ column_name: string }>(
-          `SELECT column_name FROM information_schema.columns WHERE table_name = 'ts_matches' ORDER BY ordinal_position LIMIT 20`
-        );
-        matchColumns = matchCol.map(c => c.column_name);
-
-        const teamSamples = await safeQuery<any>('SELECT id, name, external_id FROM ts_teams LIMIT 2');
-        sampleTeams = teamSamples;
-      } catch (e) {
-        logger.warn('[FootyStats] Debug schema query failed:', e);
-      }
-
-      return {
-        tables: tables.map(t => t.table_name),
-        ts_competitions_count: competitionsCount,
-        ts_competitions_columns: competitionColumns,
-        sample_competitions: sampleCompetitions,
-        ts_countries_columns: countryColumns,
-        sample_countries: sampleCountries,
-        ts_teams_columns: teamColumns,
-        ts_matches_columns: matchColumns,
-        sample_teams: sampleTeams,
-      };
-    } catch (error: any) {
-      return reply.status(500).send({ error: error.message });
-    }
-  });
+  // NOTE: Debug endpoint /footystats/debug-db DELETED for security (exposed DB schema)
 
   // Search competitions by name or country
   fastify.get('/footystats/search-leagues', async (request: FastifyRequest<{
@@ -672,8 +602,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
     }
   });
 
-  // Clear all mappings (for re-run)
-  fastify.delete('/footystats/mapping/clear', async (request: FastifyRequest, reply: FastifyReply) => {
+  // Clear all mappings (for re-run) - ADMIN ONLY
+  fastify.delete('/footystats/mapping/clear', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       await safeQuery('DELETE FROM integration_mappings');
       return { success: true, message: 'All mappings cleared' };
@@ -682,8 +612,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
     }
   });
 
-  // Create migration tables
-  fastify.post('/footystats/migrate', async (request: FastifyRequest, reply: FastifyReply) => {
+  // Create migration tables - ADMIN ONLY
+  fastify.post('/footystats/migrate', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       // Run migrations
       const migrations = [
