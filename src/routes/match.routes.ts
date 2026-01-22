@@ -33,6 +33,9 @@ import {
   forceRefreshMatch,
 } from '../controllers/match/forceRefreshStuck.controller';
 import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
+// PR-10: Schema validation
+import { validate } from '../middleware/validation.middleware';
+import { matchIdParamSchema } from '../schemas/match.schema';
 
 export default async function matchRoutes(
   fastify: FastifyInstance,
@@ -205,7 +208,8 @@ export default async function matchRoutes(
    * Uses /match/detail_live to get latest status
    * Useful for manual refresh of stuck matches
    */
-  fastify.post('/:match_id/force-refresh', forceRefreshMatch);
+  // PR-10: Validate params
+  fastify.post('/:match_id/force-refresh', { preHandler: [validate({ params: matchIdParamSchema })] }, forceRefreshMatch);
 
   /**
    * GET /api/matches/:match_id

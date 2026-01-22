@@ -17,6 +17,28 @@ import { memoryCache, cacheKeys } from '../utils/cache/memoryCache';
 import { singleFlight } from '../utils/cache/singleFlight';
 import { generatePredictionsCacheKey } from '../utils/cache/cacheKeyGenerator';
 import { deprecateRoute } from '../utils/deprecation.utils';
+// PR-4: Use repository for all DB access
+import {
+    logPredictionRequest,
+    getRequestLogs,
+    getPredictionStats,
+    updatePredictionAccessType
+} from '../repositories/prediction.repository';
+// PR-10: Schema validation
+import { validate } from '../middleware/validation.middleware';
+import {
+    ingestPredictionSchema,
+    updateResultsSchema,
+    updateDisplaySchema,
+    bulkDisplaySchema,
+    updateAccessSchema,
+    manualPredictionSchema,
+    manualCouponSchema,
+    matchUnmatchedSchema,
+    matchByExternalIdSchema,
+    predictionIdParamSchema,
+    externalIdParamSchema,
+} from '../schemas/prediction.schema';
 
 /**
  * Cache Configuration for Empty Responses
@@ -111,7 +133,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * POST /api/predictions/ingest
      * Receive AI predictions from external sources
      */
-    fastify.post('/api/predictions/ingest', async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
+    // PR-10: Non-strict validation for external bot submissions
+    fastify.post('/api/predictions/ingest', { preHandler: [validate({ body: ingestPredictionSchema, strict: false })] }, async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
         const startTime = Date.now();
         let responseStatus = 200;
         let responseBody: any;
@@ -174,7 +197,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * @deprecated Use POST /api/predictions/ingest instead
      * @sunset 2026-03-01
      */
-    fastify.post('/api/v1/ingest/predictions', async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
+    // PR-10: Non-strict validation for external bot submissions
+    fastify.post('/api/v1/ingest/predictions', { preHandler: [validate({ body: ingestPredictionSchema, strict: false })] }, async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
         // PR-11: Add deprecation headers
         deprecateRoute(request, reply, {
             canonical: '/api/predictions/ingest',
@@ -629,6 +653,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Manually trigger result updates for completed matches
      * SECURITY: Admin-only endpoint
      */
+    // PR-10: This endpoint takes no body, but keep auth handlers
     fastify.post('/api/predictions/update-results', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const updatedCount = await aiPredictionService.updatePredictionResults();
@@ -710,7 +735,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * This is what users will see in the TAHMİN column
      * SECURITY: Admin-only endpoint
      */
-    fastify.put<{ Params: { id: string }; Body: { display_prediction: string } }>('/api/predictions/:id/display', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
+    // PR-10: Validate params and body
+    fastify.put<{ Params: { id: string }; Body: { display_prediction: string } }>('/api/predictions/:id/display', { preHandler: [requireAuth, requireAdmin, validate({ params: predictionIdParamSchema, body: updateDisplaySchema })] }, async (request, reply) => {
         try {
             const { id } = request.params;
             const { display_prediction } = request.body;
@@ -751,7 +777,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Bulk update display_prediction for multiple predictions
      * SECURITY: Admin-only endpoint
      */
-    fastify.put<{ Body: { updates: { id: string; display_prediction: string }[] } }>('/api/predictions/bulk-display', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
+    // PR-10: Validate body
+    fastify.put<{ Body: { updates: { id: string; display_prediction: string }[] } }>('/api/predictions/bulk-display', { preHandler: [requireAuth, requireAdmin, validate({ body: bulkDisplaySchema })] }, async (request, reply) => {
         try {
             const { updates } = request.body;
 
@@ -788,7 +815,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Toggle access_type between VIP and FREE
      * SECURITY: Admin-only endpoint
      */
-    fastify.put<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>('/api/predictions/:id/access', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
+    // PR-10: Validate params and body
+    fastify.put<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>('/api/predictions/:id/access', { preHandler: [requireAuth, requireAdmin, validate({ params: predictionIdParamSchema, body: updateAccessSchema })] }, async (request, reply) => {
         try {
             const { id } = request.params;
             const { access_type } = request.body;
@@ -902,7 +930,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     }
 
     // SECURITY: Admin authentication required for manual prediction creation
-    fastify.post<{ Body: ManualPredictionBody }>('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
+    // PR-10: Validate body
+    fastify.post<{ Body: ManualPredictionBody }>('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin, validate({ body: manualPredictionSchema })] }, async (request, reply) => {
         try {
             const result = await aiPredictionService.createManualPrediction(request.body);
             if (result) {
@@ -938,7 +967,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     }
 
     // SECURITY: Admin authentication required for coupon creation
-    fastify.post<{ Body: CouponBody }>('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
+    // PR-10: Validate body
+    fastify.post<{ Body: CouponBody }>('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin, validate({ body: manualCouponSchema })] }, async (request, reply) => {
         try {
             const result = await aiPredictionService.createCoupon(request.body);
             if (result) {
@@ -961,6 +991,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Manually trigger prediction matcher to match all unmatched predictions
      * Requires admin authentication
      */
+    // PR-10: This endpoint takes no body, triggers matching all unmatched
     fastify.post('/api/predictions/match-unmatched', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
@@ -992,7 +1023,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Match a specific prediction by external ID
      * Requires admin authentication
      */
-    fastify.post<{ Params: { externalId: string } }>('/api/predictions/match/:externalId', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
+    // PR-10: Validate params
+    fastify.post<{ Params: { externalId: string } }>('/api/predictions/match/:externalId', { preHandler: [requireAuth, requireAdmin, validate({ params: externalIdParamSchema })] }, async (request, reply) => {
         try {
             const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
 

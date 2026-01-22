@@ -11,6 +11,16 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { commentsService, chatService, pollService } from '../services/forum/forumService';
 import { requireAuth } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
+// PR-10: Schema validation
+import { validate } from '../middleware/validation.middleware';
+import {
+  forumMatchIdParamSchema,
+  forumCommentIdParamSchema,
+  messageIdParamSchema,
+  forumCommentSchema,
+  chatMessageSchema,
+  pollVoteSchema,
+} from '../schemas/forum.schema';
 
 export default async function forumRoutes(
   fastify: FastifyInstance,
@@ -54,7 +64,8 @@ export default async function forumRoutes(
    * POST /api/forum/:matchId/comments
    * Create a new comment (requires auth)
    */
-  fastify.post('/:matchId/comments', { preHandler: [requireAuth] }, async (request, reply) => {
+  // PR-10: Validate params and body
+  fastify.post('/:matchId/comments', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: forumCommentSchema })] }, async (request, reply) => {
     try {
       const { matchId } = request.params as { matchId: string };
       const { content, parentId } = request.body as { content: string; parentId?: number };
@@ -95,7 +106,8 @@ export default async function forumRoutes(
    * DELETE /api/forum/comments/:commentId
    * Delete a comment (requires auth, owner only)
    */
-  fastify.delete('/comments/:commentId', { preHandler: [requireAuth] }, async (request, reply) => {
+  // PR-10: Validate params
+  fastify.delete('/comments/:commentId', { preHandler: [requireAuth, validate({ params: forumCommentIdParamSchema })] }, async (request, reply) => {
     try {
       const { commentId } = request.params as { commentId: string };
       const userId = (request as any).user?.id;
@@ -127,7 +139,8 @@ export default async function forumRoutes(
    * POST /api/forum/comments/:commentId/like
    * Like/unlike a comment (requires auth)
    */
-  fastify.post('/comments/:commentId/like', { preHandler: [requireAuth] }, async (request, reply) => {
+  // PR-10: Validate params
+  fastify.post('/comments/:commentId/like', { preHandler: [requireAuth, validate({ params: forumCommentIdParamSchema })] }, async (request, reply) => {
     try {
       const { commentId } = request.params as { commentId: string };
       const userId = (request as any).user?.id;
@@ -186,7 +199,8 @@ export default async function forumRoutes(
    * POST /api/forum/:matchId/chat
    * Send a chat message (requires auth)
    */
-  fastify.post('/:matchId/chat', { preHandler: [requireAuth] }, async (request, reply) => {
+  // PR-10: Validate params and body
+  fastify.post('/:matchId/chat', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: chatMessageSchema })] }, async (request, reply) => {
     try {
       const { matchId } = request.params as { matchId: string };
       const { message } = request.body as { message: string };
@@ -229,7 +243,8 @@ export default async function forumRoutes(
    * DELETE /api/forum/chat/:messageId
    * Delete a chat message (requires auth, owner only)
    */
-  fastify.delete('/chat/:messageId', { preHandler: [requireAuth] }, async (request, reply) => {
+  // PR-10: Validate params
+  fastify.delete('/chat/:messageId', { preHandler: [requireAuth, validate({ params: messageIdParamSchema })] }, async (request, reply) => {
     try {
       const { messageId } = request.params as { messageId: string };
       const userId = (request as any).user?.id;
@@ -289,7 +304,8 @@ export default async function forumRoutes(
    * POST /api/forum/:matchId/poll/vote
    * Vote on a poll (requires auth)
    */
-  fastify.post('/:matchId/poll/vote', { preHandler: [requireAuth] }, async (request, reply) => {
+  // PR-10: Validate params and body
+  fastify.post('/:matchId/poll/vote', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: pollVoteSchema })] }, async (request, reply) => {
     try {
       const { matchId } = request.params as { matchId: string };
       const { vote } = request.body as { vote: 'home' | 'draw' | 'away' };
