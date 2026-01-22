@@ -63,8 +63,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
     };
   });
 
-  // Test FootyStats API
-  fastify.get('/footystats/test', async (request: FastifyRequest<{
+  // Test FootyStats API - ADMIN ONLY
+  fastify.get('/footystats/test', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{
     Querystring: { q?: string };
   }>, reply: FastifyReply) => {
     try {
@@ -536,68 +536,6 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       return response;
     } catch (error: any) {
       logger.error('[FootyStats] Match detail error:', error);
-      return reply.status(500).send({ error: error.message });
-    }
-  });
-
-  // Debug: Test raw FootyStats API responses
-  fastify.get('/footystats/debug-api/:fsId', async (request: FastifyRequest<{
-    Params: { fsId: string };
-  }>, reply: FastifyReply) => {
-    try {
-      const { fsId } = request.params;
-      const fsIdNum = parseInt(fsId);
-
-      const results: any = {
-        match_details: null,
-        match_details_error: null,
-        home_team_form: null,
-        home_team_error: null,
-        away_team_form: null,
-        away_team_error: null,
-      };
-
-      // 1. Test getMatchDetails
-      try {
-        const matchResponse = await footyStatsAPI.getMatchDetails(fsIdNum);
-        results.match_details = matchResponse;
-      } catch (err: any) {
-        results.match_details_error = err.message;
-      }
-
-      // 2. Get basic match info first
-      const todaysMatches = await footyStatsAPI.getTodaysMatches();
-      const basicMatch = todaysMatches.data?.find((m: any) => m.id === fsIdNum);
-      results.basic_match = basicMatch ? {
-        id: basicMatch.id,
-        homeID: basicMatch.homeID,
-        awayID: basicMatch.awayID,
-        home_name: basicMatch.home_name,
-        away_name: basicMatch.away_name,
-      } : null;
-
-      // 3. Test getTeamLastX for home team
-      if (basicMatch?.homeID) {
-        try {
-          const homeResponse = await footyStatsAPI.getTeamLastX(basicMatch.homeID);
-          results.home_team_form = homeResponse;
-        } catch (err: any) {
-          results.home_team_error = err.message;
-        }
-      }
-
-      // 4. Test getTeamLastX for away team
-      if (basicMatch?.awayID) {
-        try {
-          const awayResponse = await footyStatsAPI.getTeamLastX(basicMatch.awayID);
-          results.away_team_form = awayResponse;
-        } catch (err: any) {
-          results.away_team_error = err.message;
-        }
-      }
-
-      return results;
-    } catch (error: any) {
       return reply.status(500).send({ error: error.message });
     }
   });

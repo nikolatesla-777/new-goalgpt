@@ -780,8 +780,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     /**
      * GET /api/predictions/manual
      * List manual predictions
+     * SECURITY: Admin only - lists all manual predictions
      */
-    fastify.get('/api/predictions/manual', async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+    fastify.get('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
         try {
             const limit = parseInt(request.query.limit || '100', 10);
             const predictions = await aiPredictionService.getManualPredictions(limit);
