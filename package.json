@@ -45,6 +45,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
+    "cockatiel": "^3.2.1",
     "csv-parse": "^5.5.3",
     "dotenv": "^17.2.3",
     "fastify": "^4.26.0",
