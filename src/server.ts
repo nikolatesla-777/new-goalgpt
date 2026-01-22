@@ -15,29 +15,10 @@ import { logger } from './utils/logger';
 import { logEvent } from './utils/obsLogger';
 import { sendStartupAlert } from './utils/telegramAlert';
 
-// Routes - Corrected Imports
-import matchRoutes from './routes/match.routes';
-import seasonRoutes from './routes/season.routes';
-import teamRoutes from './routes/team.routes';
-import playerRoutes from './routes/player.routes';
-import leagueRoutes from './routes/league.routes';
-import { healthRoutes } from './routes/health.routes';
-import { predictionRoutes } from './routes/prediction.routes';
-import { predictionUnlockRoutes } from './routes/predictionUnlock.routes';
-import { dashboardRoutes } from './routes/dashboard.routes';
-import websocketRoutes, { broadcastEvent, setLatencyMonitor } from './routes/websocket.routes';
-import metricsRoutes from './routes/metrics.routes';
-import { authRoutes } from './routes/auth.routes';
-import { xpRoutes } from './routes/xp.routes';
-import { creditsRoutes } from './routes/credits.routes';
-import { badgesRoutes } from './routes/badges.routes';
-import { referralsRoutes } from './routes/referrals.routes';
-import { partnersRoutes } from './routes/partners.routes';
-import { commentsRoutes } from './routes/comments.routes';
-import { dailyRewardsRoutes } from './routes/dailyRewards.routes';
-import forumRoutes from './routes/forum.routes';
-import { footyStatsRoutes } from './routes/footystats.routes';
-import { announcementsRoutes } from './routes/announcements.routes';
+// Central Route Registration (PR-1)
+import { registerRoutes } from './routes';
+// WebSocket event broadcasting (still needed for worker integration)
+import { broadcastEvent, setLatencyMonitor } from './routes/websocket.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -98,30 +79,8 @@ fastify.register(cors, {
   allowedHeaders: ['Content-Type', 'Authorization'],
 });
 
-
-// Register routes
-fastify.register(matchRoutes, { prefix: '/api/matches' });
-fastify.register(seasonRoutes, { prefix: '/api/seasons' });
-fastify.register(teamRoutes, { prefix: '/api/teams' });
-fastify.register(playerRoutes, { prefix: '/api/players' });
-fastify.register(leagueRoutes, { prefix: '/api/leagues' });
-fastify.register(predictionRoutes);
-fastify.register(dashboardRoutes);
-fastify.register(healthRoutes, { prefix: '/api' });
-fastify.register(websocketRoutes); // WebSocket route: /ws
-fastify.register(metricsRoutes, { prefix: '/api/metrics' }); // Metrics routes
-fastify.register(authRoutes, { prefix: '/api/auth' }); // Phase 2: Authentication routes
-fastify.register(xpRoutes, { prefix: '/api/xp' }); // Phase 2: XP system routes
-fastify.register(creditsRoutes, { prefix: '/api/credits' }); // Phase 2: Credits system routes
-fastify.register(badgesRoutes, { prefix: '/api/badges' }); // Phase 3: Badges system routes
-fastify.register(referralsRoutes, { prefix: '/api/referrals' }); // Phase 3: Referrals system routes
-fastify.register(partnersRoutes, { prefix: '/api/partners' }); // Phase 3: Partners system routes
-fastify.register(commentsRoutes, { prefix: '/api/comments' }); // Phase 3: Match Comments system routes
-fastify.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' }); // Phase 3: Daily Rewards system routes
-fastify.register(forumRoutes, { prefix: '/api/forum' }); // Match Detail Forum (comments, chat, polls)
-fastify.register(footyStatsRoutes, { prefix: '/api' }); // FootyStats integration (AI Lab data source)
-fastify.register(announcementsRoutes, { prefix: '/api/announcements' }); // Admin Popup Announcements
-fastify.register(predictionUnlockRoutes, { prefix: '/api/predictions' }); // Credit-based prediction unlock
+// Register all application routes (PR-1: Central registration)
+registerRoutes(fastify);
 
 // Initialize background workers (consolidated - most entity syncs now in entitySync.job.ts)
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;
