@@ -11,6 +11,7 @@
  */
 
 import { pool } from '../database/connection';
+import { withAdvisoryLock } from '../database/connectionHelpers';
 import { logger } from '../utils/logger';
 
 // ============================================================
@@ -385,13 +386,53 @@ export class MatchRepository {
   // ============================================================
 
   /**
-   * Acquire advisory lock for a match
-   * Uses pg_try_advisory_lock (non-blocking)
+   * Execute operation with match-level advisory lock
    *
-   * @param lockKey - The bigint lock key
-   * @returns true if lock acquired, false if already held
+   * PR-9: CRITICAL FIX - Uses withAdvisoryLock for proper session-bound locking.
+   * The old tryAcquireLock/releaseLock pattern was BROKEN because:
+   * - Lock acquired on Connection A, released on Connection B
+   * - Advisory locks are session-bound, so lock on A was NEVER released
+   *
+   * Now uses withAdvisoryLock() which holds SAME connection for entire lock duration.
+   *
+   * @param lockKey - BigInt advisory lock key
+   * @param fn - Callback to execute while holding lock
+   * @param options - Optional timeout configuration
+   * @returns Object with acquired status and optional result
+   *
+   * @example
+   * ```typescript
+   * const result = await matchRepository.withMatchLock(
+   *   LOCK_KEYS.matchUpdateLock(matchId),
+   *   async () => {
+   *     // This code runs while holding the lock
+   *     return await matchRepository.update(matchId, updates);
+   *   }
+   * );
+   * if (!result.acquired) {
+   *   logger.warn('Could not acquire lock - another process is updating this match');
+   * }
+   * ```
+   */
+  async withMatchLock<T>(
+    lockKey: bigint,
+    fn: () => Promise<T>,
+    options?: { timeoutMs?: number }
+  ): Promise<{ acquired: boolean; result?: T }> {
+    return withAdvisoryLock(lockKey, fn, {
+      blocking: false, // Non-blocking - skip if lock held by another process
+      timeoutMs: options?.timeoutMs ?? 10_000, // Default 10 seconds
+    });
+  }
+
+  /**
+   * @deprecated Use withMatchLock() instead - this method has a critical bug
+   * where lock is acquired on one connection but released on another.
+   *
+   * PR-9: Kept for backward compatibility but logs deprecation warning.
    */
   async tryAcquireLock(lockKey: bigint): Promise<boolean> {
+    logger.warn('[MatchRepository] DEPRECATED: tryAcquireLock() is broken - use withMatchLock() instead');
     const client = await pool.connect();
     try {
       const result = await client.query(
@@ -408,12 +449,13 @@ export class MatchRepository {
   }
 
   /**
-   * Release advisory lock for a match
+   * @deprecated Use withMatchLock() instead - this method has a critical bug
+   * where lock is released on a different connection than it was acquired on.
    *
-   * @param lockKey - The bigint lock key
-   * @returns true if lock released
+   * PR-9: Kept for backward compatibility but logs deprecation warning.
    */
   async releaseLock(lockKey: bigint): Promise<boolean> {
+    logger.warn('[MatchRepository] DEPRECATED: releaseLock() is broken - use withMatchLock() instead');
     const client = await pool.connect();
     try {
       await client.query('SELECT pg_advisory_unlock($1)', [lockKey.toString()]);
