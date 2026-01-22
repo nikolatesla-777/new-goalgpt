@@ -3,6 +3,7 @@ import { db } from '../../database/kysely';
 import { sql } from 'kysely';
 import { generateTokens } from '../../utils/jwt.utils';
 import { logger } from '../../utils/logger';
+import { applyReferralCode } from '../../services/referrals.service';
 
 /**
  * Phone Authentication Controller
@@ -17,6 +18,7 @@ interface PhoneLoginRequest {
   Body: {
     phone: string; // Phone number in E.164 format (e.g., +905551234567)
     verificationToken?: string; // Optional: OTP or verification token
+    referralCode?: string; // Promosyon kodu (opsiyonel)
     deviceInfo?: {
       deviceId: string;
       platform: 'ios' | 'android';
@@ -35,7 +37,7 @@ export async function phoneLogin(
   reply: FastifyReply
 ) {
   try {
-    const { phone, deviceInfo } = request.body;
+    const { phone, referralCode, deviceInfo } = request.body;
 
     if (!phone) {
       return reply.status(400).send({
@@ -139,6 +141,16 @@ export async function phoneLogin(
 
         logger.info('New user created via phone auth:', { userId, phone });
       });
+
+      // Apply referral code if provided (for new users only)
+      if (referralCode) {
+        try {
+          await applyReferralCode(userId!, referralCode.toUpperCase());
+          logger.info(`Referral code ${referralCode} applied for user ${userId}`);
+        } catch (refError: any) {
+          logger.warn(`Referral code application failed: ${refError.message}`);
+        }
+      }
     } else {
       // Existing user
       userId = user.id;

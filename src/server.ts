@@ -23,6 +23,7 @@ import playerRoutes from './routes/player.routes';
 import leagueRoutes from './routes/league.routes';
 import { healthRoutes } from './routes/health.routes';
 import { predictionRoutes } from './routes/prediction.routes';
+import { predictionUnlockRoutes } from './routes/predictionUnlock.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
 import websocketRoutes, { broadcastEvent, setLatencyMonitor } from './routes/websocket.routes';
 import metricsRoutes from './routes/metrics.routes';
@@ -36,6 +37,7 @@ import { commentsRoutes } from './routes/comments.routes';
 import { dailyRewardsRoutes } from './routes/dailyRewards.routes';
 import forumRoutes from './routes/forum.routes';
 import { footyStatsRoutes } from './routes/footystats.routes';
+import { announcementsRoutes } from './routes/announcements.routes';
 
 import { setWebSocketState } from './controllers/health.controller';
 import { pool } from './database/connection';
@@ -118,6 +120,8 @@ fastify.register(commentsRoutes, { prefix: '/api/comments' }); // Phase 3: Match
 fastify.register(dailyRewardsRoutes, { prefix: '/api/daily-rewards' }); // Phase 3: Daily Rewards system routes
 fastify.register(forumRoutes, { prefix: '/api/forum' }); // Match Detail Forum (comments, chat, polls)
 fastify.register(footyStatsRoutes, { prefix: '/api' }); // FootyStats integration (AI Lab data source)
+fastify.register(announcementsRoutes, { prefix: '/api/announcements' }); // Admin Popup Announcements
+fastify.register(predictionUnlockRoutes, { prefix: '/api/predictions' }); // Credit-based prediction unlock
 
 // Initialize background workers (consolidated - most entity syncs now in entitySync.job.ts)
 let teamDataSyncWorker: TeamDataSyncWorker | null = null;

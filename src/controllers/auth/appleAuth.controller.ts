@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import { getFirebaseAuth } from '../../config/firebase.config';
 import { generateTokens } from '../../utils/jwt.utils';
 import { logger } from '../../utils/logger';
+import { applyReferralCode } from '../../services/referrals.service';
 
 /**
  * Apple OAuth Authentication Controller
@@ -15,6 +16,7 @@ interface AppleAuthRequest {
     idToken: string; // Apple ID token from client
     email?: string; // Email (only provided on first sign in)
     name?: string; // Full name (only provided on first sign in)
+    referralCode?: string; // Promosyon kodu (opsiyonel)
     deviceInfo?: {
       deviceId: string;
       platform: 'ios' | 'android';
@@ -33,7 +35,7 @@ export async function appleSignIn(
   reply: FastifyReply
 ) {
   try {
-    const { idToken, email: providedEmail, name: providedName, deviceInfo } = request.body;
+    const { idToken, email: providedEmail, name: providedName, referralCode, deviceInfo } = request.body;
 
     if (!idToken) {
       return reply.status(400).send({
@@ -178,6 +180,16 @@ export async function appleSignIn(
 
         logger.info('New user created via Apple Sign In:', { userId, email });
       });
+
+      // Apply referral code if provided (for new users only)
+      if (referralCode) {
+        try {
+          await applyReferralCode(userId!, referralCode.toUpperCase());
+          logger.info(`Referral code ${referralCode} applied for user ${userId}`);
+        } catch (refError: any) {
+          logger.warn(`Referral code application failed: ${refError.message}`);
+        }
+      }
     } else {
       // Existing user
       userId = user.id;

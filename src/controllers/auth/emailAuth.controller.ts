@@ -7,6 +7,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../../database/kysely';
 import { generateTokens } from '../../utils/jwt.utils';
 import * as bcrypt from 'bcrypt';
+import { applyReferralCode } from '../../services/referrals.service';
 
 // ============================================================================
 // TYPES
@@ -27,6 +28,7 @@ interface EmailRegisterBody {
   email: string;
   password: string;
   name?: string;
+  referralCode?: string; // Promosyon kodu (opsiyonel)
   deviceInfo?: {
     deviceId: string;
     platform: string;
@@ -48,7 +50,7 @@ export async function emailRegister(
   reply: FastifyReply
 ) {
   try {
-    const { email, password, name, deviceInfo } = request.body;
+    const { email, password, name, referralCode, deviceInfo } = request.body;
 
     // Validate input
     if (!email || !password) {
@@ -96,8 +98,8 @@ export async function emailRegister(
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate referral code
-    const referralCode = `GG${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // Generate user's own referral code
+    const userReferralCode = `GG${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
     // Create user
     const newUser = await db
@@ -106,7 +108,7 @@ export async function emailRegister(
         email: normalizedEmail,
         password_hash: hashedPassword,
         full_name: name || null,
-        referral_code: referralCode,
+        referral_code: userReferralCode,
         created_at: new Date(),
         updated_at: new Date(),
       })
@@ -142,6 +144,19 @@ export async function emailRegister(
         updated_at: new Date(),
       })
       .execute();
+
+    // Apply referral code if provided
+    let referralApplied = false;
+    if (referralCode) {
+      try {
+        await applyReferralCode(newUser.id, referralCode.toUpperCase());
+        referralApplied = true;
+        request.log.info(`Referral code ${referralCode} applied for user ${newUser.id}`);
+      } catch (refError: any) {
+        // Log but don't fail registration if referral fails
+        request.log.warn(`Referral code application failed: ${refError.message}`);
+      }
+    }
 
     // Save FCM token if provided
     if (deviceInfo?.fcmToken && deviceInfo?.platform) {
@@ -200,20 +215,21 @@ export async function emailRegister(
         username: newUser.username,
         profilePhotoUrl: null,
         referralCode: newUser.referral_code,
+        referralApplied,
         createdAt: newUser.created_at,
         isNewUser: true,
         xp: xp
           ? {
-              xpPoints: xp.xp_points,
-              level: xp.level,
-              levelProgress: Number(xp.level_progress),
-            }
+            xpPoints: xp.xp_points,
+            level: xp.level,
+            levelProgress: Number(xp.level_progress),
+          }
           : undefined,
         credits: credits
           ? {
-              balance: credits.balance,
-              lifetimeEarned: credits.lifetime_earned,
-            }
+            balance: credits.balance,
+            lifetimeEarned: credits.lifetime_earned,
+          }
           : undefined,
         subscription: {
           status: 'expired',
@@ -363,26 +379,26 @@ export async function emailLogin(
         isNewUser: false,
         xp: xp
           ? {
-              xpPoints: xp.xp_points,
-              level: xp.level,
-              levelProgress: Number(xp.level_progress),
-            }
+            xpPoints: xp.xp_points,
+            level: xp.level,
+            levelProgress: Number(xp.level_progress),
+          }
           : undefined,
         credits: credits
           ? {
-              balance: credits.balance,
-              lifetimeEarned: credits.lifetime_earned,
-            }
+            balance: credits.balance,
+            lifetimeEarned: credits.lifetime_earned,
+          }
           : undefined,
         subscription: subscription
           ? {
-              status: subscription.status,
-              expiredAt: subscription.expired_at?.toISOString() || null,
-            }
+            status: subscription.status,
+            expiredAt: subscription.expired_at?.toISOString() || null,
+          }
           : {
-              status: 'expired',
-              expiredAt: null,
-            },
+            status: 'expired',
+            expiredAt: null,
+          },
       },
       tokens: {
         accessToken: tokens.accessToken,

@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import { getFirebaseAuth } from '../../config/firebase.config';
 import { generateTokens } from '../../utils/jwt.utils';
 import { logger } from '../../utils/logger';
+import { applyReferralCode } from '../../services/referrals.service';
 
 /**
  * Google OAuth Authentication Controller
@@ -13,6 +14,7 @@ import { logger } from '../../utils/logger';
 interface GoogleAuthRequest {
   Body: {
     idToken: string; // Google ID token from client
+    referralCode?: string; // Promosyon kodu (opsiyonel)
     deviceInfo?: {
       deviceId: string;
       platform: 'ios' | 'android';
@@ -31,7 +33,7 @@ export async function googleSignIn(
   reply: FastifyReply
 ) {
   try {
-    const { idToken, deviceInfo } = request.body;
+    const { idToken, referralCode, deviceInfo } = request.body;
 
     if (!idToken) {
       return reply.status(400).send({
@@ -171,6 +173,16 @@ export async function googleSignIn(
 
         logger.info('New user created via Google OAuth:', { userId, email });
       });
+
+      // Apply referral code if provided (for new users only)
+      if (referralCode) {
+        try {
+          await applyReferralCode(userId!, referralCode.toUpperCase());
+          logger.info(`Referral code ${referralCode} applied for user ${userId}`);
+        } catch (refError: any) {
+          logger.warn(`Referral code application failed: ${refError.message}`);
+        }
+      }
     } else {
       // Existing user
       userId = user.id;

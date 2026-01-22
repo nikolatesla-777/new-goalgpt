@@ -29,6 +29,9 @@ export interface Database {
   notification_templates: NotificationTemplate;
   scheduled_notifications: ScheduledNotification;
   customer_ad_views: CustomerAdView;
+  announcements: Announcement;
+  announcement_dismissals: AnnouncementDismissal;
+  customer_prediction_unlocks: CustomerPredictionUnlock;
 }
 
 // Table interfaces
@@ -365,6 +368,41 @@ export interface CustomerAdView {
   user_agent: string | null;
   completed_at: Date;
   metadata: any; // JSONB
+}
+
+export interface Announcement {
+  id: Generated<string>;
+  title: string;
+  message: string;
+  image_url: string | null;
+  button_text: string | null;
+  button_url: string | null;
+  button_action: 'url' | 'screen' | 'dismiss' | null;
+  target_audience: 'all' | 'vip' | 'free' | 'new_users';
+  announcement_type: 'popup' | 'banner' | 'fullscreen';
+  status: 'draft' | 'active' | 'scheduled' | 'expired';
+  priority: number;
+  show_once: boolean;
+  start_date: Date | null;
+  end_date: Date | null;
+  created_by: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface AnnouncementDismissal {
+  id: Generated<string>;
+  user_id: string;
+  announcement_id: string;
+  dismissed_at: Date;
+}
+
+export interface CustomerPredictionUnlock {
+  id: Generated<string>;
+  customer_user_id: string;
+  prediction_id: string;
+  credits_spent: number;
+  unlocked_at: Date;
 }
 
 // Create and export Kysely instance
