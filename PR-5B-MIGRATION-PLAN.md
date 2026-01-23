@@ -68,9 +68,13 @@ const response = await this.client.get('/match/diary', { date: '20260123' });
    → Uses existing config.thesports.baseUrl / .user / .secret
 
 ✅ Tests Added:
-   → src/__tests__/pr5b-migration.test.ts
+   → src/__tests__/pr5b-migration.test.ts (CI-safe with fetch mocking)
    → Validates response structure for both services
    → Checks adapter health and circuit breaker state
+   → NO real network calls - fully mocked
+   → src/__tests__/manual/live-thesports-smoke.ts (manual live testing)
+   → Requires THESPORTS_API_USER/SECRET credentials
+   → Run with: npm run test:live-thesports
 ```
 
 ---
