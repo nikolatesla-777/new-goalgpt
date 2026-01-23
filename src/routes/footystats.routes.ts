@@ -7,9 +7,18 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { mappingService } from '../services/footystats/mapping.service';
 import { footyStatsAPI } from '../services/footystats/footystats.client';
-import { safeQuery } from '../database/connection';
 import { logger } from '../utils/logger';
 import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
+// PR-4: Use repository for all FootyStats DB access
+import {
+  getLeagues,
+  getVerifiedLeagueMappings,
+  searchMappings,
+  getMatchDetails,
+  getTeamMapping,
+  clearAllMappings,
+  runMigrations
+} from '../repositories/footystats.repository';
 
 export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> {
   // NOTE: Debug endpoint /footystats/debug-db DELETED for security (exposed DB schema)
@@ -45,7 +54,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         params = [`%${q!.toLowerCase()}%`];
       }
 
-      const leagues = await safeQuery<{ id: string; name: string; country_name: string }>(query, params);
+      // PR-4: Use repository for DB access
+      const leagues = await getLeagues(query, params);
       return { count: leagues.length, leagues };
     } catch (error: any) {
       return reply.status(500).send({ error: error.message });
@@ -176,13 +186,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
   // Get verified league mappings
   fastify.get('/footystats/mapping/verified-leagues', async (request: FastifyRequest, reply: FastifyReply) => {
-    const verified = await safeQuery<any>(
-      `SELECT ts_id, ts_name, fs_id, fs_name, confidence_score
-       FROM integration_mappings
-       WHERE entity_type = 'league' AND is_verified = true
-       ORDER BY confidence_score DESC
-       LIMIT 50`
-    );
+    // PR-4: Use repository for DB access
+    const verified = await getVerifiedLeagueMappings();
     return { count: verified.length, leagues: verified };
   });
 
@@ -194,14 +199,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
     if (!q) {
       return reply.status(400).send({ error: 'q parameter required' });
     }
-    const results = await safeQuery<any>(
-      `SELECT ts_id, ts_name, fs_id, fs_name, confidence_score, is_verified, entity_type
-       FROM integration_mappings
-       WHERE LOWER(ts_name) LIKE $1 OR LOWER(fs_name) LIKE $1
-       ORDER BY confidence_score DESC
-       LIMIT 50`,
-      [`%${q.toLowerCase()}%`]
-    );
+    // PR-4: Use repository for DB access
+    const results = await searchMappings(q);
     return { count: results.length, mappings: results };
   });
 
@@ -232,20 +231,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
       // 1. Get match details from TheSports database
       // Note: external_id is varchar, id is UUID - we use external_id for lookups
-      const matchResult = await safeQuery<any>(
-        `SELECT m.id, m.external_id, m.home_team_id, m.away_team_id,
-                m.competition_id, m.match_time, m.status_id,
-                m.home_scores, m.away_scores,
-                ht.name as home_team_name, ht.logo_url as home_logo,
-                at.name as away_team_name, at.logo_url as away_logo,
-                c.name as league_name
-         FROM ts_matches m
-         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
-         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
-         LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-         WHERE m.external_id = $1`,
-        [matchId]
-      );
+      // PR-4: Use repository for DB access
+      const matchResult = await getMatchDetails(matchId);
 
       if (matchResult.length === 0) {
         return reply.status(404).send({ error: 'Match not found' });
@@ -254,17 +241,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       const match = matchResult[0];
 
       // 2. Get FootyStats team mappings
-      const homeTeamMapping = await safeQuery<any>(
-        `SELECT fs_id FROM integration_mappings
-         WHERE entity_type = 'team' AND ts_name = $1`,
-        [match.home_team_name]
-      );
-
-      const awayTeamMapping = await safeQuery<any>(
-        `SELECT fs_id FROM integration_mappings
-         WHERE entity_type = 'team' AND ts_name = $1`,
-        [match.away_team_name]
-      );
+      // PR-4: Use repository for DB access
+      const homeTeamMapping = await getTeamMapping(match.home_team_name);
+      const awayTeamMapping = await getTeamMapping(match.away_team_name);
 
       // 3. Try to get FootyStats match data (if available)
       let fsMatchData = null;
@@ -543,7 +522,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
   // Clear all mappings (for re-run) - ADMIN ONLY
   fastify.delete('/footystats/mapping/clear', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      await safeQuery('DELETE FROM integration_mappings');
+      // PR-4: Use repository for DB access
+      await clearAllMappings();
       return { success: true, message: 'All mappings cleared' };
     } catch (error: any) {
       return reply.status(500).send({ success: false, error: error.message });
@@ -553,76 +533,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
   // Create migration tables - ADMIN ONLY
   fastify.post('/footystats/migrate', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      // Run migrations
-      const migrations = [
-        // integration_mappings
-        `CREATE TABLE IF NOT EXISTS integration_mappings (
-          id SERIAL PRIMARY KEY,
-          entity_type VARCHAR(50) NOT NULL,
-          ts_id VARCHAR(100) NOT NULL,
-          ts_name VARCHAR(255),
-          fs_id INTEGER NOT NULL,
-          fs_name VARCHAR(255),
-          confidence_score DECIMAL(5,2),
-          is_verified BOOLEAN DEFAULT FALSE,
-          verified_by VARCHAR(100),
-          verified_at TIMESTAMP,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(entity_type, ts_id),
-          UNIQUE(entity_type, fs_id)
-        )`,
-        // fs_match_stats
-        `CREATE TABLE IF NOT EXISTS fs_match_stats (
-          id SERIAL PRIMARY KEY,
-          match_id VARCHAR(100) NOT NULL UNIQUE,
-          fs_match_id INTEGER,
-          btts_potential INTEGER,
-          o25_potential INTEGER,
-          avg_potential DECIMAL(4,2),
-          corners_potential DECIMAL(5,2),
-          cards_potential DECIMAL(5,2),
-          xg_home_prematch DECIMAL(4,2),
-          xg_away_prematch DECIMAL(4,2),
-          trends JSONB,
-          h2h_data JSONB,
-          odds_comparison JSONB,
-          risk_level VARCHAR(20),
-          fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`,
-        // fs_team_form
-        `CREATE TABLE IF NOT EXISTS fs_team_form (
-          id SERIAL PRIMARY KEY,
-          team_id VARCHAR(100) NOT NULL,
-          fs_team_id INTEGER,
-          season_id VARCHAR(50),
-          form_string_overall VARCHAR(20),
-          form_string_home VARCHAR(20),
-          form_string_away VARCHAR(20),
-          ppg_overall DECIMAL(4,2),
-          ppg_home DECIMAL(4,2),
-          ppg_away DECIMAL(4,2),
-          xg_for_avg DECIMAL(4,2),
-          xg_against_avg DECIMAL(4,2),
-          btts_percentage INTEGER,
-          over25_percentage INTEGER,
-          clean_sheet_percentage INTEGER,
-          failed_to_score_percentage INTEGER,
-          corners_avg DECIMAL(4,2),
-          cards_avg DECIMAL(4,2),
-          goal_timing JSONB,
-          last_x_matches INTEGER DEFAULT 5,
-          fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(team_id, season_id, last_x_matches)
-        )`,
-      ];
-
-      for (const sql of migrations) {
-        await safeQuery(sql);
-      }
-
+      // PR-4: Use repository for DB access
+      await runMigrations();
       return { success: true, message: 'FootyStats tables created' };
     } catch (error: any) {
       return reply.status(500).send({
