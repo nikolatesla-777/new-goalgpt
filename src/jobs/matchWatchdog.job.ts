@@ -21,8 +21,9 @@ import { invalidateLiveMatchesCache } from '../utils/matchCache';
 import { broadcastEvent } from '../routes/websocket.routes';
 import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
+import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
 
-// REFACTOR: Direct database writes (orchestrator removed)
+// PR-8B: Using MatchOrchestrator for atomic match updates
 interface FieldUpdate {
   field: string;
   value: any;
@@ -47,8 +48,8 @@ export class MatchWatchdogWorker {
   }
 
   /**
-   * REFACTOR: Direct database write helper (replaces orchestrator.updateMatch)
-   * Builds dynamic UPDATE query from field updates
+   * PR-8B: MatchOrchestrator wrapper for atomic match updates
+   * Replaces direct SQL with orchestrator + maintains WebSocket broadcasting
    */
   private async updateMatchDirect(matchId: string, updates: FieldUpdate[], source: string): Promise<{ status: string; fieldsUpdated: string[] }> {
     if (updates.length === 0) {
@@ -56,64 +57,35 @@ export class MatchWatchdogWorker {
     }
 
     try {
-      // CRITICAL FIX: Protect finished matches from being overridden
-      // Once status=8, it should be IMMUTABLE (unless update also has status=8)
-      const statusUpdate = updates.find(u => u.field === 'status_id');
-      if (statusUpdate && statusUpdate.value !== 8) {
-        const checkQuery = `SELECT status_id, status_id_source, status_id_timestamp FROM ts_matches WHERE external_id = $1`;
-        const checkResult = await pool.query(checkQuery, [matchId]);
-        const existing = checkResult.rows[0];
+      // PR-8B: Use MatchOrchestrator for atomic updates with:
+      // - Match-level advisory lock
+      // - Priority-based conflict resolution
+      // - Immutability protection (status=8)
+      const orchestratorResult = await matchOrchestrator.updateMatch(matchId, updates, source);
 
-        if (existing?.status_id === 8) {
-          logger.warn(`[Watchdog.directWrite] REJECT: Match ${matchId} already finished (status=8 immutable). Attempted change to status=${statusUpdate.value}`);
-          return { status: 'rejected_immutable', fieldsUpdated: [] };
+      // Map orchestrator result to expected format
+      const result = {
+        status: orchestratorResult.status,
+        fieldsUpdated: orchestratorResult.fieldsUpdated,
+      };
+
+      // If update failed (locked, rejected, etc), return early
+      if (orchestratorResult.status !== 'success') {
+        if (orchestratorResult.status === 'rejected_immutable') {
+          logger.warn(`[Watchdog.orchestrator] REJECT: Match ${matchId} is immutable (status=8)`);
+        } else if (orchestratorResult.status === 'rejected_locked') {
+          logger.debug(`[Watchdog.orchestrator] Lock busy for match ${matchId}, skipping update`);
+        } else if (orchestratorResult.status === 'rejected_stale') {
+          logger.debug(`[Watchdog.orchestrator] Updates rejected by priority filter for ${matchId}`);
         }
+        return result;
       }
 
-      const setClauses: string[] = [];
-      const values: any[] = [];
-      let paramIndex = 1;
-      const fieldsUpdated: string[] = [];
+      // Success - get actual fieldsUpdated from orchestrator
+      const fieldsUpdated = orchestratorResult.fieldsUpdated;
 
-      for (const update of updates) {
-        setClauses.push(`${update.field} = $${paramIndex}`);
-        values.push(update.value);
-        fieldsUpdated.push(update.field);
-        paramIndex++;
-
-        // Map field names to correct source column names
-        const sourceColumnMap: Record<string, string> = {
-          'home_score_display': 'home_score_source',
-          'away_score_display': 'away_score_source',
-          'status_id': 'status_id_source',
-          'minute': 'minute_source',
-        };
-
-        const sourceColumn = sourceColumnMap[update.field];
-        if (sourceColumn) {
-          setClauses.push(`${sourceColumn} = $${paramIndex}`);
-          values.push(update.source);
-          paramIndex++;
-          setClauses.push(`${sourceColumn.replace('_source', '_timestamp')} = $${paramIndex}`);
-          values.push(update.timestamp);
-          paramIndex++;
-        }
-      }
-
-      // Always update updated_at
-      setClauses.push(`updated_at = NOW()`);
-
-      const query = `
-        UPDATE ts_matches
-        SET ${setClauses.join(', ')}
-        WHERE external_id = $${paramIndex}
-      `;
-      values.push(matchId);
-
-      await pool.query(query, values);
-
-      // CRITICAL FIX: Broadcast WebSocket events after database write
-      // This ensures frontend receives real-time updates even when data comes from Watchdog
+      // PR-8B: Broadcast WebSocket events after successful update
+      // This ensures frontend receives real-time updates from Watchdog
       const hasScoreUpdate = fieldsUpdated.some(f => f === 'home_score_display' || f === 'away_score_display');
       const hasStatusUpdate = fieldsUpdated.some(f => f === 'status_id');
       const hasMinuteUpdate = fieldsUpdated.some(f => f === 'minute');
@@ -159,12 +131,12 @@ export class MatchWatchdogWorker {
           } as any);
         }
       } catch (broadcastError: any) {
-        logger.warn(`[Watchdog.directWrite] Failed to broadcast event for ${matchId}: ${broadcastError.message}`);
+        logger.warn(`[Watchdog.orchestrator] Failed to broadcast event for ${matchId}: ${broadcastError.message}`);
       }
 
-      return { status: 'success', fieldsUpdated };
+      return result;
     } catch (error: any) {
-      logger.error(`[Watchdog.directWrite] Failed to update ${matchId}:`, error);
+      logger.error(`[Watchdog.orchestrator] Failed to update ${matchId}:`, error);
       return { status: 'error', fieldsUpdated: [] };
     }
   }
