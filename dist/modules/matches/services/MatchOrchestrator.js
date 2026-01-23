@@ -71,6 +71,11 @@ class MatchOrchestrator {
             return { status: 'success', fieldsUpdated: [] };
         }
         const lockKey = lockKeys_1.LOCK_KEYS.matchUpdateLock(matchId);
+        // PR-8B.1: Skip update if matchId is invalid (lockKey === null)
+        if (lockKey === null) {
+            logger_1.logger.debug(`[MatchOrchestrator] Skipping update for invalid matchId: ${matchId}`);
+            return { status: 'rejected_invalid', fieldsUpdated: [], reason: 'invalid_match_id' };
+        }
         let lockAcquired = false;
         const startTime = Date.now();
         try {

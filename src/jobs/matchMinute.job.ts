@@ -16,8 +16,17 @@ import { broadcastEvent } from '../routes/websocket.routes';
 import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
 import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
+import { FieldUpdate } from '../repositories/match.repository';
 
 // PR-8B: Using MatchOrchestrator for atomic match updates
+
+// PR-8B.1: Cap concurrent updates to prevent DB pool exhaustion
+// Limit orchestrator calls per tick to reduce connection pressure
+// Can be adjusted in production via environment variable
+const MAX_UPDATES_PER_TICK = (() => {
+  const envValue = parseInt(process.env.MAX_UPDATES_PER_TICK || '50', 10);
+  return Number.isFinite(envValue) && envValue > 0 ? envValue : 50;
+})();
 
 export class MatchMinuteWorker {
   private matchMinuteService: MatchMinuteService;
@@ -30,11 +39,14 @@ export class MatchMinuteWorker {
 
   /**
    * Process a batch of matches and update their minutes
-   * @param batchSize - Maximum number of matches to process (default: 100)
+   * @param batchSize - Maximum number of matches to process (default: 100, capped at MAX_UPDATES_PER_TICK)
    *
    * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
+   * PR-8B.1: Capped to MAX_UPDATES_PER_TICK to prevent DB pool exhaustion
    */
   async tick(batchSize: number = 100): Promise<void> {
+    // PR-8B.1: Cap batchSize to prevent DB pool exhaustion
+    batchSize = Math.min(batchSize, MAX_UPDATES_PER_TICK);
     if (this.isRunning) {
       logger.debug('[MinuteEngine] Tick already running, skipping this run');
       return;
@@ -90,8 +102,14 @@ export class MatchMinuteWorker {
         let updatedCount = 0;
         let skippedCount = 0;
         let skippedRecentlyUpdated = 0;
+        let attemptedUpdates = 0; // PR-8B.1: Track orchestrator call attempts
 
         for (const match of matches) {
+          // PR-8B.1: Stop processing after MAX_UPDATES_PER_TICK orchestrator attempts
+          if (attemptedUpdates >= MAX_UPDATES_PER_TICK) {
+            logger.debug(`[MinuteEngine] Reached MAX_UPDATES_PER_TICK=${MAX_UPDATES_PER_TICK}, stopping early`);
+            break;
+          }
           const matchId = match.external_id;
           const statusId = match.status_id;
 
@@ -147,9 +165,13 @@ export class MatchMinuteWorker {
           // PR-8B: Use MatchOrchestrator for atomic match updates
           // Only send update if minute changed
           if (newMinute !== existingMinute) {
+            // PR-8B.1: Increment attempt counter before orchestrator call
+            attemptedUpdates++;
+
             try {
               // Prepare update for orchestrator
-              const updates = [
+              // NOTE: last_minute_update_ts removed - not in MatchUpdateFields schema
+              const updates: FieldUpdate[] = [
                 {
                   field: 'minute',
                   value: newMinute,
@@ -157,17 +179,10 @@ export class MatchMinuteWorker {
                   priority: 1, // Lowest priority (computed fields)
                   timestamp: nowTs,
                 },
-                {
-                  field: 'last_minute_update_ts',
-                  value: nowTs,
-                  source: 'computed',
-                  priority: 1,
-                  timestamp: nowTs,
-                },
               ];
 
-              // Call orchestrator
-              const orchestratorResult = await matchOrchestrator.updateMatch(matchId, updates, 'matchMinute');
+              // Call orchestrator (source='computed' to match updates array)
+              const orchestratorResult = await matchOrchestrator.updateMatch(matchId, updates, 'computed');
 
               if (orchestratorResult.status === 'success') {
                 updatedCount++;
@@ -178,6 +193,10 @@ export class MatchMinuteWorker {
                 skippedCount++;
               } else if (orchestratorResult.status === 'rejected_locked') {
                 logger.debug(`[MinuteEngine.orchestrator] Skipped ${matchId}: lock busy`);
+                skippedCount++;
+              } else if (orchestratorResult.status === 'rejected_invalid') {
+                // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+                logger.debug(`[MinuteEngine.orchestrator] Skipped ${matchId}: invalid matchId`);
                 skippedCount++;
               } else {
                 logger.warn(`[MinuteEngine.orchestrator] Update failed for ${matchId}: ${orchestratorResult.status}`);

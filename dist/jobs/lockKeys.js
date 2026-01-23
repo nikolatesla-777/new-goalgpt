@@ -84,22 +84,39 @@ exports.LOCK_KEYS = {
     /**
      * Generate a match-level lock key for atomic match updates.
      *
-     * @param matchId - The external_id of the match (numeric string)
-     * @returns bigint lock key unique to this match
+     * PR-8B.1: Support alphanumeric matchIds (TheSports API format)
+     * Uses deterministic hash for string matchIds
+     *
+     * @param matchId - The external_id of the match (alphanumeric or numeric)
+     * @returns bigint lock key unique to this match, or null for invalid IDs
      *
      * @example
-     * const lockKey = LOCK_KEYS.matchUpdateLock(12345678);
-     * // Returns: 920000012345678n
+     * const lockKey = LOCK_KEYS.matchUpdateLock("l7oqdehg6ko3r51");
+     * // Returns: 920000000000n + hash("l7oqdehg6ko3r51")
      *
-     * Note: external_id is typically 8-digit, max ~99999999
-     * This gives us lock keys in range 920_000_000_000 to 920_099_999_999
+     * Note: Returns null for invalid/empty matchIds (caller should skip)
      */
     matchUpdateLock: (matchId) => {
-        const numericId = typeof matchId === 'string' ? parseInt(matchId, 10) : matchId;
-        if (isNaN(numericId) || numericId < 0) {
-            throw new Error(`Invalid matchId for lock key: ${matchId}`);
+        // PR-8B.1: Skip invalid/empty matchIds (don't throw error)
+        if (!matchId || matchId === '') {
+            return null;
         }
-        return 920000000000n + BigInt(numericId);
+        const matchIdStr = String(matchId);
+        // PR-8B.1: Generate deterministic 63-bit hash for alphanumeric matchIds
+        // Uses polynomial rolling hash (DJB2 variant) for deterministic collision-resistant hashing
+        let hash = 5381n; // DJB2 initial value
+        for (let i = 0; i < matchIdStr.length; i++) {
+            const charCode = BigInt(matchIdStr.charCodeAt(i));
+            hash = ((hash << 5n) + hash) + charCode; // hash * 33 + c
+        }
+        // Ensure positive 63-bit value using BigInt.asUintN (safe and efficient)
+        // This guarantees: 0 <= safeHash <= 2^63-1 (PostgreSQL bigint max)
+        const safeHash = BigInt.asUintN(63, hash);
+        // Modulo to fit within safe range: 0 to 999_999_999_999 (1 trillion)
+        // This gives us 920_000_000_000 to 920_999_999_999 range for lock keys
+        const MATCH_UPDATE_BASE = 920000000000n;
+        const MAX_HASH_RANGE = 999999999999n;
+        return MATCH_UPDATE_BASE + (safeHash % MAX_HASH_RANGE);
     },
 };
 /**
