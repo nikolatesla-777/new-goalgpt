@@ -18,6 +18,8 @@ import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 import { broadcastEvent } from '../routes/websocket.routes';
+import { jobRunner } from './framework/JobRunner';
+import { LOCK_KEYS } from './lockKeys';
 
 // REFACTOR: Direct database writes (orchestrator removed)
 interface FieldUpdate {
@@ -389,6 +391,8 @@ export class MatchDataSyncWorker {
 
   /**
    * Sync data for all live matches
+   *
+   * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
    */
   private async syncAllLiveMatches(): Promise<void> {
     if (this.isRunning) {
@@ -400,6 +404,16 @@ export class MatchDataSyncWorker {
     const startTime = Date.now();
 
     try {
+      // PR-8A: Wrap execution with JobRunner (no SQL logic changes)
+      await jobRunner.run(
+        {
+          jobName: 'matchDataSync',
+          overlapGuard: true,
+          advisoryLockKey: LOCK_KEYS.MATCH_DATA_SYNC,
+          timeoutMs: 300000, // 5 minutes
+        },
+        async (_ctx) => {
+          // Original syncAllLiveMatches() logic unchanged below this line
       logger.info('[MatchDataSync] Starting sync for all live matches...');
       
       const liveMatches = await this.getLiveMatchesFromDatabase();
@@ -449,6 +463,8 @@ export class MatchDataSyncWorker {
         errors: errorCount,
         duration_ms: duration,
       });
+        } // PR-8A: End jobRunner.run() wrapper
+      ); // PR-8A: Close jobRunner.run()
     } catch (error: any) {
       logger.error('[MatchDataSync] Error in syncAllLiveMatches:', error);
       logEvent('error', 'match_data_sync.failed', {

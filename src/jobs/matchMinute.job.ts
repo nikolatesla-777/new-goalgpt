@@ -13,6 +13,8 @@ import { MatchMinuteService } from '../services/thesports/match/matchMinute.serv
 import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 import { broadcastEvent } from '../routes/websocket.routes';
+import { jobRunner } from './framework/JobRunner';
+import { LOCK_KEYS } from './lockKeys';
 
 export class MatchMinuteWorker {
   private matchMinuteService: MatchMinuteService;
@@ -26,6 +28,8 @@ export class MatchMinuteWorker {
   /**
    * Process a batch of matches and update their minutes
    * @param batchSize - Maximum number of matches to process (default: 100)
+   *
+   * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
    */
   async tick(batchSize: number = 100): Promise<void> {
     if (this.isRunning) {
@@ -37,6 +41,16 @@ export class MatchMinuteWorker {
     const startedAt = Date.now();
 
     try {
+      // PR-8A: Wrap execution with JobRunner (no SQL logic changes)
+      await jobRunner.run(
+        {
+          jobName: 'matchMinute',
+          overlapGuard: true,
+          advisoryLockKey: LOCK_KEYS.MATCH_MINUTE,
+          timeoutMs: 120000, // 2 minutes
+        },
+        async (_ctx) => {
+          // Original tick() logic unchanged below this line
       const nowTs = Math.floor(Date.now() / 1000);
 
       // Query matches with status IN (2,3,4,5,7)
@@ -180,6 +194,8 @@ export class MatchMinuteWorker {
       } finally {
         client.release();
       }
+        } // PR-8A: End jobRunner.run() wrapper
+      ); // PR-8A: Close jobRunner.run()
     } catch (error: any) {
       logger.error('[MinuteEngine] Error in tick:', error);
     } finally {

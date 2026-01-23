@@ -52,6 +52,8 @@ const obsLogger_1 = require("../utils/obsLogger");
 const circuitBreaker_1 = require("../utils/circuitBreaker");
 const matchCache_1 = require("../utils/matchCache");
 const websocket_routes_1 = require("../routes/websocket.routes");
+const JobRunner_1 = require("./framework/JobRunner");
+const lockKeys_1 = require("./lockKeys");
 class MatchWatchdogWorker {
     constructor(matchDetailLiveService, matchRecentService) {
         this.intervalId = null;
@@ -367,6 +369,8 @@ class MatchWatchdogWorker {
     }
     /**
      * Process stale matches and trigger reconcile
+     *
+     * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
      */
     async tick() {
         if (this.isRunning) {
@@ -377,285 +381,382 @@ class MatchWatchdogWorker {
         const startedAt = Date.now();
         logger_1.logger.info('[Watchdog] ========== TICK START ==========');
         try {
-            const nowTs = Math.floor(Date.now() / 1000);
-            logger_1.logger.info(`[Watchdog] Current timestamp: ${nowTs}`);
-            // CRITICAL FIX (2026-01-13): PROACTIVE KICKOFF DETECTION
-            // Instead of waiting for TheSports API/MQTT to tell us match started,
-            // we proactively transition status=1 → status=2 when match_time passes.
-            // This runs FIRST, before any other processing, for fastest possible kickoff detection.
-            // CRITICAL FIX (2026-01-15): Expanded window from 120s to 300s (5 min) to catch delayed kickoffs
-            try {
-                const immediateKickoffs = await this.matchWatchdogService.findImmediateKickoffs(nowTs, 300, 100);
-                if (immediateKickoffs.length > 0) {
-                    logger_1.logger.info(`[Watchdog] ⚡ Proactive Kickoff: Found ${immediateKickoffs.length} matches that just started`);
-                    for (const kickoff of immediateKickoffs) {
-                        try {
-                            // Calculate minute based on time since match_time
-                            const calculatedMinute = Math.max(1, Math.floor(kickoff.secondsSinceKickoff / 60));
-                            // Force status=2 (FIRST_HALF) via orchestrator
-                            const result = await this.updateMatchDirect(kickoff.matchId, [
-                                { field: 'status_id', value: 2, source: 'computed', priority: 2, timestamp: nowTs },
-                                { field: 'minute', value: calculatedMinute, source: 'computed', priority: 1, timestamp: nowTs },
-                            ], 'proactive-kickoff');
-                            if (result.status === 'success') {
-                                logger_1.logger.info(`[Watchdog] ⚡ KICKOFF: ${kickoff.matchId} → status=2 (FIRST_HALF), minute=${calculatedMinute}`);
-                                (0, obsLogger_1.logEvent)('info', 'watchdog.proactive_kickoff', {
-                                    match_id: kickoff.matchId,
-                                    seconds_since_kickoff: kickoff.secondsSinceKickoff,
-                                    calculated_minute: calculatedMinute,
-                                    result: 'success',
-                                });
-                            }
-                        }
-                        catch (kickoffErr) {
-                            logger_1.logger.warn(`[Watchdog] Proactive kickoff failed for ${kickoff.matchId}: ${kickoffErr.message}`);
-                        }
-                    }
-                    // CRITICAL FIX (2026-01-16): Invalidate live matches cache after kickoff
-                    // New live matches should appear immediately in /api/matches/live
-                    if (immediateKickoffs.length > 0) {
-                        (0, matchCache_1.invalidateLiveMatchesCache)();
-                        logger_1.logger.info(`[Watchdog] Cache invalidated after ${immediateKickoffs.length} kickoffs`);
-                    }
-                }
-            }
-            catch (kickoffError) {
-                logger_1.logger.error('[Watchdog] Proactive Kickoff Detection failed:', kickoffError);
-                // Continue with normal processing even if kickoff detection fails
-            }
-            // CRITICAL FIX (2026-01-13): PROACTIVE MATCH FINISH DETECTION
-            // Just like proactive kickoff detection, we proactively transition live matches to FINISHED
-            // when match_time + 130 minutes has passed OR minute >= 90 with no update in 15 minutes.
-            // This fixes matches stuck in CANLI (e.g., Indonesia WC at 90+10' forever).
-            try {
-                logger_1.logger.info('[Watchdog] 🏁 Checking for overdue finishes...');
-                const overdueFinishes = await this.matchWatchdogService.findOverdueFinishes(nowTs, 100);
-                logger_1.logger.info(`[Watchdog] 🏁 findOverdueFinishes returned: ${overdueFinishes.length} matches`);
-                if (overdueFinishes.length > 0) {
-                    logger_1.logger.info(`[Watchdog] 🏁 Proactive Finish: Found ${overdueFinishes.length} matches that should have ended`);
-                    overdueFinishes.forEach(f => {
-                        logger_1.logger.info(`[Watchdog]   - ${f.matchId}: minute=${f.minute}, status=${f.statusId}, reason=${f.reason}, score=${f.homeScore}-${f.awayScore}`);
-                    });
-                    for (const finish of overdueFinishes) {
-                        try {
-                            // CRITICAL FIX: Handle halftime_stuck differently!
-                            // Halftime stuck matches should transition to status=4 (SECOND_HALF), NOT finish!
-                            if (finish.reason === 'halftime_stuck') {
-                                logger_1.logger.info(`[Watchdog] 🟡 HT STUCK: ${finish.matchId} → transitioning to SECOND_HALF (status=4)`);
-                                // Estimate second_half_kickoff_ts if missing
-                                // Typically 2nd half starts 60 minutes after kickoff (45min play + 15min HT)
-                                const estimatedSecondHalfTs = finish.matchTime + 3600;
-                                const result = await this.updateMatchDirect(finish.matchId, [
-                                    { field: 'status_id', value: 4, source: 'computed', priority: 10, timestamp: nowTs },
-                                    { field: 'second_half_kickoff_ts', value: estimatedSecondHalfTs, source: 'computed', priority: 10, timestamp: nowTs },
-                                    { field: 'minute', value: 46, source: 'computed', priority: 10, timestamp: nowTs },
-                                ], 'halftime-stuck-fix');
-                                if (result.status === 'success') {
-                                    logger_1.logger.info(`[Watchdog] 🟡 HT STUCK FIXED: ${finish.matchId} → status=4, minute=46 (was HT @ 45')`);
-                                }
-                                continue;
-                            }
-                            // Regular finish logic for absolute_timeout, minute_exceeded, stale_finish
-                            logger_1.logger.info(`[Watchdog] 🏁 Processing finish for ${finish.matchId} (${finish.reason})...`);
-                            // Force status=8 (FINISHED) via orchestrator with actual scores
-                            // CRITICAL FIX: Preserve existing minute instead of hardcoding 90
-                            // Overtime matches can be at 105+, penalty matches at 120+
-                            const result = await this.updateMatchDirect(finish.matchId, [
-                                { field: 'status_id', value: 8, source: 'computed', priority: 10, timestamp: nowTs },
-                                { field: 'minute', value: finish.minute ?? 90, source: 'computed', priority: 10, timestamp: nowTs },
-                            ], 'proactive-finish');
-                            logger_1.logger.info(`[Watchdog] 🏁 updateMatchDirect result for ${finish.matchId}: ${result.status}, fields: ${result.fieldsUpdated.join(',')}`);
-                            if (result.status === 'success') {
-                                logger_1.logger.info(`[Watchdog] 🏁 FINISHED: ${finish.matchId} → status=8 (was ${finish.statusId} @ ${finish.minute}') [${finish.reason}] Score: ${finish.homeScore}-${finish.awayScore}`);
-                                (0, obsLogger_1.logEvent)('info', 'watchdog.proactive_finish', {
-                                    match_id: finish.matchId,
-                                    previous_status: finish.statusId,
-                                    previous_minute: finish.minute,
-                                    seconds_since_kickoff: finish.secondsSinceKickoff,
-                                    seconds_since_update: finish.secondsSinceUpdate,
-                                    reason: finish.reason,
-                                    home_score: finish.homeScore,
-                                    away_score: finish.awayScore,
-                                    result: 'success',
-                                });
-                            }
-                        }
-                        catch (finishErr) {
-                            logger_1.logger.error(`[Watchdog] 🏁 Proactive finish/HT fix FAILED for ${finish.matchId}: ${finishErr.message}`, finishErr);
-                        }
-                    }
-                    // CRITICAL FIX (2026-01-16): Invalidate live matches cache after finishing matches
-                    // Without this, finished matches stay in /api/matches/live cache for 30s showing wrong status
-                    if (overdueFinishes.length > 0) {
-                        (0, matchCache_1.invalidateLiveMatchesCache)();
-                        logger_1.logger.info(`[Watchdog] Cache invalidated after finishing ${overdueFinishes.length} matches`);
-                    }
-                }
-                else {
-                    logger_1.logger.info('[Watchdog] 🏁 No overdue finishes found (all matches within normal time)');
-                }
-            }
-            catch (finishError) {
-                logger_1.logger.error('[Watchdog] 🏁 Proactive Finish Detection EXCEPTION:', finishError);
-                logger_1.logger.error('[Watchdog] 🏁 Stack trace:', finishError.stack);
-                // Continue with normal processing even if finish detection fails
-            }
-            // TEMPORARY DISABLE (2026-01-17): Global Sweep takes too long (100+ API calls)
-            // Causing Watchdog tick() to never complete, isRunning stuck forever
-            // TODO: Re-enable after optimization (batch processing, timeout limits)
-            // await this.runGlobalSweep();
-            // CRITICAL FIX (2026-01-11): Use /match/diary instead of /match/recent/list
-            // /match/recent/list only returns recently CHANGED matches (500 limit)
-            // This caused orphan matches: if a match finished but wasn't in the 500-limit window,
-            // it would stay "live" in DB forever
-            // /match/diary returns ALL today's matches with CURRENT status - this is the correct source
-            let recentListAllMatches = new Map();
-            try {
-                // Get today's date in YYYY-MM-DD format
-                const today = new Date().toISOString().split('T')[0];
-                // Fetch ALL today's matches from /match/diary
-                const diaryResponse = await this.matchDiaryService.getMatchDiary({ date: today });
-                const diaryMatches = diaryResponse?.results ?? [];
-                // Build map of ALL matches from diary (not just changed ones)
-                for (const match of diaryMatches) {
-                    const status = match.status_id ?? match.status ?? 0;
-                    const matchId = match.id ?? match.match_id ?? match.external_id;
-                    if (matchId) {
-                        const updateTime = match.update_time ?? match.updateTime ?? null;
-                        recentListAllMatches.set(matchId, { statusId: status, updateTime });
-                    }
-                }
-                const liveCount = Array.from(recentListAllMatches.values()).filter(m => [2, 3, 4, 5, 7].includes(m.statusId)).length;
-                const endCount = Array.from(recentListAllMatches.values()).filter(m => [8, 9, 10, 12].includes(m.statusId)).length;
-                // Always log (even if empty) for observability
-                logger_1.logger.info(`[Watchdog] Fetched /match/diary: ${recentListAllMatches.size} total matches (${liveCount} live, ${endCount} finished)`);
-            }
-            catch (error) {
-                logger_1.logger.error('[Watchdog] Error fetching /match/diary:', error);
-                // Continue processing, but reconciliation will fall back to detail_live only
-            }
-            // CRITICAL FIX: Re-enable stale match detection for HALF_TIME matches stuck in status 3
-            // /data/update handles live match updates but doesn't handle HALF_TIME -> END transitions
-            // We need to find stale matches (especially HALF_TIME) that should be END
-            // UPDATED: Reduced HALF_TIME threshold from 900s (15 min) to 300s (5 min) for faster recovery
-            // PERFORMANCE FIX (2026-01-17): Limit to 2 matches per tick (was 5, originally 100)
-            // Each reconcileViaOrchestrator() takes ~10-15s → 2 matches = 20-30s (fits in tick interval)
-            // Testing showed 5 matches = 3min tick, still blocking. 2 matches = ~30-45s (acceptable)
-            const stales = await this.matchWatchdogService.findStaleLiveMatches(nowTs, 120, 300, 2);
-            // CRITICAL FIX: Also find matches that should be live (match_time passed but status still NOT_STARTED)
-            // This ensures matches transition from NOT_STARTED to LIVE when they actually start
-            // maxMinutesAgo = 1440 (24 saat) to catch ALL today's matches, even if they started many hours ago
-            // Previous limit of 120 minutes was too restrictive and missed matches that started 3+ hours ago
-            // PERFORMANCE FIX (2026-01-17): Limit to 2 matches per tick (was 5, originally 2000)
-            // Each match calls reconcileViaOrchestrator() (~10-15s) → 2 matches = 20-30s
-            const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 2);
-            // CRITICAL FIX: Find matches that exceeded maximum duration (minute > 105 for 2nd half, > 130 for overtime)
-            // These matches should have ended but status is still LIVE - need immediate reconciliation
-            // PERFORMANCE FIX (2026-01-17): Limit to 2 matches per tick (was 5, originally 50)
-            // Each match calls reconcileViaOrchestrator() (~10-15s) → 2 matches = 20-30s
-            const overdueMatches = await this.matchWatchdogService.findOverdueMatches(2);
-            if (overdueMatches.length > 0) {
-                logger_1.logger.warn(`[Watchdog] Found ${overdueMatches.length} OVERDUE matches (minute exceeded max):`);
-                overdueMatches.forEach(m => logger_1.logger.warn(`  - ${m.matchId}: ${m.reason}`));
-            }
-            const candidatesCount = stales.length + shouldBeLive.length + overdueMatches.length;
-            if (candidatesCount === 0) {
-                // Phase 5-S: Emit summary even when no candidates (for observability)
-                (0, obsLogger_1.logEvent)('info', 'watchdog.tick.summary', {
-                    candidates_count: 0,
-                    attempted_count: 0,
-                    success_count: 0,
-                    fail_count: 0,
-                    skipped_count: 0,
-                    stale_count: 0,
-                    should_be_live_count: 0,
-                    reasons: {},
-                });
-                return;
-            }
-            // Phase 5-S: Track reconcile attempts with detailed breakdown
-            let attemptedCount = 0;
-            let successCount = 0;
-            let failCount = 0;
-            let skippedCount = 0;
-            const reasons = {};
-            // Process each stale match
-            for (const stale of stales) {
-                (0, obsLogger_1.logEvent)('info', 'watchdog.stale_detected', {
-                    match_id: stale.matchId,
-                    status_id: stale.statusId,
-                    reason: stale.reason,
-                    last_event_ts: stale.lastEventTs,
-                    provider_update_time: stale.providerUpdateTime,
-                });
-                const reconcileStartTime = Date.now();
-                attemptedCount++;
+            // PR-8A: Wrap execution with JobRunner (no SQL logic changes)
+            await JobRunner_1.jobRunner.run({
+                jobName: 'matchWatchdog',
+                overlapGuard: true,
+                advisoryLockKey: lockKeys_1.LOCK_KEYS.MATCH_WATCHDOG,
+                timeoutMs: 120000, // 2 minutes
+            }, async (_ctx) => {
+                // Original tick() logic unchanged below this line
+                const nowTs = Math.floor(Date.now() / 1000);
+                logger_1.logger.info(`[Watchdog] Current timestamp: ${nowTs}`);
+                // CRITICAL FIX (2026-01-13): PROACTIVE KICKOFF DETECTION
+                // Instead of waiting for TheSports API/MQTT to tell us match started,
+                // we proactively transition status=1 → status=2 when match_time passes.
+                // This runs FIRST, before any other processing, for fastest possible kickoff detection.
+                // CRITICAL FIX (2026-01-15): Expanded window from 120s to 300s (5 min) to catch delayed kickoffs
                 try {
-                    // Phase 5-S FIX: Check recent/list first - if match is finished (status=8) or not in list, transition to END
-                    const recentListMatch = recentListAllMatches.get(stale.matchId);
-                    // CRITICAL FIX HATA #3: HALF_TIME (status 3) için özel kontrol
-                    // Devre arasından ikinci yarıya geçiş sırasında recent/list'te olmayabilir
-                    if (stale.statusId === 3 && !recentListMatch) {
-                        logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list, ` +
-                            `checking detail_live for SECOND_HALF transition before END`);
-                        const { pool } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
-                        const client = await pool.connect();
-                        try {
-                            // PHASE C: Use orchestrator - check detail_live for SECOND_HALF transition
-                            const reconcileResult = await this.reconcileViaOrchestrator(stale.matchId);
-                            if (reconcileResult.statusId !== undefined) {
-                                // detail_live başarılı → status güncellendi (muhtemelen SECOND_HALF)
-                                if (reconcileResult.statusId === 4) {
-                                    logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} transitioned to SECOND_HALF via detail_live`);
-                                    successCount++;
-                                    reasons['half_time_to_second_half'] = (reasons['half_time_to_second_half'] || 0) + 1;
-                                    (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
-                                        match_id: stale.matchId,
+                    const immediateKickoffs = await this.matchWatchdogService.findImmediateKickoffs(nowTs, 300, 100);
+                    if (immediateKickoffs.length > 0) {
+                        logger_1.logger.info(`[Watchdog] ⚡ Proactive Kickoff: Found ${immediateKickoffs.length} matches that just started`);
+                        for (const kickoff of immediateKickoffs) {
+                            try {
+                                // Calculate minute based on time since match_time
+                                const calculatedMinute = Math.max(1, Math.floor(kickoff.secondsSinceKickoff / 60));
+                                // Force status=2 (FIRST_HALF) via orchestrator
+                                const result = await this.updateMatchDirect(kickoff.matchId, [
+                                    { field: 'status_id', value: 2, source: 'computed', priority: 2, timestamp: nowTs },
+                                    { field: 'minute', value: calculatedMinute, source: 'computed', priority: 1, timestamp: nowTs },
+                                ], 'proactive-kickoff');
+                                if (result.status === 'success') {
+                                    logger_1.logger.info(`[Watchdog] ⚡ KICKOFF: ${kickoff.matchId} → status=2 (FIRST_HALF), minute=${calculatedMinute}`);
+                                    (0, obsLogger_1.logEvent)('info', 'watchdog.proactive_kickoff', {
+                                        match_id: kickoff.matchId,
+                                        seconds_since_kickoff: kickoff.secondsSinceKickoff,
+                                        calculated_minute: calculatedMinute,
                                         result: 'success',
-                                        reason: 'half_time_to_second_half',
-                                        duration_ms: Date.now() - reconcileStartTime,
-                                        new_status_id: 4,
                                     });
-                                    continue; // Success - skip further processing
-                                }
-                                else {
-                                    logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} updated via detail_live to status ${reconcileResult.statusId}`);
-                                    successCount++;
-                                    reasons['half_time_updated'] = (reasons['half_time_updated'] || 0) + 1;
-                                    continue; // Success - skip further processing
                                 }
                             }
-                            // detail_live başarısız → match_time kontrolü yap
-                            const matchInfo = await client.query(`SELECT match_time, first_half_kickoff_ts FROM ts_matches WHERE external_id = $1`, [stale.matchId]);
-                            if (matchInfo.rows.length > 0) {
+                            catch (kickoffErr) {
+                                logger_1.logger.warn(`[Watchdog] Proactive kickoff failed for ${kickoff.matchId}: ${kickoffErr.message}`);
+                            }
+                        }
+                        // CRITICAL FIX (2026-01-16): Invalidate live matches cache after kickoff
+                        // New live matches should appear immediately in /api/matches/live
+                        if (immediateKickoffs.length > 0) {
+                            (0, matchCache_1.invalidateLiveMatchesCache)();
+                            logger_1.logger.info(`[Watchdog] Cache invalidated after ${immediateKickoffs.length} kickoffs`);
+                        }
+                    }
+                }
+                catch (kickoffError) {
+                    logger_1.logger.error('[Watchdog] Proactive Kickoff Detection failed:', kickoffError);
+                    // Continue with normal processing even if kickoff detection fails
+                }
+                // CRITICAL FIX (2026-01-13): PROACTIVE MATCH FINISH DETECTION
+                // Just like proactive kickoff detection, we proactively transition live matches to FINISHED
+                // when match_time + 130 minutes has passed OR minute >= 90 with no update in 15 minutes.
+                // This fixes matches stuck in CANLI (e.g., Indonesia WC at 90+10' forever).
+                try {
+                    logger_1.logger.info('[Watchdog] 🏁 Checking for overdue finishes...');
+                    const overdueFinishes = await this.matchWatchdogService.findOverdueFinishes(nowTs, 100);
+                    logger_1.logger.info(`[Watchdog] 🏁 findOverdueFinishes returned: ${overdueFinishes.length} matches`);
+                    if (overdueFinishes.length > 0) {
+                        logger_1.logger.info(`[Watchdog] 🏁 Proactive Finish: Found ${overdueFinishes.length} matches that should have ended`);
+                        overdueFinishes.forEach(f => {
+                            logger_1.logger.info(`[Watchdog]   - ${f.matchId}: minute=${f.minute}, status=${f.statusId}, reason=${f.reason}, score=${f.homeScore}-${f.awayScore}`);
+                        });
+                        for (const finish of overdueFinishes) {
+                            try {
+                                // CRITICAL FIX: Handle halftime_stuck differently!
+                                // Halftime stuck matches should transition to status=4 (SECOND_HALF), NOT finish!
+                                if (finish.reason === 'halftime_stuck') {
+                                    logger_1.logger.info(`[Watchdog] 🟡 HT STUCK: ${finish.matchId} → transitioning to SECOND_HALF (status=4)`);
+                                    // Estimate second_half_kickoff_ts if missing
+                                    // Typically 2nd half starts 60 minutes after kickoff (45min play + 15min HT)
+                                    const estimatedSecondHalfTs = finish.matchTime + 3600;
+                                    const result = await this.updateMatchDirect(finish.matchId, [
+                                        { field: 'status_id', value: 4, source: 'computed', priority: 10, timestamp: nowTs },
+                                        { field: 'second_half_kickoff_ts', value: estimatedSecondHalfTs, source: 'computed', priority: 10, timestamp: nowTs },
+                                        { field: 'minute', value: 46, source: 'computed', priority: 10, timestamp: nowTs },
+                                    ], 'halftime-stuck-fix');
+                                    if (result.status === 'success') {
+                                        logger_1.logger.info(`[Watchdog] 🟡 HT STUCK FIXED: ${finish.matchId} → status=4, minute=46 (was HT @ 45')`);
+                                    }
+                                    continue;
+                                }
+                                // Regular finish logic for absolute_timeout, minute_exceeded, stale_finish
+                                logger_1.logger.info(`[Watchdog] 🏁 Processing finish for ${finish.matchId} (${finish.reason})...`);
+                                // Force status=8 (FINISHED) via orchestrator with actual scores
+                                // CRITICAL FIX: Preserve existing minute instead of hardcoding 90
+                                // Overtime matches can be at 105+, penalty matches at 120+
+                                const result = await this.updateMatchDirect(finish.matchId, [
+                                    { field: 'status_id', value: 8, source: 'computed', priority: 10, timestamp: nowTs },
+                                    { field: 'minute', value: finish.minute ?? 90, source: 'computed', priority: 10, timestamp: nowTs },
+                                ], 'proactive-finish');
+                                logger_1.logger.info(`[Watchdog] 🏁 updateMatchDirect result for ${finish.matchId}: ${result.status}, fields: ${result.fieldsUpdated.join(',')}`);
+                                if (result.status === 'success') {
+                                    logger_1.logger.info(`[Watchdog] 🏁 FINISHED: ${finish.matchId} → status=8 (was ${finish.statusId} @ ${finish.minute}') [${finish.reason}] Score: ${finish.homeScore}-${finish.awayScore}`);
+                                    (0, obsLogger_1.logEvent)('info', 'watchdog.proactive_finish', {
+                                        match_id: finish.matchId,
+                                        previous_status: finish.statusId,
+                                        previous_minute: finish.minute,
+                                        seconds_since_kickoff: finish.secondsSinceKickoff,
+                                        seconds_since_update: finish.secondsSinceUpdate,
+                                        reason: finish.reason,
+                                        home_score: finish.homeScore,
+                                        away_score: finish.awayScore,
+                                        result: 'success',
+                                    });
+                                }
+                            }
+                            catch (finishErr) {
+                                logger_1.logger.error(`[Watchdog] 🏁 Proactive finish/HT fix FAILED for ${finish.matchId}: ${finishErr.message}`, finishErr);
+                            }
+                        }
+                        // CRITICAL FIX (2026-01-16): Invalidate live matches cache after finishing matches
+                        // Without this, finished matches stay in /api/matches/live cache for 30s showing wrong status
+                        if (overdueFinishes.length > 0) {
+                            (0, matchCache_1.invalidateLiveMatchesCache)();
+                            logger_1.logger.info(`[Watchdog] Cache invalidated after finishing ${overdueFinishes.length} matches`);
+                        }
+                    }
+                    else {
+                        logger_1.logger.info('[Watchdog] 🏁 No overdue finishes found (all matches within normal time)');
+                    }
+                }
+                catch (finishError) {
+                    logger_1.logger.error('[Watchdog] 🏁 Proactive Finish Detection EXCEPTION:', finishError);
+                    logger_1.logger.error('[Watchdog] 🏁 Stack trace:', finishError.stack);
+                    // Continue with normal processing even if finish detection fails
+                }
+                // TEMPORARY DISABLE (2026-01-17): Global Sweep takes too long (100+ API calls)
+                // Causing Watchdog tick() to never complete, isRunning stuck forever
+                // TODO: Re-enable after optimization (batch processing, timeout limits)
+                // await this.runGlobalSweep();
+                // CRITICAL FIX (2026-01-11): Use /match/diary instead of /match/recent/list
+                // /match/recent/list only returns recently CHANGED matches (500 limit)
+                // This caused orphan matches: if a match finished but wasn't in the 500-limit window,
+                // it would stay "live" in DB forever
+                // /match/diary returns ALL today's matches with CURRENT status - this is the correct source
+                let recentListAllMatches = new Map();
+                try {
+                    // Get today's date in YYYY-MM-DD format
+                    const today = new Date().toISOString().split('T')[0];
+                    // Fetch ALL today's matches from /match/diary
+                    const diaryResponse = await this.matchDiaryService.getMatchDiary({ date: today });
+                    const diaryMatches = diaryResponse?.results ?? [];
+                    // Build map of ALL matches from diary (not just changed ones)
+                    for (const match of diaryMatches) {
+                        const status = match.status_id ?? match.status ?? 0;
+                        const matchId = match.id ?? match.match_id ?? match.external_id;
+                        if (matchId) {
+                            const updateTime = match.update_time ?? match.updateTime ?? null;
+                            recentListAllMatches.set(matchId, { statusId: status, updateTime });
+                        }
+                    }
+                    const liveCount = Array.from(recentListAllMatches.values()).filter(m => [2, 3, 4, 5, 7].includes(m.statusId)).length;
+                    const endCount = Array.from(recentListAllMatches.values()).filter(m => [8, 9, 10, 12].includes(m.statusId)).length;
+                    // Always log (even if empty) for observability
+                    logger_1.logger.info(`[Watchdog] Fetched /match/diary: ${recentListAllMatches.size} total matches (${liveCount} live, ${endCount} finished)`);
+                }
+                catch (error) {
+                    logger_1.logger.error('[Watchdog] Error fetching /match/diary:', error);
+                    // Continue processing, but reconciliation will fall back to detail_live only
+                }
+                // CRITICAL FIX: Re-enable stale match detection for HALF_TIME matches stuck in status 3
+                // /data/update handles live match updates but doesn't handle HALF_TIME -> END transitions
+                // We need to find stale matches (especially HALF_TIME) that should be END
+                // UPDATED: Reduced HALF_TIME threshold from 900s (15 min) to 300s (5 min) for faster recovery
+                // PERFORMANCE FIX (2026-01-17): Limit to 2 matches per tick (was 5, originally 100)
+                // Each reconcileViaOrchestrator() takes ~10-15s → 2 matches = 20-30s (fits in tick interval)
+                // Testing showed 5 matches = 3min tick, still blocking. 2 matches = ~30-45s (acceptable)
+                const stales = await this.matchWatchdogService.findStaleLiveMatches(nowTs, 120, 300, 2);
+                // CRITICAL FIX: Also find matches that should be live (match_time passed but status still NOT_STARTED)
+                // This ensures matches transition from NOT_STARTED to LIVE when they actually start
+                // maxMinutesAgo = 1440 (24 saat) to catch ALL today's matches, even if they started many hours ago
+                // Previous limit of 120 minutes was too restrictive and missed matches that started 3+ hours ago
+                // PERFORMANCE FIX (2026-01-17): Limit to 2 matches per tick (was 5, originally 2000)
+                // Each match calls reconcileViaOrchestrator() (~10-15s) → 2 matches = 20-30s
+                const shouldBeLive = await this.matchWatchdogService.findShouldBeLiveMatches(nowTs, 1440, 2);
+                // CRITICAL FIX: Find matches that exceeded maximum duration (minute > 105 for 2nd half, > 130 for overtime)
+                // These matches should have ended but status is still LIVE - need immediate reconciliation
+                // PERFORMANCE FIX (2026-01-17): Limit to 2 matches per tick (was 5, originally 50)
+                // Each match calls reconcileViaOrchestrator() (~10-15s) → 2 matches = 20-30s
+                const overdueMatches = await this.matchWatchdogService.findOverdueMatches(2);
+                if (overdueMatches.length > 0) {
+                    logger_1.logger.warn(`[Watchdog] Found ${overdueMatches.length} OVERDUE matches (minute exceeded max):`);
+                    overdueMatches.forEach(m => logger_1.logger.warn(`  - ${m.matchId}: ${m.reason}`));
+                }
+                const candidatesCount = stales.length + shouldBeLive.length + overdueMatches.length;
+                if (candidatesCount === 0) {
+                    // Phase 5-S: Emit summary even when no candidates (for observability)
+                    (0, obsLogger_1.logEvent)('info', 'watchdog.tick.summary', {
+                        candidates_count: 0,
+                        attempted_count: 0,
+                        success_count: 0,
+                        fail_count: 0,
+                        skipped_count: 0,
+                        stale_count: 0,
+                        should_be_live_count: 0,
+                        reasons: {},
+                    });
+                    return;
+                }
+                // Phase 5-S: Track reconcile attempts with detailed breakdown
+                let attemptedCount = 0;
+                let successCount = 0;
+                let failCount = 0;
+                let skippedCount = 0;
+                const reasons = {};
+                // Process each stale match
+                for (const stale of stales) {
+                    (0, obsLogger_1.logEvent)('info', 'watchdog.stale_detected', {
+                        match_id: stale.matchId,
+                        status_id: stale.statusId,
+                        reason: stale.reason,
+                        last_event_ts: stale.lastEventTs,
+                        provider_update_time: stale.providerUpdateTime,
+                    });
+                    const reconcileStartTime = Date.now();
+                    attemptedCount++;
+                    try {
+                        // Phase 5-S FIX: Check recent/list first - if match is finished (status=8) or not in list, transition to END
+                        const recentListMatch = recentListAllMatches.get(stale.matchId);
+                        // CRITICAL FIX HATA #3: HALF_TIME (status 3) için özel kontrol
+                        // Devre arasından ikinci yarıya geçiş sırasında recent/list'te olmayabilir
+                        if (stale.statusId === 3 && !recentListMatch) {
+                            logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list, ` +
+                                `checking detail_live for SECOND_HALF transition before END`);
+                            const { pool } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
+                            const client = await pool.connect();
+                            try {
+                                // PHASE C: Use orchestrator - check detail_live for SECOND_HALF transition
+                                const reconcileResult = await this.reconcileViaOrchestrator(stale.matchId);
+                                if (reconcileResult.statusId !== undefined) {
+                                    // detail_live başarılı → status güncellendi (muhtemelen SECOND_HALF)
+                                    if (reconcileResult.statusId === 4) {
+                                        logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} transitioned to SECOND_HALF via detail_live`);
+                                        successCount++;
+                                        reasons['half_time_to_second_half'] = (reasons['half_time_to_second_half'] || 0) + 1;
+                                        (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                            match_id: stale.matchId,
+                                            result: 'success',
+                                            reason: 'half_time_to_second_half',
+                                            duration_ms: Date.now() - reconcileStartTime,
+                                            new_status_id: 4,
+                                        });
+                                        continue; // Success - skip further processing
+                                    }
+                                    else {
+                                        logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} updated via detail_live to status ${reconcileResult.statusId}`);
+                                        successCount++;
+                                        reasons['half_time_updated'] = (reasons['half_time_updated'] || 0) + 1;
+                                        continue; // Success - skip further processing
+                                    }
+                                }
+                                // detail_live başarısız → match_time kontrolü yap
+                                const matchInfo = await client.query(`SELECT match_time, first_half_kickoff_ts FROM ts_matches WHERE external_id = $1`, [stale.matchId]);
+                                if (matchInfo.rows.length > 0) {
+                                    const match = matchInfo.rows[0];
+                                    const toSafeNum = (val) => {
+                                        if (val === null || val === undefined || val === '')
+                                            return null;
+                                        const num = Number(val);
+                                        return isNaN(num) ? null : num;
+                                    };
+                                    const nowTs = Math.floor(Date.now() / 1000);
+                                    const matchTime = toSafeNum(match.match_time);
+                                    const firstHalfKickoff = toSafeNum(match.first_half_kickoff_ts);
+                                    // CRITICAL FIX (2026-01-09): Reduced HALF_TIME threshold from 120 to 60 minutes
+                                    // Reason: HALF_TIME match without recent/list or detail_live data is anomaly
+                                    // 60 minutes is sufficient to determine match should have finished
+                                    // Normal match: 45 (first half) + 15 (HT) = 60 minutes minimum
+                                    // Previously 120 minutes was too conservative, causing 10+ matches to stay stuck in HALF_TIME
+                                    const minTimeForEnd = (firstHalfKickoff || matchTime || 0) + (60 * 60); // 60 minutes (was 120)
+                                    if (nowTs < minTimeForEnd) {
+                                        logger_1.logger.warn(`[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list but match started ` +
+                                            `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (<60 min). ` +
+                                            `Skipping END transition. Will retry later.`);
+                                        skippedCount++;
+                                        reasons['half_time_too_recent'] = (reasons['half_time_too_recent'] || 0) + 1;
+                                        continue; // Don't transition to END, retry later
+                                    }
+                                    else {
+                                        // Match time is old enough, safe to transition to END
+                                        logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list and match started ` +
+                                            `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>60 min). Transitioning to END.`);
+                                        // PHASE C: Use orchestrator for centralized write coordination
+                                        const orchestratorResult = await this.updateMatchDirect(stale.matchId, [
+                                            { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+                                            { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                                        ], 'watchdog');
+                                        if (orchestratorResult.status === 'success') {
+                                            successCount++;
+                                            reasons['half_time_finished_safe'] = (reasons['half_time_finished_safe'] || 0) + 1;
+                                            (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                                match_id: stale.matchId,
+                                                result: 'success',
+                                                reason: 'half_time_finished_safe',
+                                                duration_ms: Date.now() - reconcileStartTime,
+                                                fields_updated: orchestratorResult.fieldsUpdated,
+                                                new_status_id: 8,
+                                                match_time: matchTime,
+                                                elapsed_minutes: Math.floor((nowTs - (matchTime ?? nowTs)) / 60),
+                                            });
+                                            // CRITICAL FIX: Trigger post-match persistence when HALF_TIME match transitions to END
+                                            logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} transitioned to END (8), triggering post-match persistence + half stats save...`);
+                                            try {
+                                                const { PostMatchProcessor } = await Promise.resolve().then(() => __importStar(require('../services/liveData/postMatchProcessor')));
+                                                const { theSportsAPI } = await Promise.resolve().then(() => __importStar(require('../core')));
+                                                // SINGLETON: Use shared API client with global rate limiting
+                                                const processor = new PostMatchProcessor();
+                                                await processor.onMatchEnded(stale.matchId);
+                                                logger_1.logger.info(`[Watchdog] ✅ Post-match persistence completed for ${stale.matchId}`);
+                                            }
+                                            catch (postMatchErr) {
+                                                logger_1.logger.warn(`[Watchdog] Failed to trigger post-match persistence for ${stale.matchId}:`, postMatchErr.message);
+                                            }
+                                            // HALF STATS PERSISTENCE: Save second half data when match transitions to END
+                                            halfStatsPersistence_service_1.halfStatsPersistenceService.saveSecondHalfData(stale.matchId)
+                                                .then(res => {
+                                                if (res.success)
+                                                    logger_1.logger.info(`[Watchdog] Half stats saved for ${stale.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                                            })
+                                                .catch(err => logger_1.logger.warn(`[Watchdog] Failed to save half stats for ${stale.matchId}:`, err.message));
+                                            continue; // Skip further processing
+                                        }
+                                    }
+                                }
+                            }
+                            catch (detailLiveError) {
+                                logger_1.logger.warn(`[Watchdog] detail_live failed for HALF_TIME match ${stale.matchId}: ${detailLiveError.message}`);
+                                // Fall through to normal processing
+                            }
+                            finally {
+                                client.release();
+                            }
+                        }
+                        // Normal stale match processing (status 2, 4, 5, 7) - HATA #1 fix will be applied here
+                        if (!recentListMatch) {
+                            // Match not in recent/list - check match_time before transitioning to END
+                            const { pool } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
+                            const client = await pool.connect();
+                            try {
+                                const matchInfo = await client.query(`SELECT match_time, first_half_kickoff_ts, second_half_kickoff_ts, status_id 
+                 FROM ts_matches WHERE external_id = $1`, [stale.matchId]);
+                                if (matchInfo.rows.length === 0) {
+                                    continue; // Match not found, skip
+                                }
                                 const match = matchInfo.rows[0];
+                                const nowTs = Math.floor(Date.now() / 1000);
                                 const toSafeNum = (val) => {
                                     if (val === null || val === undefined || val === '')
                                         return null;
                                     const num = Number(val);
                                     return isNaN(num) ? null : num;
                                 };
-                                const nowTs = Math.floor(Date.now() / 1000);
                                 const matchTime = toSafeNum(match.match_time);
-                                const firstHalfKickoff = toSafeNum(match.first_half_kickoff_ts);
-                                // CRITICAL FIX (2026-01-09): Reduced HALF_TIME threshold from 120 to 60 minutes
-                                // Reason: HALF_TIME match without recent/list or detail_live data is anomaly
-                                // 60 minutes is sufficient to determine match should have finished
-                                // Normal match: 45 (first half) + 15 (HT) = 60 minutes minimum
-                                // Previously 120 minutes was too conservative, causing 10+ matches to stay stuck in HALF_TIME
-                                const minTimeForEnd = (firstHalfKickoff || matchTime || 0) + (60 * 60); // 60 minutes (was 120)
+                                // Calculate minimum time for match to be finished
+                                // Standard match: 90 minutes + 15 min HT = 105 minutes minimum
+                                // With overtime: up to 120 minutes
+                                // CRITICAL FIX: Reduced safety margin from 150 to 120 minutes (2 hours) for faster match ending
+                                // This ensures matches end faster when they should be finished
+                                const minTimeForEnd = (matchTime || 0) + (120 * 60); // 120 minutes in seconds (was 150)
+                                // If match started less than 120 minutes ago, DO NOT transition to END
                                 if (nowTs < minTimeForEnd) {
-                                    logger_1.logger.warn(`[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list but match started ` +
-                                        `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (<60 min). ` +
-                                        `Skipping END transition. Will retry later.`);
-                                    skippedCount++;
-                                    reasons['half_time_too_recent'] = (reasons['half_time_too_recent'] || 0) + 1;
-                                    continue; // Don't transition to END, retry later
+                                    logger_1.logger.warn(`[Watchdog] Match ${stale.matchId} not in recent/list but match_time (${matchTime}) ` +
+                                        `is less than 120 minutes ago (now: ${nowTs}, diff: ${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} min). ` +
+                                        `Skipping END transition. Will try detail_live instead.`);
+                                    // Continue to detail_live reconcile instead of END
+                                    // (fall through to detail_live check below)
                                 }
                                 else {
                                     // Match time is old enough, safe to transition to END
-                                    logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} not in recent/list and match started ` +
-                                        `${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>60 min). Transitioning to END.`);
+                                    logger_1.logger.info(`[Watchdog] Match ${stale.matchId} not in recent/list and match_time (${matchTime}) ` +
+                                        `is ${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>120 min). Transitioning to END.`);
                                     // PHASE C: Use orchestrator for centralized write coordination
                                     const orchestratorResult = await this.updateMatchDirect(stale.matchId, [
                                         { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
@@ -663,641 +764,554 @@ class MatchWatchdogWorker {
                                     ], 'watchdog');
                                     if (orchestratorResult.status === 'success') {
                                         successCount++;
-                                        reasons['half_time_finished_safe'] = (reasons['half_time_finished_safe'] || 0) + 1;
+                                        reasons['finished_not_in_recent_list_safe'] = (reasons['finished_not_in_recent_list_safe'] || 0) + 1;
                                         (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
                                             match_id: stale.matchId,
                                             result: 'success',
-                                            reason: 'half_time_finished_safe',
+                                            reason: 'finished_not_in_recent_list_safe',
                                             duration_ms: Date.now() - reconcileStartTime,
                                             fields_updated: orchestratorResult.fieldsUpdated,
                                             new_status_id: 8,
                                             match_time: matchTime,
                                             elapsed_minutes: Math.floor((nowTs - (matchTime ?? nowTs)) / 60),
                                         });
-                                        // CRITICAL FIX: Trigger post-match persistence when HALF_TIME match transitions to END
-                                        logger_1.logger.info(`[Watchdog] HALF_TIME match ${stale.matchId} transitioned to END (8), triggering post-match persistence + half stats save...`);
-                                        try {
-                                            const { PostMatchProcessor } = await Promise.resolve().then(() => __importStar(require('../services/liveData/postMatchProcessor')));
-                                            const { theSportsAPI } = await Promise.resolve().then(() => __importStar(require('../core')));
-                                            // SINGLETON: Use shared API client with global rate limiting
-                                            const processor = new PostMatchProcessor();
-                                            await processor.onMatchEnded(stale.matchId);
-                                            logger_1.logger.info(`[Watchdog] ✅ Post-match persistence completed for ${stale.matchId}`);
-                                        }
-                                        catch (postMatchErr) {
-                                            logger_1.logger.warn(`[Watchdog] Failed to trigger post-match persistence for ${stale.matchId}:`, postMatchErr.message);
-                                        }
-                                        // HALF STATS PERSISTENCE: Save second half data when match transitions to END
-                                        halfStatsPersistence_service_1.halfStatsPersistenceService.saveSecondHalfData(stale.matchId)
-                                            .then(res => {
-                                            if (res.success)
-                                                logger_1.logger.info(`[Watchdog] Half stats saved for ${stale.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
-                                        })
-                                            .catch(err => logger_1.logger.warn(`[Watchdog] Failed to save half stats for ${stale.matchId}:`, err.message));
-                                        continue; // Skip further processing
+                                        continue; // Skip detail_live reconcile
                                     }
                                 }
                             }
-                        }
-                        catch (detailLiveError) {
-                            logger_1.logger.warn(`[Watchdog] detail_live failed for HALF_TIME match ${stale.matchId}: ${detailLiveError.message}`);
-                            // Fall through to normal processing
-                        }
-                        finally {
-                            client.release();
-                        }
-                    }
-                    // Normal stale match processing (status 2, 4, 5, 7) - HATA #1 fix will be applied here
-                    if (!recentListMatch) {
-                        // Match not in recent/list - check match_time before transitioning to END
-                        const { pool } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
-                        const client = await pool.connect();
-                        try {
-                            const matchInfo = await client.query(`SELECT match_time, first_half_kickoff_ts, second_half_kickoff_ts, status_id 
-                 FROM ts_matches WHERE external_id = $1`, [stale.matchId]);
-                            if (matchInfo.rows.length === 0) {
-                                continue; // Match not found, skip
+                            finally {
+                                client.release();
                             }
-                            const match = matchInfo.rows[0];
+                        }
+                        else if ([8, 9, 10, 12].includes(recentListMatch.statusId)) {
+                            // Match is END in recent/list but LIVE in DB - transition to END
+                            logger_1.logger.info(`[Watchdog] Match ${stale.matchId} is END (status ${recentListMatch.statusId}) in recent/list, transitioning DB to END`);
                             const nowTs = Math.floor(Date.now() / 1000);
-                            const toSafeNum = (val) => {
-                                if (val === null || val === undefined || val === '')
-                                    return null;
-                                const num = Number(val);
-                                return isNaN(num) ? null : num;
-                            };
-                            const matchTime = toSafeNum(match.match_time);
-                            // Calculate minimum time for match to be finished
-                            // Standard match: 90 minutes + 15 min HT = 105 minutes minimum
-                            // With overtime: up to 120 minutes
-                            // CRITICAL FIX: Reduced safety margin from 150 to 120 minutes (2 hours) for faster match ending
-                            // This ensures matches end faster when they should be finished
-                            const minTimeForEnd = (matchTime || 0) + (120 * 60); // 120 minutes in seconds (was 150)
-                            // If match started less than 120 minutes ago, DO NOT transition to END
-                            if (nowTs < minTimeForEnd) {
-                                logger_1.logger.warn(`[Watchdog] Match ${stale.matchId} not in recent/list but match_time (${matchTime}) ` +
-                                    `is less than 120 minutes ago (now: ${nowTs}, diff: ${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} min). ` +
-                                    `Skipping END transition. Will try detail_live instead.`);
-                                // Continue to detail_live reconcile instead of END
-                                // (fall through to detail_live check below)
-                            }
-                            else {
-                                // Match time is old enough, safe to transition to END
-                                logger_1.logger.info(`[Watchdog] Match ${stale.matchId} not in recent/list and match_time (${matchTime}) ` +
-                                    `is ${Math.floor((nowTs - (matchTime ?? nowTs)) / 60)} minutes ago (>120 min). Transitioning to END.`);
-                                // PHASE C: Use orchestrator for centralized write coordination
-                                const orchestratorResult = await this.updateMatchDirect(stale.matchId, [
-                                    { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
-                                    { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
-                                ], 'watchdog');
-                                if (orchestratorResult.status === 'success') {
-                                    successCount++;
-                                    reasons['finished_not_in_recent_list_safe'] = (reasons['finished_not_in_recent_list_safe'] || 0) + 1;
-                                    (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
-                                        match_id: stale.matchId,
-                                        result: 'success',
-                                        reason: 'finished_not_in_recent_list_safe',
-                                        duration_ms: Date.now() - reconcileStartTime,
-                                        fields_updated: orchestratorResult.fieldsUpdated,
-                                        new_status_id: 8,
-                                        match_time: matchTime,
-                                        elapsed_minutes: Math.floor((nowTs - (matchTime ?? nowTs)) / 60),
-                                    });
-                                    continue; // Skip detail_live reconcile
-                                }
+                            // PHASE C: Use orchestrator for centralized write coordination
+                            const orchestratorResult = await this.updateMatchDirect(stale.matchId, [
+                                { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+                                { field: 'provider_update_time', value: recentListMatch.updateTime || nowTs, source: 'api', priority: 2, timestamp: nowTs },
+                                { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                            ], 'watchdog');
+                            if (orchestratorResult.status === 'success') {
+                                successCount++;
+                                reasons['finished_in_recent_list'] = (reasons['finished_in_recent_list'] || 0) + 1;
+                                (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                    match_id: stale.matchId,
+                                    result: 'success',
+                                    reason: 'finished_in_recent_list',
+                                    duration_ms: Date.now() - reconcileStartTime,
+                                    fields_updated: orchestratorResult.fieldsUpdated,
+                                    new_status_id: 8,
+                                    provider_status_id: recentListMatch.statusId,
+                                });
+                                // HALF STATS PERSISTENCE: Save second half data when match transitions to END
+                                halfStatsPersistence_service_1.halfStatsPersistenceService.saveSecondHalfData(stale.matchId)
+                                    .then(res => {
+                                    if (res.success)
+                                        logger_1.logger.info(`[Watchdog] Half stats saved for ${stale.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                                })
+                                    .catch(err => logger_1.logger.warn(`[Watchdog] Failed to save half stats for ${stale.matchId}:`, err.message));
+                                continue; // Skip detail_live reconcile
                             }
                         }
-                        finally {
-                            client.release();
-                        }
-                    }
-                    else if ([8, 9, 10, 12].includes(recentListMatch.statusId)) {
-                        // Match is END in recent/list but LIVE in DB - transition to END
-                        logger_1.logger.info(`[Watchdog] Match ${stale.matchId} is END (status ${recentListMatch.statusId}) in recent/list, transitioning DB to END`);
-                        const nowTs = Math.floor(Date.now() / 1000);
+                        // Phase 5-S: Emit reconcile.start event
+                        (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.start', {
+                            match_id: stale.matchId,
+                            external_id: stale.matchId,
+                            match_time: null, // Stale matches don't have match_time in context
+                            reason: stale.reason,
+                        });
                         // PHASE C: Use orchestrator for centralized write coordination
-                        const orchestratorResult = await this.updateMatchDirect(stale.matchId, [
-                            { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
-                            { field: 'provider_update_time', value: recentListMatch.updateTime || nowTs, source: 'api', priority: 2, timestamp: nowTs },
-                            { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
-                        ], 'watchdog');
-                        if (orchestratorResult.status === 'success') {
+                        const reconcileResult = await this.reconcileViaOrchestrator(stale.matchId);
+                        const duration = Date.now() - reconcileStartTime;
+                        // Phase 5-S: Check if reconcile was successful (statusId returned)
+                        if (reconcileResult.statusId !== undefined) {
                             successCount++;
-                            reasons['finished_in_recent_list'] = (reasons['finished_in_recent_list'] || 0) + 1;
+                            const reasonKey = `success_${stale.reason}`;
+                            reasons[reasonKey] = (reasons[reasonKey] || 0) + 1;
+                            // Phase 5-S: Emit reconcile.done event with success
                             (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
                                 match_id: stale.matchId,
                                 result: 'success',
-                                reason: 'finished_in_recent_list',
-                                duration_ms: Date.now() - reconcileStartTime,
-                                fields_updated: orchestratorResult.fieldsUpdated,
-                                new_status_id: 8,
-                                provider_status_id: recentListMatch.statusId,
+                                reason: stale.reason,
+                                duration_ms: duration,
+                                new_status_id: reconcileResult.statusId,
                             });
-                            // HALF STATS PERSISTENCE: Save second half data when match transitions to END
-                            halfStatsPersistence_service_1.halfStatsPersistenceService.saveSecondHalfData(stale.matchId)
-                                .then(res => {
-                                if (res.success)
-                                    logger_1.logger.info(`[Watchdog] Half stats saved for ${stale.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
-                            })
-                                .catch(err => logger_1.logger.warn(`[Watchdog] Failed to save half stats for ${stale.matchId}:`, err.message));
-                            continue; // Skip detail_live reconcile
+                        }
+                        else {
+                            skippedCount++;
+                            reasons['no_update'] = (reasons['no_update'] || 0) + 1;
+                            // Phase 5-S: Emit reconcile.done event with skip (no update)
+                            (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                match_id: stale.matchId,
+                                result: 'skip',
+                                reason: 'no_update',
+                                duration_ms: duration,
+                            });
                         }
                     }
-                    // Phase 5-S: Emit reconcile.start event
-                    (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.start', {
-                        match_id: stale.matchId,
-                        external_id: stale.matchId,
-                        match_time: null, // Stale matches don't have match_time in context
-                        reason: stale.reason,
-                    });
-                    // PHASE C: Use orchestrator for centralized write coordination
-                    const reconcileResult = await this.reconcileViaOrchestrator(stale.matchId);
-                    const duration = Date.now() - reconcileStartTime;
-                    // Phase 5-S: Check if reconcile was successful (statusId returned)
-                    if (reconcileResult.statusId !== undefined) {
-                        successCount++;
-                        const reasonKey = `success_${stale.reason}`;
-                        reasons[reasonKey] = (reasons[reasonKey] || 0) + 1;
-                        // Phase 5-S: Emit reconcile.done event with success
-                        (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                    catch (error) {
+                        const duration = Date.now() - reconcileStartTime;
+                        failCount++;
+                        // Phase 5-S: Categorize failure reason
+                        let failureReason = 'unknown_error';
+                        if (error instanceof circuitBreaker_1.CircuitOpenError) {
+                            failureReason = 'circuit_open';
+                        }
+                        else if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
+                            failureReason = 'timeout';
+                        }
+                        else if (error.message?.includes('404') || error.message?.includes('not found')) {
+                            failureReason = 'provider_404';
+                        }
+                        else if (error.message?.includes('no usable data')) {
+                            failureReason = 'no_usable_data';
+                        }
+                        reasons[failureReason] = (reasons[failureReason] || 0) + 1;
+                        logger_1.logger.error(`[Watchdog] reconcile failed for ${stale.matchId}:`, error);
+                        // Phase 5-S: Emit reconcile.done event with failure
+                        (0, obsLogger_1.logEvent)('error', 'watchdog.reconcile.done', {
                             match_id: stale.matchId,
-                            result: 'success',
-                            reason: stale.reason,
+                            result: 'fail',
+                            reason: failureReason,
                             duration_ms: duration,
-                            new_status_id: reconcileResult.statusId,
-                        });
-                    }
-                    else {
-                        skippedCount++;
-                        reasons['no_update'] = (reasons['no_update'] || 0) + 1;
-                        // Phase 5-S: Emit reconcile.done event with skip (no update)
-                        (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
-                            match_id: stale.matchId,
-                            result: 'skip',
-                            reason: 'no_update',
-                            duration_ms: duration,
+                            error_message: error.message || 'Unknown error',
                         });
                     }
                 }
-                catch (error) {
-                    const duration = Date.now() - reconcileStartTime;
-                    failCount++;
-                    // Phase 5-S: Categorize failure reason
-                    let failureReason = 'unknown_error';
-                    if (error instanceof circuitBreaker_1.CircuitOpenError) {
-                        failureReason = 'circuit_open';
-                    }
-                    else if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
-                        failureReason = 'timeout';
-                    }
-                    else if (error.message?.includes('404') || error.message?.includes('not found')) {
-                        failureReason = 'provider_404';
-                    }
-                    else if (error.message?.includes('no usable data')) {
-                        failureReason = 'no_usable_data';
-                    }
-                    reasons[failureReason] = (reasons[failureReason] || 0) + 1;
-                    logger_1.logger.error(`[Watchdog] reconcile failed for ${stale.matchId}:`, error);
-                    // Phase 5-S: Emit reconcile.done event with failure
-                    (0, obsLogger_1.logEvent)('error', 'watchdog.reconcile.done', {
-                        match_id: stale.matchId,
-                        result: 'fail',
-                        reason: failureReason,
-                        duration_ms: duration,
-                        error_message: error.message || 'Unknown error',
+                // Process matches that should be live
+                // NOTE: recentListAllMatches is already fetched at the beginning of tick() and reused here
+                for (const match of shouldBeLive) {
+                    (0, obsLogger_1.logEvent)('info', 'watchdog.should_be_live_detected', {
+                        match_id: match.matchId,
+                        match_time: match.matchTime,
+                        minutes_ago: match.minutesAgo,
                     });
-                }
-            }
-            // Process matches that should be live
-            // NOTE: recentListAllMatches is already fetched at the beginning of tick() and reused here
-            for (const match of shouldBeLive) {
-                (0, obsLogger_1.logEvent)('info', 'watchdog.should_be_live_detected', {
-                    match_id: match.matchId,
-                    match_time: match.matchTime,
-                    minutes_ago: match.minutesAgo,
-                });
-                const reconcileStartTime = Date.now();
-                attemptedCount++;
-                try {
-                    // Phase 5-S FIX: Check if match is in recent/list first
-                    const recentListMatch = recentListAllMatches.get(match.matchId);
-                    if (!recentListMatch) {
-                        // Match not in recent/list - try detail_live first, then diary as fallback
+                    const reconcileStartTime = Date.now();
+                    attemptedCount++;
+                    try {
+                        // Phase 5-S FIX: Check if match is in recent/list first
+                        const recentListMatch = recentListAllMatches.get(match.matchId);
+                        if (!recentListMatch) {
+                            // Match not in recent/list - try detail_live first, then diary as fallback
+                            (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.start', {
+                                match_id: match.matchId,
+                                external_id: match.matchId,
+                                match_time: match.matchTime,
+                                reason: 'should_be_live',
+                                source: 'detail_live_fallback',
+                            });
+                            try {
+                                // PHASE C: Use orchestrator for centralized write coordination
+                                const reconcileResult = await this.reconcileViaOrchestrator(match.matchId);
+                                const duration = Date.now() - reconcileStartTime;
+                                if (reconcileResult.statusId !== undefined) {
+                                    successCount++;
+                                    reasons['should_be_live_detail_live_success'] = (reasons['should_be_live_detail_live_success'] || 0) + 1;
+                                    (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                        match_id: match.matchId,
+                                        result: 'success',
+                                        reason: 'should_be_live_detail_live_success',
+                                        duration_ms: duration,
+                                        new_status_id: reconcileResult.statusId,
+                                        source: 'detail_live_fallback',
+                                    });
+                                    continue;
+                                }
+                                // detail_live returned no data - check if match is VERY OLD (>115 mins)
+                                // Old matches should be transitioned to END since they're clearly finished
+                                const matchAgeMinutes = match.minutesAgo;
+                                // CRITICAL FIX: Reduced from 180 to 115 mins to clear 90+10 stuck matches faster
+                                const OLD_MATCH_THRESHOLD_MINUTES = 115; // ~2 hours
+                                if (matchAgeMinutes > OLD_MATCH_THRESHOLD_MINUTES) {
+                                    // Match is >3 hours old with no live data - transition to END
+                                    logger_1.logger.info(`[Watchdog] Match ${match.matchId} is ${matchAgeMinutes} min old (>${OLD_MATCH_THRESHOLD_MINUTES}min) ` +
+                                        `with no detail_live data. Transitioning to END (status=8).`);
+                                    const nowTs = Math.floor(Date.now() / 1000);
+                                    // PHASE C: Use orchestrator for centralized write coordination
+                                    const orchestratorResult = await this.updateMatchDirect(match.matchId, [
+                                        { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+                                        { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                                    ], 'watchdog');
+                                    if (orchestratorResult.status === 'success') {
+                                        successCount++;
+                                        reasons['old_match_transition_to_end'] = (reasons['old_match_transition_to_end'] || 0) + 1;
+                                        (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                            match_id: match.matchId,
+                                            result: 'success',
+                                            reason: 'old_match_transition_to_end',
+                                            duration_ms: Date.now() - reconcileStartTime,
+                                            fields_updated: orchestratorResult.fieldsUpdated,
+                                            match_age_minutes: matchAgeMinutes,
+                                            new_status_id: 8,
+                                        });
+                                    }
+                                    continue;
+                                }
+                                // Match is recent but no live data - skip and retry later
+                                logger_1.logger.warn(`[Watchdog] detail_live returned no data for ${match.matchId}. ` +
+                                    `Match is ${matchAgeMinutes} min old (<${OLD_MATCH_THRESHOLD_MINUTES}min threshold). ` +
+                                    `Will retry on next tick.`);
+                                // Match is not old enough to force-end, skip for now
+                                skippedCount++;
+                                reasons['not_in_recent_list_no_detail_data'] = (reasons['not_in_recent_list_no_detail_data'] || 0) + 1;
+                                (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                    match_id: match.matchId,
+                                    result: 'skip',
+                                    reason: 'not_in_recent_list_no_detail_data',
+                                    duration_ms: duration,
+                                    row_count: 0,
+                                    source: 'detail_live_fallback',
+                                });
+                            }
+                            catch (error) {
+                                const duration = Date.now() - reconcileStartTime;
+                                failCount++;
+                                let failureReason = 'unknown_error';
+                                if (error instanceof circuitBreaker_1.CircuitOpenError) {
+                                    failureReason = 'circuit_open';
+                                }
+                                else if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
+                                    failureReason = 'timeout';
+                                }
+                                else if (error.message?.includes('404') || error.message?.includes('not found')) {
+                                    failureReason = 'provider_404';
+                                }
+                                reasons[failureReason] = (reasons[failureReason] || 0) + 1;
+                                (0, obsLogger_1.logEvent)('error', 'watchdog.reconcile.done', {
+                                    match_id: match.matchId,
+                                    result: 'fail',
+                                    reason: failureReason,
+                                    duration_ms: duration,
+                                    error_message: error.message || 'Unknown error',
+                                    source: 'detail_live_fallback',
+                                });
+                            }
+                            continue;
+                        }
+                        // Phase 5-S FIX: Match is in recent/list - update status first, then call detail_live
                         (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.start', {
                             match_id: match.matchId,
                             external_id: match.matchId,
                             match_time: match.matchTime,
                             reason: 'should_be_live',
-                            source: 'detail_live_fallback',
+                            source: 'recent_list',
                         });
+                        // Update status using optimistic locking (same pattern as reconcileMatchToDatabase)
+                        const client = await connection_1.pool.connect();
+                        let statusUpdateSuccess = false;
                         try {
-                            // PHASE C: Use orchestrator for centralized write coordination
-                            const reconcileResult = await this.reconcileViaOrchestrator(match.matchId);
-                            const duration = Date.now() - reconcileStartTime;
-                            if (reconcileResult.statusId !== undefined) {
-                                successCount++;
-                                reasons['should_be_live_detail_live_success'] = (reasons['should_be_live_detail_live_success'] || 0) + 1;
-                                (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
-                                    match_id: match.matchId,
-                                    result: 'success',
-                                    reason: 'should_be_live_detail_live_success',
-                                    duration_ms: duration,
-                                    new_status_id: reconcileResult.statusId,
-                                    source: 'detail_live_fallback',
-                                });
-                                continue;
+                            // Read existing timestamps for optimistic locking
+                            const existingResult = await client.query(`SELECT provider_update_time, last_event_ts, status_id 
+               FROM ts_matches WHERE external_id = $1`, [match.matchId]);
+                            if (existingResult.rows.length === 0) {
+                                logger_1.logger.warn(`[Watchdog] Match ${match.matchId} not found in DB during status update`);
+                                throw new Error('Match not found in DB');
                             }
-                            // detail_live returned no data - check if match is VERY OLD (>115 mins)
-                            // Old matches should be transitioned to END since they're clearly finished
-                            const matchAgeMinutes = match.minutesAgo;
-                            // CRITICAL FIX: Reduced from 180 to 115 mins to clear 90+10 stuck matches faster
-                            const OLD_MATCH_THRESHOLD_MINUTES = 115; // ~2 hours
-                            if (matchAgeMinutes > OLD_MATCH_THRESHOLD_MINUTES) {
-                                // Match is >3 hours old with no live data - transition to END
-                                logger_1.logger.info(`[Watchdog] Match ${match.matchId} is ${matchAgeMinutes} min old (>${OLD_MATCH_THRESHOLD_MINUTES}min) ` +
-                                    `with no detail_live data. Transitioning to END (status=8).`);
-                                const nowTs = Math.floor(Date.now() / 1000);
+                            const existing = existingResult.rows[0];
+                            const existingProviderTime = existing.provider_update_time;
+                            const incomingProviderTime = recentListMatch.updateTime;
+                            // Optimistic locking: only update if provider time is newer (or null existing)
+                            if (incomingProviderTime !== null && existingProviderTime !== null && incomingProviderTime <= existingProviderTime) {
+                                logger_1.logger.debug(`[Watchdog] Skipping status update for ${match.matchId} (provider time: ${incomingProviderTime} <= ${existingProviderTime})`);
+                            }
+                            else {
+                                // Update status_id using provider_update_time from recent/list
+                                const ingestionTs = Math.floor(Date.now() / 1000);
+                                const providerTimeToWrite = incomingProviderTime !== null && incomingProviderTime !== undefined
+                                    ? Math.max(existingProviderTime || 0, incomingProviderTime)
+                                    : ingestionTs;
                                 // PHASE C: Use orchestrator for centralized write coordination
                                 const orchestratorResult = await this.updateMatchDirect(match.matchId, [
-                                    { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
-                                    { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                                    { field: 'status_id', value: recentListMatch.statusId, source: 'api', priority: 2, timestamp: providerTimeToWrite },
+                                    { field: 'provider_update_time', value: providerTimeToWrite, source: 'api', priority: 2, timestamp: providerTimeToWrite },
+                                    { field: 'last_event_ts', value: ingestionTs, source: 'api', priority: 2, timestamp: ingestionTs },
                                 ], 'watchdog');
                                 if (orchestratorResult.status === 'success') {
+                                    statusUpdateSuccess = true;
+                                    logger_1.logger.info(`[Watchdog] Updated status for ${match.matchId} from 1 to ${recentListMatch.statusId} (from recent/list)`);
+                                }
+                            }
+                        }
+                        finally {
+                            client.release();
+                        }
+                        // Now call detail_live for events/score/minute (only if status update succeeded)
+                        if (statusUpdateSuccess) {
+                            try {
+                                // PHASE C: Use orchestrator for centralized write coordination
+                                const reconcileResult = await this.reconcileViaOrchestrator(match.matchId);
+                                const duration = Date.now() - reconcileStartTime;
+                                // Phase 5-S: Check if reconcile was successful
+                                if (reconcileResult.statusId !== undefined || statusUpdateSuccess) {
                                     successCount++;
-                                    reasons['old_match_transition_to_end'] = (reasons['old_match_transition_to_end'] || 0) + 1;
+                                    reasons['success_should_be_live'] = (reasons['success_should_be_live'] || 0) + 1;
                                     (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
                                         match_id: match.matchId,
                                         result: 'success',
-                                        reason: 'old_match_transition_to_end',
-                                        duration_ms: Date.now() - reconcileStartTime,
-                                        fields_updated: orchestratorResult.fieldsUpdated,
-                                        match_age_minutes: matchAgeMinutes,
-                                        new_status_id: 8,
+                                        reason: 'should_be_live',
+                                        duration_ms: duration,
+                                        new_status_id: reconcileResult.statusId || recentListMatch.statusId,
+                                        provider_update_time: recentListMatch.updateTime || null,
                                     });
                                 }
-                                continue;
+                                else {
+                                    // Status updated but detail_live didn't update anything
+                                    successCount++; // Status update is still success
+                                    reasons['success_should_be_live'] = (reasons['success_should_be_live'] || 0) + 1;
+                                    (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                        match_id: match.matchId,
+                                        result: 'success',
+                                        reason: 'should_be_live_status_only',
+                                        duration_ms: duration,
+                                        new_status_id: recentListMatch.statusId,
+                                        provider_update_time: recentListMatch.updateTime || null,
+                                    });
+                                }
                             }
-                            // Match is recent but no live data - skip and retry later
-                            logger_1.logger.warn(`[Watchdog] detail_live returned no data for ${match.matchId}. ` +
-                                `Match is ${matchAgeMinutes} min old (<${OLD_MATCH_THRESHOLD_MINUTES}min threshold). ` +
-                                `Will retry on next tick.`);
-                            // Match is not old enough to force-end, skip for now
+                            catch (detailLiveError) {
+                                // Status update succeeded but detail_live failed - still count as partial success
+                                const duration = Date.now() - reconcileStartTime;
+                                successCount++;
+                                reasons['success_should_be_live_status_only'] = (reasons['success_should_be_live_status_only'] || 0) + 1;
+                                let failureReason = 'detail_live_missing';
+                                if (detailLiveError instanceof circuitBreaker_1.CircuitOpenError) {
+                                    failureReason = 'circuit_open';
+                                }
+                                else if (detailLiveError.message?.includes('timeout')) {
+                                    failureReason = 'provider_timeout';
+                                }
+                                else if (detailLiveError.message?.includes('404')) {
+                                    failureReason = 'provider_404';
+                                }
+                                (0, obsLogger_1.logEvent)('warn', 'watchdog.reconcile.done', {
+                                    match_id: match.matchId,
+                                    result: 'success', // Status update succeeded
+                                    reason: `should_be_live_${failureReason}`,
+                                    duration_ms: duration,
+                                    row_count: 1, // Status update
+                                    provider_update_time: recentListMatch.updateTime || null,
+                                    detail_live_error: failureReason,
+                                });
+                            }
+                        }
+                        else {
+                            // Status update failed (optimistic locking guard)
                             skippedCount++;
-                            reasons['not_in_recent_list_no_detail_data'] = (reasons['not_in_recent_list_no_detail_data'] || 0) + 1;
+                            reasons['status_update_skipped'] = (reasons['status_update_skipped'] || 0) + 1;
+                            const duration = Date.now() - reconcileStartTime;
                             (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
                                 match_id: match.matchId,
                                 result: 'skip',
-                                reason: 'not_in_recent_list_no_detail_data',
+                                reason: 'status_update_skipped',
                                 duration_ms: duration,
                                 row_count: 0,
-                                source: 'detail_live_fallback',
-                            });
-                        }
-                        catch (error) {
-                            const duration = Date.now() - reconcileStartTime;
-                            failCount++;
-                            let failureReason = 'unknown_error';
-                            if (error instanceof circuitBreaker_1.CircuitOpenError) {
-                                failureReason = 'circuit_open';
-                            }
-                            else if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
-                                failureReason = 'timeout';
-                            }
-                            else if (error.message?.includes('404') || error.message?.includes('not found')) {
-                                failureReason = 'provider_404';
-                            }
-                            reasons[failureReason] = (reasons[failureReason] || 0) + 1;
-                            (0, obsLogger_1.logEvent)('error', 'watchdog.reconcile.done', {
-                                match_id: match.matchId,
-                                result: 'fail',
-                                reason: failureReason,
-                                duration_ms: duration,
-                                error_message: error.message || 'Unknown error',
-                                source: 'detail_live_fallback',
-                            });
-                        }
-                        continue;
-                    }
-                    // Phase 5-S FIX: Match is in recent/list - update status first, then call detail_live
-                    (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.start', {
-                        match_id: match.matchId,
-                        external_id: match.matchId,
-                        match_time: match.matchTime,
-                        reason: 'should_be_live',
-                        source: 'recent_list',
-                    });
-                    // Update status using optimistic locking (same pattern as reconcileMatchToDatabase)
-                    const client = await connection_1.pool.connect();
-                    let statusUpdateSuccess = false;
-                    try {
-                        // Read existing timestamps for optimistic locking
-                        const existingResult = await client.query(`SELECT provider_update_time, last_event_ts, status_id 
-               FROM ts_matches WHERE external_id = $1`, [match.matchId]);
-                        if (existingResult.rows.length === 0) {
-                            logger_1.logger.warn(`[Watchdog] Match ${match.matchId} not found in DB during status update`);
-                            throw new Error('Match not found in DB');
-                        }
-                        const existing = existingResult.rows[0];
-                        const existingProviderTime = existing.provider_update_time;
-                        const incomingProviderTime = recentListMatch.updateTime;
-                        // Optimistic locking: only update if provider time is newer (or null existing)
-                        if (incomingProviderTime !== null && existingProviderTime !== null && incomingProviderTime <= existingProviderTime) {
-                            logger_1.logger.debug(`[Watchdog] Skipping status update for ${match.matchId} (provider time: ${incomingProviderTime} <= ${existingProviderTime})`);
-                        }
-                        else {
-                            // Update status_id using provider_update_time from recent/list
-                            const ingestionTs = Math.floor(Date.now() / 1000);
-                            const providerTimeToWrite = incomingProviderTime !== null && incomingProviderTime !== undefined
-                                ? Math.max(existingProviderTime || 0, incomingProviderTime)
-                                : ingestionTs;
-                            // PHASE C: Use orchestrator for centralized write coordination
-                            const orchestratorResult = await this.updateMatchDirect(match.matchId, [
-                                { field: 'status_id', value: recentListMatch.statusId, source: 'api', priority: 2, timestamp: providerTimeToWrite },
-                                { field: 'provider_update_time', value: providerTimeToWrite, source: 'api', priority: 2, timestamp: providerTimeToWrite },
-                                { field: 'last_event_ts', value: ingestionTs, source: 'api', priority: 2, timestamp: ingestionTs },
-                            ], 'watchdog');
-                            if (orchestratorResult.status === 'success') {
-                                statusUpdateSuccess = true;
-                                logger_1.logger.info(`[Watchdog] Updated status for ${match.matchId} from 1 to ${recentListMatch.statusId} (from recent/list)`);
-                            }
-                        }
-                    }
-                    finally {
-                        client.release();
-                    }
-                    // Now call detail_live for events/score/minute (only if status update succeeded)
-                    if (statusUpdateSuccess) {
-                        try {
-                            // PHASE C: Use orchestrator for centralized write coordination
-                            const reconcileResult = await this.reconcileViaOrchestrator(match.matchId);
-                            const duration = Date.now() - reconcileStartTime;
-                            // Phase 5-S: Check if reconcile was successful
-                            if (reconcileResult.statusId !== undefined || statusUpdateSuccess) {
-                                successCount++;
-                                reasons['success_should_be_live'] = (reasons['success_should_be_live'] || 0) + 1;
-                                (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
-                                    match_id: match.matchId,
-                                    result: 'success',
-                                    reason: 'should_be_live',
-                                    duration_ms: duration,
-                                    new_status_id: reconcileResult.statusId || recentListMatch.statusId,
-                                    provider_update_time: recentListMatch.updateTime || null,
-                                });
-                            }
-                            else {
-                                // Status updated but detail_live didn't update anything
-                                successCount++; // Status update is still success
-                                reasons['success_should_be_live'] = (reasons['success_should_be_live'] || 0) + 1;
-                                (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
-                                    match_id: match.matchId,
-                                    result: 'success',
-                                    reason: 'should_be_live_status_only',
-                                    duration_ms: duration,
-                                    new_status_id: recentListMatch.statusId,
-                                    provider_update_time: recentListMatch.updateTime || null,
-                                });
-                            }
-                        }
-                        catch (detailLiveError) {
-                            // Status update succeeded but detail_live failed - still count as partial success
-                            const duration = Date.now() - reconcileStartTime;
-                            successCount++;
-                            reasons['success_should_be_live_status_only'] = (reasons['success_should_be_live_status_only'] || 0) + 1;
-                            let failureReason = 'detail_live_missing';
-                            if (detailLiveError instanceof circuitBreaker_1.CircuitOpenError) {
-                                failureReason = 'circuit_open';
-                            }
-                            else if (detailLiveError.message?.includes('timeout')) {
-                                failureReason = 'provider_timeout';
-                            }
-                            else if (detailLiveError.message?.includes('404')) {
-                                failureReason = 'provider_404';
-                            }
-                            (0, obsLogger_1.logEvent)('warn', 'watchdog.reconcile.done', {
-                                match_id: match.matchId,
-                                result: 'success', // Status update succeeded
-                                reason: `should_be_live_${failureReason}`,
-                                duration_ms: duration,
-                                row_count: 1, // Status update
-                                provider_update_time: recentListMatch.updateTime || null,
-                                detail_live_error: failureReason,
                             });
                         }
                     }
-                    else {
-                        // Status update failed (optimistic locking guard)
-                        skippedCount++;
-                        reasons['status_update_skipped'] = (reasons['status_update_skipped'] || 0) + 1;
+                    catch (error) {
                         const duration = Date.now() - reconcileStartTime;
-                        (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                        failCount++;
+                        // Phase 5-S: Categorize failure reason
+                        let failureReason = 'unknown_error';
+                        if (error instanceof circuitBreaker_1.CircuitOpenError) {
+                            failureReason = 'circuit_open';
+                            skippedCount++;
+                            failCount--;
+                        }
+                        else if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
+                            failureReason = 'provider_timeout';
+                        }
+                        else if (error.message?.includes('404') || error.message?.includes('not found')) {
+                            failureReason = 'provider_404';
+                        }
+                        else if (error.message?.includes('no usable data')) {
+                            failureReason = 'no_usable_data';
+                        }
+                        reasons[failureReason] = (reasons[failureReason] || 0) + 1;
+                        logger_1.logger.error(`[Watchdog] reconcile failed for should-be-live match ${match.matchId}:`, error);
+                        (0, obsLogger_1.logEvent)('error', 'watchdog.reconcile.done', {
                             match_id: match.matchId,
-                            result: 'skip',
-                            reason: 'status_update_skipped',
+                            result: failureReason === 'circuit_open' ? 'skip' : 'fail',
+                            reason: failureReason,
                             duration_ms: duration,
-                            row_count: 0,
+                            error_message: error.message || 'Unknown error',
                         });
                     }
                 }
-                catch (error) {
-                    const duration = Date.now() - reconcileStartTime;
-                    failCount++;
-                    // Phase 5-S: Categorize failure reason
-                    let failureReason = 'unknown_error';
-                    if (error instanceof circuitBreaker_1.CircuitOpenError) {
-                        failureReason = 'circuit_open';
-                        skippedCount++;
-                        failCount--;
-                    }
-                    else if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
-                        failureReason = 'provider_timeout';
-                    }
-                    else if (error.message?.includes('404') || error.message?.includes('not found')) {
-                        failureReason = 'provider_404';
-                    }
-                    else if (error.message?.includes('no usable data')) {
-                        failureReason = 'no_usable_data';
-                    }
-                    reasons[failureReason] = (reasons[failureReason] || 0) + 1;
-                    logger_1.logger.error(`[Watchdog] reconcile failed for should-be-live match ${match.matchId}:`, error);
-                    (0, obsLogger_1.logEvent)('error', 'watchdog.reconcile.done', {
-                        match_id: match.matchId,
-                        result: failureReason === 'circuit_open' ? 'skip' : 'fail',
-                        reason: failureReason,
-                        duration_ms: duration,
-                        error_message: error.message || 'Unknown error',
+                // CRITICAL FIX: Process OVERDUE matches (minute exceeded maximum)
+                // These matches have status=4 with minute>105 or status=5 with minute>130
+                // They should have ended but didn't get status update - force reconcile to get correct status
+                for (const overdue of overdueMatches) {
+                    (0, obsLogger_1.logEvent)('warn', 'watchdog.overdue_detected', {
+                        match_id: overdue.matchId,
+                        status_id: overdue.statusId,
+                        minute: overdue.minute,
+                        reason: overdue.reason,
                     });
-                }
-            }
-            // CRITICAL FIX: Process OVERDUE matches (minute exceeded maximum)
-            // These matches have status=4 with minute>105 or status=5 with minute>130
-            // They should have ended but didn't get status update - force reconcile to get correct status
-            for (const overdue of overdueMatches) {
-                (0, obsLogger_1.logEvent)('warn', 'watchdog.overdue_detected', {
-                    match_id: overdue.matchId,
-                    status_id: overdue.statusId,
-                    minute: overdue.minute,
-                    reason: overdue.reason,
-                });
-                const reconcileStartTime = Date.now();
-                attemptedCount++;
-                try {
-                    // CRITICAL FIX (2026-01-13): Handle KICKOFF TIMESTAMP MISMATCH ANOMALY
-                    // If status=2 (1H) but second_half_kickoff_ts exists, force status=4 immediately
-                    // This is the primary cause of "stuck at 45" bug for minor league matches
-                    if (overdue.statusId === 2 && overdue.reason.includes('second_half_kickoff_ts')) {
-                        logger_1.logger.warn(`[Watchdog] KICKOFF MISMATCH DETECTED: ${overdue.matchId} has status=2 (1H) but 2H kickoff timestamp exists! ` +
-                            `Force transitioning to status=4 (SECOND_HALF).`);
-                        const nowTs = Math.floor(Date.now() / 1000);
-                        // First, force status_id=4 via orchestrator (high priority watchdog source)
-                        const statusFixResult = await this.updateMatchDirect(overdue.matchId, [
-                            { field: 'status_id', value: 4, source: 'watchdog', priority: 3, timestamp: nowTs },
-                            { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
-                        ], 'watchdog-kickoff-mismatch-fix');
-                        if (statusFixResult.status === 'success') {
+                    const reconcileStartTime = Date.now();
+                    attemptedCount++;
+                    try {
+                        // CRITICAL FIX (2026-01-13): Handle KICKOFF TIMESTAMP MISMATCH ANOMALY
+                        // If status=2 (1H) but second_half_kickoff_ts exists, force status=4 immediately
+                        // This is the primary cause of "stuck at 45" bug for minor league matches
+                        if (overdue.statusId === 2 && overdue.reason.includes('second_half_kickoff_ts')) {
+                            logger_1.logger.warn(`[Watchdog] KICKOFF MISMATCH DETECTED: ${overdue.matchId} has status=2 (1H) but 2H kickoff timestamp exists! ` +
+                                `Force transitioning to status=4 (SECOND_HALF).`);
+                            const nowTs = Math.floor(Date.now() / 1000);
+                            // First, force status_id=4 via orchestrator (high priority watchdog source)
+                            const statusFixResult = await this.updateMatchDirect(overdue.matchId, [
+                                { field: 'status_id', value: 4, source: 'watchdog', priority: 3, timestamp: nowTs },
+                                { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                            ], 'watchdog-kickoff-mismatch-fix');
+                            if (statusFixResult.status === 'success') {
+                                successCount++;
+                                reasons['kickoff_mismatch_fixed'] = (reasons['kickoff_mismatch_fixed'] || 0) + 1;
+                                (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                    match_id: overdue.matchId,
+                                    result: 'success',
+                                    reason: 'kickoff_mismatch_fixed',
+                                    duration_ms: Date.now() - reconcileStartTime,
+                                    fields_updated: statusFixResult.fieldsUpdated,
+                                    old_status: 2,
+                                    new_status: 4,
+                                });
+                                // Now try to get actual status from API (may be status=8 if match already ended)
+                                const reconcileResult = await this.reconcileViaOrchestrator(overdue.matchId);
+                                if (reconcileResult.statusId !== undefined && reconcileResult.statusId !== 4) {
+                                    logger_1.logger.info(`[Watchdog] Kickoff mismatch match ${overdue.matchId} further updated to status=${reconcileResult.statusId} from API`);
+                                }
+                                continue;
+                            }
+                            logger_1.logger.error(`[Watchdog] Failed to fix kickoff mismatch for ${overdue.matchId}: ${statusFixResult.reason}`);
+                            // Fall through to normal reconcile if kickoff mismatch fix failed
+                        }
+                        // PHASE C: Use orchestrator - try to reconcile via API to get correct status
+                        const reconcileResult = await this.reconcileViaOrchestrator(overdue.matchId);
+                        const duration = Date.now() - reconcileStartTime;
+                        if (reconcileResult.statusId !== undefined) {
+                            // API returned updated data
                             successCount++;
-                            reasons['kickoff_mismatch_fixed'] = (reasons['kickoff_mismatch_fixed'] || 0) + 1;
+                            reasons['overdue_reconciled'] = (reasons['overdue_reconciled'] || 0) + 1;
                             (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
                                 match_id: overdue.matchId,
                                 result: 'success',
-                                reason: 'kickoff_mismatch_fixed',
-                                duration_ms: Date.now() - reconcileStartTime,
-                                fields_updated: statusFixResult.fieldsUpdated,
-                                old_status: 2,
-                                new_status: 4,
+                                reason: 'overdue_reconciled',
+                                duration_ms: duration,
+                                old_minute: overdue.minute,
+                                old_status: overdue.statusId,
+                                new_status: reconcileResult.statusId,
                             });
-                            // Now try to get actual status from API (may be status=8 if match already ended)
-                            const reconcileResult = await this.reconcileViaOrchestrator(overdue.matchId);
-                            if (reconcileResult.statusId !== undefined && reconcileResult.statusId !== 4) {
-                                logger_1.logger.info(`[Watchdog] Kickoff mismatch match ${overdue.matchId} further updated to status=${reconcileResult.statusId} from API`);
+                            // If match transitioned to END, trigger post-match persistence
+                            if (reconcileResult.statusId === 8) {
+                                logger_1.logger.info(`[Watchdog] Overdue match ${overdue.matchId} transitioned to END (8), triggering post-match persistence...`);
+                                try {
+                                    const { PostMatchProcessor } = await Promise.resolve().then(() => __importStar(require('../services/liveData/postMatchProcessor')));
+                                    const { theSportsAPI } = await Promise.resolve().then(() => __importStar(require('../core')));
+                                    const processor = new PostMatchProcessor();
+                                    await processor.onMatchEnded(overdue.matchId);
+                                    logger_1.logger.info(`[Watchdog] ✅ Post-match persistence completed for overdue match ${overdue.matchId}`);
+                                }
+                                catch (postMatchErr) {
+                                    logger_1.logger.warn(`[Watchdog] Failed to trigger post-match persistence for overdue ${overdue.matchId}:`, postMatchErr.message);
+                                }
+                                // Save half stats
+                                halfStatsPersistence_service_1.halfStatsPersistenceService.saveSecondHalfData(overdue.matchId)
+                                    .then(res => {
+                                    if (res.success)
+                                        logger_1.logger.info(`[Watchdog] Half stats saved for overdue ${overdue.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                                })
+                                    .catch(err => logger_1.logger.warn(`[Watchdog] Failed to save half stats for overdue ${overdue.matchId}:`, err.message));
                             }
                             continue;
                         }
-                        logger_1.logger.error(`[Watchdog] Failed to fix kickoff mismatch for ${overdue.matchId}: ${statusFixResult.reason}`);
-                        // Fall through to normal reconcile if kickoff mismatch fix failed
-                    }
-                    // PHASE C: Use orchestrator - try to reconcile via API to get correct status
-                    const reconcileResult = await this.reconcileViaOrchestrator(overdue.matchId);
-                    const duration = Date.now() - reconcileStartTime;
-                    if (reconcileResult.statusId !== undefined) {
-                        // API returned updated data
-                        successCount++;
-                        reasons['overdue_reconciled'] = (reasons['overdue_reconciled'] || 0) + 1;
-                        (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
-                            match_id: overdue.matchId,
-                            result: 'success',
-                            reason: 'overdue_reconciled',
-                            duration_ms: duration,
-                            old_minute: overdue.minute,
-                            old_status: overdue.statusId,
-                            new_status: reconcileResult.statusId,
-                        });
-                        // If match transitioned to END, trigger post-match persistence
-                        if (reconcileResult.statusId === 8) {
-                            logger_1.logger.info(`[Watchdog] Overdue match ${overdue.matchId} transitioned to END (8), triggering post-match persistence...`);
+                        // API didn't return updated data - force transition to END
+                        // Match minute is way over maximum (105 for 2nd half, 130 for overtime)
+                        // This means match should have ended but provider didn't send update
+                        logger_1.logger.warn(`[Watchdog] Overdue match ${overdue.matchId} (minute=${overdue.minute}, status=${overdue.statusId}) ` +
+                            `not updated by API. Force transitioning to END (status=8).`);
+                        const nowTs = Math.floor(Date.now() / 1000);
+                        // PHASE C: Use orchestrator for centralized write coordination
+                        const orchestratorResult = await this.updateMatchDirect(overdue.matchId, [
+                            { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
+                            { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
+                        ], 'watchdog');
+                        if (orchestratorResult.status === 'success') {
+                            successCount++;
+                            reasons['overdue_force_end'] = (reasons['overdue_force_end'] || 0) + 1;
+                            (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                                match_id: overdue.matchId,
+                                result: 'success',
+                                reason: 'overdue_force_end',
+                                duration_ms: Date.now() - reconcileStartTime,
+                                fields_updated: orchestratorResult.fieldsUpdated,
+                                old_minute: overdue.minute,
+                                old_status: overdue.statusId,
+                                new_status: 8,
+                            });
+                            // Trigger post-match persistence
+                            logger_1.logger.info(`[Watchdog] Overdue match ${overdue.matchId} force-ended, triggering post-match persistence...`);
                             try {
                                 const { PostMatchProcessor } = await Promise.resolve().then(() => __importStar(require('../services/liveData/postMatchProcessor')));
                                 const { theSportsAPI } = await Promise.resolve().then(() => __importStar(require('../core')));
                                 const processor = new PostMatchProcessor();
                                 await processor.onMatchEnded(overdue.matchId);
-                                logger_1.logger.info(`[Watchdog] ✅ Post-match persistence completed for overdue match ${overdue.matchId}`);
                             }
                             catch (postMatchErr) {
-                                logger_1.logger.warn(`[Watchdog] Failed to trigger post-match persistence for overdue ${overdue.matchId}:`, postMatchErr.message);
+                                logger_1.logger.warn(`[Watchdog] Failed to trigger post-match persistence for force-ended ${overdue.matchId}:`, postMatchErr.message);
                             }
                             // Save half stats
                             halfStatsPersistence_service_1.halfStatsPersistenceService.saveSecondHalfData(overdue.matchId)
                                 .then(res => {
                                 if (res.success)
-                                    logger_1.logger.info(`[Watchdog] Half stats saved for overdue ${overdue.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                                    logger_1.logger.info(`[Watchdog] Half stats saved for force-ended ${overdue.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
                             })
-                                .catch(err => logger_1.logger.warn(`[Watchdog] Failed to save half stats for overdue ${overdue.matchId}:`, err.message));
+                                .catch(err => logger_1.logger.warn(`[Watchdog] Failed to save half stats for force-ended ${overdue.matchId}:`, err.message));
                         }
-                        continue;
+                        else {
+                            skippedCount++;
+                            reasons['overdue_no_update'] = (reasons['overdue_no_update'] || 0) + 1;
+                        }
                     }
-                    // API didn't return updated data - force transition to END
-                    // Match minute is way over maximum (105 for 2nd half, 130 for overtime)
-                    // This means match should have ended but provider didn't send update
-                    logger_1.logger.warn(`[Watchdog] Overdue match ${overdue.matchId} (minute=${overdue.minute}, status=${overdue.statusId}) ` +
-                        `not updated by API. Force transitioning to END (status=8).`);
-                    const nowTs = Math.floor(Date.now() / 1000);
-                    // PHASE C: Use orchestrator for centralized write coordination
-                    const orchestratorResult = await this.updateMatchDirect(overdue.matchId, [
-                        { field: 'status_id', value: 8, source: 'watchdog', priority: 1, timestamp: nowTs },
-                        { field: 'last_event_ts', value: nowTs, source: 'watchdog', priority: 1, timestamp: nowTs },
-                    ], 'watchdog');
-                    if (orchestratorResult.status === 'success') {
-                        successCount++;
-                        reasons['overdue_force_end'] = (reasons['overdue_force_end'] || 0) + 1;
-                        (0, obsLogger_1.logEvent)('info', 'watchdog.reconcile.done', {
+                    catch (error) {
+                        failCount++;
+                        let failureReason = 'overdue_reconcile_failed';
+                        if (error instanceof circuitBreaker_1.CircuitOpenError) {
+                            failureReason = 'circuit_open';
+                        }
+                        else if (error.message?.includes('timeout')) {
+                            failureReason = 'timeout';
+                        }
+                        reasons[failureReason] = (reasons[failureReason] || 0) + 1;
+                        logger_1.logger.error(`[Watchdog] Overdue match reconcile failed for ${overdue.matchId}:`, error);
+                        (0, obsLogger_1.logEvent)('error', 'watchdog.reconcile.done', {
                             match_id: overdue.matchId,
-                            result: 'success',
-                            reason: 'overdue_force_end',
+                            result: 'fail',
+                            reason: failureReason,
                             duration_ms: Date.now() - reconcileStartTime,
-                            fields_updated: orchestratorResult.fieldsUpdated,
-                            old_minute: overdue.minute,
-                            old_status: overdue.statusId,
-                            new_status: 8,
+                            error_message: error.message || 'Unknown error',
                         });
-                        // Trigger post-match persistence
-                        logger_1.logger.info(`[Watchdog] Overdue match ${overdue.matchId} force-ended, triggering post-match persistence...`);
-                        try {
-                            const { PostMatchProcessor } = await Promise.resolve().then(() => __importStar(require('../services/liveData/postMatchProcessor')));
-                            const { theSportsAPI } = await Promise.resolve().then(() => __importStar(require('../core')));
-                            const processor = new PostMatchProcessor();
-                            await processor.onMatchEnded(overdue.matchId);
-                        }
-                        catch (postMatchErr) {
-                            logger_1.logger.warn(`[Watchdog] Failed to trigger post-match persistence for force-ended ${overdue.matchId}:`, postMatchErr.message);
-                        }
-                        // Save half stats
-                        halfStatsPersistence_service_1.halfStatsPersistenceService.saveSecondHalfData(overdue.matchId)
-                            .then(res => {
-                            if (res.success)
-                                logger_1.logger.info(`[Watchdog] Half stats saved for force-ended ${overdue.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
-                        })
-                            .catch(err => logger_1.logger.warn(`[Watchdog] Failed to save half stats for force-ended ${overdue.matchId}:`, err.message));
-                    }
-                    else {
-                        skippedCount++;
-                        reasons['overdue_no_update'] = (reasons['overdue_no_update'] || 0) + 1;
                     }
                 }
-                catch (error) {
-                    failCount++;
-                    let failureReason = 'overdue_reconcile_failed';
-                    if (error instanceof circuitBreaker_1.CircuitOpenError) {
-                        failureReason = 'circuit_open';
-                    }
-                    else if (error.message?.includes('timeout')) {
-                        failureReason = 'timeout';
-                    }
-                    reasons[failureReason] = (reasons[failureReason] || 0) + 1;
-                    logger_1.logger.error(`[Watchdog] Overdue match reconcile failed for ${overdue.matchId}:`, error);
-                    (0, obsLogger_1.logEvent)('error', 'watchdog.reconcile.done', {
-                        match_id: overdue.matchId,
-                        result: 'fail',
-                        reason: failureReason,
-                        duration_ms: Date.now() - reconcileStartTime,
-                        error_message: error.message || 'Unknown error',
-                    });
-                }
-            }
-            // Phase 5-S: Emit summary log with detailed breakdown
-            const duration = Date.now() - startedAt;
-            (0, obsLogger_1.logEvent)('info', 'watchdog.tick.summary', {
-                candidates_count: candidatesCount,
-                attempted_count: attemptedCount,
-                success_count: successCount,
-                fail_count: failCount,
-                skipped_count: skippedCount,
-                stale_count: stales.length,
-                should_be_live_count: shouldBeLive.length,
-                overdue_count: overdueMatches.length,
-                reasons: reasons,
-                duration_ms: duration,
-            });
-            logger_1.logger.info(`[Watchdog] tick: stale=${stales.length} should_be_live=${shouldBeLive.length} overdue=${overdueMatches.length} ` +
-                `attempted=${attemptedCount} success=${successCount} fail=${failCount} skipped=${skippedCount} (${duration}ms)`);
+                // Phase 5-S: Emit summary log with detailed breakdown
+                const duration = Date.now() - startedAt;
+                (0, obsLogger_1.logEvent)('info', 'watchdog.tick.summary', {
+                    candidates_count: candidatesCount,
+                    attempted_count: attemptedCount,
+                    success_count: successCount,
+                    fail_count: failCount,
+                    skipped_count: skippedCount,
+                    stale_count: stales.length,
+                    should_be_live_count: shouldBeLive.length,
+                    overdue_count: overdueMatches.length,
+                    reasons: reasons,
+                    duration_ms: duration,
+                });
+                logger_1.logger.info(`[Watchdog] tick: stale=${stales.length} should_be_live=${shouldBeLive.length} overdue=${overdueMatches.length} ` +
+                    `attempted=${attemptedCount} success=${successCount} fail=${failCount} skipped=${skippedCount} (${duration}ms)`);
+            } // PR-8A: End jobRunner.run() wrapper
+            ); // PR-8A: Close jobRunner.run()
         }
         catch (error) {
             logger_1.logger.error('[Watchdog] CRITICAL ERROR in tick:', error);

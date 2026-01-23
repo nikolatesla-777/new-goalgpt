@@ -26,6 +26,8 @@ const predictionSettlement_service_1 = require("../services/ai/predictionSettlem
 const matchStats_repository_1 = require("../repositories/matchStats.repository");
 const websocket_routes_1 = require("../routes/websocket.routes");
 const matchDetailSync_service_1 = require("../services/thesports/match/matchDetailSync.service");
+const JobRunner_1 = require("./framework/JobRunner");
+const lockKeys_1 = require("./lockKeys");
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 class MatchSyncWorker {
     constructor() {
@@ -168,6 +170,8 @@ class MatchSyncWorker {
     }
     /**
      * Sync matches incrementally using /match/recent/list with time parameter
+     *
+     * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
      */
     async syncMatches() {
         if (this.isRunning) {
@@ -176,11 +180,21 @@ class MatchSyncWorker {
         }
         this.isRunning = true;
         try {
-            logger_1.logger.info('Starting match incremental sync job...');
-            const result = await this.recentSyncService.syncIncremental();
-            logger_1.logger.info(`Match sync completed: ${result.synced} matches synced, ${result.errors} errors`);
-            // After incremental sync, run authoritative reconciliation for LIVE matches.
-            await this.reconcileLiveMatches();
+            // PR-8A: Wrap execution with JobRunner (no SQL logic changes)
+            await JobRunner_1.jobRunner.run({
+                jobName: 'matchSync',
+                overlapGuard: true,
+                advisoryLockKey: lockKeys_1.LOCK_KEYS.MATCH_SYNC,
+                timeoutMs: 300000, // 5 minutes
+            }, async (_ctx) => {
+                // Original syncMatches() logic unchanged below this line
+                logger_1.logger.info('Starting match incremental sync job...');
+                const result = await this.recentSyncService.syncIncremental();
+                logger_1.logger.info(`Match sync completed: ${result.synced} matches synced, ${result.errors} errors`);
+                // After incremental sync, run authoritative reconciliation for LIVE matches.
+                await this.reconcileLiveMatches();
+            } // PR-8A: End jobRunner.run() wrapper
+            ); // PR-8A: Close jobRunner.run()
         }
         catch (error) {
             logger_1.logger.error('Match sync job error:', error);

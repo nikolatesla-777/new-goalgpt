@@ -21,6 +21,8 @@ import { predictionSettlementService } from '../services/ai/predictionSettlement
 import { matchStatsRepository } from '../repositories/matchStats.repository';
 import { broadcastEvent } from '../routes/websocket.routes';
 import { matchDetailSyncService } from '../services/thesports/match/matchDetailSync.service';
+import { jobRunner } from './framework/JobRunner';
+import { LOCK_KEYS } from './lockKeys';
 
 // REFACTOR: Direct database writes (orchestrator removed)
 interface FieldUpdate {
@@ -197,6 +199,8 @@ export class MatchSyncWorker {
 
   /**
    * Sync matches incrementally using /match/recent/list with time parameter
+   *
+   * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
    */
   async syncMatches(): Promise<void> {
     if (this.isRunning) {
@@ -206,6 +210,16 @@ export class MatchSyncWorker {
 
     this.isRunning = true;
     try {
+      // PR-8A: Wrap execution with JobRunner (no SQL logic changes)
+      await jobRunner.run(
+        {
+          jobName: 'matchSync',
+          overlapGuard: true,
+          advisoryLockKey: LOCK_KEYS.MATCH_SYNC,
+          timeoutMs: 300000, // 5 minutes
+        },
+        async (_ctx) => {
+          // Original syncMatches() logic unchanged below this line
       logger.info('Starting match incremental sync job...');
 
       const result = await this.recentSyncService.syncIncremental();
@@ -214,6 +228,8 @@ export class MatchSyncWorker {
 
       // After incremental sync, run authoritative reconciliation for LIVE matches.
       await this.reconcileLiveMatches();
+        } // PR-8A: End jobRunner.run() wrapper
+      ); // PR-8A: Close jobRunner.run()
     } catch (error: any) {
       logger.error('Match sync job error:', error);
     } finally {

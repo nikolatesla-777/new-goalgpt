@@ -19,6 +19,8 @@ import { logEvent } from '../utils/obsLogger';
 import { CircuitOpenError } from '../utils/circuitBreaker';
 import { invalidateLiveMatchesCache } from '../utils/matchCache';
 import { broadcastEvent } from '../routes/websocket.routes';
+import { jobRunner } from './framework/JobRunner';
+import { LOCK_KEYS } from './lockKeys';
 
 // REFACTOR: Direct database writes (orchestrator removed)
 interface FieldUpdate {
@@ -388,6 +390,8 @@ export class MatchWatchdogWorker {
 
   /**
    * Process stale matches and trigger reconcile
+   *
+   * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
    */
   async tick(): Promise<void> {
     if (this.isRunning) {
@@ -400,6 +404,16 @@ export class MatchWatchdogWorker {
     logger.info('[Watchdog] ========== TICK START ==========');
 
     try {
+      // PR-8A: Wrap execution with JobRunner (no SQL logic changes)
+      await jobRunner.run(
+        {
+          jobName: 'matchWatchdog',
+          overlapGuard: true,
+          advisoryLockKey: LOCK_KEYS.MATCH_WATCHDOG,
+          timeoutMs: 120000, // 2 minutes
+        },
+        async (_ctx) => {
+          // Original tick() logic unchanged below this line
       const nowTs = Math.floor(Date.now() / 1000);
       logger.info(`[Watchdog] Current timestamp: ${nowTs}`);
 
@@ -1484,6 +1498,8 @@ export class MatchWatchdogWorker {
         `[Watchdog] tick: stale=${stales.length} should_be_live=${shouldBeLive.length} overdue=${overdueMatches.length} ` +
         `attempted=${attemptedCount} success=${successCount} fail=${failCount} skipped=${skippedCount} (${duration}ms)`
       );
+        } // PR-8A: End jobRunner.run() wrapper
+      ); // PR-8A: Close jobRunner.run()
     } catch (error: any) {
       logger.error('[Watchdog] CRITICAL ERROR in tick:', error);
       logger.error('[Watchdog] Error stack:', error.stack);

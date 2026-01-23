@@ -15,6 +15,8 @@ import { logEvent } from '../utils/obsLogger';
 // SINGLETON: Use shared API client for global rate limiting
 import { theSportsAPI } from '../core';
 import { MatchSyncService, MatchSyncData } from '../services/thesports/match/matchSync.service';
+import { jobRunner } from './framework/JobRunner';
+import { LOCK_KEYS } from './lockKeys';
 
 // REFACTOR: Direct database writes (orchestrator removed)
 interface FieldUpdate {
@@ -440,6 +442,8 @@ export class DataUpdateWorker {
 
   /**
    * Check for updates
+   *
+   * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
    */
   async checkUpdates(): Promise<void> {
     if (this.isRunning) {
@@ -453,6 +457,16 @@ export class DataUpdateWorker {
     logEvent('debug', 'dataupdate.tick.start', { run_id: runId });
 
     try {
+      // PR-8A: Wrap execution with JobRunner (no SQL logic changes)
+      await jobRunner.run(
+        {
+          jobName: 'dataUpdate',
+          overlapGuard: true,
+          advisoryLockKey: LOCK_KEYS.DATA_UPDATE,
+          timeoutMs: 600000, // 10 minutes
+        },
+        async (_ctx) => {
+          // Original checkUpdates() logic unchanged below this line
       const payload: any = await this.dataUpdateService.checkUpdates();
 
       if (!payload) {
@@ -601,6 +615,8 @@ export class DataUpdateWorker {
           dbClient.release();
         }
       }
+        } // PR-8A: End jobRunner.run() wrapper
+      ); // PR-8A: Close jobRunner.run()
     } catch (error: any) {
       logger.error('Data update check error:', error);
     } finally {

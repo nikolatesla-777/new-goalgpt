@@ -41,11 +41,46 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.runStuckMatchFinisher = runStuckMatchFinisher;
 exports.initializeJobs = initializeJobs;
 exports.getJobsList = getJobsList;
 exports.getNextJobRuns = getNextJobRuns;
 const node_cron_1 = __importDefault(require("node-cron"));
 const logger_1 = require("../utils/logger");
+const JobRunner_1 = require("./framework/JobRunner");
+/**
+ * PR-8A: Stuck Match Finisher job extracted as separate function
+ * Wrapped with JobRunner for overlap guard + timeout + metrics
+ */
+async function runStuckMatchFinisher() {
+    await JobRunner_1.jobRunner.run({
+        jobName: 'stuckMatchFinisher',
+        overlapGuard: true,
+        advisoryLockKey: 910000000099n, // Using available lock key slot
+        timeoutMs: 180000, // 3 minutes
+    }, async (_ctx) => {
+        // Original SQL logic unchanged (direct database write)
+        const { pool } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
+        const nowTs = Math.floor(Date.now() / 1000);
+        // Finish matches that are 90+ minutes and started 2+ hours ago
+        const result = await pool.query(`
+        UPDATE ts_matches
+        SET
+          status_id = 8,
+          minute = CASE WHEN minute >= 90 THEN minute ELSE 90 END,
+          status_id_source = 'auto_finish',
+          status_id_timestamp = $1,
+          updated_at = NOW()
+        WHERE status_id IN (2, 3, 4, 5, 7)
+          AND match_time < $2
+          AND (minute >= 90 OR match_time < $3)
+        RETURNING external_id
+      `, [nowTs, nowTs - 7200, nowTs - 14400]); // 2 hours, 4 hours
+        if (result.rowCount && result.rowCount > 0) {
+            logger_1.logger.info(`✅ Auto-finished ${result.rowCount} stuck matches`);
+        }
+    });
+}
 /**
  * All background jobs configuration
  */
@@ -153,27 +188,7 @@ const jobs = [
     {
         name: 'Stuck Match Finisher',
         schedule: '*/10 * * * *', // Every 10 minutes
-        handler: async () => {
-            const { pool } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
-            const nowTs = Math.floor(Date.now() / 1000);
-            // Finish matches that are 90+ minutes and started 2+ hours ago
-            const result = await pool.query(`
-        UPDATE ts_matches
-        SET
-          status_id = 8,
-          minute = CASE WHEN minute >= 90 THEN minute ELSE 90 END,
-          status_id_source = 'auto_finish',
-          status_id_timestamp = $1,
-          updated_at = NOW()
-        WHERE status_id IN (2, 3, 4, 5, 7)
-          AND match_time < $2
-          AND (minute >= 90 OR match_time < $3)
-        RETURNING external_id
-      `, [nowTs, nowTs - 7200, nowTs - 14400]); // 2 hours, 4 hours
-            if (result.rowCount && result.rowCount > 0) {
-                logger_1.logger.info(`✅ Auto-finished ${result.rowCount} stuck matches`);
-            }
-        },
+        handler: runStuckMatchFinisher, // PR-8A: Use wrapped function
         enabled: true,
         description: 'Auto-finish matches stuck in live status (90+ min or 4+ hours old)',
     },

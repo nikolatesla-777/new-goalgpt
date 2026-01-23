@@ -20,6 +20,8 @@ const connection_1 = require("../database/connection");
 const logger_1 = require("../utils/logger");
 const obsLogger_1 = require("../utils/obsLogger");
 const websocket_routes_1 = require("../routes/websocket.routes");
+const JobRunner_1 = require("./framework/JobRunner");
+const lockKeys_1 = require("./lockKeys");
 class MatchDataSyncWorker {
     constructor() {
         this.apiClient = TheSportsAPIManager_1.theSportsAPI; // Phase 3A: Use singleton
@@ -342,6 +344,8 @@ class MatchDataSyncWorker {
     }
     /**
      * Sync data for all live matches
+     *
+     * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
      */
     async syncAllLiveMatches() {
         if (this.isRunning) {
@@ -351,50 +355,60 @@ class MatchDataSyncWorker {
         this.isRunning = true;
         const startTime = Date.now();
         try {
-            logger_1.logger.info('[MatchDataSync] Starting sync for all live matches...');
-            const liveMatches = await this.getLiveMatchesFromDatabase();
-            logger_1.logger.info(`[MatchDataSync] Found ${liveMatches.length} live matches to sync`);
-            if (liveMatches.length === 0) {
-                logger_1.logger.debug('[MatchDataSync] No live matches to sync');
-                return;
-            }
-            let statsCount = 0;
-            let incidentsCount = 0;
-            let trendCount = 0;
-            let settlementCount = 0;
-            let errorCount = 0;
-            // Process matches sequentially to avoid overwhelming the API
-            for (const match of liveMatches) {
-                try {
-                    const result = await this.syncMatchData(match.external_id);
-                    if (result.stats)
-                        statsCount++;
-                    if (result.incidents)
-                        incidentsCount++;
-                    if (result.trend)
-                        trendCount++;
-                    if (result.settlement)
-                        settlementCount++;
-                    // Small delay between matches to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 200));
+            // PR-8A: Wrap execution with JobRunner (no SQL logic changes)
+            await JobRunner_1.jobRunner.run({
+                jobName: 'matchDataSync',
+                overlapGuard: true,
+                advisoryLockKey: lockKeys_1.LOCK_KEYS.MATCH_DATA_SYNC,
+                timeoutMs: 300000, // 5 minutes
+            }, async (_ctx) => {
+                // Original syncAllLiveMatches() logic unchanged below this line
+                logger_1.logger.info('[MatchDataSync] Starting sync for all live matches...');
+                const liveMatches = await this.getLiveMatchesFromDatabase();
+                logger_1.logger.info(`[MatchDataSync] Found ${liveMatches.length} live matches to sync`);
+                if (liveMatches.length === 0) {
+                    logger_1.logger.debug('[MatchDataSync] No live matches to sync');
+                    return;
                 }
-                catch (error) {
-                    errorCount++;
-                    logger_1.logger.error(`[MatchDataSync] Error processing match ${match.external_id}:`, error);
+                let statsCount = 0;
+                let incidentsCount = 0;
+                let trendCount = 0;
+                let settlementCount = 0;
+                let errorCount = 0;
+                // Process matches sequentially to avoid overwhelming the API
+                for (const match of liveMatches) {
+                    try {
+                        const result = await this.syncMatchData(match.external_id);
+                        if (result.stats)
+                            statsCount++;
+                        if (result.incidents)
+                            incidentsCount++;
+                        if (result.trend)
+                            trendCount++;
+                        if (result.settlement)
+                            settlementCount++;
+                        // Small delay between matches to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                    catch (error) {
+                        errorCount++;
+                        logger_1.logger.error(`[MatchDataSync] Error processing match ${match.external_id}:`, error);
+                    }
                 }
-            }
-            const duration = Date.now() - startTime;
-            logger_1.logger.info(`[MatchDataSync] ✅ Sync completed in ${duration}ms: ` +
-                `stats=${statsCount}, incidents=${incidentsCount}, trend=${trendCount}, settlement=${settlementCount}, errors=${errorCount}`);
-            (0, obsLogger_1.logEvent)('info', 'match_data_sync.completed', {
-                matches_processed: liveMatches.length,
-                stats_saved: statsCount,
-                incidents_saved: incidentsCount,
-                trend_saved: trendCount,
-                settlement_checked: settlementCount,
-                errors: errorCount,
-                duration_ms: duration,
-            });
+                const duration = Date.now() - startTime;
+                logger_1.logger.info(`[MatchDataSync] ✅ Sync completed in ${duration}ms: ` +
+                    `stats=${statsCount}, incidents=${incidentsCount}, trend=${trendCount}, settlement=${settlementCount}, errors=${errorCount}`);
+                (0, obsLogger_1.logEvent)('info', 'match_data_sync.completed', {
+                    matches_processed: liveMatches.length,
+                    stats_saved: statsCount,
+                    incidents_saved: incidentsCount,
+                    trend_saved: trendCount,
+                    settlement_checked: settlementCount,
+                    errors: errorCount,
+                    duration_ms: duration,
+                });
+            } // PR-8A: End jobRunner.run() wrapper
+            ); // PR-8A: Close jobRunner.run()
         }
         catch (error) {
             logger_1.logger.error('[MatchDataSync] Error in syncAllLiveMatches:', error);
