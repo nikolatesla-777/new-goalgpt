@@ -137,14 +137,15 @@ export const LOCK_KEYS = {
       hash = ((hash << 5n) + hash) + charCode; // hash * 33 + c
     }
 
-    // Ensure positive 63-bit value (PostgreSQL bigint range: -2^63 to 2^63-1)
-    // Use modulo to fit within safe range: 0 to 99_999_999_999 (100 billion)
-    const MAX_HASH_VALUE = 99_999_999_999n;
-    const safeHash = hash > 0n ? hash % MAX_HASH_VALUE : (-hash) % MAX_HASH_VALUE;
+    // Ensure positive 63-bit value using BigInt.asUintN (safe and efficient)
+    // This guarantees: 0 <= safeHash <= 2^63-1 (PostgreSQL bigint max)
+    const safeHash = BigInt.asUintN(63, hash);
 
-    // Add to MATCH_UPDATE_BASE to get final lock key
+    // Modulo to fit within safe range: 0 to 999_999_999_999 (1 trillion)
+    // This gives us 920_000_000_000 to 920_999_999_999 range for lock keys
     const MATCH_UPDATE_BASE = 920_000_000_000n;
-    return MATCH_UPDATE_BASE + safeHash;
+    const MAX_HASH_RANGE = 999_999_999_999n;
+    return MATCH_UPDATE_BASE + (safeHash % MAX_HASH_RANGE);
   },
 } as const;
 

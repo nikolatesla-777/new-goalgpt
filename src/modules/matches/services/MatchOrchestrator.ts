@@ -33,7 +33,7 @@ import { logEvent } from '../../../utils/obsLogger';
 // ============================================================
 
 export interface UpdateResult {
-  status: 'success' | 'rejected_locked' | 'rejected_immutable' | 'rejected_stale' | 'not_found' | 'error';
+  status: 'success' | 'rejected_locked' | 'rejected_immutable' | 'rejected_stale' | 'rejected_invalid' | 'not_found' | 'error';
   fieldsUpdated: string[];
   reason?: string;
 }
@@ -107,7 +107,7 @@ export class MatchOrchestrator {
     // PR-8B.1: Skip update if matchId is invalid (lockKey === null)
     if (lockKey === null) {
       logger.debug(`[MatchOrchestrator] Skipping update for invalid matchId: ${matchId}`);
-      return { status: 'error', fieldsUpdated: [], reason: 'Invalid matchId' };
+      return { status: 'rejected_invalid', fieldsUpdated: [], reason: 'invalid_match_id' };
     }
 
     let lockAcquired = false;

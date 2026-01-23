@@ -22,7 +22,11 @@ import { FieldUpdate } from '../repositories/match.repository';
 
 // PR-8B.1: Cap concurrent updates to prevent DB pool exhaustion
 // Limit orchestrator calls per tick to reduce connection pressure
-const MAX_UPDATES_PER_TICK = 50;
+// Can be adjusted in production via environment variable
+const MAX_UPDATES_PER_TICK = (() => {
+  const envValue = parseInt(process.env.MAX_UPDATES_PER_TICK || '50', 10);
+  return Number.isFinite(envValue) && envValue > 0 ? envValue : 50;
+})();
 
 export class MatchMinuteWorker {
   private matchMinuteService: MatchMinuteService;
@@ -189,6 +193,10 @@ export class MatchMinuteWorker {
                 skippedCount++;
               } else if (orchestratorResult.status === 'rejected_locked') {
                 logger.debug(`[MinuteEngine.orchestrator] Skipped ${matchId}: lock busy`);
+                skippedCount++;
+              } else if (orchestratorResult.status === 'rejected_invalid') {
+                // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+                logger.debug(`[MinuteEngine.orchestrator] Skipped ${matchId}: invalid matchId`);
                 skippedCount++;
               } else {
                 logger.warn(`[MinuteEngine.orchestrator] Update failed for ${matchId}: ${orchestratorResult.status}`);
