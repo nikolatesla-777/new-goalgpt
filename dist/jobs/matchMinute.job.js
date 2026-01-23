@@ -17,6 +17,8 @@ const obsLogger_1 = require("../utils/obsLogger");
 const websocket_routes_1 = require("../routes/websocket.routes");
 const JobRunner_1 = require("./framework/JobRunner");
 const lockKeys_1 = require("./lockKeys");
+const MatchOrchestrator_1 = require("../modules/matches/services/MatchOrchestrator");
+// PR-8B: Using MatchOrchestrator for atomic match updates
 class MatchMinuteWorker {
     constructor() {
         this.intervalId = null;
@@ -114,39 +116,65 @@ class MatchMinuteWorker {
                             skippedCount++;
                             continue;
                         }
-                        // REFACTOR: Direct database write (bypass orchestrator)
+                        // PR-8B: Use MatchOrchestrator for atomic match updates
                         // Only send update if minute changed
                         if (newMinute !== existingMinute) {
                             try {
-                                const updateQuery = `
-                UPDATE ts_matches
-                SET
-                  minute = $1,
-                  last_minute_update_ts = $2,
-                  minute_source = 'computed',
-                  minute_timestamp = $2
-                WHERE external_id = $3
-              `;
-                                await client.query(updateQuery, [newMinute, nowTs, matchId]);
-                                updatedCount++;
-                                logger_1.logger.debug(`[MinuteEngine] Updated ${matchId}: minute ${existingMinute} → ${newMinute}`);
-                                // CRITICAL FIX: Broadcast MINUTE_UPDATE event to frontend
-                                // This ensures real-time minute progression without page refresh
-                                try {
-                                    (0, websocket_routes_1.broadcastEvent)({
-                                        type: 'MINUTE_UPDATE',
-                                        matchId,
-                                        minute: newMinute,
-                                        statusId: statusId || 2, // Use actual status or default to FIRST_HALF
-                                        timestamp: Date.now(),
-                                    });
+                                // Prepare update for orchestrator
+                                const updates = [
+                                    {
+                                        field: 'minute',
+                                        value: newMinute,
+                                        source: 'computed',
+                                        priority: 1, // Lowest priority (computed fields)
+                                        timestamp: nowTs,
+                                    },
+                                    {
+                                        field: 'last_minute_update_ts',
+                                        value: nowTs,
+                                        source: 'computed',
+                                        priority: 1,
+                                        timestamp: nowTs,
+                                    },
+                                ];
+                                // Call orchestrator
+                                const orchestratorResult = await MatchOrchestrator_1.matchOrchestrator.updateMatch(matchId, updates, 'matchMinute');
+                                if (orchestratorResult.status === 'success') {
+                                    updatedCount++;
+                                    logger_1.logger.debug(`[MinuteEngine.orchestrator] Updated ${matchId}: minute ${existingMinute} → ${newMinute}`);
                                 }
-                                catch (broadcastError) {
-                                    logger_1.logger.warn(`[MinuteEngine] Failed to broadcast minute update for ${matchId}: ${broadcastError.message}`);
+                                else if (orchestratorResult.status === 'rejected_stale') {
+                                    // Higher priority source (API/watchdog) already updated minute
+                                    logger_1.logger.debug(`[MinuteEngine.orchestrator] Skipped ${matchId}: rejected by priority (API/watchdog takes precedence)`);
+                                    skippedCount++;
+                                }
+                                else if (orchestratorResult.status === 'rejected_locked') {
+                                    logger_1.logger.debug(`[MinuteEngine.orchestrator] Skipped ${matchId}: lock busy`);
+                                    skippedCount++;
+                                }
+                                else {
+                                    logger_1.logger.warn(`[MinuteEngine.orchestrator] Update failed for ${matchId}: ${orchestratorResult.status}`);
+                                    skippedCount++;
+                                }
+                                // CRITICAL FIX: Broadcast MINUTE_UPDATE event to frontend (only on success)
+                                // This ensures real-time minute progression without page refresh
+                                if (orchestratorResult.status === 'success') {
+                                    try {
+                                        (0, websocket_routes_1.broadcastEvent)({
+                                            type: 'MINUTE_UPDATE',
+                                            matchId,
+                                            minute: newMinute,
+                                            statusId: statusId || 2, // Use actual status or default to FIRST_HALF
+                                            timestamp: Date.now(),
+                                        });
+                                    }
+                                    catch (broadcastError) {
+                                        logger_1.logger.warn(`[MinuteEngine.orchestrator] Failed to broadcast minute update for ${matchId}: ${broadcastError.message}`);
+                                    }
                                 }
                             }
                             catch (error) {
-                                logger_1.logger.error(`[MinuteEngine] Failed to update ${matchId}:`, error);
+                                logger_1.logger.error(`[MinuteEngine.orchestrator] Failed to update ${matchId}:`, error);
                                 skippedCount++;
                             }
                         }

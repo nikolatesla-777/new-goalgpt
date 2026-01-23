@@ -15,6 +15,9 @@ import { logEvent } from '../utils/obsLogger';
 import { broadcastEvent } from '../routes/websocket.routes';
 import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
+import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
+
+// PR-8B: Using MatchOrchestrator for atomic match updates
 
 export class MatchMinuteWorker {
   private matchMinuteService: MatchMinuteService;
@@ -141,40 +144,63 @@ export class MatchMinuteWorker {
             continue;
           }
 
-          // REFACTOR: Direct database write (bypass orchestrator)
+          // PR-8B: Use MatchOrchestrator for atomic match updates
           // Only send update if minute changed
           if (newMinute !== existingMinute) {
             try {
-              const updateQuery = `
-                UPDATE ts_matches
-                SET
-                  minute = $1,
-                  last_minute_update_ts = $2,
-                  minute_source = 'computed',
-                  minute_timestamp = $2
-                WHERE external_id = $3
-              `;
+              // Prepare update for orchestrator
+              const updates = [
+                {
+                  field: 'minute',
+                  value: newMinute,
+                  source: 'computed',
+                  priority: 1, // Lowest priority (computed fields)
+                  timestamp: nowTs,
+                },
+                {
+                  field: 'last_minute_update_ts',
+                  value: nowTs,
+                  source: 'computed',
+                  priority: 1,
+                  timestamp: nowTs,
+                },
+              ];
 
-              await client.query(updateQuery, [newMinute, nowTs, matchId]);
-              updatedCount++;
+              // Call orchestrator
+              const orchestratorResult = await matchOrchestrator.updateMatch(matchId, updates, 'matchMinute');
 
-              logger.debug(`[MinuteEngine] Updated ${matchId}: minute ${existingMinute} → ${newMinute}`);
+              if (orchestratorResult.status === 'success') {
+                updatedCount++;
+                logger.debug(`[MinuteEngine.orchestrator] Updated ${matchId}: minute ${existingMinute} → ${newMinute}`);
+              } else if (orchestratorResult.status === 'rejected_stale') {
+                // Higher priority source (API/watchdog) already updated minute
+                logger.debug(`[MinuteEngine.orchestrator] Skipped ${matchId}: rejected by priority (API/watchdog takes precedence)`);
+                skippedCount++;
+              } else if (orchestratorResult.status === 'rejected_locked') {
+                logger.debug(`[MinuteEngine.orchestrator] Skipped ${matchId}: lock busy`);
+                skippedCount++;
+              } else {
+                logger.warn(`[MinuteEngine.orchestrator] Update failed for ${matchId}: ${orchestratorResult.status}`);
+                skippedCount++;
+              }
 
-              // CRITICAL FIX: Broadcast MINUTE_UPDATE event to frontend
+              // CRITICAL FIX: Broadcast MINUTE_UPDATE event to frontend (only on success)
               // This ensures real-time minute progression without page refresh
-              try {
-                broadcastEvent({
-                  type: 'MINUTE_UPDATE',
-                  matchId,
-                  minute: newMinute,
-                  statusId: statusId || 2, // Use actual status or default to FIRST_HALF
-                  timestamp: Date.now(),
-                } as any);
-              } catch (broadcastError: any) {
-                logger.warn(`[MinuteEngine] Failed to broadcast minute update for ${matchId}: ${broadcastError.message}`);
+              if (orchestratorResult.status === 'success') {
+                try {
+                  broadcastEvent({
+                    type: 'MINUTE_UPDATE',
+                    matchId,
+                    minute: newMinute,
+                    statusId: statusId || 2, // Use actual status or default to FIRST_HALF
+                    timestamp: Date.now(),
+                  } as any);
+                } catch (broadcastError: any) {
+                  logger.warn(`[MinuteEngine.orchestrator] Failed to broadcast minute update for ${matchId}: ${broadcastError.message}`);
+                }
               }
             } catch (error: any) {
-              logger.error(`[MinuteEngine] Failed to update ${matchId}:`, error);
+              logger.error(`[MinuteEngine.orchestrator] Failed to update ${matchId}:`, error);
               skippedCount++;
             }
           } else {
