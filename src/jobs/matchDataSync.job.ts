@@ -73,6 +73,9 @@ export class MatchDataSyncWorker {
           logger.debug(`[MatchDataSync.orchestrator] Lock busy for match ${matchId}, skipping update`);
         } else if (orchestratorResult.status === 'rejected_stale') {
           logger.debug(`[MatchDataSync.orchestrator] Updates rejected by priority filter for ${matchId}`);
+        } else if (orchestratorResult.status === 'rejected_invalid') {
+          // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+          logger.debug(`[MatchDataSync.orchestrator] Skipped ${matchId}: invalid matchId`);
         }
         return result;
       }

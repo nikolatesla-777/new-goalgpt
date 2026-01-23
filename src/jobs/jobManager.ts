@@ -92,6 +92,16 @@ export async function runStuckMatchFinisher(): Promise<void> {
             if (orchestratorResult.status === 'success') {
               successCount++;
               logger.debug(`[StuckMatchFinisher] Auto-finished ${matchId} (minute: ${currentMinute} → ${finalMinute})`);
+            } else if (orchestratorResult.status === 'rejected_invalid') {
+              // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+              logger.debug(`[StuckMatchFinisher] Skipped ${matchId}: invalid matchId`);
+              failCount++;
+            } else if (orchestratorResult.status === 'rejected_immutable') {
+              logger.debug(`[StuckMatchFinisher] Skipped ${matchId}: already finished (immutable)`);
+              failCount++;
+            } else if (orchestratorResult.status === 'rejected_locked') {
+              logger.debug(`[StuckMatchFinisher] Skipped ${matchId}: lock busy`);
+              failCount++;
             } else {
               logger.warn(`[StuckMatchFinisher] Failed to finish ${matchId}: ${orchestratorResult.status}`);
               failCount++;

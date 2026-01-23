@@ -24,15 +24,9 @@ import { matchDetailSyncService } from '../services/thesports/match/matchDetailS
 import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
 import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
+import { FieldUpdate } from '../repositories/match.repository';
 
 // PR-8B: Using MatchOrchestrator for atomic match updates
-interface FieldUpdate {
-  field: string;
-  value: any;
-  source: string;
-  priority: number;
-  timestamp: number;
-}
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -110,6 +104,9 @@ export class MatchSyncWorker {
           logger.debug(`[MatchSync.orchestrator] Lock busy for match ${matchId}, skipping update`);
         } else if (orchestratorResult.status === 'rejected_stale') {
           logger.debug(`[MatchSync.orchestrator] Updates rejected by priority filter for ${matchId}`);
+        } else if (orchestratorResult.status === 'rejected_invalid') {
+          // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+          logger.debug(`[MatchSync.orchestrator] Skipped ${matchId}: invalid matchId`);
         }
         return result;
       }

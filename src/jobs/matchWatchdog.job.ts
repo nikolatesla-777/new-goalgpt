@@ -22,15 +22,9 @@ import { broadcastEvent } from '../routes/websocket.routes';
 import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
 import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
+import { FieldUpdate } from '../repositories/match.repository';
 
 // PR-8B: Using MatchOrchestrator for atomic match updates
-interface FieldUpdate {
-  field: string;
-  value: any;
-  source: string;
-  priority: number;
-  timestamp: number;
-}
 
 export class MatchWatchdogWorker {
   private matchWatchdogService: MatchWatchdogService;
@@ -51,7 +45,7 @@ export class MatchWatchdogWorker {
    * PR-8B: MatchOrchestrator wrapper for atomic match updates
    * Replaces direct SQL with orchestrator + maintains WebSocket broadcasting
    */
-  private async updateMatchDirect(matchId: string, updates: FieldUpdate[], source: string): Promise<{ status: string; fieldsUpdated: string[] }> {
+  private async updateMatchDirect(matchId: string, updates: FieldUpdate[], source: string): Promise<{ status: string; fieldsUpdated: string[]; reason?: string }> {
     if (updates.length === 0) {
       return { status: 'success', fieldsUpdated: [] };
     }
@@ -67,6 +61,7 @@ export class MatchWatchdogWorker {
       const result = {
         status: orchestratorResult.status,
         fieldsUpdated: orchestratorResult.fieldsUpdated,
+        reason: orchestratorResult.reason,
       };
 
       // If update failed (locked, rejected, etc), return early
@@ -77,6 +72,9 @@ export class MatchWatchdogWorker {
           logger.debug(`[Watchdog.orchestrator] Lock busy for match ${matchId}, skipping update`);
         } else if (orchestratorResult.status === 'rejected_stale') {
           logger.debug(`[Watchdog.orchestrator] Updates rejected by priority filter for ${matchId}`);
+        } else if (orchestratorResult.status === 'rejected_invalid') {
+          // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+          logger.debug(`[Watchdog.orchestrator] Skipped ${matchId}: invalid matchId`);
         }
         return result;
       }
@@ -137,7 +135,7 @@ export class MatchWatchdogWorker {
       return result;
     } catch (error: any) {
       logger.error(`[Watchdog.orchestrator] Failed to update ${matchId}:`, error);
-      return { status: 'error', fieldsUpdated: [] };
+      return { status: 'error', fieldsUpdated: [], reason: error.message };
     }
   }
 

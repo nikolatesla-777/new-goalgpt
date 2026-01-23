@@ -29,6 +29,7 @@ const matchDetailSync_service_1 = require("../services/thesports/match/matchDeta
 const JobRunner_1 = require("./framework/JobRunner");
 const lockKeys_1 = require("./lockKeys");
 const MatchOrchestrator_1 = require("../modules/matches/services/MatchOrchestrator");
+// PR-8B: Using MatchOrchestrator for atomic match updates
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 class MatchSyncWorker {
     constructor() {
@@ -94,6 +95,10 @@ class MatchSyncWorker {
                 }
                 else if (orchestratorResult.status === 'rejected_stale') {
                     logger_1.logger.debug(`[MatchSync.orchestrator] Updates rejected by priority filter for ${matchId}`);
+                }
+                else if (orchestratorResult.status === 'rejected_invalid') {
+                    // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+                    logger_1.logger.debug(`[MatchSync.orchestrator] Skipped ${matchId}: invalid matchId`);
                 }
                 return result;
             }

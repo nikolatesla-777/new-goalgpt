@@ -111,6 +111,19 @@ async function runStuckMatchFinisher() {
                         successCount++;
                         logger_1.logger.debug(`[StuckMatchFinisher] Auto-finished ${matchId} (minute: ${currentMinute} → ${finalMinute})`);
                     }
+                    else if (orchestratorResult.status === 'rejected_invalid') {
+                        // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+                        logger_1.logger.debug(`[StuckMatchFinisher] Skipped ${matchId}: invalid matchId`);
+                        failCount++;
+                    }
+                    else if (orchestratorResult.status === 'rejected_immutable') {
+                        logger_1.logger.debug(`[StuckMatchFinisher] Skipped ${matchId}: already finished (immutable)`);
+                        failCount++;
+                    }
+                    else if (orchestratorResult.status === 'rejected_locked') {
+                        logger_1.logger.debug(`[StuckMatchFinisher] Skipped ${matchId}: lock busy`);
+                        failCount++;
+                    }
                     else {
                         logger_1.logger.warn(`[StuckMatchFinisher] Failed to finish ${matchId}: ${orchestratorResult.status}`);
                         failCount++;

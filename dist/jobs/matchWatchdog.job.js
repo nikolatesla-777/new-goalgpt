@@ -55,6 +55,7 @@ const websocket_routes_1 = require("../routes/websocket.routes");
 const JobRunner_1 = require("./framework/JobRunner");
 const lockKeys_1 = require("./lockKeys");
 const MatchOrchestrator_1 = require("../modules/matches/services/MatchOrchestrator");
+// PR-8B: Using MatchOrchestrator for atomic match updates
 class MatchWatchdogWorker {
     constructor(matchDetailLiveService, matchRecentService) {
         this.intervalId = null;
@@ -82,6 +83,7 @@ class MatchWatchdogWorker {
             const result = {
                 status: orchestratorResult.status,
                 fieldsUpdated: orchestratorResult.fieldsUpdated,
+                reason: orchestratorResult.reason,
             };
             // If update failed (locked, rejected, etc), return early
             if (orchestratorResult.status !== 'success') {
@@ -93,6 +95,10 @@ class MatchWatchdogWorker {
                 }
                 else if (orchestratorResult.status === 'rejected_stale') {
                     logger_1.logger.debug(`[Watchdog.orchestrator] Updates rejected by priority filter for ${matchId}`);
+                }
+                else if (orchestratorResult.status === 'rejected_invalid') {
+                    // PR-8B.1: Invalid matchId (alphanumeric hash collision or malformed ID)
+                    logger_1.logger.debug(`[Watchdog.orchestrator] Skipped ${matchId}: invalid matchId`);
                 }
                 return result;
             }
@@ -147,7 +153,7 @@ class MatchWatchdogWorker {
         }
         catch (error) {
             logger_1.logger.error(`[Watchdog.orchestrator] Failed to update ${matchId}:`, error);
-            return { status: 'error', fieldsUpdated: [] };
+            return { status: 'error', fieldsUpdated: [], reason: error.message };
         }
     }
     /**
