@@ -4,10 +4,17 @@
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { db } from '../../database/kysely';
 import { generateTokens } from '../../utils/jwt.utils';
 import * as bcrypt from 'bcrypt';
 import { applyReferralCode } from '../../services/referrals.service';
+// PR-4: Use repository for all user DB access
+import {
+  getUserByEmail,
+  getUserByEmailWithPassword,
+  createEmailPasswordUser,
+  upsertPushToken,
+  getUserAuthContext,
+} from '../../repositories/user.repository';
 
 // ============================================================================
 // TYPES
@@ -77,16 +84,9 @@ export async function emailRegister(
       });
     }
 
-    // Normalize email (lowercase)
-    const normalizedEmail = email.toLowerCase().trim();
-
+    // PR-4: Use repository for DB access
     // Check if email already exists
-    const existingUser = await db
-      .selectFrom('customer_users')
-      .select('id')
-      .where('email', '=', normalizedEmail)
-      .where('deleted_at', 'is', null)
-      .executeTakeFirst();
+    const existingUser = await getUserByEmail(email);
 
     if (existingUser) {
       return reply.status(409).send({
@@ -98,52 +98,8 @@ export async function emailRegister(
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate user's own referral code
-    const userReferralCode = `GG${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-    // Create user
-    const newUser = await db
-      .insertInto('customer_users')
-      .values({
-        email: normalizedEmail,
-        password_hash: hashedPassword,
-        full_name: name || null,
-        referral_code: userReferralCode,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .returning(['id', 'email', 'phone', 'full_name', 'username', 'referral_code', 'created_at'])
-      .executeTakeFirstOrThrow();
-
-    // Initialize XP for new user
-    await db
-      .insertInto('customer_xp')
-      .values({
-        customer_user_id: newUser.id,
-        xp_points: 0,
-        level: 'bronze',
-        level_progress: 0,
-        current_streak_days: 0,
-        longest_streak_days: 0,
-        total_earned: 0,
-        achievements_count: 0,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .execute();
-
-    // Initialize Credits for new user
-    await db
-      .insertInto('customer_credits')
-      .values({
-        customer_user_id: newUser.id,
-        balance: 100, // Welcome bonus
-        lifetime_earned: 100,
-        lifetime_spent: 0,
-        created_at: new Date(),
-        updated_at: new Date(),
-      })
-      .execute();
+    // PR-4: Use repository for user creation (includes XP + Credits with 100 welcome bonus)
+    const newUser = await createEmailPasswordUser(email, hashedPassword, name || null);
 
     // Apply referral code if provided
     let referralApplied = false;
@@ -158,49 +114,26 @@ export async function emailRegister(
       }
     }
 
-    // Save FCM token if provided
+    // PR-4: Use repository for FCM token upsert
     if (deviceInfo?.fcmToken && deviceInfo?.platform) {
-      const validPlatform = ['ios', 'android', 'web'].includes(deviceInfo.platform)
-        ? (deviceInfo.platform as 'ios' | 'android' | 'web')
-        : 'web';
-
-      await db
-        .insertInto('customer_push_tokens')
-        .values({
-          customer_user_id: newUser.id,
-          token: deviceInfo.fcmToken,
-          platform: validPlatform,
-          device_id: deviceInfo.deviceId || 'unknown',
-          is_active: true,
-          created_at: new Date(),
-          updated_at: new Date(),
-        })
-        .onConflict((oc) =>
-          oc
-            .columns(['customer_user_id', 'device_id'])
-            .doUpdateSet({ token: deviceInfo.fcmToken!, is_active: true, updated_at: new Date() })
-        )
-        .execute();
+      // Only store push tokens for mobile platforms
+      if (deviceInfo.platform === 'ios' || deviceInfo.platform === 'android') {
+        await upsertPushToken(newUser.id, {
+          fcmToken: deviceInfo.fcmToken,
+          platform: deviceInfo.platform,
+          deviceId: deviceInfo.deviceId || 'unknown',
+          appVersion: deviceInfo.appVersion,
+        });
+      }
     }
 
-    // Get user's XP and credits
-    const [xp, credits] = await Promise.all([
-      db
-        .selectFrom('customer_xp')
-        .selectAll()
-        .where('customer_user_id', '=', newUser.id)
-        .executeTakeFirst(),
-      db
-        .selectFrom('customer_credits')
-        .selectAll()
-        .where('customer_user_id', '=', newUser.id)
-        .executeTakeFirst(),
-    ]);
+    // PR-4: Use repository for auth context (XP, credits, subscription)
+    const authContext = await getUserAuthContext(newUser.id);
 
     // Generate JWT tokens
     const tokens = generateTokens({
       userId: newUser.id,
-      email: newUser.email,
+      email: email, // Use input email (guaranteed non-null)
       phone: newUser.phone,
     });
 
@@ -211,30 +144,35 @@ export async function emailRegister(
         id: newUser.id,
         email: newUser.email || null,
         phone: newUser.phone,
-        name: newUser.full_name,
+        name: newUser.name,
         username: newUser.username,
         profilePhotoUrl: null,
         referralCode: newUser.referral_code,
         referralApplied,
         createdAt: newUser.created_at,
         isNewUser: true,
-        xp: xp
+        xp: authContext.xp
           ? {
-            xpPoints: xp.xp_points,
-            level: xp.level,
-            levelProgress: Number(xp.level_progress),
+            xpPoints: authContext.xp.xp_points,
+            level: authContext.xp.level,
+            levelProgress: Number(authContext.xp.level_progress),
           }
           : undefined,
-        credits: credits
+        credits: authContext.credits
           ? {
-            balance: credits.balance,
-            lifetimeEarned: credits.lifetime_earned,
+            balance: authContext.credits.balance,
+            lifetimeEarned: authContext.credits.lifetime_earned,
           }
           : undefined,
-        subscription: {
-          status: 'expired',
-          expiredAt: null,
-        },
+        subscription: authContext.subscription
+          ? {
+            status: authContext.subscription.status,
+            expiredAt: authContext.subscription.expired_at?.toISOString() || null,
+          }
+          : {
+            status: 'expired',
+            expiredAt: null,
+          },
       },
       tokens: {
         accessToken: tokens.accessToken,
@@ -275,16 +213,9 @@ export async function emailLogin(
       });
     }
 
-    // Normalize email
-    const normalizedEmail = email.toLowerCase().trim();
-
-    // Find user by email
-    const user = await db
-      .selectFrom('customer_users')
-      .selectAll()
-      .where('email', '=', normalizedEmail)
-      .where('deleted_at', 'is', null)
-      .executeTakeFirst();
+    // PR-4: Use repository for DB access
+    // Find user by email (includes password_hash for verification)
+    const user = await getUserByEmailWithPassword(email);
 
     if (!user) {
       return reply.status(401).send({
@@ -311,56 +242,26 @@ export async function emailLogin(
       });
     }
 
-    // Save FCM token if provided
+    // PR-4: Use repository for FCM token upsert
     if (deviceInfo?.fcmToken && deviceInfo?.platform) {
-      const validPlatform = ['ios', 'android', 'web'].includes(deviceInfo.platform)
-        ? (deviceInfo.platform as 'ios' | 'android' | 'web')
-        : 'web';
-
-      await db
-        .insertInto('customer_push_tokens')
-        .values({
-          customer_user_id: user.id,
-          token: deviceInfo.fcmToken,
-          platform: validPlatform,
-          device_id: deviceInfo.deviceId || 'unknown',
-          is_active: true,
-          created_at: new Date(),
-          updated_at: new Date(),
-        })
-        .onConflict((oc) =>
-          oc
-            .columns(['customer_user_id', 'device_id'])
-            .doUpdateSet({ token: deviceInfo.fcmToken!, is_active: true, updated_at: new Date() })
-        )
-        .execute();
+      // Only store push tokens for mobile platforms
+      if (deviceInfo.platform === 'ios' || deviceInfo.platform === 'android') {
+        await upsertPushToken(user.id, {
+          fcmToken: deviceInfo.fcmToken,
+          platform: deviceInfo.platform,
+          deviceId: deviceInfo.deviceId || 'unknown',
+          appVersion: deviceInfo.appVersion,
+        });
+      }
     }
 
-    // Get user's XP and credits
-    const [xp, credits, subscription] = await Promise.all([
-      db
-        .selectFrom('customer_xp')
-        .selectAll()
-        .where('customer_user_id', '=', user.id)
-        .executeTakeFirst(),
-      db
-        .selectFrom('customer_credits')
-        .selectAll()
-        .where('customer_user_id', '=', user.id)
-        .executeTakeFirst(),
-      db
-        .selectFrom('customer_subscriptions')
-        .selectAll()
-        .where('customer_user_id', '=', user.id)
-        .where('status', '=', 'active')
-        .where('expired_at', '>', new Date())
-        .executeTakeFirst(),
-    ]);
+    // PR-4: Use repository for auth context (XP, credits, subscription)
+    const authContext = await getUserAuthContext(user.id);
 
     // Generate JWT tokens
     const tokens = generateTokens({
       userId: user.id,
-      email: user.email,
+      email: email, // Use input email (guaranteed non-null)
       phone: user.phone,
     });
 
@@ -371,29 +272,29 @@ export async function emailLogin(
         id: user.id,
         email: user.email || null,
         phone: user.phone,
-        name: user.full_name,
+        name: user.name,
         username: user.username,
         profilePhotoUrl: null,
         referralCode: user.referral_code,
         createdAt: user.created_at,
         isNewUser: false,
-        xp: xp
+        xp: authContext.xp
           ? {
-            xpPoints: xp.xp_points,
-            level: xp.level,
-            levelProgress: Number(xp.level_progress),
+            xpPoints: authContext.xp.xp_points,
+            level: authContext.xp.level,
+            levelProgress: Number(authContext.xp.level_progress),
           }
           : undefined,
-        credits: credits
+        credits: authContext.credits
           ? {
-            balance: credits.balance,
-            lifetimeEarned: credits.lifetime_earned,
+            balance: authContext.credits.balance,
+            lifetimeEarned: authContext.credits.lifetime_earned,
           }
           : undefined,
-        subscription: subscription
+        subscription: authContext.subscription
           ? {
-            status: subscription.status,
-            expiredAt: subscription.expired_at?.toISOString() || null,
+            status: authContext.subscription.status,
+            expiredAt: authContext.subscription.expired_at?.toISOString() || null,
           }
           : {
             status: 'expired',

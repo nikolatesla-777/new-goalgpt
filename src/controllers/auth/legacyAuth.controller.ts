@@ -4,9 +4,17 @@
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { db } from '../../database/kysely';
 import { generateTokens } from '../../utils/jwt.utils';
 import bcrypt from 'bcrypt';
+// PR-4: Use repository for all user DB access
+import {
+  getUserByPhoneWithPassword,
+  updateUserLastLogin,
+  getUserAuthContext,
+  getOAuthIdentity,
+  linkOAuthProvider,
+  updateUserInfo,
+} from '../../repositories/user.repository';
 
 // ============================================================================
 // TYPES
@@ -52,16 +60,9 @@ export async function legacyLogin(
       });
     }
 
-    // Normalize phone number (remove spaces, dashes)
-    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
-
-    // Find user by phone
-    const user = await db
-      .selectFrom('customer_users')
-      .selectAll()
-      .where('phone', '=', normalizedPhone)
-      .where('deleted_at', 'is', null)
-      .executeTakeFirst();
+    // PR-4: Use repository for DB access
+    // Find user by phone (includes password_hash for verification)
+    const user = await getUserByPhoneWithPassword(phone);
 
     if (!user) {
       return reply.status(401).send({
@@ -71,7 +72,7 @@ export async function legacyLogin(
     }
 
     // Check if user has password (legacy account)
-    if (!user.password) {
+    if (!user.password_hash) {
       return reply.status(400).send({
         error: 'NO_PASSWORD_SET',
         message: 'Bu hesap için şifre ayarlanmamış. Lütfen SMS ile giriş yapın.',
@@ -80,7 +81,7 @@ export async function legacyLogin(
     }
 
     // Verify password
-    const passwordMatch = await bcrypt.compare(password, user.password);
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
       return reply.status(401).send({
@@ -89,38 +90,16 @@ export async function legacyLogin(
       });
     }
 
-    // Update last login
-    await db
-      .updateTable('customer_users')
-      .set({ last_login_at: new Date() })
-      .where('id', '=', user.id)
-      .execute();
+    // PR-4: Use repository for last login update
+    await updateUserLastLogin(user.id);
 
-    // Get user's XP and credits
-    const [xp, credits, subscription] = await Promise.all([
-      db
-        .selectFrom('customer_xp')
-        .selectAll()
-        .where('customer_user_id', '=', user.id)
-        .executeTakeFirst(),
-      db
-        .selectFrom('customer_credits')
-        .selectAll()
-        .where('customer_user_id', '=', user.id)
-        .executeTakeFirst(),
-      db
-        .selectFrom('customer_subscriptions')
-        .selectAll()
-        .where('customer_user_id', '=', user.id)
-        .where('status', '=', 'active')
-        .where('expired_at', '>', new Date())
-        .executeTakeFirst(),
-    ]);
+    // PR-4: Use repository for auth context (XP, credits, subscription)
+    const authContext = await getUserAuthContext(user.id);
 
     // Generate JWT tokens
     const tokens = generateTokens({
       userId: user.id,
-      email: user.email,
+      email: user.email || '', // Legacy users may not have email
       phone: user.phone,
     });
 
@@ -133,28 +112,28 @@ export async function legacyLogin(
         phone: user.phone,
         name: user.name,
         username: user.username,
-        profilePhotoUrl: user.profile_photo_url,
+        profilePhotoUrl: user.profile_image_url,
         referralCode: user.referral_code,
         createdAt: user.created_at,
         isNewUser: false,
         hasPassword: true, // Indicate legacy account
-        xp: xp
+        xp: authContext.xp
           ? {
-              xpPoints: xp.xp_points,
-              level: xp.level,
-              levelProgress: Number(xp.level_progress),
+              xpPoints: authContext.xp.xp_points,
+              level: authContext.xp.level,
+              levelProgress: Number(authContext.xp.level_progress),
             }
           : undefined,
-        credits: credits
+        credits: authContext.credits
           ? {
-              balance: credits.balance,
-              lifetimeEarned: credits.lifetime_earned,
+              balance: authContext.credits.balance,
+              lifetimeEarned: authContext.credits.lifetime_earned,
             }
           : undefined,
-        subscription: subscription
+        subscription: authContext.subscription
           ? {
-              status: subscription.status,
-              expiredAt: subscription.expired_at,
+              status: authContext.subscription.status,
+              expiredAt: authContext.subscription.expired_at,
             }
           : undefined,
       },
@@ -195,14 +174,8 @@ export async function checkLegacyUser(
       });
     }
 
-    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
-
-    const user = await db
-      .selectFrom('customer_users')
-      .select(['id', 'phone', 'password', 'created_at'])
-      .where('phone', '=', normalizedPhone)
-      .where('deleted_at', 'is', null)
-      .executeTakeFirst();
+    // PR-4: Use repository for DB access
+    const user = await getUserByPhoneWithPassword(phone);
 
     if (!user) {
       return reply.send({
@@ -214,8 +187,8 @@ export async function checkLegacyUser(
 
     return reply.send({
       exists: true,
-      hasPassword: !!user.password,
-      isLegacyUser: !!user.password,
+      hasPassword: !!user.password_hash,
+      isLegacyUser: !!user.password_hash,
       registeredAt: user.created_at,
     });
   } catch (error: any) {
@@ -259,13 +232,9 @@ export async function migrateToOAuth(
       });
     }
 
+    // PR-4: Use repository for DB access
     // Check if OAuth identity already exists
-    const existingOAuth = await db
-      .selectFrom('customer_oauth_identities')
-      .selectAll()
-      .where('provider', '=', oauthProvider)
-      .where('provider_user_id', '=', oauthUserId)
-      .executeTakeFirst();
+    const existingOAuth = await getOAuthIdentity(oauthProvider, oauthUserId);
 
     if (existingOAuth && existingOAuth.customer_user_id !== userId) {
       return reply.status(409).send({
@@ -282,31 +251,18 @@ export async function migrateToOAuth(
       });
     }
 
-    // Create OAuth identity
-    await db
-      .insertInto('customer_oauth_identities')
-      .values({
-        customer_user_id: userId,
-        provider: oauthProvider,
-        provider_user_id: oauthUserId,
-        email: email || null,
-        display_name: name || null,
-        is_primary: true,
-        linked_at: new Date(),
-      })
-      .execute();
+    // PR-4: Use repository to link OAuth provider
+    await linkOAuthProvider(userId, {
+      provider: oauthProvider,
+      providerId: oauthUserId,
+      email: email || null,
+      name: name || null,
+      picture: null,
+    });
 
-    // Optionally update user email/name if provided and not set
-    const updateData: any = {};
-    if (email) updateData.email = email;
-    if (name) updateData.name = name;
-
-    if (Object.keys(updateData).length > 0) {
-      await db
-        .updateTable('customer_users')
-        .set(updateData)
-        .where('id', '=', userId)
-        .execute();
+    // PR-4: Use repository to update user email/name if provided
+    if (email || name) {
+      await updateUserInfo(userId, email, name);
     }
 
     return reply.send({
