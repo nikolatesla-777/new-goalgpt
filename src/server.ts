@@ -1,15 +1,19 @@
 /**
  * Fastify Server
- * 
+ *
  * Main application entry point - High performance for real-time match data processing
  */
+
+// CRITICAL: Load environment variables BEFORE any imports
+// This ensures JWT_SECRET and other env vars are available during module initialization
+import dotenv from 'dotenv';
+dotenv.config();
 
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
-import dotenv from 'dotenv';
 import { randomUUID } from 'crypto';
 import { logger } from './utils/logger';
 import { logEvent } from './utils/obsLogger';
@@ -40,8 +44,6 @@ import { MatchSyncWorker } from './jobs/matchSync.job';
 import { MatchMinuteWorker } from './jobs/matchMinute.job';
 // Cold Start Handler - Fixes kickoff timestamps on server restart
 import { coldStartKickoffBackfill } from './jobs/coldStartKickoff.job';
-
-dotenv.config();
 
 const fastify = Fastify({
   logger: false,

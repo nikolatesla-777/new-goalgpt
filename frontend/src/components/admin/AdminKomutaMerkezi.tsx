@@ -412,6 +412,15 @@ function DetailTable({ data, type, tableTitle, tableDesc }: { data: DetailItem[]
 }
 
 // Main Dashboard Component
+import { NotificationsPanel } from './NotificationsPanel';
+
+const BellIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+    </svg>
+);
+
 export function AdminKomutaMerkezi() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -421,6 +430,7 @@ export function AdminKomutaMerkezi() {
     const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
     const [detailData, setDetailData] = useState<DetailItem[]>([]);
     const [drilldownLoading, setDrilldownLoading] = useState(false);
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
     // Fetch main stats
     useEffect(() => {
@@ -511,22 +521,33 @@ export function AdminKomutaMerkezi() {
         const config = cardConfig[selectedCard];
         return (
             <>
+                <NotificationsPanel isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
                 <header className="admin-header">
                     <div className="admin-header-left">
                         <button className="back-button" onClick={handleBackClick}>
                             <BackIcon /> Panele Dön
                         </button>
                     </div>
-                    <div className="admin-period-selector">
-                        <select
-                            value={period}
-                            onChange={(e) => setPeriod(e.target.value as PeriodFilter)}
-                            className="admin-select"
+                    <div className="admin-header-actions">
+                        <button
+                            className="notification-btn"
+                            onClick={() => setIsNotificationsOpen(true)}
+                            aria-label="Bildirimler"
                         >
-                            {Object.entries(periodLabels).map(([key, label]) => (
-                                <option key={key} value={key}>{label}</option>
-                            ))}
-                        </select>
+                            <BellIcon />
+                            <span className="notification-badge">3</span>
+                        </button>
+                        <div className="admin-period-selector">
+                            <select
+                                value={period}
+                                onChange={(e) => setPeriod(e.target.value as PeriodFilter)}
+                                className="admin-select"
+                            >
+                                {Object.entries(periodLabels).map(([key, label]) => (
+                                    <option key={key} value={key}>{label}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </header>
 
@@ -576,21 +597,32 @@ export function AdminKomutaMerkezi() {
     // Collapsed View (Main Dashboard)
     return (
         <>
+            <NotificationsPanel isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
             <header className="admin-header">
                 <div>
                     <h1 className="admin-header-title">Komuta Merkezi 🚀</h1>
                     <p className="admin-header-subtitle">Tüm uygulamanın anlık verileri ve finansal durumu</p>
                 </div>
-                <div className="admin-period-selector">
-                    <select
-                        value={period}
-                        onChange={(e) => setPeriod(e.target.value as PeriodFilter)}
-                        className="admin-select"
+                <div className="admin-header-actions">
+                    <button
+                        className="notification-btn"
+                        onClick={() => setIsNotificationsOpen(true)}
+                        aria-label="Bildirimler"
                     >
-                        {Object.entries(periodLabels).map(([key, label]) => (
-                            <option key={key} value={key}>{label}</option>
-                        ))}
-                    </select>
+                        <BellIcon />
+                        <span className="notification-badge">3</span>
+                    </button>
+                    <div className="admin-period-selector">
+                        <select
+                            value={period}
+                            onChange={(e) => setPeriod(e.target.value as PeriodFilter)}
+                            className="admin-select"
+                        >
+                            {Object.entries(periodLabels).map(([key, label]) => (
+                                <option key={key} value={key}>{label}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </header>
 

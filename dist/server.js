@@ -41,12 +41,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// CRITICAL: Load environment variables BEFORE any imports
+// This ensures JWT_SECRET and other env vars are available during module initialization
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
 const fastify_1 = __importDefault(require("fastify"));
 const cors_1 = __importDefault(require("@fastify/cors"));
 const helmet_1 = __importDefault(require("@fastify/helmet"));
 const rate_limit_1 = __importDefault(require("@fastify/rate-limit"));
 const websocket_1 = __importDefault(require("@fastify/websocket"));
-const dotenv_1 = __importDefault(require("dotenv"));
 const logger_1 = require("./utils/logger");
 const telegramAlert_1 = require("./utils/telegramAlert");
 // Central Route Registration (PR-1)
@@ -69,7 +72,6 @@ const matchSync_job_1 = require("./jobs/matchSync.job");
 const matchMinute_job_1 = require("./jobs/matchMinute.job");
 // Cold Start Handler - Fixes kickoff timestamps on server restart
 const coldStartKickoff_job_1 = require("./jobs/coldStartKickoff.job");
-dotenv_1.default.config();
 const fastify = (0, fastify_1.default)({
     logger: false,
 });
