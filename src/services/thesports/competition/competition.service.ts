@@ -1,11 +1,12 @@
 
 /**
  * Competition Service
- * 
+ *
  * Handles competition data retrieval
  */
 
-import { theSportsAPI } from '../../../core/TheSportsAPIManager';
+// PR-5B: Migrated to hardened TheSportsClient via adapter
+import { theSportsAPIAdapter as theSportsAPI } from '../../../integrations/thesports';
 import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { logger } from '../../../utils/logger';

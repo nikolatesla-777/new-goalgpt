@@ -5,7 +5,8 @@
  * Handles business logic for /match/diary endpoint
  */
 
-import { theSportsAPI } from '../../../core/TheSportsAPIManager';
+// PR-5B: Migrated to hardened TheSportsClient via adapter
+import { theSportsAPIAdapter as theSportsAPI } from '../../../integrations/thesports';
 import { logger } from '../../../utils/logger';
 import { MatchDiaryResponse, MatchDiaryParams } from '../../../types/thesports/match';
 import { cacheService } from '../../../utils/cache/cache.service';
