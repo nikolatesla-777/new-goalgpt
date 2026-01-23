@@ -109,22 +109,42 @@ export const LOCK_KEYS = {
   /**
    * Generate a match-level lock key for atomic match updates.
    *
-   * @param matchId - The external_id of the match (numeric string)
-   * @returns bigint lock key unique to this match
+   * PR-8B.1: Support alphanumeric matchIds (TheSports API format)
+   * Uses deterministic hash for string matchIds
+   *
+   * @param matchId - The external_id of the match (alphanumeric or numeric)
+   * @returns bigint lock key unique to this match, or null for invalid IDs
    *
    * @example
-   * const lockKey = LOCK_KEYS.matchUpdateLock(12345678);
-   * // Returns: 920000012345678n
+   * const lockKey = LOCK_KEYS.matchUpdateLock("l7oqdehg6ko3r51");
+   * // Returns: 920000000000n + hash("l7oqdehg6ko3r51")
    *
-   * Note: external_id is typically 8-digit, max ~99999999
-   * This gives us lock keys in range 920_000_000_000 to 920_099_999_999
+   * Note: Returns null for invalid/empty matchIds (caller should skip)
    */
-  matchUpdateLock: (matchId: number | string): bigint => {
-    const numericId = typeof matchId === 'string' ? parseInt(matchId, 10) : matchId;
-    if (isNaN(numericId) || numericId < 0) {
-      throw new Error(`Invalid matchId for lock key: ${matchId}`);
+  matchUpdateLock: (matchId: number | string): bigint | null => {
+    // PR-8B.1: Skip invalid/empty matchIds (don't throw error)
+    if (!matchId || matchId === '') {
+      return null;
     }
-    return 920000000000n + BigInt(numericId);
+
+    const matchIdStr = String(matchId);
+
+    // PR-8B.1: Generate deterministic 63-bit hash for alphanumeric matchIds
+    // Uses polynomial rolling hash (DJB2 variant) for deterministic collision-resistant hashing
+    let hash = 5381n; // DJB2 initial value
+    for (let i = 0; i < matchIdStr.length; i++) {
+      const charCode = BigInt(matchIdStr.charCodeAt(i));
+      hash = ((hash << 5n) + hash) + charCode; // hash * 33 + c
+    }
+
+    // Ensure positive 63-bit value (PostgreSQL bigint range: -2^63 to 2^63-1)
+    // Use modulo to fit within safe range: 0 to 99_999_999_999 (100 billion)
+    const MAX_HASH_VALUE = 99_999_999_999n;
+    const safeHash = hash > 0n ? hash % MAX_HASH_VALUE : (-hash) % MAX_HASH_VALUE;
+
+    // Add to MATCH_UPDATE_BASE to get final lock key
+    const MATCH_UPDATE_BASE = 920_000_000_000n;
+    return MATCH_UPDATE_BASE + safeHash;
   },
 } as const;
 

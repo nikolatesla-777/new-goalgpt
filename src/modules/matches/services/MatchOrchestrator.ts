@@ -103,6 +103,13 @@ export class MatchOrchestrator {
     }
 
     const lockKey = LOCK_KEYS.matchUpdateLock(matchId);
+
+    // PR-8B.1: Skip update if matchId is invalid (lockKey === null)
+    if (lockKey === null) {
+      logger.debug(`[MatchOrchestrator] Skipping update for invalid matchId: ${matchId}`);
+      return { status: 'error', fieldsUpdated: [], reason: 'Invalid matchId' };
+    }
+
     let lockAcquired = false;
     const startTime = Date.now();
 
