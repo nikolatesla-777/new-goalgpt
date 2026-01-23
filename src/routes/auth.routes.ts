@@ -5,8 +5,8 @@ import { appleSignIn } from '../controllers/auth/appleAuth.controller';
 import { phoneLogin, refreshToken } from '../controllers/auth/phoneAuth.controller';
 import { legacyLogin, checkLegacyUser, migrateToOAuth } from '../controllers/auth/legacyAuth.controller';
 import { requireAuth } from '../middleware/auth.middleware';
-import { db } from '../database/kysely';
-import { sql } from 'kysely';
+// PR-4: Use repository for all user DB access
+import { getUserProfile, deactivatePushTokens } from '../repositories/user.repository';
 
 /**
  * Authentication Routes
@@ -129,39 +129,16 @@ export async function authRoutes(fastify: FastifyInstance) {
       try {
         const userId = request.user!.userId;
 
-        // Get full user profile with XP, Credits, and Subscription
-        const userProfile = await db
-          .selectFrom('customer_users as cu')
-          .leftJoin('customer_xp as xp', 'xp.customer_user_id', 'cu.id')
-          .leftJoin('customer_credits as credits', 'credits.customer_user_id', 'cu.id')
-          .leftJoin('customer_subscriptions as sub', (join) =>
-            join
-              .onRef('sub.customer_user_id', '=', 'cu.id')
-              .on('sub.status', '=', 'active')
-              .on('sub.expired_at', '>', sql`NOW()`)
-          )
-          .select([
-            'cu.id',
-            'cu.email',
-            'cu.full_name as name',
-            'cu.phone',
-            'cu.username',
-            'cu.referral_code',
-            'cu.created_at',
-            'xp.xp_points',
-            'xp.level',
-            'xp.level_progress',
-            'xp.current_streak_days',
-            'xp.longest_streak_days',
-            'xp.total_earned as total_xp_earned',
-            'credits.balance as credit_balance',
-            'credits.lifetime_earned as credits_lifetime_earned',
-            'credits.lifetime_spent as credits_lifetime_spent',
-            'sub.expired_at as vip_expires_at',
-            sql<boolean>`CASE WHEN sub.id IS NOT NULL THEN true ELSE false END`.as('is_vip'),
-          ])
-          .where('cu.id', '=', userId)
-          .executeTakeFirstOrThrow();
+        // PR-4: Use repository for DB access
+        const userProfile = await getUserProfile(userId);
+
+        if (!userProfile) {
+          return reply.status(404).send({
+            success: false,
+            error: 'USER_NOT_FOUND',
+            message: 'User not found',
+          });
+        }
 
         return reply.status(200).send({
           success: true,
@@ -223,19 +200,8 @@ export async function authRoutes(fastify: FastifyInstance) {
         const userId = request.user!.userId;
         const { deviceId } = request.body as { deviceId?: string };
 
-        // Invalidate FCM tokens
-        const query = db
-          .updateTable('customer_push_tokens')
-          .set({ is_active: false, updated_at: sql`NOW()` })
-          .where('customer_user_id', '=', userId);
-
-        // If deviceId specified, only invalidate that device
-        if (deviceId) {
-          await query.where('device_id', '=', deviceId).execute();
-        } else {
-          // Otherwise invalidate all devices
-          await query.execute();
-        }
+        // PR-4: Use repository for DB access
+        await deactivatePushTokens(userId, deviceId);
 
         return reply.status(200).send({
           success: true,
