@@ -780,8 +780,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     /**
      * GET /api/predictions/manual
      * List manual predictions
+     * SECURITY: Admin only - lists all manual predictions
      */
-    fastify.get('/api/predictions/manual', async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+    fastify.get('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
         try {
             const limit = parseInt(request.query.limit || '100', 10);
             const predictions = await aiPredictionService.getManualPredictions(limit);
@@ -815,8 +816,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         bot_name?: string;          // Optional, defaults to "Manual"
     }
 
-    // NOTE: Auth temporarily disabled - frontend admin panel lacks token mechanism
-    fastify.post('/api/predictions/manual', async (request: FastifyRequest<{ Body: ManualPredictionBody }>, reply: FastifyReply) => {
+    // SECURITY: Admin authentication required for manual prediction creation
+    fastify.post('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Body: ManualPredictionBody }>, reply: FastifyReply) => {
         try {
             const result = await aiPredictionService.createManualPrediction(request.body);
             if (result) {
@@ -851,8 +852,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         }>;
     }
 
-    // NOTE: Auth temporarily disabled - frontend admin panel lacks token mechanism
-    fastify.post('/api/predictions/manual-coupon', async (request: FastifyRequest<{ Body: CouponBody }>, reply: FastifyReply) => {
+    // SECURITY: Admin authentication required for coupon creation
+    fastify.post('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Body: CouponBody }>, reply: FastifyReply) => {
         try {
             const result = await aiPredictionService.createCoupon(request.body);
             if (result) {
