@@ -1,0 +1,1960 @@
+"use strict";
+/**
+ * WebSocket Service
+ *
+ * Main service for WebSocket integration with event detection and handling
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.WebSocketService = void 0;
+const websocket_client_1 = require("./websocket.client");
+const websocket_parser_1 = require("./websocket.parser");
+const websocket_validator_1 = require("./websocket.validator");
+const event_detector_1 = require("./event-detector");
+const logger_1 = require("../../../utils/logger");
+const obsLogger_1 = require("../../../utils/obsLogger");
+const config_1 = require("../../../config");
+const cache_service_1 = require("../../../utils/cache/cache.service");
+const types_1 = require("../../../utils/cache/types");
+const connection_1 = require("../../../database/connection");
+const enums_1 = require("../../../types/thesports/enums");
+const eventLatencyMonitor_1 = require("./eventLatencyMonitor");
+const predictionSettlement_service_1 = require("../../ai/predictionSettlement.service");
+const halfStatsPersistence_service_1 = require("../match/halfStatsPersistence.service");
+class WebSocketService {
+    constructor() {
+        this.eventHandlers = [];
+        this.mqttReceivedTimestamps = new Map(); // Key: matchId:eventType, Value: mqttReceivedTs
+        // Track match states for "false end" detection
+        // Map: matchId -> { status: MatchState, lastStatus8Time: number | null, minute?: number | null }
+        this.matchStates = new Map();
+        // Keepalive timers for matches that hit status 8 (potential false end)
+        // Map: matchId -> NodeJS.Timeout
+        this.matchKeepaliveTimers = new Map();
+        // Keepalive duration: 20 minutes after status 8
+        this.KEEPALIVE_DURATION_MS = 20 * 60 * 1000; // 20 minutes
+        // Cached schema capabilities (avoid querying information_schema on every WS tick)
+        this.scoreColumnSupportChecked = false;
+        this.hasNewScoreColumns = false;
+        // Cached live_kickoff_time column capability (avoid querying information_schema on every WS tick)
+        this.kickoffColumnSupportChecked = false;
+        this.hasLiveKickoffTimeColumn = false;
+        // Cached TLIVE column capability (avoid querying information_schema on every TLIVE message)
+        this.tliveColumnSupportChecked = false;
+        this.tliveTargetColumn = null;
+        // Housekeeping interval reference (so we can stop it on disconnect)
+        this.cleanupInterval = null;
+        this.client = new websocket_client_1.WebSocketClient({
+            host: config_1.config.thesports?.mqtt?.host || 'mqtt://mq.thesports.com', // MQTT broker host (env: THESPORTS_MQTT_HOST)
+            user: config_1.config.thesports?.user,
+            secret: config_1.config.thesports?.secret,
+        });
+        this.parser = new websocket_parser_1.WebSocketParser();
+        this.validator = new websocket_validator_1.WebSocketValidator();
+        this.eventDetector = new event_detector_1.EventDetector();
+        this.latencyMonitor = new eventLatencyMonitor_1.EventLatencyMonitor();
+        // Register message handler
+        this.client.onMessage((message) => {
+            this.handleMessage(message);
+        });
+        // Cleanup old events every 5 minutes
+        this.cleanupInterval = setInterval(() => {
+            this.eventDetector.cleanupOldEvents();
+            this.cleanupStaleMatches(); // Clean up old match states to prevent memory leak
+        }, 5 * 60 * 1000);
+    }
+    /**
+     * Clean up stale match states to prevent unbounded memory growth
+     * Removes matches that ended more than 24 hours ago
+     */
+    cleanupStaleMatches() {
+        const now = Date.now();
+        const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+        let cleanedCount = 0;
+        for (const [matchId, state] of this.matchStates) {
+            // Only clean up matches that have ended (status 8) and are old enough
+            if (state.lastStatus8Time && (now - state.lastStatus8Time) > MAX_AGE_MS) {
+                this.matchStates.delete(matchId);
+                // Also clean up any associated keepalive timer
+                const timer = this.matchKeepaliveTimers.get(matchId);
+                if (timer) {
+                    clearTimeout(timer);
+                    this.matchKeepaliveTimers.delete(matchId);
+                }
+                cleanedCount++;
+            }
+        }
+        if (cleanedCount > 0) {
+            logger_1.logger.info(`[WebSocket] Cleaned up ${cleanedCount} stale match states. Remaining: ${this.matchStates.size}`);
+        }
+    }
+    /**
+     * Connect to WebSocket
+     */
+    async connect() {
+        try {
+            (0, obsLogger_1.logEvent)('info', 'websocket.connecting', {
+                host: 'mqtt://mq.thesports.com',
+                user: config_1.config.thesports?.user,
+            });
+            await this.client.connect();
+            (0, obsLogger_1.logEvent)('info', 'websocket.connected', {
+                host: 'mqtt://mq.thesports.com',
+                user: config_1.config.thesports?.user,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to connect WebSocket service:', error);
+            throw error;
+        }
+    }
+    /**
+     * Handle MQTT message
+     */
+    async handleMessage(message) {
+        try {
+            // TEMPORARY DEBUG: Log all incoming messages (check for non-empty arrays)
+            const msgType = this.validator.isScoreMessage(message) ? 'SCORE'
+                : this.validator.isStatsMessage(message) ? 'STATS'
+                    : this.validator.isIncidentsMessage(message) ? 'INCIDENTS'
+                        : this.validator.isTliveMessage(message) ? 'TLIVE'
+                            : 'OTHER';
+            logger_1.logger.info(`[WebSocket] handleMessage called, message type: ${msgType}`);
+            // LATENCY MONITORING: Record MQTT message received timestamp
+            const mqttReceivedTs = Date.now();
+            // Extract provider update_time from message if available (for optimistic locking)
+            const providerUpdateTime = this.extractProviderUpdateTimeFromMessage(message);
+            // Handle score messages
+            if (this.validator.isScoreMessage(message)) {
+                logger_1.logger.info(`[WebSocket] isScoreMessage=true, score array length: ${Array.isArray(message?.score) ? message.score.length : 0}`);
+                const scoreMessages = Array.isArray(message.score) ? message.score : [];
+                for (const scoreMsg of scoreMessages) {
+                    try {
+                        const parsedScore = this.parser.parseScoreToStructured(scoreMsg);
+                        // Detect status change BEFORE updating local map
+                        const previousState = this.matchStates.get(parsedScore.matchId)?.status ?? null;
+                        const nextState = parsedScore.statusId;
+                        const statusChanged = previousState !== null && previousState !== nextState;
+                        // CRITICAL: Handle match state transitions (including resurrection)
+                        this.handleMatchStateTransition(parsedScore.matchId, parsedScore.statusId, parsedScore.home.score, parsedScore.away.score);
+                        // ===== FIX 2: STATUS-MINUTE ANOMALY DETECTION =====
+                        // CRITICAL: If status=3 (HT) but minute > 55, MQTT status is STALE
+                        // HT normally lasts 10-15 minutes, so minute > 55 means match is actually in 2H
+                        // Force transition to SECOND_HALF (4) to prevent stuck HT state
+                        const minute = parsedScore.minute;
+                        const statusId = parsedScore.statusId;
+                        if (statusId === 3 && minute && minute > 55) {
+                            logger_1.logger.warn(`[WebSocket] 🚨 ANOMALY DETECTED: status=3 (HT) but minute=${minute}. Forcing 2H transition for ${parsedScore.matchId}`);
+                            const correctedStatus = 4; // SECOND_HALF
+                            await this.updateMatchStatusInDatabase(parsedScore.matchId, correctedStatus, providerUpdateTime);
+                            // Update local state as well
+                            this.handleMatchStateTransition(parsedScore.matchId, correctedStatus, parsedScore.home.score, parsedScore.away.score);
+                            // Emit corrected event
+                            this.emitEvent({
+                                type: 'MATCH_STATE_CHANGE',
+                                matchId: parsedScore.matchId,
+                                statusId: correctedStatus,
+                                timestamp: Date.now(),
+                            }, mqttReceivedTs);
+                            // Skip normal status change handling since we already corrected it
+                            continue;
+                        }
+                        // ===== END FIX 2 =====
+                        // If status changed (and we had a previous state), persist to DB + notify frontend
+                        if (statusChanged) {
+                            await this.updateMatchStatusInDatabase(parsedScore.matchId, parsedScore.statusId, providerUpdateTime);
+                            // CRITICAL: Track first half kickoff when status changes to 2 (1H)
+                            // CRITICAL FIX (2026-01-19): Use API kickoff timestamp (score[4]) instead of server Date.now()
+                            if (nextState === 2 && (previousState === null || previousState === 1)) {
+                                const apiKickoffTs = parsedScore.liveKickoffTime ?? parsedScore.messageTimestamp ?? null;
+                                const firstHalfKickoffTs = apiKickoffTs ?? Math.floor(Date.now() / 1000);
+                                const source = apiKickoffTs ? 'api' : 'fallback';
+                                logger_1.logger.info(`[WebSocket] Match ${parsedScore.matchId}: First half started! Recording kickoff timestamp: ${firstHalfKickoffTs} (source=${source})`);
+                                await connection_1.pool.query('UPDATE ts_matches SET first_half_kickoff_ts = $1 WHERE external_id = $2 AND first_half_kickoff_ts IS NULL', [firstHalfKickoffTs, parsedScore.matchId]).catch(err => {
+                                    logger_1.logger.error(`[WebSocket] Failed to record first_half_kickoff_ts for ${parsedScore.matchId}:`, err);
+                                });
+                            }
+                            // CRITICAL: Track second half kickoff when status changes from 3 (HT) to 4 (2H)
+                            // CRITICAL FIX (2026-01-19): Use API kickoff timestamp (score[4]) instead of server Date.now()
+                            if (previousState === 3 && nextState === 4) {
+                                const apiKickoffTs = parsedScore.liveKickoffTime ?? parsedScore.messageTimestamp ?? null;
+                                const secondHalfKickoffTs = apiKickoffTs ?? Math.floor(Date.now() / 1000);
+                                const source = apiKickoffTs ? 'api' : 'fallback';
+                                logger_1.logger.info(`[WebSocket] Match ${parsedScore.matchId}: Second half started! Recording kickoff timestamp: ${secondHalfKickoffTs} (source=${source})`);
+                                await connection_1.pool.query('UPDATE ts_matches SET second_half_kickoff_ts = $1 WHERE external_id = $2 AND second_half_kickoff_ts IS NULL', [secondHalfKickoffTs, parsedScore.matchId]).catch(err => {
+                                    logger_1.logger.error(`[WebSocket] Failed to record second_half_kickoff_ts for ${parsedScore.matchId}:`, err);
+                                });
+                            }
+                            // LATENCY MONITORING: Store mqttReceivedTs for this event
+                            const eventKey = `${parsedScore.matchId}:MATCH_STATE_CHANGE`;
+                            this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
+                            this.emitEvent({
+                                type: 'MATCH_STATE_CHANGE',
+                                matchId: parsedScore.matchId,
+                                statusId: parsedScore.statusId,
+                                timestamp: Date.now(),
+                            }, mqttReceivedTs);
+                            // CRITICAL FIX: Save trend data when match state changes (for live matches)
+                            // This ensures trend data is persisted even if user doesn't visit match detail page
+                            if (parsedScore.statusId && [2, 3, 4, 5, 7].includes(parsedScore.statusId)) {
+                                // Only for live matches
+                                this.saveMatchTrendFromWebSocket(parsedScore.matchId).catch(err => {
+                                    logger_1.logger.warn(`[WebSocket] Failed to save trend for ${parsedScore.matchId}: ${err.message}`);
+                                });
+                            }
+                            // CRITICAL FIX: Trigger post-match persistence when match ends (status 8)
+                            if (parsedScore.statusId === 8) {
+                                logger_1.logger.info(`[WebSocket] Match ${parsedScore.matchId} ended (status=8), triggering post-match persistence + second half data save...`);
+                                // Trigger post-match persistence
+                                this.triggerPostMatchPersistence(parsedScore.matchId).catch(err => {
+                                    logger_1.logger.error(`[WebSocket] Failed to trigger post-match persistence for ${parsedScore.matchId}:`, err);
+                                });
+                                // HALF STATS PERSISTENCE: Save second half data (stats + incidents)
+                                halfStatsPersistence_service_1.halfStatsPersistenceService.saveSecondHalfData(parsedScore.matchId)
+                                    .then(res => {
+                                    if (res.success)
+                                        logger_1.logger.info(`[HalfStatsPersistence] Second half data saved for ${parsedScore.matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+                                })
+                                    .catch(err => logger_1.logger.error(`[HalfStatsPersistence] Failed to save second half data for ${parsedScore.matchId}:`, err));
+                            }
+                        }
+                        // CRITICAL: Check for score rollback (Goal Cancellation)
+                        await this.detectScoreRollback(parsedScore);
+                        // REFACTOR: Direct database write (bypass queue/orchestrator)
+                        // MQTT is authoritative for real-time score updates - write immediately
+                        const ingestionTs = Math.floor(Date.now() / 1000);
+                        logger_1.logger.info(`[WebSocket] BEFORE writeMQTTScoreDirectly for ${parsedScore.matchId}`);
+                        await this.writeMQTTScoreDirectly(parsedScore, providerUpdateTime, ingestionTs);
+                        logger_1.logger.info(`[WebSocket] AFTER writeMQTTScoreDirectly for ${parsedScore.matchId}`);
+                        // CRITICAL FIX: Emit SCORE_CHANGE immediately for frontend real-time updates
+                        // The actual DB write will happen via queue (100ms), but frontend gets notified now
+                        // LATENCY MONITORING: Store mqttReceivedTs for this event
+                        const eventKey = `${parsedScore.matchId}:SCORE_CHANGE`;
+                        this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
+                        this.emitEvent({
+                            type: 'SCORE_CHANGE',
+                            matchId: parsedScore.matchId,
+                            homeScore: parsedScore.home.score,
+                            awayScore: parsedScore.away.score,
+                            minute: parsedScore.minute,
+                            statusId: parsedScore.statusId,
+                            timestamp: Date.now(),
+                        }, mqttReceivedTs);
+                        // CRITICAL: Detect minute changes and broadcast separately
+                        // This enables frontend to update minute badge even when score doesn't change
+                        const previousMinute = this.matchStates.get(parsedScore.matchId)?.minute;
+                        const currentMinuteValue = parsedScore.minute;
+                        if (currentMinuteValue != null && previousMinute != null && currentMinuteValue !== previousMinute) {
+                            logger_1.logger.info(`[WebSocket] Minute changed for ${parsedScore.matchId}: ${previousMinute}' → ${currentMinuteValue}'`);
+                            this.emitEvent({
+                                type: 'MINUTE_UPDATE',
+                                matchId: parsedScore.matchId,
+                                minute: currentMinuteValue,
+                                statusId: parsedScore.statusId,
+                                timestamp: Date.now(),
+                            }, mqttReceivedTs);
+                        }
+                        // Update minute in match states for future comparison
+                        const state = this.matchStates.get(parsedScore.matchId);
+                        if (state) {
+                            state.minute = currentMinuteValue;
+                        }
+                        // AUTO SETTLEMENT: Trigger instant settlement on score change
+                        // CRITICAL: Use calculated minute from ParsedScore (from MQTT messageTimestamp)
+                        // ParsedScore.minute is calculated in websocket.parser.ts using kickoff_timestamp formula
+                        const currentMinute = parsedScore.minute ?? (parsedScore.statusId === 2 ? 1 : parsedScore.statusId === 4 ? 46 : 0);
+                        // CRITICAL: Settlement MUST happen when score changes via WebSocket
+                        // This is the primary mechanism - if WebSocket updates score, settlement should work
+                        // REFACTORED: Now using centralized PredictionSettlementService
+                        predictionSettlement_service_1.predictionSettlementService.processEvent({
+                            matchId: parsedScore.matchId,
+                            eventType: 'score_change',
+                            homeScore: parsedScore.home.score,
+                            awayScore: parsedScore.away.score,
+                            minute: currentMinute,
+                            statusId: parsedScore.statusId,
+                            timestamp: Date.now(),
+                        }).then((result) => {
+                            if (result.settled > 0) {
+                                logger_1.logger.info(`[AutoSettlement] Score change settlement for ${parsedScore.matchId}: ${result.settled} settled (${result.winners}W/${result.losers}L)`);
+                            }
+                            else {
+                                logger_1.logger.debug(`[AutoSettlement] Settlement check completed for ${parsedScore.matchId} (Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${currentMinute})`);
+                            }
+                        }).catch(err => {
+                            logger_1.logger.error(`[AutoSettlement] CRITICAL ERROR in score change handler for ${parsedScore.matchId}: ${err.message}`);
+                            logger_1.logger.error(`[AutoSettlement] Score: ${parsedScore.home.score}-${parsedScore.away.score}, Minute: ${currentMinute}, Status: ${parsedScore.statusId}`);
+                            logger_1.logger.error(`[AutoSettlement] Stack: ${err.stack}`);
+                        });
+                        // CRITICAL FIX: Save statistics to database when score changes
+                        // This ensures data is persisted even if user doesn't visit match detail page
+                        if (parsedScore.statusId && [2, 3, 4, 5, 7].includes(parsedScore.statusId)) {
+                            // Only for live matches
+                            this.saveMatchStatisticsFromWebSocket(parsedScore.matchId).catch(err => {
+                                logger_1.logger.warn(`[WebSocket] Failed to save statistics for ${parsedScore.matchId}: ${err.message}`);
+                            });
+                        }
+                        // Update cache (for fast reads before queue flushes)
+                        const scoreCacheKey = `${types_1.CacheKeyPrefix.TheSports}:ws:score:${parsedScore.matchId}`;
+                        await cache_service_1.cacheService.set(scoreCacheKey, parsedScore, types_1.CacheTTL.Minute);
+                    }
+                    catch (e) {
+                        logger_1.logger.error('Error processing score message item:', e);
+                    }
+                }
+            }
+            // Handle incidents (goals, cards, substitutions, VAR)
+            if (this.validator.isIncidentsMessage(message)) {
+                const incidentMessages = Array.isArray(message.incidents) ? message.incidents : [];
+                for (const incidentsMsg of incidentMessages) {
+                    const matchId = String(incidentsMsg?.id ?? incidentsMsg?.match_id ?? incidentsMsg?.matchId ?? '').trim();
+                    if (!matchId) {
+                        logger_1.logger.warn('Incidents message missing id/matchId, skipping item:', incidentsMsg);
+                        continue;
+                    }
+                    const incidentsArr = Array.isArray(incidentsMsg.incidents) ? incidentsMsg.incidents : [];
+                    // Update database with incidents array
+                    await this.updateMatchIncidentsInDatabase(matchId, incidentsArr, providerUpdateTime);
+                    // CRITICAL FIX: Also save incidents to CombinedStatsService format
+                    // This ensures incidents are in statistics JSONB column as well
+                    if (incidentsArr.length > 0) {
+                        this.saveMatchIncidentsToCombinedStats(matchId, incidentsArr).catch(err => {
+                            logger_1.logger.warn(`[WebSocket] Failed to save incidents to combined stats for ${matchId}: ${err.message}`);
+                        });
+                    }
+                    // CRITICAL FIX: Also save incidents to CombinedStatsService format
+                    // This ensures incidents are in statistics JSONB column as well
+                    if (incidentsArr.length > 0) {
+                        this.saveMatchIncidentsToCombinedStats(matchId, incidentsArr).catch(err => {
+                            logger_1.logger.warn(`[WebSocket] Failed to save incidents to combined stats for ${matchId}: ${err.message}`);
+                        });
+                    }
+                    // Update cache
+                    const incidentsCacheKey = `${types_1.CacheKeyPrefix.TheSports}:ws:incidents:${matchId}`;
+                    await cache_service_1.cacheService.set(incidentsCacheKey, incidentsMsg, types_1.CacheTTL.Minute);
+                    for (const incident of incidentsArr) {
+                        const parsedIncident = this.parser.parseIncidentToStructured(matchId, incident);
+                        // Log VAR incidents (especially goal cancellations)
+                        if (parsedIncident.isVAR) {
+                            logger_1.logger.info(`VAR incident for match ${parsedIncident.matchId}: reason=${parsedIncident.varReason}, result=${parsedIncident.varResult}`);
+                            if (parsedIncident.isGoalCancelled) {
+                                logger_1.logger.warn(`Goal CANCELLED via VAR for match ${parsedIncident.matchId} at ${parsedIncident.time}'`);
+                            }
+                        }
+                        // LATENCY MONITORING: Use message timestamp for incidents
+                        const incidentsMqttTs = mqttReceivedTs; // Use same mqttReceivedTs from handleMessage
+                        // Detect goal (but don't rely on VAR incidents for score updates - use score field)
+                        const goalEvent = this.eventDetector.detectGoalFromIncident(parsedIncident.matchId, parsedIncident);
+                        if (goalEvent) {
+                            const eventKey = `${parsedIncident.matchId}:GOAL`;
+                            this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
+                            this.emitEvent(goalEvent, incidentsMqttTs);
+                            // AUTO SETTLEMENT: Trigger instant settlement on verified GOAL event
+                            // REFACTORED: Now using centralized PredictionSettlementService
+                            predictionSettlement_service_1.predictionSettlementService.processEvent({
+                                matchId: parsedIncident.matchId,
+                                eventType: 'goal',
+                                homeScore: goalEvent.homeScore,
+                                awayScore: goalEvent.awayScore,
+                                minute: goalEvent.time,
+                                timestamp: Date.now(),
+                            }).then((result) => {
+                                if (result.settled > 0) {
+                                    logger_1.logger.info(`[AutoSettlement] Goal settlement for ${parsedIncident.matchId}: ${result.settled} instant wins`);
+                                }
+                            }).catch(err => logger_1.logger.error(`[AutoSettlement] Error in goal handler: ${err.message}`));
+                        }
+                        // Detect card
+                        const cardEvent = this.eventDetector.detectCardFromIncident(parsedIncident.matchId, parsedIncident);
+                        if (cardEvent) {
+                            const eventKey = `${parsedIncident.matchId}:CARD`;
+                            this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
+                            this.emitEvent(cardEvent, incidentsMqttTs);
+                        }
+                        // Detect substitution
+                        const substitutionEvent = this.eventDetector.detectSubstitutionFromIncident(parsedIncident.matchId, parsedIncident);
+                        if (substitutionEvent) {
+                            const eventKey = `${parsedIncident.matchId}:SUBSTITUTION`;
+                            this.mqttReceivedTimestamps.set(eventKey, incidentsMqttTs);
+                            this.emitEvent(substitutionEvent, incidentsMqttTs);
+                        }
+                    }
+                }
+            }
+            // Handle stats messages
+            if (this.validator.isStatsMessage(message)) {
+                // CRITICAL FIX: Extract match ID from message (not from individual stat items)
+                const matchId = String(message?.id ?? message?.match_id ?? message?.matchId ?? '').trim();
+                if (!matchId) {
+                    logger_1.logger.warn('Stats message missing id/matchId, skipping:', message);
+                    return;
+                }
+                // Parse stats to structured format (pass full message with id + stats array)
+                const structuredStats = this.parser.parseStatsToStructured(message);
+                // Update database with statistics
+                await this.updateMatchStatisticsInDatabase(matchId, structuredStats, providerUpdateTime);
+                // Update cache
+                const statsCacheKey = `${types_1.CacheKeyPrefix.TheSports}:ws:stats:${matchId}`;
+                await cache_service_1.cacheService.set(statsCacheKey, structuredStats, types_1.CacheTTL.Minute);
+                logger_1.logger.debug(`Stats update received for match ${matchId}: ${Object.keys(structuredStats).length} stat types`);
+            }
+            // Handle tlive messages (timeline / phase updates: HT / 2H / FT etc.)
+            if (this.validator.isTliveMessage(message)) {
+                const tliveMessages = Array.isArray(message.tlive) ? message.tlive : [];
+                for (const tliveRaw of tliveMessages) {
+                    const tliveMsg = tliveRaw;
+                    const matchId = String(tliveMsg?.id ?? tliveMsg?.match_id ?? tliveMsg?.matchId ?? '').trim();
+                    if (!matchId) {
+                        logger_1.logger.warn('Tlive message missing id/matchId, skipping item:', tliveMsg);
+                        continue;
+                    }
+                    const tliveArr = Array.isArray(tliveMsg.tlive) ? tliveMsg.tlive : [];
+                    // Store tlive raw array (if DB supports it) + try to infer match state from latest entry
+                    await this.updateMatchTliveInDatabase(matchId, tliveArr, providerUpdateTime);
+                    // Cache tlive
+                    const tliveCacheKey = `${types_1.CacheKeyPrefix.TheSports}:ws:tlive:${matchId}`;
+                    await cache_service_1.cacheService.set(tliveCacheKey, tliveMsg, types_1.CacheTTL.Minute);
+                    // CRITICAL: Detect dangerous play / goal position from TLIVE
+                    const dangerAlert = this.detectDangerousPlayFromTlive(matchId, tliveArr);
+                    if (dangerAlert) {
+                        const alertType = dangerAlert.alertType || 'UNKNOWN';
+                        logger_1.logger.info(`[WebSocket/TLIVE] 🎯 ${alertType} detected for match ${matchId}`);
+                        const eventKey = `${matchId}:DANGER_ALERT`;
+                        this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
+                        this.emitEvent(dangerAlert, mqttReceivedTs);
+                    }
+                    // Infer status from tlive (fixes "45+ but actually HT")
+                    const inferredStatus = this.inferStatusFromTlive(tliveArr);
+                    if (inferredStatus !== null) {
+                        logger_1.logger.info(`[WebSocket/TLIVE] Inferred status ${inferredStatus} from tlive for match ${matchId}, updating database`);
+                        // Update local transition map (resurrection-safe)
+                        this.handleMatchStateTransition(matchId, inferredStatus); // Score unavailable in status-only update, will default to DB scores if needed
+                        // Update DB status_id immediately (source of truth for UI)
+                        await this.updateMatchStatusInDatabase(matchId, inferredStatus, providerUpdateTime);
+                        // Emit event so frontend can refresh live cards immediately
+                        const eventKey = `${matchId}:MATCH_STATE_CHANGE`;
+                        this.mqttReceivedTimestamps.set(eventKey, mqttReceivedTs);
+                        this.emitEvent({
+                            type: 'MATCH_STATE_CHANGE',
+                            matchId,
+                            statusId: inferredStatus,
+                            timestamp: Date.now(),
+                        }, mqttReceivedTs);
+                    }
+                }
+            }
+        }
+        catch (error) {
+            logger_1.logger.error('Error handling MQTT message:', error);
+        }
+    }
+    /**
+     * Infer match status from tlive timeline entries.
+     * NOTE: TheSports tlive `data` strings vary by provider/language; we use resilient keyword heuristics.
+     * This is used to fix "45+ stuck" when HT/2H is only reflected via TLIVE.
+     */
+    inferStatusFromTlive(tlive) {
+        if (!Array.isArray(tlive) || tlive.length === 0)
+            return null;
+        // Scan backwards across the last few entries because HT/2H/FT markers are not always the final element
+        const scanMax = Math.min(10, tlive.length);
+        const recent = tlive.slice(-scanMax).reverse();
+        const getDataStr = (entry) => String(entry?.data ?? '').toLowerCase();
+        // Check for HALF_TIME - MULTI-LANGUAGE SUPPORT
+        const halfTimeEntry = recent.find((e) => {
+            const dataStr = getDataStr(e);
+            return dataStr.includes('half time') ||
+                dataStr.includes('halftime') ||
+                dataStr.includes('ht') ||
+                dataStr.includes('devre arası') ||
+                dataStr.includes('devre arasi') ||
+                // Spanish
+                dataStr.includes('medio tiempo') ||
+                dataStr.includes('descanso') ||
+                dataStr.includes('entretiempo') ||
+                // Portuguese
+                dataStr.includes('intervalo') ||
+                // French
+                dataStr.includes('mi-temps') ||
+                // German
+                dataStr.includes('halbzeit') ||
+                // Italian
+                dataStr.includes('primo tempo') ||
+                dataStr.includes('intervallo');
+        });
+        if (halfTimeEntry) {
+            logger_1.logger.info(`[WebSocket/TLIVE] HALF_TIME detected from tlive: ${JSON.stringify(halfTimeEntry)}`);
+            return enums_1.MatchState.HALF_TIME;
+        }
+        // Check for SECOND_HALF - MULTI-LANGUAGE SUPPORT
+        if (recent.some((e) => {
+            const dataStr = getDataStr(e);
+            return dataStr.includes('second half') ||
+                dataStr.includes('2nd half') ||
+                dataStr.includes('2h') ||
+                dataStr.includes('ikinci yarı') ||
+                dataStr.includes('ikinci yari') ||
+                // Spanish
+                dataStr.includes('segundo tiempo') ||
+                dataStr.includes('segunda parte') ||
+                // Portuguese
+                dataStr.includes('segundo tempo') ||
+                // French
+                dataStr.includes('deuxième mi-temps') ||
+                dataStr.includes('2eme mi-temps') ||
+                // German
+                dataStr.includes('zweite halbzeit') ||
+                // Italian
+                dataStr.includes('secondo tempo');
+        })) {
+            return enums_1.MatchState.SECOND_HALF;
+        }
+        // Check for FINAL WHISTLE / MATCH END indicators
+        if (recent.some((e) => {
+            const dataStr = getDataStr(e);
+            // CRITICAL FIX: Robust keywords for match ending - MULTI-LANGUAGE
+            return dataStr.includes('full time') ||
+                dataStr.includes('fulltime') ||
+                dataStr.includes('final whistle') ||
+                dataStr.includes('match ended') ||
+                dataStr.includes('game over') ||
+                dataStr.includes('maç bitti') ||
+                dataStr.includes('mac bitti') ||
+                dataStr.includes('maç sona erdi') ||
+                dataStr.includes('ended') ||
+                dataStr === 'ft' ||
+                dataStr.startsWith('ft ') ||
+                dataStr.endsWith(' ft') ||
+                dataStr.includes(' ft ') ||
+                // Spanish
+                dataStr.includes('fin del partido') ||
+                dataStr.includes('final del partido') ||
+                dataStr.includes('tiempo completo') ||
+                // Portuguese
+                dataStr.includes('fim de jogo') ||
+                dataStr.includes('final do jogo') ||
+                // French
+                dataStr.includes('fin du match') ||
+                // German
+                dataStr.includes('spielende') ||
+                dataStr.includes('abpfiff') ||
+                // Italian
+                dataStr.includes('fine partita');
+        })) {
+            // DOUBLE CHECK: Ensure it's not "First Half Ended" or "Second Half Started"
+            const isFalsePositive = recent.some(e => {
+                const s = getDataStr(e);
+                return (s.includes('first half') || s.includes('1st half') || s.includes('half time')) && s.includes('end');
+            });
+            if (!isFalsePositive) {
+                return enums_1.MatchState.END;
+            }
+        }
+        if (recent.some((e) => {
+            const dataStr = getDataStr(e);
+            return dataStr.includes('kick off') || dataStr.includes('kickoff') || dataStr.includes('first half') || dataStr.includes('1st half') || dataStr.includes('1h') || dataStr.includes('başladı') || dataStr.includes('basladi');
+        })) {
+            return enums_1.MatchState.FIRST_HALF;
+        }
+        return null;
+    }
+    /**
+     * Detect dangerous play (goal position) from TLIVE timeline entries.
+     * CRITICAL: This is how we show "GOL POZİSYONU!" badge before the goal happens!
+     *
+     * Keywords detected:
+     * - "dangerous attack", "tehlikeli atak" → DANGEROUS_ATTACK
+     * - "shot", "şut", "shoot" → SHOT_ATTEMPT
+     * - "saved", "kurtarış" → SHOT_SAVED (near miss!)
+     * - "hit post", "direkten döndü" → HIT_POST (very close!)
+     * - "penalty" → PENALTY_SITUATION
+     *
+     * Returns DANGER_ALERT event if detected
+     */
+    detectDangerousPlayFromTlive(matchId, tlive) {
+        if (!Array.isArray(tlive) || tlive.length === 0)
+            return null;
+        // Only check the most recent entries (last 3)
+        const recentEntries = tlive.slice(-3);
+        for (const entry of recentEntries) {
+            const dataStr = String(entry?.data ?? '').toLowerCase();
+            const time = String(entry?.time ?? '').replace(/[^0-9+]/g, '');
+            const position = entry?.position ?? 0; // 1=home, 2=away
+            // Determine team
+            const team = position === 1 ? 'home' : position === 2 ? 'away' : 'unknown';
+            // Priority order: Most dangerous first
+            // 1. HIT POST - Very close to goal!
+            if (dataStr.includes('hit post') || dataStr.includes('post') ||
+                dataStr.includes('direkten') || dataStr.includes('woodwork') ||
+                dataStr.includes('crossbar') || dataStr.includes('üst direk')) {
+                return {
+                    type: 'DANGER_ALERT',
+                    matchId,
+                    alertType: 'HIT_POST',
+                    team,
+                    time,
+                    message: entry?.data || 'Hit the post!',
+                    timestamp: Date.now(),
+                };
+            }
+            // 2. PENALTY - Could be a goal!
+            if ((dataStr.includes('penalty') || dataStr.includes('penaltı')) &&
+                !dataStr.includes('missed') && !dataStr.includes('saved') && !dataStr.includes('kaçırdı')) {
+                return {
+                    type: 'DANGER_ALERT',
+                    matchId,
+                    alertType: 'PENALTY_SITUATION',
+                    team,
+                    time,
+                    message: entry?.data || 'Penalty!',
+                    timestamp: Date.now(),
+                };
+            }
+            // 3. SHOT SAVED - Good save, was close!
+            if (dataStr.includes('saved') || dataStr.includes('kurtarış') ||
+                dataStr.includes('save') || dataStr.includes('kurtardı')) {
+                return {
+                    type: 'DANGER_ALERT',
+                    matchId,
+                    alertType: 'SHOT_SAVED',
+                    team,
+                    time,
+                    message: entry?.data || 'Shot saved!',
+                    timestamp: Date.now(),
+                };
+            }
+            // 4. SHOT ATTEMPT - Danger building
+            if (dataStr.includes('shot') || dataStr.includes('şut') ||
+                dataStr.includes('shoot') || dataStr.includes('attempt') ||
+                dataStr.includes('vuruş')) {
+                return {
+                    type: 'DANGER_ALERT',
+                    matchId,
+                    alertType: 'SHOT_ATTEMPT',
+                    team,
+                    time,
+                    message: entry?.data || 'Shot attempt!',
+                    timestamp: Date.now(),
+                };
+            }
+            // 5. DANGEROUS ATTACK - Initial danger
+            if (dataStr.includes('dangerous') || dataStr.includes('tehlikeli') ||
+                dataStr.includes('chance') || dataStr.includes('opportunity') ||
+                dataStr.includes('pozisyon') || dataStr.includes('fırsat')) {
+                return {
+                    type: 'DANGER_ALERT',
+                    matchId,
+                    alertType: 'DANGEROUS_ATTACK',
+                    team,
+                    time,
+                    message: entry?.data || 'Dangerous attack!',
+                    timestamp: Date.now(),
+                };
+            }
+        }
+        return null;
+    }
+    /**
+     * Persist tlive to DB if the column exists.
+     * Non-critical: if the column is missing, we log and continue.
+     */
+    async updateMatchTliveInDatabase(matchId, tlive, providerUpdateTime = null) {
+        try {
+            const client = await connection_1.pool.connect();
+            try {
+                await this.ensureTliveColumnSupport(client);
+                if (!this.tliveTargetColumn) {
+                    logger_1.logger.debug(`No tlive/timeline column found in ts_matches. Skipping tlive persist for match ${matchId}`);
+                    return;
+                }
+                const targetColumn = this.tliveTargetColumn;
+                // Optimistic locking check
+                const freshnessCheck = await this.shouldApplyUpdate(client, matchId, providerUpdateTime);
+                if (!freshnessCheck.apply) {
+                    return; // Stale update, skip
+                }
+                const query = `
+          UPDATE ts_matches
+          SET
+            ${targetColumn} = $1::jsonb,
+            provider_update_time = CASE 
+              WHEN $3 IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $3)
+              ELSE provider_update_time
+            END,
+            last_event_ts = $4,
+            updated_at = NOW()
+          WHERE external_id = $2
+        `;
+                const res = await client.query(query, [
+                    JSON.stringify(tlive ?? []),
+                    matchId,
+                    freshnessCheck.providerTimeToWrite,
+                    freshnessCheck.ingestionTs,
+                ]);
+                if (res.rowCount === 0) {
+                    logger_1.logger.warn(`⚠️ [WebSocket/TLIVE] UPDATE affected 0 rows: matchId=${matchId}. ` +
+                        `Match not found in DB or external_id mismatch.`);
+                    return;
+                }
+            }
+            finally {
+                client.release();
+            }
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to update tlive for match ${matchId}:`, error.message);
+        }
+    }
+    /**
+     * Detect whether the database schema supports persisting TLIVE.
+     * Cached in-memory to avoid querying information_schema on every TLIVE tick.
+     */
+    async ensureTliveColumnSupport(client) {
+        if (this.tliveColumnSupportChecked)
+            return;
+        const columnCheck = await client.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'ts_matches' AND column_name IN ('tlive', 'timeline')
+    `);
+        if (columnCheck.rows.length === 0) {
+            this.tliveTargetColumn = null;
+        }
+        else {
+            const hasTlive = columnCheck.rows.some((r) => r.column_name === 'tlive');
+            this.tliveTargetColumn = hasTlive ? 'tlive' : 'timeline';
+        }
+        this.tliveColumnSupportChecked = true;
+        logger_1.logger.info(`TLIVE column support detected: tliveTargetColumn=${this.tliveTargetColumn ?? 'none'}`);
+    }
+    /**
+     * Update only status_id from TLIVE inference.
+     * This makes DB the single source of truth for UI.
+     */
+    async updateMatchStatusInDatabase(matchId, statusId, providerUpdateTime = null) {
+        try {
+            const client = await connection_1.pool.connect();
+            try {
+                // Optimistic locking check
+                const freshnessCheck = await this.shouldApplyUpdate(client, matchId, providerUpdateTime);
+                if (!freshnessCheck.apply) {
+                    return; // Stale update, skip
+                }
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'websocket.service.ts:617', message: 'WebSocket status update start', data: { matchId, statusId, providerUpdateTime }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
+                // #endregion
+                const res = await client.query(`UPDATE ts_matches 
+           SET status_id = $1, 
+               provider_update_time = CASE 
+                 WHEN $3 IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $3)
+                 ELSE provider_update_time
+               END,
+               last_event_ts = $4,
+               updated_at = NOW() 
+           WHERE external_id = $2`, [statusId, matchId, freshnessCheck.providerTimeToWrite, freshnessCheck.ingestionTs]);
+                if (res.rowCount === 0) {
+                    logger_1.logger.warn(`⚠️ [WebSocket/STATUS] UPDATE affected 0 rows: matchId=${matchId}, status=${statusId}. ` +
+                        `Match not found in DB or external_id mismatch.`);
+                }
+                else {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/1eefcedf-7c6a-4338-ae7b-79041647f89f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'websocket.service.ts:620', message: 'WebSocket status update done', data: { matchId, statusId, rowCount: res.rowCount }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
+                    // #endregion
+                    logger_1.logger.info(`[WebSocket/STATUS] Successfully updated status_id=${statusId} for matchId=${matchId}, rowCount=${res.rowCount}`);
+                }
+            }
+            finally {
+                client.release();
+            }
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to update status_id from TLIVE for match ${matchId}:`, error.message);
+        }
+    }
+    /**
+     * Detect whether the database schema supports the new score columns.
+     * Cached in-memory to avoid querying information_schema on every WS tick.
+     */
+    async ensureScoreColumnSupport(client) {
+        if (this.scoreColumnSupportChecked)
+            return;
+        const columnCheck = await client.query(`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_name = 'ts_matches' AND column_name = 'home_score_regular'
+      LIMIT 1
+    `);
+        this.hasNewScoreColumns = columnCheck.rows.length > 0;
+        this.scoreColumnSupportChecked = true;
+        logger_1.logger.info(`Score column support detected: hasNewScoreColumns=${this.hasNewScoreColumns}`);
+    }
+    /**
+     * Detect whether the database schema supports persisting live_kickoff_time.
+     * Cached in-memory to avoid querying information_schema on every WS tick.
+     */
+    async ensureKickoffColumnSupport(client) {
+        if (this.kickoffColumnSupportChecked)
+            return;
+        const columnCheck = await client.query(`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_name = 'ts_matches' AND column_name = 'live_kickoff_time'
+      LIMIT 1
+    `);
+        this.hasLiveKickoffTimeColumn = columnCheck.rows.length > 0;
+        this.kickoffColumnSupportChecked = true;
+        logger_1.logger.info(`Kickoff column support detected: hasLiveKickoffTimeColumn=${this.hasLiveKickoffTimeColumn}`);
+    }
+    /**
+     * Extract provider update_time from MQTT message if available
+     * Tries common fields: update_time, updateTime, ut, ts, timestamp
+     * Returns unix seconds (converts from milliseconds if needed)
+     */
+    extractProviderUpdateTimeFromMessage(msg) {
+        if (!msg || typeof msg !== 'object')
+            return null;
+        const candidates = [
+            msg.update_time,
+            msg.updateTime,
+            msg.ut,
+            msg.ts,
+            msg.timestamp,
+            msg?.meta?.update_time,
+            msg?.meta?.timestamp,
+        ];
+        for (const c of candidates) {
+            if (c == null)
+                continue;
+            let num;
+            if (typeof c === 'string') {
+                num = parseInt(c, 10);
+                if (isNaN(num))
+                    continue;
+            }
+            else if (typeof c === 'number') {
+                num = c;
+            }
+            else {
+                continue;
+            }
+            // If milliseconds (>= year 2000 in ms), convert to seconds
+            if (num >= 946684800000) {
+                num = Math.floor(num / 1000);
+            }
+            // Must be reasonable unix timestamp (after 2000, before 2100)
+            if (num >= 946684800 && num < 4102444800) {
+                return num;
+            }
+        }
+        return null;
+    }
+    /**
+     * Best-effort extraction of live kickoff time from parsed payload.
+     *
+     * CRITICAL FIX (2026-01-19): Per TheSports API documentation:
+     * - score[4] = first_half_kickoff_timestamp (for status 2)
+     * - score[4] = second_half_kickoff_timestamp (for status 4)
+     * Formula: minute = (current_timestamp - kickoff_timestamp) / 60 + 1
+     *
+     * The parser now sets liveKickoffTime = messageTimestamp (score[4]).
+     */
+    extractLiveKickoffTimeSeconds(parsedScore) {
+        const candidates = [
+            parsedScore?.liveKickoffTime,
+            parsedScore?.live_kickoff_time,
+            parsedScore?.messageTimestamp, // CRITICAL: score[4] from TheSports API
+            parsedScore?.kickoffTime,
+            parsedScore?.kickoff_time,
+            parsedScore?.match?.live_kickoff_time,
+            parsedScore?.match?.liveKickoffTime,
+        ];
+        for (const c of candidates) {
+            const n = typeof c === 'string' ? Number(c) : c;
+            if (typeof n === 'number' && Number.isFinite(n) && n > 0)
+                return n;
+        }
+        return null;
+    }
+    /**
+     * Handle match state transitions
+     * CRITICAL: Detects "resurrection" states (Status 8 -> 5 or 7) for cup matches
+     *
+     * Match Flow:
+     * - Standard: 4 (2nd Half) -> 8 (End)
+     * - Cup: 4 -> 8 (End of Reg) -> 5 (Overtime) -> 8 (End of OT) -> 7 (Penalty) -> 8 (Final)
+     */
+    /*
+     * Handle match state transition
+     */
+    handleMatchStateTransition(matchId, statusId, homeScore, awayScore) {
+        const currentState = statusId;
+        const previousState = this.matchStates.get(matchId)?.status;
+        // Track current state
+        if (currentState === enums_1.MatchState.END) {
+            // Status 8 (END) - might be false end, track timestamp
+            this.matchStates.set(matchId, {
+                status: currentState,
+                lastStatus8Time: Date.now(),
+            });
+            // Start keepalive timer (20 minutes) to keep listening for potential resurrection
+            this.startMatchKeepalive(matchId);
+            logger_1.logger.info(`Match ${matchId} reached Status 8 (END). Keeping connection alive for potential Overtime/Penalty...`);
+        }
+        else if (currentState === enums_1.MatchState.OVERTIME || currentState === enums_1.MatchState.PENALTY_SHOOTOUT) {
+            // Status 5 (Overtime) or 7 (Penalty) - RESURRECTION detected!
+            if (previousState === enums_1.MatchState.END) {
+                logger_1.logger.warn(`🔄 MATCH RESURRECTION: Match ${matchId} transitioned from END (8) to ${currentState === enums_1.MatchState.OVERTIME ? 'OVERTIME (5)' : 'PENALTY (7)'}`);
+                // Clear keepalive timer since match is live again
+                this.clearMatchKeepalive(matchId);
+            }
+            // Update state (match is LIVE again)
+            this.matchStates.set(matchId, {
+                status: currentState,
+                lastStatus8Time: null, // Reset since match is live
+            });
+            logger_1.logger.info(`Match ${matchId} is LIVE: ${currentState === enums_1.MatchState.OVERTIME ? 'Overtime' : 'Penalty Shootout'}`);
+        }
+        else if (currentState === enums_1.MatchState.HALF_TIME) {
+            // STATUS 3 (HALF_TIME) - Trigger HT settlement immediately!
+            this.matchStates.set(matchId, {
+                status: currentState,
+                lastStatus8Time: null,
+            });
+            logger_1.logger.info(`[WebSocket] Match ${matchId} reached Halftime (Status 3). Triggering AI Settlement + First Half Data Persistence...`);
+            // For HT, current scores ARE the HT scores
+            // CRITICAL: Always set minute to 45 for halftime settlement
+            // REFACTORED: Now using centralized PredictionSettlementService
+            predictionSettlement_service_1.predictionSettlementService.processEvent({
+                matchId,
+                eventType: 'halftime',
+                homeScore: homeScore ?? 0,
+                awayScore: awayScore ?? 0,
+                minute: 45,
+                statusId: 3,
+                timestamp: Date.now(),
+            })
+                .then(res => {
+                if (res.settled > 0)
+                    logger_1.logger.info(`[AutoSettlement] HT Settlement for ${matchId}: ${res.settled} settled (${res.winners}W/${res.losers}L)`);
+            })
+                .catch(err => logger_1.logger.error(`[AutoSettlement] HT Settlement failed for ${matchId}:`, err));
+            // HALF STATS PERSISTENCE: Save first half data (stats + incidents)
+            halfStatsPersistence_service_1.halfStatsPersistenceService.saveFirstHalfData(matchId)
+                .then(res => {
+                if (res.success)
+                    logger_1.logger.info(`[HalfStatsPersistence] First half data saved for ${matchId}: ${res.statsCount} stats, ${res.incidentsCount} incidents`);
+            })
+                .catch(err => logger_1.logger.error(`[HalfStatsPersistence] Failed to save first half data for ${matchId}:`, err));
+        }
+        else if ((0, enums_1.isLiveMatchState)(currentState)) {
+            // Other live states (2, 4) - clear any keepalive timers
+            this.clearMatchKeepalive(matchId);
+            this.matchStates.set(matchId, {
+                status: currentState,
+                lastStatus8Time: null,
+            });
+        }
+        else {
+            // Other states - just track
+            this.matchStates.set(matchId, {
+                status: currentState,
+                lastStatus8Time: this.matchStates.get(matchId)?.lastStatus8Time || null,
+            });
+        }
+    }
+    /**
+     * Start keepalive timer for a match that hit status 8
+     * Keeps connection/subscription active for 20 minutes to detect potential resurrection
+     */
+    startMatchKeepalive(matchId) {
+        // Clear existing timer if any
+        this.clearMatchKeepalive(matchId);
+        // Set new timer
+        const timer = setTimeout(async () => {
+            const matchState = this.matchStates.get(matchId);
+            if (matchState?.status === enums_1.MatchState.END) {
+                // Status 8 has been stable for 20 minutes - consider it final
+                logger_1.logger.info(`Match ${matchId} Status 8 (END) stable for 20 minutes. Marking as definitely finished.`);
+                // Fetch final scores from database for settlement
+                try {
+                    const matchData = await connection_1.pool.query(`
+            SELECT home_score_display, away_score_display,
+                   (home_scores->>1)::INTEGER as ht_home,
+                   (away_scores->>1)::INTEGER as ht_away,
+                   minute
+            FROM ts_matches WHERE external_id = $1
+          `, [matchId]);
+                    const finalHome = matchData.rows[0]?.home_score_display ?? 0;
+                    const finalAway = matchData.rows[0]?.away_score_display ?? 0;
+                    const htHome = matchData.rows[0]?.ht_home;
+                    const htAway = matchData.rows[0]?.ht_away;
+                    const finalMinute = matchData.rows[0]?.minute ?? 90; // Default to 90 if not available
+                    // CRITICAL: Include minute for fulltime settlement
+                    // REFACTORED: Now using centralized PredictionSettlementService
+                    const result = await predictionSettlement_service_1.predictionSettlementService.processEvent({
+                        matchId,
+                        eventType: 'fulltime',
+                        homeScore: finalHome,
+                        awayScore: finalAway,
+                        htHome,
+                        htAway,
+                        minute: finalMinute,
+                        statusId: 8,
+                        timestamp: Date.now(),
+                    });
+                    if (result.settled > 0) {
+                        logger_1.logger.info(`[AutoSettlement] Match ${matchId}: ${result.settled} predictions settled (${result.winners} wins, ${result.losers} losses)`);
+                    }
+                }
+                catch (err) {
+                    logger_1.logger.error(`[AutoSettlement] Failed for match ${matchId}:`, err);
+                }
+            }
+            this.matchKeepaliveTimers.delete(matchId);
+        }, this.KEEPALIVE_DURATION_MS);
+        this.matchKeepaliveTimers.set(matchId, timer);
+    }
+    /**
+     * Clear keepalive timer (match is live again or definitely finished)
+     */
+    clearMatchKeepalive(matchId) {
+        const timer = this.matchKeepaliveTimers.get(matchId);
+        if (timer) {
+            clearTimeout(timer);
+            this.matchKeepaliveTimers.delete(matchId);
+        }
+    }
+    /**
+     * Detect score rollback (Goal Cancellation)
+     * CRITICAL RULE: Compare new score with DB score. If new < old, goal was cancelled.
+     * Do NOT rely solely on VAR incidents - use the score field as source of truth.
+     */
+    async detectScoreRollback(parsedScore) {
+        try {
+            const client = await connection_1.pool.connect();
+            try {
+                // Get current score from database
+                const result = await client.query(`SELECT home_scores, away_scores FROM ts_matches WHERE external_id = $1`, [parsedScore.matchId]);
+                if (result.rows.length === 0) {
+                    // Match not found in DB, skip rollback detection
+                    return;
+                }
+                const currentRow = result.rows[0];
+                const currentHomeScore = Array.isArray(currentRow.home_scores) && currentRow.home_scores.length > 0
+                    ? currentRow.home_scores[0] : 0;
+                const currentAwayScore = Array.isArray(currentRow.away_scores) && currentRow.away_scores.length > 0
+                    ? currentRow.away_scores[0] : 0;
+                const newHomeScore = parsedScore.home.score;
+                const newAwayScore = parsedScore.away.score;
+                // Check for score rollback (goal cancellation)
+                const homeRollback = newHomeScore < currentHomeScore;
+                const awayRollback = newAwayScore < currentAwayScore;
+                if (homeRollback || awayRollback) {
+                    logger_1.logger.warn(`⚠️ GOAL CANCELLED detected for match ${parsedScore.matchId}: ` +
+                        `${currentHomeScore}-${currentAwayScore} → ${newHomeScore}-${newAwayScore}`);
+                    // Emit goal cancelled event
+                    // Note: mqttReceivedTs not available here, use current timestamp
+                    const goalCancelledTs = Date.now();
+                    const eventKey = `${parsedScore.matchId}:GOAL_CANCELLED`;
+                    this.mqttReceivedTimestamps.set(eventKey, goalCancelledTs);
+                    this.emitEvent({
+                        type: 'GOAL_CANCELLED',
+                        matchId: parsedScore.matchId,
+                        homeScore: newHomeScore,
+                        awayScore: newAwayScore,
+                        previousHomeScore: currentHomeScore,
+                        previousAwayScore: currentAwayScore,
+                        timestamp: Date.now(),
+                    }, goalCancelledTs);
+                }
+            }
+            finally {
+                client.release();
+            }
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to detect score rollback for match ${parsedScore.matchId}:`, error.message);
+        }
+    }
+    /**
+     * Optimistic locking helper: Check if update should be applied
+     * Returns: { apply: boolean, providerTimeToWrite: number | null, ingestionTs: number }
+     *
+     * Rules:
+     * - If incomingProviderUpdateTime exists: compare to DB.provider_update_time → skip if stale
+     * - If no provider time: compare ingestionTs to DB.last_event_ts → skip if stale (within 5s window)
+     */
+    async shouldApplyUpdate(client, matchId, incomingProviderUpdateTime) {
+        const ingestionTs = Math.floor(Date.now() / 1000);
+        // Read current timestamps
+        const result = await client.query(`SELECT provider_update_time, last_event_ts FROM ts_matches WHERE external_id = $1`, [matchId]);
+        if (result.rows.length === 0) {
+            // Match not found - log warning but allow update attempt (will fail gracefully)
+            logger_1.logger.warn(`Match ${matchId} not found in DB during optimistic locking check`);
+            return { apply: true, providerTimeToWrite: incomingProviderUpdateTime, ingestionTs };
+        }
+        const existing = result.rows[0];
+        // CRITICAL FIX: Convert to numbers to avoid string concatenation bug
+        // PostgreSQL BIGINT can be returned as string depending on node-postgres config
+        const existingProviderTime = existing.provider_update_time !== null ? Number(existing.provider_update_time) : null;
+        const existingEventTime = existing.last_event_ts !== null ? Number(existing.last_event_ts) : null;
+        // Check freshness
+        if (incomingProviderUpdateTime !== null && incomingProviderUpdateTime !== undefined) {
+            // Provider supplied update_time
+            if (existingProviderTime !== null && incomingProviderUpdateTime <= existingProviderTime) {
+                logger_1.logger.debug(`Skipping stale update for ${matchId} (provider time: ${incomingProviderUpdateTime} <= ${existingProviderTime})`);
+                return { apply: false, providerTimeToWrite: null, ingestionTs };
+            }
+            // Use max(existing, incoming) to always advance
+            const providerTimeToWrite = Math.max(existingProviderTime || 0, incomingProviderUpdateTime);
+            return { apply: true, providerTimeToWrite, ingestionTs };
+        }
+        else {
+            // No provider update_time, use event time comparison
+            if (existingEventTime !== null && ingestionTs <= existingEventTime + 5) {
+                logger_1.logger.debug(`Skipping stale update for ${matchId} (event time: ${ingestionTs} <= ${existingEventTime + 5})`);
+                return { apply: false, providerTimeToWrite: null, ingestionTs };
+            }
+            return { apply: true, providerTimeToWrite: null, ingestionTs };
+        }
+    }
+    /**
+     * Update match in database with score data
+     * CRITICAL: Updates ts_matches table immediately when score changes
+     *
+     * Saves:
+     * - status_id: Match status (Index 1 from MQTT)
+     * - live_kickoff_time: Real kickoff timestamp (if known) - NOT derived from MQTT score timestamp
+     * - Separate score columns: regular, overtime, penalties, display
+     * - Legacy: home_scores, away_scores (for backward compatibility)
+     * - provider_update_time: Provider's update_time (if available from MQTT, else null)
+     * - last_event_ts: Our ingestion timestamp (always set)
+     *
+     * Frontend should use live_kickoff_time (if set) to calculate: CurrentTime - KickoffTime = MatchMinute
+     * Frontend uses score_display for UI, or can calculate using the algorithm
+     * Frontend should implement this logic using live_kickoff_time from database.
+     */
+    async updateMatchInDatabase(parsedScore, providerUpdateTime = null) {
+        try {
+            const client = await connection_1.pool.connect();
+            try {
+                // Optimistic locking check
+                // Use provider update_time if available from MQTT message, else null
+                const freshnessCheck = await this.shouldApplyUpdate(client, parsedScore.matchId, providerUpdateTime);
+                if (!freshnessCheck.apply) {
+                    return false; // Stale update, skip
+                }
+                // Read existing status and kickoff timestamps for transition detection
+                const existingStatusResult = await client.query(`SELECT status_id, first_half_kickoff_ts, second_half_kickoff_ts, overtime_kickoff_ts 
+           FROM ts_matches WHERE external_id = $1`, [parsedScore.matchId]);
+                const existingStatus = existingStatusResult.rows.length > 0 ? existingStatusResult.rows[0] : null;
+                const existingStatusId = existingStatus?.status_id ?? null;
+                await this.ensureScoreColumnSupport(client);
+                const hasNewColumns = this.hasNewScoreColumns;
+                // Ensure kickoff column support and extract kickoff time if possible
+                await this.ensureKickoffColumnSupport(client);
+                const kickoffSeconds = this.hasLiveKickoffTimeColumn
+                    ? this.extractLiveKickoffTimeSeconds(parsedScore)
+                    : null;
+                // Determine kickoff time to use (provider kickoff or ingestion time as fallback)
+                const kickoffTimeToUse = kickoffSeconds !== null ? kickoffSeconds : freshnessCheck.ingestionTs;
+                if (hasNewColumns) {
+                    const withKickoff = this.hasLiveKickoffTimeColumn && kickoffSeconds !== null;
+                    // Build kickoff_ts write-once clauses based on status transition
+                    const kickoffClauses = [];
+                    const kickoffValues = [];
+                    let kickoffParamIndex = withKickoff ? 14 : 11; // Start after existing params
+                    // Status 2 (FIRST_HALF): Set first_half_kickoff_ts if transitioning from non-live or null
+                    if (parsedScore.statusId === 2 && (existingStatusId === null || existingStatusId === 1)) {
+                        if (existingStatus?.first_half_kickoff_ts === null) {
+                            kickoffClauses.push(`first_half_kickoff_ts = $${kickoffParamIndex++}`);
+                            kickoffValues.push(kickoffTimeToUse);
+                            const source = kickoffSeconds !== null ? 'liveKickoff' : 'now';
+                            logger_1.logger.info(`[KickoffTS] set first_half_kickoff_ts=${kickoffTimeToUse} match_id=${parsedScore.matchId} source=${source}`);
+                        }
+                        else {
+                            logger_1.logger.debug(`[KickoffTS] skip (already set) first_half_kickoff_ts match_id=${parsedScore.matchId}`);
+                        }
+                    }
+                    // Status 4 (SECOND_HALF): Set second_half_kickoff_ts if transitioning from HT
+                    if (parsedScore.statusId === 4 && existingStatusId === 3) {
+                        if (existingStatus?.second_half_kickoff_ts === null) {
+                            kickoffClauses.push(`second_half_kickoff_ts = $${kickoffParamIndex++}`);
+                            kickoffValues.push(kickoffTimeToUse);
+                            const source = kickoffSeconds !== null ? 'liveKickoff' : 'now';
+                            logger_1.logger.info(`[KickoffTS] set second_half_kickoff_ts=${kickoffTimeToUse} match_id=${parsedScore.matchId} source=${source}`);
+                        }
+                        else {
+                            logger_1.logger.debug(`[KickoffTS] skip (already set) second_half_kickoff_ts match_id=${parsedScore.matchId}`);
+                        }
+                    }
+                    // Status 5 (OVERTIME): Set overtime_kickoff_ts if transitioning from SECOND_HALF
+                    if (parsedScore.statusId === 5 && existingStatusId === 4) {
+                        if (existingStatus?.overtime_kickoff_ts === null) {
+                            kickoffClauses.push(`overtime_kickoff_ts = $${kickoffParamIndex++}`);
+                            kickoffValues.push(kickoffTimeToUse);
+                            const source = kickoffSeconds !== null ? 'liveKickoff' : 'now';
+                            logger_1.logger.info(`[KickoffTS] set overtime_kickoff_ts=${kickoffTimeToUse} match_id=${parsedScore.matchId} source=${source}`);
+                        }
+                        else {
+                            logger_1.logger.debug(`[KickoffTS] skip (already set) overtime_kickoff_ts match_id=${parsedScore.matchId}`);
+                        }
+                    }
+                    // Build SET clauses dynamically
+                    const setClauses = [];
+                    const queryValues = [];
+                    // Status
+                    setClauses.push(`status_id = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.statusId);
+                    // Legacy live_kickoff_time (if applicable)
+                    if (withKickoff) {
+                        setClauses.push(`live_kickoff_time = COALESCE(live_kickoff_time, $${queryValues.length + 1})`);
+                        queryValues.push(kickoffSeconds);
+                    }
+                    // Scores (new columns)
+                    setClauses.push(`home_score_regular = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.home.regularScore);
+                    setClauses.push(`home_score_overtime = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.home.overtimeScore);
+                    setClauses.push(`home_score_penalties = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.home.penaltyScore);
+                    setClauses.push(`home_score_display = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.home.score);
+                    setClauses.push(`away_score_regular = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.away.regularScore);
+                    setClauses.push(`away_score_overtime = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.away.overtimeScore);
+                    setClauses.push(`away_score_penalties = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.away.penaltyScore);
+                    setClauses.push(`away_score_display = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.away.score);
+                    // Legacy arrays - CRITICAL FIX: Use JSONB format, not PostgreSQL ARRAY
+                    // Score array format: [regular, halftime, red_cards, yellow_cards, corners, overtime, penalty]
+                    setClauses.push(`home_scores = jsonb_build_array($${queryValues.length + 1}, 0, 0, 0, 0, $${queryValues.length + 2}, $${queryValues.length + 3})`);
+                    queryValues.push(parsedScore.home.regularScore);
+                    queryValues.push(parsedScore.home.overtimeScore || 0);
+                    queryValues.push(parsedScore.home.penaltyScore || 0);
+                    setClauses.push(`away_scores = jsonb_build_array($${queryValues.length + 1}, 0, 0, 0, 0, $${queryValues.length + 2}, $${queryValues.length + 3})`);
+                    queryValues.push(parsedScore.away.regularScore);
+                    queryValues.push(parsedScore.away.overtimeScore || 0);
+                    queryValues.push(parsedScore.away.penaltyScore || 0);
+                    // Kickoff timestamps (write-once)
+                    if (kickoffClauses.length > 0) {
+                        kickoffClauses.forEach((clause, idx) => {
+                            setClauses.push(clause);
+                            queryValues.push(kickoffValues[idx]);
+                        });
+                    }
+                    // Provider update time
+                    const providerTimeParam = queryValues.length + 1;
+                    setClauses.push(`provider_update_time = CASE 
+            WHEN $${providerTimeParam} IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $${providerTimeParam})
+            ELSE provider_update_time
+          END`);
+                    queryValues.push(freshnessCheck.providerTimeToWrite);
+                    // Last event ts
+                    setClauses.push(`last_event_ts = $${queryValues.length + 1}`);
+                    queryValues.push(freshnessCheck.ingestionTs);
+                    // Updated at
+                    setClauses.push(`updated_at = NOW()`);
+                    // Match ID for WHERE clause
+                    const matchIdParam = queryValues.length + 1;
+                    queryValues.push(parsedScore.matchId);
+                    const query = `
+            UPDATE ts_matches
+            SET ${setClauses.join(', ')}
+            WHERE external_id = $${matchIdParam}
+          `;
+                    const res = await client.query(query, queryValues);
+                    if (res.rowCount === 0) {
+                        logger_1.logger.warn(`⚠️ [WebSocket/SCORE] UPDATE affected 0 rows: matchId=${parsedScore.matchId}, ` +
+                            `status=${parsedScore.statusId}, score=${parsedScore.home.score}-${parsedScore.away.score}. ` +
+                            `Match not found in DB or external_id mismatch.`);
+                        return false;
+                    }
+                    logger_1.logger.debug(`Updated match ${parsedScore.matchId} in database: ` +
+                        `Display: ${parsedScore.home.score}-${parsedScore.away.score}, ` +
+                        `Regular: ${parsedScore.home.regularScore}-${parsedScore.away.regularScore}, ` +
+                        `Overtime: ${parsedScore.home.overtimeScore}-${parsedScore.away.overtimeScore}, ` +
+                        `Penalties: ${parsedScore.home.penaltyScore}-${parsedScore.away.penaltyScore}, ` +
+                        `status=${parsedScore.statusId}, msgTs=${parsedScore.messageTimestamp}`);
+                    return true;
+                }
+                else {
+                    // Legacy path (no new score columns) - same kickoff_ts write-once logic
+                    const withKickoff = this.hasLiveKickoffTimeColumn && kickoffSeconds !== null;
+                    // Build kickoff_ts write-once clauses (same logic as new columns path)
+                    const kickoffClauses = [];
+                    const kickoffValues = [];
+                    if (parsedScore.statusId === 2 && (existingStatusId === null || existingStatusId === 1)) {
+                        if (existingStatus?.first_half_kickoff_ts === null) {
+                            kickoffClauses.push(`first_half_kickoff_ts = $${withKickoff ? 4 : 3}`);
+                            kickoffValues.push(kickoffTimeToUse);
+                            const source = kickoffSeconds !== null ? 'liveKickoff' : 'now';
+                            logger_1.logger.info(`[KickoffTS] set first_half_kickoff_ts=${kickoffTimeToUse} match_id=${parsedScore.matchId} source=${source} (legacy)`);
+                        }
+                        else {
+                            logger_1.logger.debug(`[KickoffTS] skip (already set) first_half_kickoff_ts match_id=${parsedScore.matchId} (legacy)`);
+                        }
+                    }
+                    if (parsedScore.statusId === 4 && existingStatusId === 3) {
+                        if (existingStatus?.second_half_kickoff_ts === null) {
+                            kickoffClauses.push(`second_half_kickoff_ts = $${withKickoff ? 4 : 3}`);
+                            kickoffValues.push(kickoffTimeToUse);
+                            const source = kickoffSeconds !== null ? 'liveKickoff' : 'now';
+                            logger_1.logger.info(`[KickoffTS] set second_half_kickoff_ts=${kickoffTimeToUse} match_id=${parsedScore.matchId} source=${source} (legacy)`);
+                        }
+                        else {
+                            logger_1.logger.debug(`[KickoffTS] skip (already set) second_half_kickoff_ts match_id=${parsedScore.matchId} (legacy)`);
+                        }
+                    }
+                    if (parsedScore.statusId === 5 && existingStatusId === 4) {
+                        if (existingStatus?.overtime_kickoff_ts === null) {
+                            kickoffClauses.push(`overtime_kickoff_ts = $${withKickoff ? 4 : 3}`);
+                            kickoffValues.push(kickoffTimeToUse);
+                            const source = kickoffSeconds !== null ? 'liveKickoff' : 'now';
+                            logger_1.logger.info(`[KickoffTS] set overtime_kickoff_ts=${kickoffTimeToUse} match_id=${parsedScore.matchId} source=${source} (legacy)`);
+                        }
+                        else {
+                            logger_1.logger.debug(`[KickoffTS] skip (already set) overtime_kickoff_ts match_id=${parsedScore.matchId} (legacy)`);
+                        }
+                    }
+                    // Build query dynamically (legacy path)
+                    const setClauses = [];
+                    const queryValues = [];
+                    setClauses.push(`status_id = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.statusId);
+                    if (withKickoff) {
+                        setClauses.push(`live_kickoff_time = COALESCE(live_kickoff_time, $${queryValues.length + 1})`);
+                        queryValues.push(kickoffSeconds);
+                    }
+                    // CRITICAL FIX: Use JSONB format + add missing score display columns
+                    // Score array format: [regular, halftime, red_cards, yellow_cards, corners, overtime, penalty]
+                    setClauses.push(`home_scores = jsonb_build_array($${queryValues.length + 1}, 0, 0, 0, 0, $${queryValues.length + 2}, $${queryValues.length + 3})`);
+                    queryValues.push(parsedScore.home.regularScore || parsedScore.home.score || 0);
+                    queryValues.push(parsedScore.home.overtimeScore || 0);
+                    queryValues.push(parsedScore.home.penaltyScore || 0);
+                    setClauses.push(`away_scores = jsonb_build_array($${queryValues.length + 1}, 0, 0, 0, 0, $${queryValues.length + 2}, $${queryValues.length + 3})`);
+                    queryValues.push(parsedScore.away.regularScore || parsedScore.away.score || 0);
+                    queryValues.push(parsedScore.away.overtimeScore || 0);
+                    queryValues.push(parsedScore.away.penaltyScore || 0);
+                    // Add score display columns (missing in legacy path)
+                    setClauses.push(`home_score_display = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.home.score);
+                    setClauses.push(`away_score_display = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.away.score);
+                    setClauses.push(`home_score_regular = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.home.regularScore || parsedScore.home.score || 0);
+                    setClauses.push(`away_score_regular = $${queryValues.length + 1}`);
+                    queryValues.push(parsedScore.away.regularScore || parsedScore.away.score || 0);
+                    // Add kickoff timestamps
+                    if (kickoffClauses.length > 0) {
+                        kickoffClauses.forEach((clause, idx) => {
+                            // Recalculate param index based on current queryValues length
+                            const paramIdx = queryValues.length + 1;
+                            setClauses.push(clause.replace(/\$\d+/, `$${paramIdx}`));
+                            queryValues.push(kickoffValues[idx]);
+                        });
+                    }
+                    const providerTimeParam = queryValues.length + 1;
+                    setClauses.push(`provider_update_time = CASE 
+            WHEN $${providerTimeParam} IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $${providerTimeParam})
+            ELSE provider_update_time
+          END`);
+                    queryValues.push(freshnessCheck.providerTimeToWrite);
+                    setClauses.push(`last_event_ts = $${queryValues.length + 1}`);
+                    queryValues.push(freshnessCheck.ingestionTs);
+                    setClauses.push(`updated_at = NOW()`);
+                    const matchIdParam = queryValues.length + 1;
+                    queryValues.push(parsedScore.matchId);
+                    const query = `
+            UPDATE ts_matches
+            SET ${setClauses.join(', ')}
+            WHERE external_id = $${matchIdParam}
+          `;
+                    const res = await client.query(query, queryValues);
+                    if (res.rowCount === 0) {
+                        logger_1.logger.warn(`⚠️ [WebSocket/SCORE] UPDATE affected 0 rows (legacy): matchId=${parsedScore.matchId}, ` +
+                            `status=${parsedScore.statusId}, score=${parsedScore.home.score}-${parsedScore.away.score}. ` +
+                            `Match not found in DB or external_id mismatch.`);
+                        return false;
+                    }
+                    logger_1.logger.debug(`Updated match ${parsedScore.matchId} in database (legacy): ` +
+                        `${parsedScore.home.score}-${parsedScore.away.score}, msgTs=${parsedScore.messageTimestamp}`);
+                    return true;
+                }
+            }
+            finally {
+                client.release();
+            }
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to update match ${parsedScore.matchId} in database:`, error.message);
+            return false;
+        }
+    }
+    /**
+     * Calculate match minute and injury time display
+     *
+     * INJURY TIME LOGIC (for Frontend):
+     *
+     * Formula: CurrentMinute = (Now - live_kickoff_time) / 60
+     *
+     * Display Rules:
+     * 1. First Half (status_id = 2):
+     *    - If CurrentMinute <= 45: Show "X'" (e.g., "23'")
+     *    - If CurrentMinute > 45: Show "45+" (injury time)
+     *
+     * 2. Second Half (status_id = 4):
+     *    - Calculate: SecondHalfMinute = CurrentMinute - 45
+     *    - If SecondHalfMinute <= 45: Show "X'" (e.g., "67'" = 22' of 2nd half)
+     *    - If SecondHalfMinute > 45: Show "90+" (injury time)
+     *
+     * 3. Half Time (status_id = 3): Show "HT"
+     * 4. Full Time (status_id = 5): Show "FT"
+     *
+     * Note: This is a helper function for documentation.
+     * Frontend should implement this logic using match_time from database.
+     *
+     * @param statusId - Match status ID from database
+     * @param liveKickoffTime - Live kickoff timestamp (Unix seconds)
+     * @returns Calculated minute and display string
+     */
+    calculateMatchMinute(statusId, liveKickoffTime) {
+        const now = Math.floor(Date.now() / 1000); // Current Unix timestamp
+        const elapsedSeconds = now - liveKickoffTime;
+        const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+        // Status mapping (based on MatchState enum)
+        // 1 = Not Started, 2 = First Half, 3 = Half Time, 4 = Second Half, 5 = Full Time
+        if (statusId === 2) {
+            // First Half
+            if (elapsedMinutes <= 45) {
+                return { minute: elapsedMinutes, display: `${elapsedMinutes}'` };
+            }
+            else {
+                return { minute: elapsedMinutes, display: '45+' };
+            }
+        }
+        else if (statusId === 4) {
+            // Second Half
+            const secondHalfMinute = elapsedMinutes - 45;
+            if (secondHalfMinute <= 45) {
+                return { minute: elapsedMinutes, display: `${elapsedMinutes}'` };
+            }
+            else {
+                return { minute: elapsedMinutes, display: '90+' };
+            }
+        }
+        else if (statusId === 3) {
+            return { minute: 45, display: 'HT' };
+        }
+        else if (statusId === 5) {
+            return { minute: 90, display: 'FT' };
+        }
+        else {
+            return { minute: 0, display: '0\'' };
+        }
+    }
+    /**
+     * Update match statistics in database
+     * CRITICAL: Only updates if values changed (optimization)
+     * Stats are only available for popular competitions - handle gracefully if missing
+     */
+    async updateMatchStatisticsInDatabase(matchId, statistics, providerUpdateTime = null) {
+        try {
+            // If no stats, skip update (non-popular match)
+            if (!statistics || Object.keys(statistics).length === 0) {
+                logger_1.logger.debug(`No statistics available for match ${matchId} (non-popular competition)`);
+                return;
+            }
+            const client = await connection_1.pool.connect();
+            try {
+                // Check if column exists
+                const columnCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'ts_matches' AND column_name = 'statistics'
+        `);
+                if (columnCheck.rows.length === 0) {
+                    logger_1.logger.warn(`statistics column not found in ts_matches. Skipping statistics update for match ${matchId}`);
+                    return;
+                }
+                // Get current statistics to compare (optimization: only update if changed)
+                const currentResult = await client.query(`SELECT statistics FROM ts_matches WHERE external_id = $1`, [matchId]);
+                if (currentResult.rows.length === 0) {
+                    logger_1.logger.warn(`Match ${matchId} not found in database, skipping statistics update`);
+                    return;
+                }
+                const currentStats = currentResult.rows[0].statistics;
+                const currentStatsStr = JSON.stringify(currentStats || {});
+                const newStatsStr = JSON.stringify(statistics);
+                // Only update if statistics changed (optimization)
+                if (currentStatsStr === newStatsStr) {
+                    logger_1.logger.debug(`Statistics unchanged for match ${matchId}, skipping update`);
+                    return;
+                }
+                // Optimistic locking check
+                const freshnessCheck = await this.shouldApplyUpdate(client, matchId, providerUpdateTime);
+                if (!freshnessCheck.apply) {
+                    return; // Stale update, skip
+                }
+                // Update statistics JSONB column
+                const query = `
+          UPDATE ts_matches
+          SET 
+            statistics = $1::jsonb,
+            provider_update_time = CASE 
+              WHEN $3 IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $3)
+              ELSE provider_update_time
+            END,
+            last_event_ts = $4,
+            updated_at = NOW()
+          WHERE external_id = $2
+        `;
+                const res = await client.query(query, [
+                    JSON.stringify(statistics),
+                    matchId,
+                    freshnessCheck.providerTimeToWrite,
+                    freshnessCheck.ingestionTs,
+                ]);
+                if (res.rowCount === 0) {
+                    logger_1.logger.warn(`⚠️ [WebSocket/STATS] UPDATE affected 0 rows: matchId=${matchId}. ` +
+                        `Match not found in DB or external_id mismatch.`);
+                    return;
+                }
+                logger_1.logger.debug(`Updated statistics for match ${matchId}: ${Object.keys(statistics).join(', ')}`);
+            }
+            finally {
+                client.release();
+            }
+        }
+        catch (error) {
+            // If column doesn't exist, log and continue (non-critical)
+            if (error.message.includes('column') && error.message.includes('does not exist')) {
+                logger_1.logger.warn(`statistics column not found in ts_matches. Consider adding it via migration.`);
+            }
+            else {
+                logger_1.logger.error(`Failed to update statistics for match ${matchId}:`, error.message);
+            }
+        }
+    }
+    /**
+     * Update match incidents in database
+     * CRITICAL: Replaces entire incidents list for the match
+     * The API sends the full list or increments - we replace for safety
+     */
+    async updateMatchIncidentsInDatabase(matchId, incidents, providerUpdateTime = null) {
+        try {
+            const client = await connection_1.pool.connect();
+            try {
+                // Check if incidents column exists, if not we'll need a migration
+                // For now, store in a JSONB column or separate table
+                // Using a JSONB column in ts_matches for simplicity
+                // First, check if column exists
+                const columnCheck = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'ts_matches' AND column_name = 'incidents'
+        `);
+                if (columnCheck.rows.length === 0) {
+                    // Column doesn't exist - log warning but don't fail
+                    logger_1.logger.warn(`incidents column not found in ts_matches. Skipping incidents update for match ${matchId}`);
+                    return;
+                }
+                // Optimistic locking check
+                const freshnessCheck = await this.shouldApplyUpdate(client, matchId, providerUpdateTime);
+                if (!freshnessCheck.apply) {
+                    return; // Stale update, skip
+                }
+                // Update incidents JSONB column
+                const query = `
+          UPDATE ts_matches
+          SET 
+            incidents = $1::jsonb,
+            provider_update_time = CASE 
+              WHEN $3 IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $3)
+              ELSE provider_update_time
+            END,
+            last_event_ts = $4,
+            updated_at = NOW()
+          WHERE external_id = $2
+        `;
+                const res = await client.query(query, [
+                    JSON.stringify(incidents),
+                    matchId,
+                    freshnessCheck.providerTimeToWrite,
+                    freshnessCheck.ingestionTs,
+                ]);
+                if (res.rowCount === 0) {
+                    logger_1.logger.warn(`⚠️ [WebSocket/INCIDENTS] UPDATE affected 0 rows: matchId=${matchId}. ` +
+                        `Match not found in DB or external_id mismatch.`);
+                    return;
+                }
+                logger_1.logger.debug(`Updated ${incidents.length} incident(s) for match ${matchId}`);
+            }
+            finally {
+                client.release();
+            }
+        }
+        catch (error) {
+            // If column doesn't exist, log and continue (non-critical)
+            if (error.message.includes('column') && error.message.includes('does not exist')) {
+                logger_1.logger.warn(`incidents column not found in ts_matches. Consider adding it via migration.`);
+            }
+            else {
+                logger_1.logger.error(`Failed to update incidents for match ${matchId}:`, error.message);
+            }
+        }
+    }
+    /**
+     * Emit event to handlers
+     */
+    emitEvent(event, mqttReceivedTs) {
+        logger_1.logger.info(`Event detected: ${event.type} for match ${event.matchId}`);
+        // LATENCY MONITORING: Record event emitted timestamp
+        // If mqttReceivedTs not provided, try to get from stored timestamps
+        const eventKey = `${event.matchId}:${event.type}`;
+        const storedMqttTs = mqttReceivedTs || this.mqttReceivedTimestamps.get(eventKey);
+        if (storedMqttTs) {
+            this.latencyMonitor.recordEventEmitted(event.type, event.matchId, storedMqttTs);
+            // Clean up stored timestamp after use
+            this.mqttReceivedTimestamps.delete(eventKey);
+        }
+        this.eventHandlers.forEach(handler => {
+            try {
+                handler(event, storedMqttTs); // Pass mqttReceivedTs to handler
+            }
+            catch (error) {
+                logger_1.logger.error('Error in event handler:', error);
+            }
+        });
+    }
+    /**
+     * Register event handler
+     */
+    onEvent(handler) {
+        this.eventHandlers.push(handler);
+    }
+    /**
+     * Remove event handler
+     */
+    offEvent(handler) {
+        this.eventHandlers = this.eventHandlers.filter(h => h !== handler);
+    }
+    /**
+     * Get connection status
+     */
+    getConnectionStatus() {
+        return this.client.getConnectionStatus();
+    }
+    /**
+     * Disconnect
+     */
+    disconnect() {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
+        // Clear all keepalive timers
+        for (const [matchId, timer] of this.matchKeepaliveTimers.entries()) {
+            clearTimeout(timer);
+        }
+        this.matchKeepaliveTimers.clear();
+        this.matchStates.clear();
+        this.client.disconnect();
+    }
+    /**
+     * Get match state for a specific match
+     * Useful for checking if match is in "false end" state
+     */
+    getMatchState(matchId) {
+        return this.matchStates.get(matchId) || null;
+    }
+    /**
+     * Trigger post-match persistence when match ends
+     * CRITICAL: Ensures all match data (stats, incidents, trend, player stats, standings) is saved
+     */
+    async triggerPostMatchPersistence(matchId) {
+        try {
+            // Import PostMatchProcessor dynamically to avoid circular dependencies
+            const { PostMatchProcessor } = await Promise.resolve().then(() => __importStar(require('../../liveData/postMatchProcessor')));
+            const { theSportsAPI } = await Promise.resolve().then(() => __importStar(require('../../../core')));
+            // SINGLETON: Use shared API client with global rate limiting
+            const processor = new PostMatchProcessor();
+            // Trigger post-match processing
+            await processor.onMatchEnded(matchId);
+            logger_1.logger.info(`[WebSocket] ✅ Post-match persistence completed for ${matchId}`);
+        }
+        catch (error) {
+            logger_1.logger.error(`[WebSocket] ❌ Failed to trigger post-match persistence for ${matchId}:`, error);
+            // Don't throw - this is a background operation, shouldn't block WebSocket processing
+        }
+    }
+    /**
+     * Check if match is in keepalive period (potential false end)
+     */
+    isMatchInKeepalive(matchId) {
+        return this.matchKeepaliveTimers.has(matchId);
+    }
+    /**
+     * Save match statistics from WebSocket event
+     * Called when score changes to ensure statistics are persisted
+     */
+    async saveMatchStatisticsFromWebSocket(matchId) {
+        try {
+            // Import CombinedStatsService dynamically to avoid circular dependencies
+            const { CombinedStatsService } = await Promise.resolve().then(() => __importStar(require('../match/combinedStats.service')));
+            // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
+            const combinedStatsService = new CombinedStatsService();
+            const stats = await combinedStatsService.getCombinedMatchStats(matchId);
+            if (stats && stats.allStats.length > 0) {
+                await combinedStatsService.saveCombinedStatsToDatabase(matchId, stats);
+                logger_1.logger.debug(`[WebSocket] Saved statistics for ${matchId} from WebSocket event`);
+            }
+        }
+        catch (error) {
+            // Don't throw - this is a background operation
+            logger_1.logger.warn(`[WebSocket] Error saving statistics for ${matchId}: ${error.message}`);
+        }
+    }
+    /**
+     * Save match trend from WebSocket event
+     * Called when match state changes to ensure trend data is persisted
+     */
+    async saveMatchTrendFromWebSocket(matchId) {
+        const client = await connection_1.pool.connect();
+        try {
+            // Get match status
+            const statusResult = await client.query(`
+        SELECT status_id FROM ts_matches WHERE external_id = $1
+      `, [matchId]);
+            const matchStatus = statusResult.rows[0]?.status_id || 0;
+            // Import MatchTrendService dynamically
+            const { MatchTrendService } = await Promise.resolve().then(() => __importStar(require('../match/matchTrend.service')));
+            // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
+            const matchTrendService = new MatchTrendService();
+            // Get trend data
+            const trendData = await matchTrendService.getMatchTrend({ match_id: matchId }, matchStatus);
+            if (trendData?.results) {
+                // Check if results has actual data
+                const results = Array.isArray(trendData.results) ? trendData.results[0] : trendData.results;
+                if (results && typeof results === 'object' && !Array.isArray(results)) {
+                    if ((results.first_half?.length ?? 0) > 0 || (results.second_half?.length ?? 0) > 0 || (results.overtime?.length ?? 0) > 0) {
+                        // Save to trend_data column
+                        await client.query(`
+              UPDATE ts_matches
+              SET trend_data = $1::jsonb,
+                  updated_at = NOW()
+              WHERE external_id = $2
+            `, [JSON.stringify(trendData.results), matchId]);
+                        logger_1.logger.debug(`[WebSocket] Saved trend data for ${matchId} from WebSocket event`);
+                    }
+                }
+            }
+        }
+        catch (error) {
+            // Don't throw - this is a background operation
+            logger_1.logger.warn(`[WebSocket] Error saving trend for ${matchId}: ${error.message}`);
+        }
+        finally {
+            client.release();
+        }
+    }
+    /**
+     * Save incidents to CombinedStatsService format
+     * This ensures incidents are in statistics JSONB column as well as incidents column
+     */
+    async saveMatchIncidentsToCombinedStats(matchId, incidents) {
+        try {
+            // Import CombinedStatsService dynamically
+            const { CombinedStatsService } = await Promise.resolve().then(() => __importStar(require('../match/combinedStats.service')));
+            // Cast to any to bypass type check - WebSocketClient provides same API as TheSportsClient
+            const combinedStatsService = new CombinedStatsService();
+            // Get existing stats and merge with incidents
+            const existingStats = await combinedStatsService.getCombinedStatsFromDatabase(matchId);
+            if (existingStats) {
+                existingStats.incidents = incidents;
+                await combinedStatsService.saveCombinedStatsToDatabase(matchId, existingStats);
+                logger_1.logger.debug(`[WebSocket] Saved incidents to combined stats for ${matchId}`);
+            }
+            else {
+                // Create new entry with incidents
+                const newStats = {
+                    matchId: matchId,
+                    basicStats: [],
+                    detailedStats: [],
+                    allStats: [],
+                    incidents: incidents,
+                    score: null,
+                    lastUpdated: Date.now(),
+                };
+                await combinedStatsService.saveCombinedStatsToDatabase(matchId, newStats);
+                logger_1.logger.debug(`[WebSocket] Saved incidents to combined stats (new entry) for ${matchId}`);
+            }
+        }
+        catch (error) {
+            // Don't throw - this is a background operation
+            logger_1.logger.warn(`[WebSocket] Error saving incidents to combined stats for ${matchId}: ${error.message}`);
+        }
+    }
+    /**
+     * REFACTOR: Direct MQTT score write to database
+     *
+     * Bypasses queue and orchestrator for lightning-fast updates.
+     * MQTT is the authoritative source for real-time scores.
+     *
+     * Optimistic locking: Uses provider_update_time timestamp to prevent stale updates.
+     */
+    async writeMQTTScoreDirectly(parsedScore, providerUpdateTime, ingestionTs) {
+        const startTime = Date.now();
+        const matchId = parsedScore.matchId;
+        // TEMPORARY: Log all MQTT direct write attempts for monitoring
+        logger_1.logger.info(`[MQTT Direct Write] ATTEMPTING ${matchId}: ${parsedScore.home.score}-${parsedScore.away.score}, status=${parsedScore.statusId}, minute=${parsedScore.minute}`);
+        try {
+            // Prepare score arrays (7-element format per TheSports API)
+            const homeScores = [
+                parsedScore.home.regularScore ?? 0, // Index 0: regular score
+                parsedScore.home.halftime ?? 0, // Index 1: halftime
+                parsedScore.home.redCards ?? 0, // Index 2: red cards
+                parsedScore.home.yellowCards ?? 0, // Index 3: yellow cards
+                parsedScore.home.corners ?? 0, // Index 4: corners
+                parsedScore.home.overtimeScore ?? 0, // Index 5: overtime score
+                parsedScore.home.penaltyScore ?? 0, // Index 6: penalty score
+            ];
+            const awayScores = [
+                parsedScore.away.regularScore ?? 0,
+                parsedScore.away.halftime ?? 0,
+                parsedScore.away.redCards ?? 0,
+                parsedScore.away.yellowCards ?? 0,
+                parsedScore.away.corners ?? 0,
+                parsedScore.away.overtimeScore ?? 0,
+                parsedScore.away.penaltyScore ?? 0,
+            ];
+            // Calculate display scores (per TheSports algorithm)
+            const homeScoreDisplay = parsedScore.home.score;
+            const awayScoreDisplay = parsedScore.away.score;
+            // CRITICAL FIX (2026-01-17): Field-level timestamp check for MQTT
+            // MQTT is real-time source - should override API even if provider_update_time is older
+            // Check individual field timestamps to allow MQTT updates when field data is stale
+            const query = `
+        UPDATE ts_matches
+        SET
+          home_scores = $1::jsonb,
+          away_scores = $2::jsonb,
+          home_score_display = $3,
+          away_score_display = $4,
+          status_id = $5,
+          minute = $6,
+          provider_update_time = CASE
+            WHEN $7 IS NOT NULL THEN GREATEST(COALESCE(provider_update_time, 0), $7)
+            ELSE provider_update_time
+          END,
+          last_event_ts = $8,
+          updated_at = NOW(),
+          home_score_source = 'mqtt',
+          home_score_timestamp = $8,
+          away_score_source = 'mqtt',
+          away_score_timestamp = $8,
+          status_id_source = 'mqtt',
+          status_id_timestamp = $8,
+          minute_source = 'mqtt',
+          minute_timestamp = $8
+        WHERE external_id = $9
+          AND (
+            -- Classic optimistic lock: provider_update_time is stale
+            provider_update_time IS NULL
+            OR provider_update_time < $7
+            OR $7 IS NULL
+            -- MQTT PRIORITY FIX: Allow if ANY field timestamp is older than MQTT ingestion time
+            -- This ensures MQTT (real-time) overrides stale API data
+            OR $8 > COALESCE(home_score_timestamp, 0)
+            OR $8 > COALESCE(away_score_timestamp, 0)
+            OR $8 > COALESCE(status_id_timestamp, 0)
+            OR $8 > COALESCE(minute_timestamp, 0)
+          )
+        RETURNING external_id, home_score_display, away_score_display, status_id, minute
+      `;
+            const result = await connection_1.pool.query(query, [
+                JSON.stringify(homeScores), // $1
+                JSON.stringify(awayScores), // $2
+                homeScoreDisplay, // $3
+                awayScoreDisplay, // $4
+                parsedScore.statusId, // $5
+                parsedScore.minute, // $6
+                providerUpdateTime, // $7
+                ingestionTs, // $8
+                matchId, // $9
+            ]);
+            const latency = Date.now() - startTime;
+            if (result.rowCount === 0) {
+                // Update rejected due to stale data OR match not found
+                // TEMPORARY: Use warn level to monitor MQTT acceptance rate
+                logger_1.logger.warn(`[MQTT Direct Write] ⚠️ Update rejected for ${matchId} (stale or not found)`);
+                (0, obsLogger_1.logEvent)('warn', 'mqtt.direct_write.rejected', {
+                    matchId,
+                    reason: 'stale_or_not_found',
+                    providerUpdateTime,
+                    ingestionTs,
+                });
+                return;
+            }
+            // Success! Log metrics
+            const updated = result.rows[0];
+            logger_1.logger.info(`[MQTT Direct Write] ✅ ${matchId}: ${updated.home_score_display}-${updated.away_score_display} (${latency}ms)`);
+            (0, obsLogger_1.logEvent)('info', 'mqtt.direct_write.success', {
+                matchId,
+                score: `${updated.home_score_display}-${updated.away_score_display}`,
+                statusId: updated.status_id,
+                minute: updated.minute,
+                latency_ms: latency,
+            });
+            // Invalidate cache
+            await cache_service_1.cacheService.deletePattern(types_1.CacheKeyPrefix.LIVE_MATCHES);
+            await cache_service_1.cacheService.delete(`${types_1.CacheKeyPrefix.MATCH_DETAIL}:${matchId}`);
+        }
+        catch (error) {
+            const latency = Date.now() - startTime;
+            logger_1.logger.error(`[MQTT Direct Write] ❌ Failed for ${matchId} (${latency}ms): ${error.message}`);
+            (0, obsLogger_1.logEvent)('error', 'mqtt.direct_write.error', {
+                matchId,
+                error: error.message,
+                latency_ms: latency,
+            });
+            // Don't throw - allow process to continue
+            // Error is logged and monitored via metrics
+        }
+    }
+}
+exports.WebSocketService = WebSocketService;

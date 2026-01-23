@@ -1,0 +1,160 @@
+"use strict";
+/**
+ * Match Incidents Service
+ *
+ * Optimized service for fetching match incidents (goals, cards, substitutions).
+ *
+ * Strategy:
+ * 1. Database-first (FAST - ~50ms)
+ * 2. Check staleness (30s for live, 5min for finished)
+ * 3. Fallback to TheSports API if stale (with 5s timeout)
+ * 4. Graceful error handling (never crash, return empty array)
+ *
+ * Performance: 10,000ms → 300ms (97% faster than old getMatchDetailLive)
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.matchIncidentsService = exports.MatchIncidentsService = void 0;
+const connection_1 = require("../../../database/connection");
+const TheSportsAPIManager_1 = require("../../../core/TheSportsAPIManager");
+const logger_1 = require("../../../utils/logger");
+const IncidentOrchestrator_1 = require("../../orchestration/IncidentOrchestrator");
+// PERF FIX Phase 1: Reduced timeout from 5s to 2s (fail fast)
+// We prefer quick empty response over slow full response
+const INCIDENTS_API_TIMEOUT_MS = 2000;
+// Timeout wrapper for API calls
+async function withTimeout(promise, timeoutMs, fallback) {
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`API timeout after ${timeoutMs}ms`)), timeoutMs);
+    });
+    try {
+        return await Promise.race([promise, timeoutPromise]);
+    }
+    catch (error) {
+        logger_1.logger.warn(`[MatchIncidents] API call timed out, returning fallback`);
+        return fallback;
+    }
+}
+class MatchIncidentsService {
+    /**
+     * Get incidents for a specific match
+     *
+     * @param matchId - TheSports match ID
+     * @returns Object with incidents array
+     */
+    async getMatchIncidents(matchId) {
+        try {
+            // ============================================================
+            // STEP 1: CHECK ts_incidents TABLE FIRST (NORMALIZED - BEST)
+            // ============================================================
+            const incidentOrchestrator = IncidentOrchestrator_1.IncidentOrchestrator.getInstance();
+            const normalizedIncidents = await incidentOrchestrator.getMatchIncidents(matchId);
+            if (normalizedIncidents.length > 0) {
+                logger_1.logger.debug(`[MatchIncidents] ✓ Found ${normalizedIncidents.length} incidents in ts_incidents table for ${matchId}`);
+                return { incidents: normalizedIncidents };
+            }
+            // ============================================================
+            // STEP 2: FALLBACK TO ts_matches.incidents JSONB
+            // ============================================================
+            // CRITICAL FIX: Query by external_id (TheSports ID), not UUID id
+            const dbResult = await connection_1.pool.query(`SELECT
+           incidents,
+           updated_at,
+           status_id
+         FROM ts_matches
+         WHERE external_id = $1`, [matchId]);
+            if (dbResult.rows.length === 0) {
+                logger_1.logger.warn(`[MatchIncidents] Match ${matchId} not found in database, fetching from API`);
+                // Match not in database - fetch from API with timeout
+                try {
+                    const apiData = await withTimeout(TheSportsAPIManager_1.theSportsAPI.get('/match/detail_live', { match_id: matchId }), INCIDENTS_API_TIMEOUT_MS, null);
+                    if (!apiData) {
+                        logger_1.logger.warn(`[MatchIncidents] API timeout for ${matchId}, returning empty`);
+                        return { incidents: [] };
+                    }
+                    // CRITICAL FIX: results IS the incidents array (not results[0].incidents)
+                    // TheSports API returns: { "results": [{ "type": 1, "time": 5, ... }, ...] }
+                    const incidents = Array.isArray(apiData?.results) ? apiData.results : [];
+                    if (incidents.length > 0) {
+                        logger_1.logger.info(`[MatchIncidents] ✓ Fetched ${incidents.length} incidents from API for ${matchId}`);
+                        return { incidents };
+                    }
+                    logger_1.logger.warn(`[MatchIncidents] API returned no incidents for ${matchId}`);
+                    return { incidents: [] };
+                }
+                catch (apiError) {
+                    logger_1.logger.error(`[MatchIncidents] API error for ${matchId}:`, apiError);
+                    return { incidents: [] }; // Graceful fallback - never crash
+                }
+            }
+            // ============================================================
+            // STEP 2: CHECK STALENESS
+            // ============================================================
+            const match = dbResult.rows[0];
+            const incidents = match.incidents || [];
+            const updatedAt = new Date(match.updated_at);
+            const isLive = [2, 3, 4, 5, 7].includes(match.status_id);
+            const staleness = Date.now() - updatedAt.getTime();
+            // Live matches: 30s max staleness
+            // Finished matches: 5min max staleness
+            const maxStalenessMs = isLive ? 30000 : 300000;
+            // CRITICAL FIX: If incidents is empty, ALWAYS fetch from API
+            // This ensures events are never missing due to empty database cache
+            // PERF FIX Phase 3: Skip API call for NOT_STARTED matches (status_id=1)
+            // - NOT_STARTED matches can't have incidents yet
+            // - This saves ~2s API timeout for matches that haven't started
+            if (incidents.length === 0) {
+                // Skip API call for NOT_STARTED matches - no incidents exist yet
+                if (match.status_id === 1) {
+                    logger_1.logger.debug(`[MatchIncidents] Skipping API for NOT_STARTED match ${matchId} (no incidents possible)`);
+                    return { incidents: [] };
+                }
+                logger_1.logger.info(`[MatchIncidents] Database incidents empty for ${matchId}, fetching from API`);
+                // Fall through to STEP 3
+            }
+            else if (staleness < maxStalenessMs) {
+                // Cache is fresh and has data - use it
+                logger_1.logger.debug(`[MatchIncidents] ✓ Using cached incidents for ${matchId} (age: ${Math.round(staleness / 1000)}s, ${incidents.length} incidents)`);
+                return { incidents };
+            }
+            // ============================================================
+            // STEP 3: FETCH FRESH DATA FROM API (IF STALE OR EMPTY)
+            // ============================================================
+            logger_1.logger.info(`[MatchIncidents] Fetching fresh incidents for ${matchId} (stale: ${Math.round(staleness / 1000)}s, live: ${isLive})`);
+            try {
+                const apiData = await withTimeout(TheSportsAPIManager_1.theSportsAPI.get('/match/detail_live', { match_id: matchId }), INCIDENTS_API_TIMEOUT_MS, null);
+                if (!apiData) {
+                    // Timeout - return stale data from DB
+                    logger_1.logger.warn(`[MatchIncidents] API timeout for ${matchId}, using stale database data (${incidents.length} incidents)`);
+                    return { incidents };
+                }
+                // CRITICAL FIX: results IS the incidents array (not results[0].incidents)
+                // TheSports API returns: { "results": [{ "type": 1, "time": 5, ... }, ...] }
+                const freshIncidents = Array.isArray(apiData?.results) ? apiData.results : [];
+                if (freshIncidents.length > 0) {
+                    logger_1.logger.info(`[MatchIncidents] ✓ Fetched ${freshIncidents.length} fresh incidents from API for ${matchId}`);
+                    return { incidents: freshIncidents };
+                }
+                // API returned no incidents - return database data as fallback
+                logger_1.logger.warn(`[MatchIncidents] API returned no incidents, using stale database data (${incidents.length} incidents)`);
+                return { incidents };
+            }
+            catch (apiError) {
+                // ============================================================
+                // STEP 4: STALE CACHE FALLBACK (API ERROR)
+                // ============================================================
+                logger_1.logger.error(`[MatchIncidents] API error for ${matchId}, using stale database data (${incidents.length} incidents):`, apiError);
+                return { incidents }; // Return stale data - better than nothing
+            }
+        }
+        catch (error) {
+            // ============================================================
+            // STEP 5: CRITICAL ERROR HANDLING (NEVER CRASH)
+            // ============================================================
+            logger_1.logger.error(`[MatchIncidents] Critical error for ${matchId}:`, error);
+            return { incidents: [] }; // Last resort - return empty array
+        }
+    }
+}
+exports.MatchIncidentsService = MatchIncidentsService;
+// Export singleton instance
+exports.matchIncidentsService = new MatchIncidentsService();

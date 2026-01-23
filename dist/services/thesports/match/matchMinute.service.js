@@ -1,0 +1,184 @@
+"use strict";
+/**
+ * Match Minute Service
+ *
+ * Backend-authoritative minute calculation engine.
+ * Calculates match minutes from kickoff timestamps stored in DB.
+ * UI will read minute from DB (Phase 3C); this service enforces backend authority.
+ *
+ * PHASE 3C COMPLETE — Minute & Watchdog logic frozen
+ * No further changes allowed without Phase 4+ approval.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MatchMinuteService = void 0;
+const connection_1 = require("../../../database/connection");
+const logger_1 = require("../../../utils/logger");
+const obsLogger_1 = require("../../../utils/obsLogger");
+class MatchMinuteService {
+    /**
+     * Calculate minute for a match based on status and kickoff timestamps
+     * @param statusId - Match status (2=FIRST_HALF, 3=HALF_TIME, 4=SECOND_HALF, 5=OVERTIME, 7=PENALTY)
+     * @param firstHalfKickoffTs - Unix seconds timestamp (nullable)
+     * @param secondHalfKickoffTs - Unix seconds timestamp (nullable)
+     * @param overtimeKickoffTs - Unix seconds timestamp (nullable)
+     * @param existingMinute - Current minute value in DB (for freeze statuses)
+     * @param nowTs - Current server time (Unix seconds)
+     * @returns Calculated minute value (INTEGER, nullable) or null if cannot calculate
+     */
+    calculateMinute(statusId, firstHalfKickoffTs, secondHalfKickoffTs, overtimeKickoffTs, existingMinute, nowTs) {
+        // PHASE 4-2: Cast bigints from DB to Number to prevent string concatenation
+        // Ensure we don't return NaN which would crash DB integer columns
+        const toSafeNum = (val) => {
+            if (val === null || val === undefined || val === '')
+                return null;
+            const num = Number(val);
+            return Number.isNaN(num) ? null : num;
+        };
+        const firstHalfTs = toSafeNum(firstHalfKickoffTs);
+        const secondHalfTs = toSafeNum(secondHalfKickoffTs);
+        const overtimeTs = toSafeNum(overtimeKickoffTs);
+        // Status 2 (FIRST_HALF)
+        if (statusId === 2) {
+            if (firstHalfTs === null) {
+                logger_1.logger.warn(`[MinuteEngine] Cannot calculate minute for status 2: first_half_kickoff_ts is NULL`);
+                return null;
+            }
+            // DEFENSIVE: Validate kickoff timestamp is reasonable
+            const elapsed = nowTs - firstHalfTs;
+            const elapsedMinutes = Math.floor(elapsed / 60);
+            // Sanity check: First half should be 0-120 minutes elapsed
+            if (elapsed < 0) {
+                logger_1.logger.error(`[MinuteEngine] INVALID first_half_kickoff_ts: ${firstHalfTs} is in the future! Refusing calculation.`);
+                return null;
+            }
+            if (elapsedMinutes > 120) { // > 2 hours
+                logger_1.logger.error(`[MinuteEngine] SUSPICIOUS elapsed=${elapsedMinutes}min. ` +
+                    `first_half_kickoff_ts=${firstHalfTs} may be corrupted (match_time instead of kickoff?). ` +
+                    `Refusing calculation.`);
+                return null;
+            }
+            const calculated = Math.floor((nowTs - firstHalfTs) / 60) + 1;
+            return Math.min(calculated, 45); // Clamp max 45
+        }
+        // Status 3 (HALF_TIME) - frozen at 45
+        if (statusId === 3) {
+            return 45; // Always 45, never NULL
+        }
+        // Status 4 (SECOND_HALF)
+        // CRITICAL FIX: Max clamp at 90+15 = 105 (normal time + injury time max)
+        // If minute exceeds this, match should have ended - watchdog will reconcile
+        const SECOND_HALF_MAX = 105;
+        if (statusId === 4) {
+            if (secondHalfTs === null) {
+                // FALLBACK: If second_half_kickoff_ts is missing, estimate from first_half
+                // Usually second half starts ~60 minutes after first half kickoff (45m play + 15m break)
+                if (firstHalfTs !== null) {
+                    const estimatedSecondHalfStart = firstHalfTs + 3600; // 60 minutes
+                    const calculated = 45 + Math.floor((nowTs - estimatedSecondHalfStart) / 60) + 1;
+                    logger_1.logger.debug(`[MinuteEngine] Using fallback for status 4 (estimated_start=${estimatedSecondHalfStart}): minute=${calculated}`);
+                    // CRITICAL FIX: Clamp between 46 and SECOND_HALF_MAX
+                    return Math.min(Math.max(calculated, 46), SECOND_HALF_MAX);
+                }
+                logger_1.logger.warn(`[MinuteEngine] Cannot calculate minute for status 4: both second_half_kickoff_ts and first_half_kickoff_ts are NULL`);
+                return null;
+            }
+            // DEFENSIVE: Validate kickoff timestamp is reasonable
+            const elapsed = nowTs - secondHalfTs;
+            const elapsedMinutes = Math.floor(elapsed / 60);
+            // Sanity check: Second half should be 0-120 minutes elapsed
+            if (elapsed < 0) {
+                logger_1.logger.error(`[MinuteEngine] INVALID second_half_kickoff_ts: ${secondHalfTs} is in the future! Refusing calculation.`);
+                return null;
+            }
+            if (elapsedMinutes > 120) { // > 2 hours
+                logger_1.logger.error(`[MinuteEngine] SUSPICIOUS elapsed=${elapsedMinutes}min for second half. ` +
+                    `second_half_kickoff_ts=${secondHalfTs} may be corrupted. Refusing calculation.`);
+                return null;
+            }
+            const calculated = 45 + Math.floor((nowTs - secondHalfTs) / 60) + 1;
+            // CRITICAL FIX: Clamp between 46 and SECOND_HALF_MAX
+            return Math.min(Math.max(calculated, 46), SECOND_HALF_MAX);
+        }
+        // Status 5 (OVERTIME)
+        // CRITICAL FIX: Max clamp at 120+10 = 130 (overtime + injury time max)
+        const OVERTIME_MAX = 130;
+        if (statusId === 5) {
+            if (overtimeTs === null) {
+                logger_1.logger.warn(`[MinuteEngine] Cannot calculate minute for status 5: overtime_kickoff_ts is NULL`);
+                return null;
+            }
+            const calculated = 90 + Math.floor((nowTs - overtimeTs) / 60) + 1;
+            // CRITICAL FIX: Clamp between 91 and OVERTIME_MAX
+            return Math.min(Math.max(calculated, 91), OVERTIME_MAX);
+        }
+        // Status 7 (PENALTY) - retain existing minute
+        if (statusId === 7) {
+            return existingMinute; // Retain last computed value, never NULL if exists
+        }
+        // Status 8 (END), 9 (DELAY), 10 (INTERRUPT) - retain existing minute
+        if (statusId === 8 || statusId === 9 || statusId === 10) {
+            return existingMinute; // Retain last computed value, never NULL if exists
+        }
+        // Unknown status or status 1 (NOT_STARTED) - return null
+        return null;
+    }
+    /**
+     * Update minute for a single match in DB
+     * Only updates if minute value changed (new_minute !== existing_minute)
+     * CRITICAL: Does NOT update updated_at (preserves watchdog/reconcile stale detection)
+     *
+     * @param matchId - External match ID
+     * @param newMinute - Calculated minute value
+     * @param existingMinute - Current minute in DB
+     * @returns { updated: boolean, rowCount: number }
+     */
+    async updateMatchMinute(matchId, newMinute, existingMinute) {
+        // Update rules:
+        // - newMinute === existingMinute → skip (no change)
+        // - newMinute === null && existingMinute !== null → skip (preserve existing)
+        // - newMinute !== null && existingMinute === null → update (first time setting)
+        // - newMinute !== existingMinute → update (minute changed)
+        if (newMinute === existingMinute) {
+            return { updated: false, rowCount: 0 };
+        }
+        // If newMinute is null but existingMinute exists, preserve existing (do not set to NULL)
+        if (newMinute === null && existingMinute !== null) {
+            logger_1.logger.debug(`[MinuteEngine] Skipping update for ${matchId}: newMinute is null but existingMinute=${existingMinute} (preserving existing)`);
+            return { updated: false, rowCount: 0 };
+        }
+        const client = await connection_1.pool.connect();
+        try {
+            const nowTs = Math.floor(Date.now() / 1000);
+            // CRITICAL: Do NOT update updated_at - only minute and last_minute_update_ts
+            const query = `
+        UPDATE ts_matches
+        SET 
+          minute = $1,
+          last_minute_update_ts = $2
+        WHERE external_id = $3
+          AND (minute IS DISTINCT FROM $1)
+      `;
+            const result = await client.query(query, [newMinute, nowTs, matchId]);
+            const rowCount = result.rowCount ?? 0;
+            if (rowCount > 0) {
+                (0, obsLogger_1.logEvent)('info', 'minute.update', {
+                    match_id: matchId,
+                    old_minute: existingMinute,
+                    new_minute: newMinute,
+                });
+            }
+            else {
+                logger_1.logger.debug(`[MinuteEngine] skipped match_id=${matchId} reason=unchanged minute (newMinute=${newMinute}, existingMinute=${existingMinute})`);
+            }
+            return { updated: rowCount > 0, rowCount };
+        }
+        catch (error) {
+            logger_1.logger.error(`[MinuteEngine] Failed to update minute for ${matchId}:`, error);
+            throw error;
+        }
+        finally {
+            client.release();
+        }
+    }
+}
+exports.MatchMinuteService = MatchMinuteService;
