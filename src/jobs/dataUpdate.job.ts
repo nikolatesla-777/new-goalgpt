@@ -17,17 +17,12 @@ import { theSportsAPI } from '../core';
 import { MatchSyncService, MatchSyncData } from '../services/thesports/match/matchSync.service';
 import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
-
-// REFACTOR: Direct database writes (orchestrator removed)
-interface FieldUpdate {
-  field: string;
-  value: any;
-  source: string;
-  priority: number;
-  timestamp: number;
-}
+import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
+import { FieldUpdate } from '../repositories/match.repository';
 import { TeamDataService } from '../services/thesports/team/teamData.service';
 import { CompetitionService } from '../services/thesports/competition/competition.service';
+
+// PR-8B: Using MatchOrchestrator for atomic match updates
 
 
 export class DataUpdateWorker {
@@ -57,7 +52,8 @@ export class DataUpdateWorker {
   }
 
   /**
-   * REFACTOR: Direct database write helper (replaces orchestrator.updateMatch)
+   * PR-8B: Orchestrator wrapper for match updates
+   * Replaces direct SQL UPDATE with matchOrchestrator.updateMatch()
    */
   private async updateMatchDirect(matchId: string, updates: FieldUpdate[], source: string): Promise<{ status: string; fieldsUpdated: string[] }> {
     if (updates.length === 0) {
@@ -65,58 +61,33 @@ export class DataUpdateWorker {
     }
 
     try {
-      // CRITICAL FIX: Protect finished matches from being overridden
-      // Once status=8, it should be IMMUTABLE (unless update also has status=8)
-      const statusUpdate = updates.find(u => u.field === 'status_id');
-      if (statusUpdate && statusUpdate.value !== 8) {
-        const checkQuery = `SELECT status_id FROM ts_matches WHERE external_id = $1`;
-        const checkResult = await pool.query(checkQuery, [matchId]);
-        const existing = checkResult.rows[0];
+      // PR-8B: Use MatchOrchestrator for atomic updates with:
+      // - Match-level advisory lock
+      // - Priority-based conflict resolution
+      // - Immutability protection (status=8)
+      const orchestratorResult = await matchOrchestrator.updateMatch(matchId, updates, source);
 
-        if (existing?.status_id === 8) {
-          logger.warn(`[DataUpdate.directWrite] REJECT: Match ${matchId} already finished (status=8 immutable). Attempted change to status=${statusUpdate.value}`);
-          return { status: 'rejected_immutable', fieldsUpdated: [] };
+      // Map orchestrator result to expected format (with undefined safety)
+      const result = {
+        status: orchestratorResult.status,
+        fieldsUpdated: orchestratorResult.fieldsUpdated ?? [],
+      };
+
+      // If update failed (locked, rejected, etc), log and return early
+      if (orchestratorResult.status !== 'success') {
+        if (orchestratorResult.status === 'rejected_immutable') {
+          logger.warn(`[DataUpdate.orchestrator] REJECT: Match ${matchId} is immutable (status=8)`);
+        } else if (orchestratorResult.status === 'rejected_locked') {
+          logger.debug(`[DataUpdate.orchestrator] Lock busy for match ${matchId}, skipping update`);
+        } else if (orchestratorResult.status === 'rejected_stale') {
+          logger.debug(`[DataUpdate.orchestrator] Updates rejected by priority filter for ${matchId}`);
         }
+        return result;
       }
 
-      const setClauses: string[] = [];
-      const values: any[] = [];
-      let paramIndex = 1;
-      const fieldsUpdated: string[] = [];
-
-      for (const update of updates) {
-        setClauses.push(`${update.field} = $${paramIndex}`);
-        values.push(update.value);
-        fieldsUpdated.push(update.field);
-        paramIndex++;
-
-        // Map field names to correct source column names
-        const sourceColumnMap: Record<string, string> = {
-          'home_score_display': 'home_score_source',
-          'away_score_display': 'away_score_source',
-          'status_id': 'status_id_source',
-          'minute': 'minute_source',
-        };
-
-        const sourceColumn = sourceColumnMap[update.field];
-        if (sourceColumn) {
-          setClauses.push(`${sourceColumn} = $${paramIndex}`);
-          values.push(update.source);
-          paramIndex++;
-          setClauses.push(`${sourceColumn.replace('_source', '_timestamp')} = $${paramIndex}`);
-          values.push(update.timestamp);
-          paramIndex++;
-        }
-      }
-
-      setClauses.push(`updated_at = NOW()`);
-      const query = `UPDATE ts_matches SET ${setClauses.join(', ')} WHERE external_id = $${paramIndex}`;
-      values.push(matchId);
-
-      await pool.query(query, values);
-      return { status: 'success', fieldsUpdated };
+      return result;
     } catch (error: any) {
-      logger.error(`[DataUpdate.directWrite] Failed to update ${matchId}:`, error);
+      logger.error(`[DataUpdate.orchestrator] Failed to update ${matchId}:`, error);
       return { status: 'error', fieldsUpdated: [] };
     }
   }
@@ -405,31 +376,20 @@ export class DataUpdateWorker {
             timestamp: effectiveUpdateTime,
           });
         }
-        // Overtime (status 5+)
-        else if (statusId >= 5) {
-          updates.push({
-            field: 'overtime_kickoff_ts',
-            value: liveKickoffTime,
-            source: 'api',
-            priority: 2,
-            timestamp: effectiveUpdateTime,
-          });
-        }
+        // Note: overtime_kickoff_ts not in MatchUpdateFields schema, skipping for status 5+
       }
 
-      // Step 4: Send to orchestrator
+      // PR-8B: Send to orchestrator
       if (updates.length > 0) {
-        const result = await this.updateMatchDirect(matchId, updates, 'dataUpdate');
+        const result = await this.updateMatchDirect(matchId, updates, 'api');
 
         if (result.status === 'success') {
           logEvent('info', 'dataupdate.orchestrator.success', {
             matchId,
             fieldsUpdated: result.fieldsUpdated,
           });
-        } else if (result.status === 'retry') {
-          logger.warn(`[DataUpdate.orchestrator] Retry needed for ${matchId}: ${result.reason}`);
         } else {
-          logger.warn(`[DataUpdate.orchestrator] Rejected for ${matchId}: ${result.reason}`);
+          logger.warn(`[DataUpdate.orchestrator] Update status for ${matchId}: ${result.status}`);
         }
 
         return;
@@ -589,18 +549,14 @@ export class DataUpdateWorker {
                   logger.info(`[DataUpdate:${runId}] Saved ${stats.allStats.length} final stats for ${matchIdStr}`);
                 }
 
-                // Fetch and save final trend data
+                // Fetch final trend data (caching to statistics field removed in PR-8B)
+                // Note: statistics field is not in MatchUpdateFields schema, cannot update via orchestrator
+                // Trend data is still available via API, just not cached in database
                 const trend = await this.matchTrendService.getMatchTrend({ match_id: matchIdStr }, 8);
                 const trendResults = trend?.results;
                 const hasTrendData = Array.isArray(trendResults) ? trendResults.length > 0 : !!trendResults;
                 if (hasTrendData) {
-                  // Save trend to statistics JSONB field
-                  await dbClient.query(`
-                    UPDATE ts_matches 
-                    SET statistics = COALESCE(statistics, '{}'::jsonb) || jsonb_build_object('trend', $2::jsonb)
-                    WHERE external_id = $1
-                  `, [matchIdStr, JSON.stringify(trend)]);
-                  logger.info(`[DataUpdate:${runId}] Saved trend data for ${matchIdStr}`);
+                  logger.debug(`[DataUpdate:${runId}] Fetched trend data for ${matchIdStr} (not cached to DB)`);
                 }
               } catch (syncErr: any) {
                 logger.warn(`[DataUpdate:${runId}] Failed to sync final stats/trend for ${matchIdStr}:`, syncErr.message);

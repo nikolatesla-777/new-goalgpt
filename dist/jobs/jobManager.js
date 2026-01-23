@@ -48,9 +48,11 @@ exports.getNextJobRuns = getNextJobRuns;
 const node_cron_1 = __importDefault(require("node-cron"));
 const logger_1 = require("../utils/logger");
 const JobRunner_1 = require("./framework/JobRunner");
+const MatchOrchestrator_1 = require("../modules/matches/services/MatchOrchestrator");
 /**
- * PR-8A: Stuck Match Finisher job extracted as separate function
+ * PR-8B: Stuck Match Finisher job extracted as separate function
  * Wrapped with JobRunner for overlap guard + timeout + metrics
+ * Migrated to use MatchOrchestrator for atomic updates
  */
 async function runStuckMatchFinisher() {
     await JobRunner_1.jobRunner.run({
@@ -59,25 +61,72 @@ async function runStuckMatchFinisher() {
         advisoryLockKey: 910000000099n, // Using available lock key slot
         timeoutMs: 180000, // 3 minutes
     }, async (_ctx) => {
-        // Original SQL logic unchanged (direct database write)
+        // PR-8B: Migrated to use MatchOrchestrator for atomic updates
         const { pool } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
         const nowTs = Math.floor(Date.now() / 1000);
-        // Finish matches that are 90+ minutes and started 2+ hours ago
-        const result = await pool.query(`
-        UPDATE ts_matches
-        SET
-          status_id = 8,
-          minute = CASE WHEN minute >= 90 THEN minute ELSE 90 END,
-          status_id_source = 'auto_finish',
-          status_id_timestamp = $1,
-          updated_at = NOW()
-        WHERE status_id IN (2, 3, 4, 5, 7)
-          AND match_time < $2
-          AND (minute >= 90 OR match_time < $3)
-        RETURNING external_id
-      `, [nowTs, nowTs - 7200, nowTs - 14400]); // 2 hours, 4 hours
-        if (result.rowCount && result.rowCount > 0) {
-            logger_1.logger.info(`✅ Auto-finished ${result.rowCount} stuck matches`);
+        // Step 1: SELECT stuck matches (same criteria as before)
+        // Matches that are 90+ minutes and started 2+ hours ago
+        const client = await pool.connect();
+        try {
+            const selectQuery = `
+          SELECT external_id, minute
+          FROM ts_matches
+          WHERE status_id IN (2, 3, 4, 5, 7)
+            AND match_time < $1
+            AND (minute >= 90 OR match_time < $2)
+        `;
+            const result = await client.query(selectQuery, [nowTs - 7200, nowTs - 14400]); // 2 hours, 4 hours
+            const stuckMatches = result.rows;
+            if (stuckMatches.length === 0) {
+                logger_1.logger.debug('[StuckMatchFinisher] No stuck matches found');
+                return;
+            }
+            // Step 2: Update each match via orchestrator
+            let successCount = 0;
+            let failCount = 0;
+            for (const match of stuckMatches) {
+                const matchId = match.external_id;
+                const currentMinute = match.minute !== null ? Number(match.minute) : 0;
+                const finalMinute = Math.max(currentMinute, 90); // Ensure at least 90 minutes
+                // Build update array
+                const updates = [
+                    {
+                        field: 'status_id',
+                        value: 8, // ENDED
+                        source: 'admin',
+                        priority: 10, // Highest priority (admin action)
+                        timestamp: nowTs,
+                    },
+                    {
+                        field: 'minute',
+                        value: finalMinute,
+                        source: 'admin',
+                        priority: 10,
+                        timestamp: nowTs,
+                    },
+                ];
+                try {
+                    const orchestratorResult = await MatchOrchestrator_1.matchOrchestrator.updateMatch(matchId, updates, 'admin');
+                    if (orchestratorResult.status === 'success') {
+                        successCount++;
+                        logger_1.logger.debug(`[StuckMatchFinisher] Auto-finished ${matchId} (minute: ${currentMinute} → ${finalMinute})`);
+                    }
+                    else {
+                        logger_1.logger.warn(`[StuckMatchFinisher] Failed to finish ${matchId}: ${orchestratorResult.status}`);
+                        failCount++;
+                    }
+                }
+                catch (error) {
+                    logger_1.logger.error(`[StuckMatchFinisher] Error finishing ${matchId}:`, error);
+                    failCount++;
+                }
+            }
+            if (successCount > 0) {
+                logger_1.logger.info(`✅ Auto-finished ${successCount} stuck matches (failed: ${failCount})`);
+            }
+        }
+        finally {
+            client.release();
         }
     });
 }
