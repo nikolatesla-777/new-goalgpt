@@ -2036,8 +2036,8 @@ export const getMatchFull = async (
     let standings: any[] = [];
     if (result.match?.season_id) {
       try {
-        const standingsResult = await seasonStandingsService.getStandingsFromDb(result.match.season_id);
-        standings = standingsResult || [];
+        const standingsResult = await seasonStandingsService.getSeasonStandings({ season_id: result.match.season_id });
+        standings = (standingsResult.results || []) as any[];
       } catch {
         // Ignore standings errors
       }
@@ -2128,14 +2128,14 @@ async function fetchStatsWithTimeout(matchId: string, timeoutMs: number): Promis
     }
 
     // Fallback: Try basic stats from matchStatsRepository
-    const dbStats = await matchStatsRepository.getMatchStats(matchId);
+    const dbStats = await matchStatsRepository.getStats(matchId);
     if (dbStats && (dbStats.home_corner !== 0 || dbStats.away_corner !== 0 ||
         dbStats.home_shots !== 0 || dbStats.away_shots !== 0)) {
       return {
         stats: [
           { type: 25, home: dbStats.home_possession || 0, away: dbStats.away_possession || 0, name: 'Ball Possession', nameTr: 'Top Hakimiyeti' },
           { type: 21, home: dbStats.home_shots_on_target || 0, away: dbStats.away_shots_on_target || 0, name: 'Shots on Target', nameTr: 'İsabetli Şut' },
-          { type: 22, home: dbStats.home_shots_off_target || 0, away: dbStats.away_shots_off_target || 0, name: 'Shots off Target', nameTr: 'İsabetsiz Şut' },
+          { type: 22, home: (dbStats.home_shots || 0) - (dbStats.home_shots_on_target || 0), away: (dbStats.away_shots || 0) - (dbStats.away_shots_on_target || 0), name: 'Shots off Target', nameTr: 'İsabetsiz Şut' },
           { type: 23, home: dbStats.home_attacks || 0, away: dbStats.away_attacks || 0, name: 'Attacks', nameTr: 'Atak' },
           { type: 24, home: dbStats.home_dangerous_attacks || 0, away: dbStats.away_dangerous_attacks || 0, name: 'Dangerous Attacks', nameTr: 'Tehlikeli Atak' },
           { type: 2, home: dbStats.home_corner || 0, away: dbStats.away_corner || 0, name: 'Corner Kicks', nameTr: 'Korner' },

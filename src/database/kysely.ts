@@ -32,6 +32,7 @@ export interface Database {
   announcements: Announcement;
   announcement_dismissals: AnnouncementDismissal;
   customer_prediction_unlocks: CustomerPredictionUnlock;
+  job_execution_logs: JobExecutionLog;
 }
 
 // Table interfaces
@@ -77,6 +78,7 @@ export interface CustomerUser {
   google_id: string | null;
   apple_id: string | null;
   referral_code: string | null;
+  role: 'user' | 'admin' | 'moderator';
 }
 
 export interface CustomerOAuthIdentity {
@@ -403,6 +405,18 @@ export interface CustomerPredictionUnlock {
   prediction_id: string;
   credits_spent: number;
   unlocked_at: Date;
+}
+
+export interface JobExecutionLog {
+  id: Generated<string>;
+  job_name: string;
+  status: 'running' | 'success' | 'failed';
+  started_at: Date;
+  completed_at: Date | null;
+  error_message: string | null;
+  items_processed: number | null;
+  duration_ms: number | null;
+  created_at: Generated<Date>;
 }
 
 // Create and export Kysely instance

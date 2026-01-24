@@ -487,7 +487,7 @@ export class WebSocketService {
         }
 
         // Parse stats to structured format (pass full message with id + stats array)
-        const structuredStats = this.parser.parseStatsToStructured(message);
+        const structuredStats = this.parser.parseStatsToStructured(message as any);
 
         // Update database with statistics
         await this.updateMatchStatisticsInDatabase(matchId, structuredStats, providerUpdateTime);
@@ -2193,8 +2193,8 @@ export class WebSocketService {
       });
 
       // Invalidate cache
-      await cacheService.deletePattern(CacheKeyPrefix.LIVE_MATCHES);
-      await cacheService.delete(`${CacheKeyPrefix.MATCH_DETAIL}:${matchId}`);
+      await cacheService.deletePattern('live_matches');
+      await cacheService.del(`match_detail:${matchId}`);
 
     } catch (error: any) {
       const latency = Date.now() - startTime;

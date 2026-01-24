@@ -4,10 +4,8 @@
  * Main application entry point - High performance for real-time match data processing
  */
 
-// CRITICAL: Load environment variables BEFORE any imports
-// This ensures JWT_SECRET and other env vars are available during module initialization
-import dotenv from 'dotenv';
-dotenv.config();
+// CRITICAL: Load environment variables BEFORE any other imports
+import 'dotenv/config';
 
 import Fastify from 'fastify';
 import cors from '@fastify/cors';

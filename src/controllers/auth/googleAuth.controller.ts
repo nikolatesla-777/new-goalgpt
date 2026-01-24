@@ -155,6 +155,7 @@ export async function googleSignIn(
       userId: userProfile.id,
       email: userProfile.email!,
       phone: userProfile.phone,
+      role: userProfile.role,
     });
 
     // 8. Return response
@@ -176,6 +177,7 @@ export async function googleSignIn(
         credits: {
           balance: userProfile.credit_balance || 0,
         },
+        role: userProfile.role,
         isVip: userProfile.is_vip || false,
         createdAt: userProfile.created_at,
       },

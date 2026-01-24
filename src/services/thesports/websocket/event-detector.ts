@@ -57,6 +57,8 @@ export interface ScoreChangeEvent {
   matchId: string;
   homeScore: number;
   awayScore: number;
+  minute?: number | null;
+  statusId?: number | null;
   timestamp: number;
 }
 
