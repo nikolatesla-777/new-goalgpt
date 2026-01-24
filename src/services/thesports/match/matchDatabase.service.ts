@@ -14,6 +14,7 @@ import { cacheService } from '../../../utils/cache/cache.service';
 import { CacheKeyPrefix, CacheTTL } from '../../../utils/cache/types';
 import { generateMinuteText } from '../../../utils/matchMinuteText';
 import { liveMatchCache } from './liveMatchCache.service';
+import { LIVE_STATUSES_SQL } from '../../../types/thesports/enums/MatchState.enum';
 // SINGLETON: Use shared API client
 import { theSportsAPI } from '../../../core';
 
@@ -375,11 +376,11 @@ export class MatchDatabaseService {
           ORDER BY created_at DESC
           LIMIT 1
         ) p ON true` : ''}
-        WHERE m.status_id IN (2, 3, 4, 5, 7)  -- CRITICAL: ONLY strictly live matches (no finished/interrupted)
+        WHERE m.status_id IN (${LIVE_STATUSES_SQL})  -- CRITICAL: ONLY strictly live matches (no finished/interrupted)
           AND m.match_time <= $1  -- CRITICAL: Exclude future matches (safeguard)
         ORDER BY
           -- Live matches first (by minute descending), then by competition name
-          CASE WHEN m.status_id IN (2, 3, 4, 5, 7) THEN COALESCE(m.minute, 0) ELSE 0 END DESC,
+          CASE WHEN m.status_id IN (${LIVE_STATUSES_SQL}) THEN COALESCE(m.minute, 0) ELSE 0 END DESC,
           c.name ASC,
           m.match_time DESC
       `;

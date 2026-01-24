@@ -1,6 +1,6 @@
 /**
  * Match State Enum
- * 
+ *
  * Represents the current state of a football match (0-13)
  */
 
@@ -22,12 +22,34 @@ export enum MatchState {
 }
 
 /**
+ * PR-12: LIVE match statuses - Single Source of Truth
+ *
+ * CRITICAL: HALF_TIME (3) is LIVE - players are on field, match is ongoing
+ * Previous bug: isLiveMatchState() excluded HALF_TIME
+ *
+ * LIVE statuses: FIRST_HALF(2), HALF_TIME(3), SECOND_HALF(4), OVERTIME(5), PENALTY_SHOOTOUT(7)
+ */
+export const LIVE_STATUSES = [2, 3, 4, 5, 7] as const;
+
+/**
+ * SQL-compatible LIVE statuses string for queries
+ * Usage: WHERE status_id IN (${LIVE_STATUSES_SQL})
+ */
+export const LIVE_STATUSES_SQL = '2, 3, 4, 5, 7';
+
+/**
  * Check if match state is live
+ *
+ * PR-12 BUGFIX: HALF_TIME (3) is LIVE
+ * - Players are still on field
+ * - Match is ongoing (not finished)
+ * - Jobs should process HALF_TIME matches
  */
 export function isLiveMatchState(state: MatchState): boolean {
-  return state === MatchState.FIRST_HALF || 
-         state === MatchState.SECOND_HALF || 
-         state === MatchState.OVERTIME || 
+  return state === MatchState.FIRST_HALF ||
+         state === MatchState.HALF_TIME ||        // PR-12: BUGFIX - Added HALF_TIME
+         state === MatchState.SECOND_HALF ||
+         state === MatchState.OVERTIME ||
          state === MatchState.PENALTY_SHOOTOUT;
 }
 

@@ -13,6 +13,7 @@
 import { pool } from '../database/connection';
 import { withAdvisoryLock } from '../database/connectionHelpers';
 import { logger } from '../utils/logger';
+import { LIVE_STATUSES_SQL } from '../types/thesports/enums/MatchState.enum';
 
 // ============================================================
 // TYPES
@@ -154,7 +155,7 @@ export class MatchRepository {
     try {
       const result = await client.query<Match>(
         `SELECT * FROM ts_matches
-         WHERE status_id IN (2, 3, 4, 5, 7)
+         WHERE status_id IN (${LIVE_STATUSES_SQL})
          ORDER BY match_time ASC`
       );
       return result.rows;

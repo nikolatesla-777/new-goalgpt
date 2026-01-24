@@ -22,6 +22,7 @@ import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
 import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
 import { FieldUpdate } from '../repositories/match.repository';
+import { LIVE_STATUSES_SQL } from '../types/thesports/enums/MatchState.enum';
 
 // PR-8B: Using MatchOrchestrator for atomic match updates
 
@@ -153,7 +154,7 @@ export class MatchDataSyncWorker {
       const result = await client.query(`
         SELECT external_id, match_time
         FROM ts_matches
-        WHERE status_id IN (2, 3, 4, 5, 7)
+        WHERE status_id IN (${LIVE_STATUSES_SQL})
           AND match_time >= $1
           AND match_time <= $2
         ORDER BY match_time DESC

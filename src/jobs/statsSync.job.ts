@@ -20,6 +20,7 @@ import { logger } from '../utils/logger';
 import { logEvent } from '../utils/obsLogger';
 import { matchStatsRepository, MatchStats } from '../repositories/matchStats.repository';
 import { memoryCache } from '../utils/cache/memoryCache';
+import { LIVE_STATUSES_SQL } from '../types/thesports/enums/MatchState.enum';
 
 // Job state tracking
 let isRunning = false;
@@ -55,7 +56,7 @@ async function hasLiveMatches(): Promise<boolean> {
     const result = await pool.query(`
       SELECT EXISTS (
         SELECT 1 FROM ts_matches
-        WHERE status_id IN (2, 3, 4, 5, 7)
+        WHERE status_id IN (${LIVE_STATUSES_SQL})
         LIMIT 1
       ) as has_live
     `);

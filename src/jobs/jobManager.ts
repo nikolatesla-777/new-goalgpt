@@ -10,6 +10,7 @@ import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
 import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
 import { FieldUpdate } from '../repositories/match.repository';
+import { LIVE_STATUSES_SQL } from '../types/thesports/enums/MatchState.enum';
 
 // PR-8B: Using MatchOrchestrator for atomic match updates
 
@@ -46,7 +47,7 @@ export async function runStuckMatchFinisher(): Promise<void> {
         const selectQuery = `
           SELECT external_id, minute
           FROM ts_matches
-          WHERE status_id IN (2, 3, 4, 5, 7)
+          WHERE status_id IN (${LIVE_STATUSES_SQL})
             AND match_time < $1
             AND (minute >= 90 OR match_time < $2)
         `;
