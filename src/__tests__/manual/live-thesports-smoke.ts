@@ -71,6 +71,7 @@ async function runLiveSmokeTest() {
     console.log('  ✅ Circuit state:', finalHealth.circuitState);
     console.log('  ✅ Total requests:', finalHealth.metrics.requests);
     console.log('  ✅ Total errors:', finalHealth.metrics.errors);
+    // @ts-expect-error - circuitOpenCount property may not exist on all metric implementations
     console.log('  ✅ Circuit open count:', finalHealth.metrics.circuitOpenCount);
     console.log('');
 

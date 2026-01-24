@@ -107,7 +107,7 @@ export async function runDailyRewardReminders() {
         const reward = dailyRewards[nextDay - 1];
 
         // Send push notification
-        await sendPushToUser(user.id, {
+        await sendPushToUser(user.id!, {
           title: 'Günlük Ödül 🎁',
           body: `Günlük ödülünü almayı unutma! Bugün ${reward.credits} kredi seni bekliyor.`,
           data: {
