@@ -5,6 +5,8 @@
  */
 
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
+// PR-11: Deprecation utilities
+import { deprecateRoute } from '../utils/deprecation.utils';
 import {
   getMatchRecentList,
   getMatchDiary,
@@ -126,8 +128,25 @@ export default async function matchRoutes(
   /**
    * GET /api/matches/:match_id/analysis
    * Get match analysis (H2H, historical confrontation)
+   *
+   * PR-11: DEPRECATED - Legacy endpoint for backwards compatibility
+   * @deprecated Use GET /api/matches/:match_id/h2h instead
+   * @sunset 2026-02-23
    */
-  fastify.get('/:match_id/analysis', getMatchAnalysis);
+  fastify.get('/:match_id/analysis', async (request, reply) => {
+    const { match_id } = request.params as { match_id: string };
+
+    // PR-11: Add deprecation headers
+    deprecateRoute(request, reply, {
+      canonical: `/api/matches/${match_id}/h2h`,
+      sunset: '2026-02-23T00:00:00Z',
+      docs: 'https://docs.goalgpt.app/api/matches/h2h',
+      message: 'The /analysis endpoint is deprecated. Use /h2h for faster, database-first H2H data.'
+    });
+
+    // Redirect to canonical H2H handler
+    return getMatchH2H(request as any, reply);
+  });
 
   /**
    * GET /api/matches/:match_id/h2h
