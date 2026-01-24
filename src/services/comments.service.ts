@@ -11,7 +11,7 @@
 
 import { db } from '../database/kysely';
 import { sql } from 'kysely';
-import { grantXP } from './xp.service';
+import { grantXP, XPTransactionType } from './xp.service';
 
 // Comment status types
 export type CommentStatus = 'active' | 'hidden' | 'deleted' | 'flagged';
@@ -83,7 +83,7 @@ export async function createComment(
     await grantXP({
       userId,
       amount: 5, // 5 XP per comment
-      transactionType: 'match_comment',
+      transactionType: XPTransactionType.MATCH_COMMENT,
       description: `Maç yorumu yaptın`,
       referenceId: comment.id,
       referenceType: 'comment',
@@ -162,7 +162,7 @@ export async function replyToComment(
     await grantXP({
       userId,
       amount: 5,
-      transactionType: 'match_comment',
+      transactionType: XPTransactionType.MATCH_COMMENT,
       description: `Yoruma cevap verdin`,
       referenceId: reply.id,
       referenceType: 'comment',
@@ -231,7 +231,7 @@ export async function likeComment(userId: string, commentId: string): Promise<bo
     await grantXP({
       userId: comment.customer_user_id,
       amount: 2,
-      transactionType: 'comment_like',
+      transactionType: XPTransactionType.COMMENT_LIKE,
       description: `Yorumun beğenildi`,
       referenceId: commentId,
       referenceType: 'comment',

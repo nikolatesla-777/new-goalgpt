@@ -9,7 +9,7 @@ import { db } from '../database/kysely';
 import { logger } from '../utils/logger';
 import { sql } from 'kysely';
 import { grantCredits } from '../services/credits.service';
-import { grantXP } from '../services/xp.service';
+import { grantXP, XPTransactionType } from '../services/xp.service';
 import { sendPushToUser } from '../services/push.service';
 
 export async function runReferralTier3() {
@@ -78,7 +78,7 @@ export async function runReferralTier3() {
           await grantXP({
             userId: referral.referrer_user_id,
             amount: 500,
-            transactionType: 'referral_signup',
+            transactionType: XPTransactionType.REFERRAL_SIGNUP,
             description: 'Arkadaşın VIP oldu! (Tier 3)',
             referenceId: referral.id,
             referenceType: 'referral',

@@ -8,7 +8,7 @@
 import { db } from '../database/kysely';
 import { logger } from '../utils/logger';
 import { sql } from 'kysely';
-import { grantXP } from '../services/xp.service';
+import { grantXP, XPTransactionType } from '../services/xp.service';
 import { grantCredits } from '../services/credits.service';
 import { sendPushToUser } from '../services/push.service';
 
@@ -293,7 +293,7 @@ async function unlockBadgeForUser(userId: string, badge: any) {
       await grantXP({
         userId,
         amount: badge.reward_xp,
-        transactionType: 'badge_unlock',
+        transactionType: XPTransactionType.BADGE_UNLOCK,
         description: `${badge.name_tr} rozeti kazandın!`,
         referenceId: badge.id,
         referenceType: 'badge',

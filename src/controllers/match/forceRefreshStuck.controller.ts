@@ -139,7 +139,7 @@ export async function forceRefreshStuckMatches(
           match.external_id,
         ]);
 
-        if (updateResult.rowCount > 0) {
+        if (updateResult.rowCount! > 0) {
           const updated = updateResult.rows[0];
           refreshedCount++;
 

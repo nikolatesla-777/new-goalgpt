@@ -45,7 +45,7 @@ export async function coldStartKickoffBackfill(): Promise<void> {
     `, [nowTs]);
 
     console.log('[ColdStart] First half query result:', result1.rowCount, 'rows');
-    if (result1.rowCount > 0) {
+    if (result1.rowCount! > 0) {
       const smart = result1.rows.filter(r => r.method === 'smart').length;
       const fallback = result1.rows.filter(r => r.method === 'fallback').length;
       logger.info(`[ColdStart] ✅ Backfilled first_half_kickoff_ts for ${result1.rowCount} matches (smart: ${smart}, fallback: ${fallback})`);
@@ -75,7 +75,7 @@ export async function coldStartKickoffBackfill(): Promise<void> {
     `, [nowTs]);
 
     console.log('[ColdStart] Second half query result:', result2.rowCount, 'rows');
-    if (result2.rowCount > 0) {
+    if (result2.rowCount! > 0) {
       const smart = result2.rows.filter(r => r.method === 'smart').length;
       const fallback = result2.rows.filter(r => r.method === 'fallback').length;
       logger.info(`[ColdStart] ✅ Backfilled second_half_kickoff_ts for ${result2.rowCount} matches (smart: ${smart}, fallback: ${fallback})`);

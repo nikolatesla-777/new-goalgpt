@@ -72,7 +72,7 @@ export async function runSubscriptionExpiryAlerts() {
           data: {
             type: 'subscription_expiry',
             daysRemaining: String(daysRemaining),
-            expiredAt: subscription.expired_at.toISOString(),
+            expiredAt: subscription.expired_at!.toISOString(),
             platform: subscription.platform || 'unknown',
           },
           deepLink: 'goalgpt://paywall',

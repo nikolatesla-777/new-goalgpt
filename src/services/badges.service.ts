@@ -206,11 +206,11 @@ export async function unlockBadge(
 
     // 5. Grant rewards (XP and Credits)
     if (badge.reward_xp > 0) {
-      const { grantXP } = await import('./xp.service');
+      const { grantXP, XPTransactionType } = await import('./xp.service');
       await grantXP({
         userId,
         amount: badge.reward_xp,
-        transactionType: 'badge_unlock',
+        transactionType: XPTransactionType.BADGE_UNLOCK,
         description: `Badge unlocked: ${badge.name_tr}`,
         referenceId: unlockedBadge.id,
         referenceType: 'badge',
