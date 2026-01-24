@@ -25,9 +25,9 @@ export async function sendPushToUser(
 ): Promise<{ success: boolean; tokensUsed: number; delivered: number }> {
   try {
     // Get user's active FCM tokens
-    const tokens = await db
+    const tokens: any[] = await db
       .selectFrom('customer_push_tokens')
-      .select('fcm_token')
+      .select(['fcm_token'] as any)
       .where('customer_user_id', '=', userId)
       .where('is_active', '=', true)
       .execute();
@@ -92,7 +92,7 @@ export async function sendPushToUser(
         await db
           .updateTable('customer_push_tokens')
           .set({ is_active: false })
-          .where('fcm_token', 'in', failedTokens)
+          .where('fcm_token' as any, 'in', failedTokens)
           .execute();
 
         logger.info(`Marked ${failedTokens.length} invalid tokens as inactive`);
@@ -158,7 +158,8 @@ export async function sendPushToAudience(
     // Build query based on target audience
     let query = db
       .selectFrom('customer_users')
-      .select('id')
+      .select(['id'])
+      .$narrowType<{ id: string }>()
       .where('deleted_at', 'is', null);
 
     if (targetAudience === 'vip') {
@@ -166,17 +167,17 @@ export async function sendPushToAudience(
       query = query
         .innerJoin('customer_subscriptions', 'customer_users.id', 'customer_subscriptions.customer_user_id')
         .where('customer_subscriptions.status', '=', 'active')
-        .where('customer_subscriptions.expired_at', '>', new Date());
+        .where('customer_subscriptions.expired_at', '>', new Date()) as any;
     } else if (targetAudience === 'free') {
       // Users without active subscriptions
       query = query
-        .leftJoin('customer_subscriptions', (join) =>
+        .leftJoin('customer_subscriptions', (join: any) =>
           join
             .onRef('customer_users.id', '=', 'customer_subscriptions.customer_user_id')
             .on('customer_subscriptions.status', '=', 'active')
             .on('customer_subscriptions.expired_at', '>', new Date())
         )
-        .where('customer_subscriptions.id', 'is', null);
+        .where('customer_subscriptions.id', 'is', null) as any;
     }
 
     // Apply custom segment filter if provided

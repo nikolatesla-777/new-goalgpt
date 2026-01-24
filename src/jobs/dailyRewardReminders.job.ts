@@ -38,7 +38,7 @@ export async function runDailyRewardReminders() {
     // 1. Have NOT claimed daily reward today
     // 2. Have claimed in the last 7 days (active users)
     // 3. Have FCM tokens
-    const eligibleUsers = await db
+    const eligibleUsers: any[] = await db
       .selectFrom('customer_users as cu')
       .innerJoin('customer_push_tokens as cpt', 'cu.id', 'cpt.customer_user_id')
       .leftJoin('customer_daily_rewards as cdr', (join) =>
@@ -55,11 +55,11 @@ export async function runDailyRewardReminders() {
         'cu.id',
         'cu.name',
         sql<number>`COUNT(DISTINCT cdr_recent.id)`.as('recent_claims'),
-      ])
+      ] as any)
       .where('cu.deleted_at', 'is', null)
       .where('cpt.is_active', '=', true)
       .where('cdr.id', 'is', null) // Not claimed today
-      .groupBy(['cu.id', 'cu.name'])
+      .groupBy(['cu.id', 'cu.name'] as any)
       .having(sql`COUNT(DISTINCT cdr_recent.id)`, '>', 0) // Has claimed in last 7 days
       .execute();
 

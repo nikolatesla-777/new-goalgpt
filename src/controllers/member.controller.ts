@@ -19,7 +19,7 @@ interface ActivityQuerystring {
 }
 
 // Type for authenticated request with user info
-interface AuthenticatedRequest extends FastifyRequest<{ Params: MemberParams }> {
+type AuthenticatedRequest = FastifyRequest<{ Params: MemberParams }> & {
     user?: {
         userId: string;
         role?: string;

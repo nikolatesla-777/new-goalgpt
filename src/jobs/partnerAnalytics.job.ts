@@ -106,11 +106,11 @@ export async function runPartnerAnalytics() {
               date: yesterday,
               new_signups: Number(newSignups?.count || 0),
               new_subscriptions: subscriptionCount,
-              revenue: revenue.toFixed(2),
-              commission: commission.toFixed(2),
+              revenue: Number(revenue.toFixed(2)),
+              commission: Number(commission.toFixed(2)),
               active_subscribers: Number(activeSubscribers?.count || 0),
               churn_count: Number(churnCount?.count || 0),
-            })
+            } as any)
             .onConflict((oc) =>
               oc.columns(['partner_id', 'date']).doUpdateSet({
                 new_signups: sql`EXCLUDED.new_signups`,

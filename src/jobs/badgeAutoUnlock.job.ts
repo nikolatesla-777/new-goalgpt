@@ -238,7 +238,7 @@ async function findUsersWithXPLevel(level: string): Promise<string[]> {
   const results = await db
     .selectFrom('customer_xp')
     .select('customer_user_id')
-    .where('level', '=', level)
+    .where('level', '=', level as any)
     .execute();
 
   return results.map((r) => r.customer_user_id);
@@ -276,7 +276,7 @@ async function unlockBadgeForUser(userId: string, badge: any) {
         customer_user_id: userId,
         badge_id: badge.id,
         unlocked_at: sql`NOW()`,
-      })
+      } as any)
       .execute();
 
     // Update badge total_unlocks

@@ -40,7 +40,7 @@ export async function runSubscriptionExpiryAlerts() {
     twoDaysFromNow.setHours(23, 59, 59, 999);
 
     // Find subscriptions expiring between 2-3 days from now
-    const expiringSubscriptions = await db
+    const expiringSubscriptions: any[] = await db
       .selectFrom('customer_subscriptions as cs')
       .innerJoin('customer_users as cu', 'cs.customer_user_id', 'cu.id')
       .innerJoin('customer_push_tokens as cpt', 'cu.id', 'cpt.customer_user_id')
@@ -50,13 +50,13 @@ export async function runSubscriptionExpiryAlerts() {
         'cs.expired_at',
         'cs.platform',
         sql<number>`EXTRACT(DAY FROM (cs.expired_at - NOW()))`.as('days_remaining'),
-      ])
+      ] as any)
       .where('cu.deleted_at', 'is', null)
       .where('cpt.is_active', '=', true)
       .where('cs.status', '=', 'active')
       .where('cs.expired_at', '>', twoDaysFromNow)
       .where('cs.expired_at', '<=', threeDaysFromNow)
-      .groupBy(['cu.id', 'cu.name', 'cs.expired_at', 'cs.platform'])
+      .groupBy(['cu.id', 'cu.name', 'cs.expired_at', 'cs.platform'] as any)
       .execute();
 
     logger.info(`Found ${expiringSubscriptions.length} subscription(s) expiring in 3 days`);

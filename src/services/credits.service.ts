@@ -388,7 +388,7 @@ export async function purchaseVIPPrediction(
 
   // Check if already purchased
   const existingPurchase = await db
-    .selectFrom('ts_prediction_mapped')
+    .selectFrom('ts_prediction_mapped' as any)
     .select('id')
     .where('id', '=', predictionId)
     .where('purchased_by_user_id', '=', userId)
@@ -411,7 +411,7 @@ export async function purchaseVIPPrediction(
 
   // Mark prediction as purchased
   await db
-    .updateTable('ts_prediction_mapped')
+    .updateTable('ts_prediction_mapped' as any)
     .set({
       credit_cost: cost,
       purchased_by_user_id: userId,
