@@ -5,7 +5,7 @@
  * SECURITY: All endpoints require admin authentication
  */
 
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, RouteShorthandOptions } from 'fastify';
 import {
     getDashboardStatsHandler,
     getRevenueChartHandler,
@@ -15,22 +15,22 @@ import {
 import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 
 // Middleware chain for admin-only access
-const adminOnly = { preHandler: [requireAuth, requireAdmin] };
+const adminOnly: RouteShorthandOptions = { preHandler: [requireAuth, requireAdmin] };
 
 export async function dashboardRoutes(fastify: FastifyInstance) {
     // Dashboard stats endpoint (main summary)
-    fastify.get('/api/admin/dashboard/stats', adminOnly, getDashboardStatsHandler);
+    fastify.get<{ Querystring: any }>('/api/admin/dashboard/stats', { preHandler: [requireAuth, requireAdmin] }, getDashboardStatsHandler);
 
     // Revenue chart endpoint (legacy)
-    fastify.get('/api/admin/dashboard/revenue-chart', adminOnly, getRevenueChartHandler);
+    fastify.get<{ Querystring: any }>('/api/admin/dashboard/revenue-chart', { preHandler: [requireAuth, requireAdmin] }, getRevenueChartHandler);
 
     // Drill-down trend endpoints
     // GET /api/admin/dashboard/:type/trend?period=month
     // Types: revenue, subscribers, sales, billing-errors, signups, trials, cancellations, churn
-    fastify.get('/api/admin/dashboard/:type/trend', adminOnly, getTrendHandler);
+    fastify.get<{ Params: any; Querystring: any }>('/api/admin/dashboard/:type/trend', { preHandler: [requireAuth, requireAdmin] }, getTrendHandler);
 
     // Drill-down details endpoints
     // GET /api/admin/dashboard/:type/details?period=month&limit=100
     // Types: revenue, subscribers, sales, billing-errors, signups, trials, cancellations, churn
-    fastify.get('/api/admin/dashboard/:type/details', adminOnly, getDetailsHandler);
+    fastify.get<{ Params: any; Querystring: any }>('/api/admin/dashboard/:type/details', { preHandler: [requireAuth, requireAdmin] }, getDetailsHandler);
 }

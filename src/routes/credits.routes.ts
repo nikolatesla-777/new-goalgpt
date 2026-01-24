@@ -115,10 +115,10 @@ export async function creditsRoutes(fastify: FastifyInstance) {
    * Grant credits to a user (admin only)
    * Protected: Requires authentication + admin role
    */
-  fastify.post(
+  fastify.post<GrantCreditsRequest>(
     '/grant',
     { preHandler: [requireAuth, requireAdmin] },
-    async (request: FastifyRequest<GrantCreditsRequest>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const { userId, amount, transactionType, description, referenceId, referenceType, metadata } = request.body;
 
@@ -152,10 +152,10 @@ export async function creditsRoutes(fastify: FastifyInstance) {
    * Spend credits (generic endpoint, use specific endpoints for purchases)
    * Protected: Requires authentication
    */
-  fastify.post(
+  fastify.post<SpendCreditsRequest>(
     '/spend',
     { preHandler: requireAuth },
-    async (request: FastifyRequest<SpendCreditsRequest>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const userId = request.user!.userId;
         const { amount, transactionType, description, referenceId, referenceType, metadata } = request.body;
@@ -200,10 +200,10 @@ export async function creditsRoutes(fastify: FastifyInstance) {
    * Get current user's credit transaction history
    * Protected: Requires authentication
    */
-  fastify.get(
+  fastify.get<CreditTransactionsRequest>(
     '/transactions',
     { preHandler: requireAuth },
-    async (request: FastifyRequest<CreditTransactionsRequest>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const userId = request.user!.userId;
         const limit = parseInt(request.query.limit || '50', 10);
@@ -236,10 +236,10 @@ export async function creditsRoutes(fastify: FastifyInstance) {
    * Process rewarded ad view and grant credits
    * Protected: Requires authentication
    */
-  fastify.post(
+  fastify.post<AdRewardRequest>(
     '/ad-reward',
     { preHandler: requireAuth },
-    async (request: FastifyRequest<AdRewardRequest>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const userId = request.user!.userId;
         const { adNetwork, adUnitId, adType, deviceId } = request.body;
@@ -279,10 +279,10 @@ export async function creditsRoutes(fastify: FastifyInstance) {
    * Purchase VIP prediction with credits
    * Protected: Requires authentication
    */
-  fastify.post(
+  fastify.post<PurchasePredictionRequest>(
     '/purchase-prediction',
     { preHandler: requireAuth },
-    async (request: FastifyRequest<PurchasePredictionRequest>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const userId = request.user!.userId;
         const { predictionId } = request.body;
@@ -328,10 +328,10 @@ export async function creditsRoutes(fastify: FastifyInstance) {
    * Refund credits (admin only)
    * Protected: Requires authentication + admin role
    */
-  fastify.post(
+  fastify.post<RefundCreditsRequest>(
     '/refund',
     { preHandler: [requireAuth, requireAdmin] },
-    async (request: FastifyRequest<RefundCreditsRequest>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const { userId, amount, reason, referenceId } = request.body;
 

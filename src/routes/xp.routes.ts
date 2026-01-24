@@ -83,10 +83,10 @@ export async function xpRoutes(fastify: FastifyInstance) {
    * Grant XP to a user (admin only)
    * Protected: Requires authentication + admin role
    */
-  fastify.post(
+  fastify.post<GrantXPRequest>(
     '/grant',
     { preHandler: [requireAuth, requireAdmin] },
-    async (request: FastifyRequest<GrantXPRequest>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const { userId, amount, transactionType, description, referenceId, referenceType, metadata } = request.body;
 
@@ -120,10 +120,10 @@ export async function xpRoutes(fastify: FastifyInstance) {
    * Get current user's XP transaction history
    * Protected: Requires authentication
    */
-  fastify.get(
+  fastify.get<XPTransactionsRequest>(
     '/transactions',
     { preHandler: requireAuth },
-    async (request: FastifyRequest<XPTransactionsRequest>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const userId = request.user!.userId;
         const limit = parseInt(request.query.limit || '50', 10);

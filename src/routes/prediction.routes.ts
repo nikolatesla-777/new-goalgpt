@@ -710,7 +710,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * This is what users will see in the TAHMİN column
      * SECURITY: Admin-only endpoint
      */
-    fastify.put('/api/predictions/:id/display', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Params: { id: string }; Body: { display_prediction: string } }>, reply: FastifyReply) => {
+    fastify.put<{ Params: { id: string }; Body: { display_prediction: string } }>('/api/predictions/:id/display', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
         try {
             const { id } = request.params;
             const { display_prediction } = request.body;
@@ -751,7 +751,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Bulk update display_prediction for multiple predictions
      * SECURITY: Admin-only endpoint
      */
-    fastify.put('/api/predictions/bulk-display', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Body: { updates: { id: string; display_prediction: string }[] } }>, reply: FastifyReply) => {
+    fastify.put<{ Body: { updates: { id: string; display_prediction: string }[] } }>('/api/predictions/bulk-display', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
         try {
             const { updates } = request.body;
 
@@ -788,7 +788,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Toggle access_type between VIP and FREE
      * SECURITY: Admin-only endpoint
      */
-    fastify.put('/api/predictions/:id/access', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>, reply: FastifyReply) => {
+    fastify.put<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>('/api/predictions/:id/access', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
         try {
             const { id } = request.params;
             const { access_type } = request.body;
@@ -867,7 +867,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * List manual predictions
      * SECURITY: Admin only - lists all manual predictions
      */
-    fastify.get('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+    fastify.get<{ Querystring: { limit?: string } }>('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
         try {
             const limit = parseInt(request.query.limit || '100', 10);
             const predictions = await aiPredictionService.getManualPredictions(limit);
@@ -902,7 +902,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     }
 
     // SECURITY: Admin authentication required for manual prediction creation
-    fastify.post('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Body: ManualPredictionBody }>, reply: FastifyReply) => {
+    fastify.post<{ Body: ManualPredictionBody }>('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
         try {
             const result = await aiPredictionService.createManualPrediction(request.body);
             if (result) {
@@ -938,7 +938,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     }
 
     // SECURITY: Admin authentication required for coupon creation
-    fastify.post('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{ Body: CouponBody }>, reply: FastifyReply) => {
+    fastify.post<{ Body: CouponBody }>('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
         try {
             const result = await aiPredictionService.createCoupon(request.body);
             if (result) {
@@ -992,9 +992,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Match a specific prediction by external ID
      * Requires admin authentication
      */
-    fastify.post('/api/predictions/match/:externalId', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{
-        Params: { externalId: string }
-    }>, reply: FastifyReply) => {
+    fastify.post<{ Params: { externalId: string } }>('/api/predictions/match/:externalId', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
         try {
             const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
 
