@@ -117,6 +117,14 @@ const CACHE_CONFIGS: Record<string, CacheConfig> = {
     checkPeriod: 30,
     description: 'Today\'s match list',
   },
+
+  // AI Predictions data
+  predictions: {
+    ttlSeconds: 30,        // 30 seconds (predictions don't change frequently)
+    maxKeys: 500,          // Per user/limit combinations
+    checkPeriod: 10,
+    description: 'AI Predictions matched list',
+  },
 };
 
 // ============================================================
@@ -405,4 +413,5 @@ export const cacheKeys = {
   team: (teamId: string) => teamId,
   competition: (competitionId: string) => competitionId,
   todayMatches: (date: string) => date,
+  predictions: (userId: string | undefined, limit: number) => `${userId || 'anon'}:${limit}`,
 };

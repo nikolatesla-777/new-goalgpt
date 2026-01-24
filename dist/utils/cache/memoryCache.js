@@ -104,6 +104,13 @@ const CACHE_CONFIGS = {
         checkPeriod: 30,
         description: 'Today\'s match list',
     },
+    // AI Predictions data
+    predictions: {
+        ttlSeconds: 30, // 30 seconds (predictions don't change frequently)
+        maxKeys: 500, // Per user/limit combinations
+        checkPeriod: 10,
+        description: 'AI Predictions matched list',
+    },
 };
 // ============================================================
 // MEMORY CACHE CLASS
@@ -328,4 +335,5 @@ exports.cacheKeys = {
     team: (teamId) => teamId,
     competition: (competitionId) => competitionId,
     todayMatches: (date) => date,
+    predictions: (userId, limit) => `${userId || 'anon'}:${limit}`,
 };

@@ -47,6 +47,7 @@ const unifiedPrediction_service_1 = require("../services/ai/unifiedPrediction.se
 const connection_1 = require("../database/connection");
 const logger_1 = require("../utils/logger");
 const auth_middleware_1 = require("../middleware/auth.middleware");
+const memoryCache_1 = require("../utils/cache/memoryCache");
 /**
  * Log an incoming request to the database
  */
@@ -371,12 +372,28 @@ async function predictionRoutes(fastify) {
      * GET /api/predictions/matched
      * List matched predictions with results
      * Mobile app compatible format
+     *
+     * CACHE: 30s TTL (reduces pool exhaustion on peak load)
      */
     fastify.get('/api/predictions/matched', async (request, reply) => {
+        const startTime = Date.now();
         try {
             const limit = parseInt(request.query.limit || '50', 10);
+            const userId = request.query.userId; // Optional user ID for personalized results
+            // Generate cache key
+            const cacheKey = memoryCache_1.cacheKeys.predictions(userId, limit);
+            // Try cache first
+            const cached = memoryCache_1.memoryCache.get('predictions', cacheKey);
+            if (cached) {
+                const cacheAge = Date.now() - startTime;
+                logger_1.logger.debug(`[Predictions] Cache HIT for ${cacheKey} (${cacheAge}ms)`);
+                return reply.status(200).send(cached);
+            }
+            // Cache miss - fetch from DB
+            const dbStartTime = Date.now();
             const predictions = await aiPrediction_service_1.aiPredictionService.getMatchedPredictions(limit);
-            return reply.status(200).send({
+            const dbDuration = Date.now() - dbStartTime;
+            const response = {
                 success: true,
                 data: {
                     predictions,
@@ -385,7 +402,12 @@ async function predictionRoutes(fastify) {
                 // Keep for backward compatibility
                 count: predictions.length,
                 predictions
-            });
+            };
+            // Store in cache
+            memoryCache_1.memoryCache.set('predictions', cacheKey, response);
+            const totalDuration = Date.now() - startTime;
+            logger_1.logger.info(`[Predictions] Cache MISS for ${cacheKey} - DB: ${dbDuration}ms, Total: ${totalDuration}ms`);
+            return reply.status(200).send(response);
         }
         catch (error) {
             logger_1.logger.error('[Predictions] Get matched error:', error);

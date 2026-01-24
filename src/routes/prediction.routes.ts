@@ -13,6 +13,7 @@ import { unifiedPredictionService, PredictionFilter } from '../services/ai/unifi
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
+import { memoryCache, cacheKeys } from '../utils/cache/memoryCache';
 
 interface IngestBody {
     id?: string;
@@ -400,13 +401,32 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * GET /api/predictions/matched
      * List matched predictions with results
      * Mobile app compatible format
+     *
+     * CACHE: 30s TTL (reduces pool exhaustion on peak load)
      */
-    fastify.get('/api/predictions/matched', async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+    fastify.get('/api/predictions/matched', async (request: FastifyRequest<{ Querystring: { limit?: string; userId?: string } }>, reply: FastifyReply) => {
+        const startTime = Date.now();
         try {
             const limit = parseInt(request.query.limit || '50', 10);
-            const predictions = await aiPredictionService.getMatchedPredictions(limit);
+            const userId = request.query.userId; // Optional user ID for personalized results
 
-            return reply.status(200).send({
+            // Generate cache key
+            const cacheKey = cacheKeys.predictions(userId, limit);
+
+            // Try cache first
+            const cached = memoryCache.get('predictions', cacheKey);
+            if (cached) {
+                const cacheAge = Date.now() - startTime;
+                logger.debug(`[Predictions] Cache HIT for ${cacheKey} (${cacheAge}ms)`);
+                return reply.status(200).send(cached);
+            }
+
+            // Cache miss - fetch from DB
+            const dbStartTime = Date.now();
+            const predictions = await aiPredictionService.getMatchedPredictions(limit);
+            const dbDuration = Date.now() - dbStartTime;
+
+            const response = {
                 success: true,
                 data: {
                     predictions,
@@ -415,7 +435,15 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
                 // Keep for backward compatibility
                 count: predictions.length,
                 predictions
-            });
+            };
+
+            // Store in cache
+            memoryCache.set('predictions', cacheKey, response);
+
+            const totalDuration = Date.now() - startTime;
+            logger.info(`[Predictions] Cache MISS for ${cacheKey} - DB: ${dbDuration}ms, Total: ${totalDuration}ms`);
+
+            return reply.status(200).send(response);
         } catch (error) {
             logger.error('[Predictions] Get matched error:', error);
             return reply.status(500).send({
