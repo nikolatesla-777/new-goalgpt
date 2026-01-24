@@ -16,6 +16,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 import { memoryCache, cacheKeys } from '../utils/cache/memoryCache';
 import { singleFlight } from '../utils/cache/singleFlight';
 import { generatePredictionsCacheKey } from '../utils/cache/cacheKeyGenerator';
+import { deprecateRoute } from '../utils/deprecation.utils';
 
 /**
  * Cache Configuration for Empty Responses
@@ -168,9 +169,20 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
 
     /**
      * POST /api/v1/ingest/predictions
-     * Legacy endpoint for backwards compatibility with existing external systems
+     * PR-11: DEPRECATED - Legacy endpoint for backwards compatibility with existing external systems
+     *
+     * @deprecated Use POST /api/predictions/ingest instead
+     * @sunset 2026-03-01
      */
     fastify.post('/api/v1/ingest/predictions', async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
+        // PR-11: Add deprecation headers
+        deprecateRoute(request, reply, {
+            canonical: '/api/predictions/ingest',
+            sunset: '2026-03-01T00:00:00Z',
+            docs: 'https://docs.goalgpt.app/api/predictions/ingest',
+            message: 'This v1 endpoint is deprecated. Use POST /api/predictions/ingest for the modern API.'
+        });
+
         const startTime = Date.now();
         let responseStatus = 200;
         let responseBody: any;
@@ -179,8 +191,6 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
 
         try {
             const payload = request.body as RawPredictionPayload;
-
-            logger.info('[Predictions] Legacy ingest endpoint called');
 
             const result = await aiPredictionService.ingestPrediction(payload);
             success = result.success;
