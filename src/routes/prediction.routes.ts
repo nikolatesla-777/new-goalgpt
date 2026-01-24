@@ -14,6 +14,24 @@ import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 import { memoryCache, cacheKeys } from '../utils/cache/memoryCache';
+import { singleFlight } from '../utils/cache/singleFlight';
+import { generatePredictionsCacheKey } from '../utils/cache/cacheKeyGenerator';
+
+/**
+ * Cache Configuration for Empty Responses
+ *
+ * Business Rule Decision:
+ * - CACHE_EMPTY_RESPONSES=true: Empty results are normal (user has no predictions yet)
+ *   → Cache empty arrays with short TTL (10-15s) to reduce DB load
+ *   → Use when: Empty responses are frequent and legitimate
+ *
+ * - CACHE_EMPTY_RESPONSES=false: Empty results indicate temporary error/incomplete data
+ *   → Don't cache empty arrays, retry on next request
+ *   → Use when: Empty responses are rare or indicate API issues
+ *
+ * Default: true (predictions endpoint often returns empty for new users)
+ */
+const CACHE_EMPTY_RESPONSES = process.env.CACHE_EMPTY_RESPONSES !== 'false';
 
 interface IngestBody {
     id?: string;
@@ -403,6 +421,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Mobile app compatible format
      *
      * CACHE: 30s TTL (reduces pool exhaustion on peak load)
+     * IN-FLIGHT DEDUPE: Single DB query for concurrent requests
      */
     fastify.get('/api/predictions/matched', async (request: FastifyRequest<{ Querystring: { limit?: string; userId?: string } }>, reply: FastifyReply) => {
         const startTime = Date.now();
@@ -410,8 +429,8 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
             const limit = parseInt(request.query.limit || '50', 10);
             const userId = request.query.userId; // Optional user ID for personalized results
 
-            // Generate cache key
-            const cacheKey = cacheKeys.predictions(userId, limit);
+            // Generate cache key from ALL query params (prevents key collision)
+            const cacheKey = generatePredictionsCacheKey({ limit, userId });
 
             // Try cache first
             const cached = memoryCache.get('predictions', cacheKey);
@@ -421,31 +440,59 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
                 return reply.status(200).send(cached);
             }
 
-            // Cache miss - fetch from DB
-            const dbStartTime = Date.now();
-            const predictions = await aiPredictionService.getMatchedPredictions(limit);
-            const dbDuration = Date.now() - dbStartTime;
+            // Cache miss - use single-flight to prevent duplicate DB queries
+            const response = await singleFlight.do(cacheKey, async () => {
+                // Double-check cache (another request might have populated it)
+                const doubleCheck = memoryCache.get('predictions', cacheKey);
+                if (doubleCheck) {
+                    logger.debug(`[Predictions] Cache HIT on double-check for ${cacheKey}`);
+                    return doubleCheck;
+                }
 
-            const response = {
-                success: true,
-                data: {
-                    predictions,
-                    total: predictions.length
-                },
-                // Keep for backward compatibility
-                count: predictions.length,
-                predictions
-            };
+                // Execute DB query
+                const dbStartTime = Date.now();
+                const predictions = await aiPredictionService.getMatchedPredictions(limit);
+                const dbDuration = Date.now() - dbStartTime;
 
-            // Store in cache
-            memoryCache.set('predictions', cacheKey, response);
+                const result = {
+                    success: true,
+                    data: {
+                        predictions,
+                        total: predictions.length
+                    },
+                    // Keep for backward compatibility
+                    count: predictions.length,
+                    predictions
+                };
 
-            const totalDuration = Date.now() - startTime;
-            logger.info(`[Predictions] Cache MISS for ${cacheKey} - DB: ${dbDuration}ms, Total: ${totalDuration}ms`);
+                // Store in cache based on business rules
+                const totalDuration = Date.now() - startTime;
+                const hasData = predictions && predictions.length > 0;
+                const isEmpty = predictions && predictions.length === 0;
+
+                if (hasData) {
+                    // Always cache results with data
+                    memoryCache.set('predictions', cacheKey, result);
+                    logger.info(`[Predictions] Cached result with data for ${cacheKey} - DB: ${dbDuration}ms, Total: ${totalDuration}ms`);
+                } else if (isEmpty && CACHE_EMPTY_RESPONSES) {
+                    // Cache empty results if configured (reduces DB load for new users)
+                    memoryCache.set('predictions', cacheKey, result);
+                    logger.debug(`[Predictions] Cached empty result for ${cacheKey} (CACHE_EMPTY_RESPONSES=true) - DB: ${dbDuration}ms`);
+                } else if (isEmpty && !CACHE_EMPTY_RESPONSES) {
+                    // Don't cache empty results (may be temporary API issue)
+                    logger.debug(`[Predictions] Skipping cache for ${cacheKey} - empty result (CACHE_EMPTY_RESPONSES=false, may retry)`);
+                } else {
+                    // predictions is null/undefined (error case) - don't cache
+                    logger.warn(`[Predictions] Skipping cache for ${cacheKey} - null/undefined result (error)`);
+                }
+
+                return result;
+            });
 
             return reply.status(200).send(response);
         } catch (error) {
             logger.error('[Predictions] Get matched error:', error);
+            // Don't cache errors - let next request try again
             return reply.status(500).send({
                 success: false,
                 error: error instanceof Error ? error.message : 'Internal server error'
