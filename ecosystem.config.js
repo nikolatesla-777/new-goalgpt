@@ -14,7 +14,8 @@ module.exports = {
     out_file: '/var/www/goalgpt/logs/pm2-out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     env: {
-      NODE_ENV: 'production'
+      NODE_ENV: 'production',
+      DB_MAX_CONNECTIONS: '50'  // Pool max increased from 25 to 50 (safe for Supabase pooler max_connections ~200)
     },
     min_uptime: '10s',
     max_restarts: 10,
