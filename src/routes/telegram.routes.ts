@@ -90,10 +90,10 @@ async function createDraftPost(
   try {
     await client.query('BEGIN');
 
+    // ✅ REMOVED ON CONFLICT - Allow duplicate publishes of same match
     const result = await client.query(
       `INSERT INTO telegram_posts (match_id, fs_match_id, channel_id, content, status)
        VALUES ($1, $2, $3, $4, 'draft')
-       ON CONFLICT (match_id, channel_id) DO NOTHING
        RETURNING id`,
       [matchId, fsMatchId, channelId, content]
     );
