@@ -91,10 +91,11 @@ export function TelegramPublisher() {
     try {
       await publishToTelegram(selectedMatch.id, selectedMatch.external_id, selectedPicks);
       setPublishSuccess(true);
+
+      // ✅ Allow republishing same match: Don't clear selection, just show success
       setTimeout(() => {
         setPublishSuccess(false);
-        setSelectedMatch(null);
-        setSelectedPicks([]);
+        // DON'T clear selectedMatch - let user republish if they want
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to publish to Telegram');
