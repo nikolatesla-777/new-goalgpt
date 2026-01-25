@@ -56,7 +56,9 @@ export async function runTelegramSettlement(): Promise<void> {
     async (_ctx) => {
       logger.info('[TelegramSettlement] Starting...');
 
-      const client = await pool.connect();
+      // FIX: Acquire connection ONLY for SELECT, release before processing loop
+      let client = await pool.connect();
+      let postsToSettle: PendingPost[];
       try {
         // PHASE-1: Get published posts with pending picks for finished matches
         // Skip posts that have exceeded max retry limit
@@ -88,9 +90,17 @@ export async function runTelegramSettlement(): Promise<void> {
             )
         `);
 
-        let settledCount = 0;
+        postsToSettle = result.rows;
+      } finally {
+        // FIX: Release connection BEFORE processing loop
+        client.release();
+        client = null;
+      }
 
-        for (const post of result.rows) {
+      let settledCount = 0;
+
+      // FIX: Process each post with fresh connection per operation
+      for (const post of postsToSettle) {
           if (!post.picks || post.picks.length === 0) continue;
 
           // PHASE-2A: Prepare score data for rule engine
@@ -130,13 +140,18 @@ export async function runTelegramSettlement(): Promise<void> {
               rule: settlement.rule,
             });
 
-            // Update pick status with settlement data
-            await client.query(
-              `UPDATE telegram_picks
-               SET status = $1, settled_at = NOW(), result_data = $2
-               WHERE id = $3`,
-              [status, JSON.stringify(settlement.data), pick.id]
-            );
+            // FIX: Acquire connection for EACH pick update, release immediately
+            const pickClient = await pool.connect();
+            try {
+              await pickClient.query(
+                `UPDATE telegram_picks
+                 SET status = $1, settled_at = NOW(), result_data = $2
+                 WHERE id = $3`,
+                [status, JSON.stringify(settlement.data), pick.id]
+              );
+            } finally {
+              pickClient.release();
+            }
 
             logger.info(`[TelegramSettlement] ✅ Pick settled: ${settlement.outcome}`, {
               pick_id: pick.id,
@@ -168,6 +183,7 @@ export async function runTelegramSettlement(): Promise<void> {
           });
 
           // PHASE-1: Reply to original message with retry tracking
+          // FIX: NO connection held during Telegram API call
           try {
             await telegramBot.replyToMessage(
               post.channel_id,
@@ -175,14 +191,19 @@ export async function runTelegramSettlement(): Promise<void> {
               replyText
             );
 
-            // PHASE-1: Mark post as SETTLED (status + settled_at)
-            await client.query(
-              `UPDATE telegram_posts
-               SET status = 'settled',
-                   settled_at = NOW()
-               WHERE id = $1`,
-              [post.id]
-            );
+            // FIX: Acquire NEW connection for post update
+            const postClient = await pool.connect();
+            try {
+              await postClient.query(
+                `UPDATE telegram_posts
+                 SET status = 'settled',
+                     settled_at = NOW()
+                 WHERE id = $1`,
+                [post.id]
+              );
+            } finally {
+              postClient.release();
+            }
 
             settledCount++;
             logger.info(`[TelegramSettlement] ✅ Settled post ${post.id}: ${wonCount}/${totalCount} (${voidCount} void)`);
@@ -190,37 +211,40 @@ export async function runTelegramSettlement(): Promise<void> {
             // PHASE-1: Increment retry count on failure
             const newRetryCount = (post.retry_count || 0) + 1;
 
-            if (newRetryCount >= MAX_SETTLEMENT_RETRIES) {
-              // PHASE-1: Max retries exceeded - mark as FAILED
-              await client.query(
-                `UPDATE telegram_posts
-                 SET status = 'failed',
-                     retry_count = $1,
-                     error_log = $2,
-                     last_error_at = NOW()
-                 WHERE id = $3`,
-                [newRetryCount, `Settlement reply failed: ${err.message}`, post.id]
-              );
-              logger.error(`[TelegramSettlement] ❌ FAILED after ${newRetryCount} retries for post ${post.id}:`, err);
-            } else {
-              // PHASE-1: Update retry count and error log
-              await client.query(
-                `UPDATE telegram_posts
-                 SET retry_count = $1,
-                     error_log = $2,
-                     last_error_at = NOW()
-                 WHERE id = $3`,
-                [newRetryCount, `Settlement reply failed (retry ${newRetryCount}): ${err.message}`, post.id]
-              );
-              logger.warn(`[TelegramSettlement] ⚠️ Settlement failed (retry ${newRetryCount}/${MAX_SETTLEMENT_RETRIES}) for post ${post.id}:`, err);
+            // FIX: Acquire NEW connection for error update
+            const errorClient = await pool.connect();
+            try {
+              if (newRetryCount >= MAX_SETTLEMENT_RETRIES) {
+                // PHASE-1: Max retries exceeded - mark as FAILED
+                await errorClient.query(
+                  `UPDATE telegram_posts
+                   SET status = 'failed',
+                       retry_count = $1,
+                       error_log = $2,
+                       last_error_at = NOW()
+                   WHERE id = $3`,
+                  [newRetryCount, `Settlement reply failed: ${err.message}`, post.id]
+                );
+                logger.error(`[TelegramSettlement] ❌ FAILED after ${newRetryCount} retries for post ${post.id}:`, err);
+              } else {
+                // PHASE-1: Update retry count and error log
+                await errorClient.query(
+                  `UPDATE telegram_posts
+                   SET retry_count = $1,
+                       error_log = $2,
+                       last_error_at = NOW()
+                   WHERE id = $3`,
+                  [newRetryCount, `Settlement reply failed (retry ${newRetryCount}): ${err.message}`, post.id]
+                );
+                logger.warn(`[TelegramSettlement] ⚠️ Settlement failed (retry ${newRetryCount}/${MAX_SETTLEMENT_RETRIES}) for post ${post.id}:`, err);
+              }
+            } finally {
+              errorClient.release();
             }
           }
         }
 
         logger.info(`[TelegramSettlement] Settled ${settledCount} posts`);
-
-      } finally {
-        client.release();
       }
     }
   );

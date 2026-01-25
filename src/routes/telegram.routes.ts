@@ -44,9 +44,15 @@ const RETRY_BACKOFF_MS = [1000, 3000, 9000]; // Exponential backoff: 1s, 3s, 9s
 /**
  * PHASE-1: Idempotency check
  * Returns existing post if match+channel already published
+ *
+ * FIX: Accepts optional client parameter to avoid connection churn
  */
-async function checkExistingPost(matchId: string, channelId: string) {
-  const client = await pool.connect();
+async function checkExistingPost(matchId: string, channelId: string, client?: any) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
   try {
     const result = await client.query(
       `SELECT id, telegram_message_id, status, retry_count
@@ -57,21 +63,30 @@ async function checkExistingPost(matchId: string, channelId: string) {
     );
     return result.rows[0] || null;
   } finally {
-    client.release();
+    if (shouldReleaseClient) {
+      client.release();
+    }
   }
 }
 
 /**
  * PHASE-1: Create draft post in transaction
  * Reserves the idempotency slot before Telegram send
+ *
+ * FIX: Accepts optional client parameter to avoid connection churn
  */
 async function createDraftPost(
   matchId: string,
   fsMatchId: number,
   channelId: string,
-  content: string
+  content: string,
+  client?: any
 ) {
-  const client = await pool.connect();
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
   try {
     await client.query('BEGIN');
 
@@ -89,15 +104,23 @@ async function createDraftPost(
     await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    if (shouldReleaseClient) {
+      client.release();
+    }
   }
 }
 
 /**
  * PHASE-1: Mark post as published with message_id
+ *
+ * FIX: Accepts optional client parameter to avoid connection churn
  */
-async function markPublished(postId: string, messageId: number) {
-  const client = await pool.connect();
+async function markPublished(postId: string, messageId: number, client?: any) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
   try {
     await client.query(
       `UPDATE telegram_posts
@@ -108,15 +131,23 @@ async function markPublished(postId: string, messageId: number) {
       [postId, messageId]
     );
   } finally {
-    client.release();
+    if (shouldReleaseClient) {
+      client.release();
+    }
   }
 }
 
 /**
  * PHASE-1: Mark post as failed with error details
+ *
+ * FIX: Accepts optional client parameter to avoid connection churn
  */
-async function markFailed(postId: string, error: string, retryCount: number) {
-  const client = await pool.connect();
+async function markFailed(postId: string, error: string, retryCount: number, client?: any) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
   try {
     await client.query(
       `UPDATE telegram_posts
@@ -128,18 +159,23 @@ async function markFailed(postId: string, error: string, retryCount: number) {
       [postId, error, retryCount]
     );
   } finally {
-    client.release();
+    if (shouldReleaseClient) {
+      client.release();
+    }
   }
 }
 
 /**
  * PHASE-1: Retry logic with exponential backoff
  * Attempts Telegram send up to MAX_RETRY_ATTEMPTS times
+ *
+ * FIX: Accepts optional client parameter, NO connection held during Telegram API call
  */
 async function sendWithRetry(
   channelId: string,
   messageText: string,
-  postId: string
+  postId: string,
+  client?: any
 ): Promise<number> {
   let lastError: Error | null = null;
 
@@ -147,6 +183,7 @@ async function sendWithRetry(
     try {
       logger.info(`[Telegram] Send attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS} for post ${postId}`);
 
+      // FIX: NO connection held during Telegram API call
       const result = await telegramBot.sendMessage({
         chat_id: channelId,
         text: messageText,
@@ -169,10 +206,15 @@ async function sendWithRetry(
         attempt: attempt + 1,
       });
 
-      // Update retry count in DB
-      const client = await pool.connect();
+      // FIX: Acquire connection ONLY for DB update, release immediately
+      const shouldReleaseClient = !client;
+      let updateClient = client;
+      if (!updateClient) {
+        updateClient = await pool.connect();
+      }
+
       try {
-        await client.query(
+        await updateClient.query(
           `UPDATE telegram_posts
            SET retry_count = $1,
                error_log = $2,
@@ -181,7 +223,9 @@ async function sendWithRetry(
           [attempt + 1, err.message, postId]
         );
       } finally {
-        client.release();
+        if (shouldReleaseClient) {
+          updateClient.release();
+        }
       }
 
       // Wait before retry (exponential backoff)
@@ -262,26 +306,36 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         // 3. PHASE-1: IDEMPOTENCY CHECK
+        // FIX: Acquire connection ONCE for ALL DB operations (no API calls in between)
         logger.info('[Telegram] 🔍 Checking for existing post...', logContext);
-        const existingPost = await checkExistingPost(match_id, channelId);
 
-        if (existingPost) {
-          logger.info(`[Telegram] ✅ IDEMPOTENCY: Post already exists (${existingPost.status})`, {
-            ...logContext,
-            post_id: existingPost.id,
-            status: existingPost.status,
-            telegram_message_id: existingPost.telegram_message_id,
-          });
+        let dbClient = await pool.connect();
+        let existingPost;
+        try {
+          existingPost = await checkExistingPost(match_id, channelId, dbClient);
 
-          // Return existing data - NO-OP
-          return {
-            success: true,
-            telegram_message_id: existingPost.telegram_message_id,
-            post_id: existingPost.id,
-            status: existingPost.status,
-            idempotent: true,
-            message: 'Match already published (idempotent)',
-          };
+          if (existingPost) {
+            logger.info(`[Telegram] ✅ IDEMPOTENCY: Post already exists (${existingPost.status})`, {
+              ...logContext,
+              post_id: existingPost.id,
+              status: existingPost.status,
+              telegram_message_id: existingPost.telegram_message_id,
+            });
+
+            // Return existing data - NO-OP
+            return {
+              success: true,
+              telegram_message_id: existingPost.telegram_message_id,
+              post_id: existingPost.id,
+              status: existingPost.status,
+              idempotent: true,
+              message: 'Match already published (idempotent)',
+            };
+          }
+        } finally {
+          // Release BEFORE FootyStats API call
+          dbClient.release();
+          dbClient = null;
         }
 
         logger.info('[Telegram] ✅ No existing post found, proceeding with publish', logContext);
@@ -469,28 +523,39 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         const messageText = formatTelegramMessage(matchData, picks as any, confidenceScore);
 
         // 9. PHASE-1: TRANSACTION SAFETY - Create DRAFT post first
+        // FIX: Acquire connection for draft post, release BEFORE Telegram API call
         logger.info('[Telegram] 💾 Creating DRAFT post...', logContext);
-        const postId = await createDraftPost(match_id, fsIdNum, channelId, messageText);
 
-        if (!postId) {
-          // ON CONFLICT DO NOTHING triggered - race condition detected
-          logger.warn('[Telegram] ⚠️ Race condition detected: Another request already created this post', logContext);
+        dbClient = await pool.connect();
+        let postId;
+        try {
+          postId = await createDraftPost(match_id, fsIdNum, channelId, messageText, dbClient);
 
-          // Fetch the existing post
-          const racedPost = await checkExistingPost(match_id, channelId);
-          return {
-            success: true,
-            telegram_message_id: racedPost?.telegram_message_id,
-            post_id: racedPost?.id,
-            status: racedPost?.status,
-            idempotent: true,
-            message: 'Race condition: Post created by concurrent request',
-          };
+          if (!postId) {
+            // ON CONFLICT DO NOTHING triggered - race condition detected
+            logger.warn('[Telegram] ⚠️ Race condition detected: Another request already created this post', logContext);
+
+            // Fetch the existing post
+            const racedPost = await checkExistingPost(match_id, channelId, dbClient);
+            return {
+              success: true,
+              telegram_message_id: racedPost?.telegram_message_id,
+              post_id: racedPost?.id,
+              status: racedPost?.status,
+              idempotent: true,
+              message: 'Race condition: Post created by concurrent request',
+            };
+          }
+        } finally {
+          // FIX: Release connection BEFORE Telegram API call
+          dbClient.release();
+          dbClient = null;
         }
 
         logger.info('[Telegram] ✅ DRAFT post created', { ...logContext, post_id: postId });
 
         // 10. PHASE-1: ERROR RECOVERY - Send to Telegram with retry
+        // FIX: NO connection held during Telegram API call
         logger.info('[Telegram] 📡 Sending to Telegram with retry logic...', {
           ...logContext,
           post_id: postId,
@@ -498,6 +563,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
         let telegramMessageId: number;
         try {
+          // FIX: sendWithRetry does NOT hold connection during Telegram send
           telegramMessageId = await sendWithRetry(channelId, messageText, postId);
         } catch (err: any) {
           // All retries exhausted - mark as FAILED
@@ -507,6 +573,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             error: err.message,
           });
 
+          // FIX: Acquire NEW connection for markFailed
           await markFailed(postId, err.message, MAX_RETRY_ATTEMPTS);
 
           return reply.status(500).send({
@@ -518,6 +585,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         // 11. PHASE-1: STATE TRANSITION - Mark as PUBLISHED
+        // FIX: Acquire NEW connection for markPublished
         logger.info('[Telegram] ✅ Marking post as PUBLISHED', {
           ...logContext,
           post_id: postId,
@@ -527,23 +595,25 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         await markPublished(postId, telegramMessageId);
 
         // 12. Save picks
+        // FIX: Acquire NEW connection for picks, release immediately
         if (picks.length > 0) {
           logger.info(`[Telegram] 💾 Saving ${picks.length} picks...`, {
             ...logContext,
             post_id: postId,
           });
 
-          const client = await pool.connect();
+          dbClient = await pool.connect();
           try {
             for (const pick of picks) {
-              await client.query(
+              await dbClient.query(
                 `INSERT INTO telegram_picks (post_id, market_type, odds, status)
                  VALUES ($1, $2, $3, 'pending')`,
                 [postId, pick.market_type, pick.odds || null]
               );
             }
           } finally {
-            client.release();
+            dbClient.release();
+            dbClient = null;
           }
 
           logger.info('[Telegram] ✅ Picks saved', { ...logContext, post_id: postId });
@@ -583,32 +653,32 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /telegram/posts
    * Get published posts with pick statistics
+   *
+   * FIX: Acquire connection, execute query, release immediately
    */
   fastify.get('/telegram/posts', async (request, reply) => {
+    const client = await pool.connect();
     try {
-      const client = await pool.connect();
-      try {
-        const result = await client.query(
-          `SELECT p.*,
-                  COUNT(pk.id) as picks_count,
-                  COUNT(CASE WHEN pk.status = 'won' THEN 1 END) as won_count,
-                  COUNT(CASE WHEN pk.status = 'lost' THEN 1 END) as lost_count,
-                  COUNT(CASE WHEN pk.status = 'void' THEN 1 END) as void_count
-           FROM telegram_posts p
-           LEFT JOIN telegram_picks pk ON pk.post_id = p.id
-           WHERE p.status IN ('published', 'settled')
-           GROUP BY p.id
-           ORDER BY p.posted_at DESC
-           LIMIT 100`
-        );
+      const result = await client.query(
+        `SELECT p.*,
+                COUNT(pk.id) as picks_count,
+                COUNT(CASE WHEN pk.status = 'won' THEN 1 END) as won_count,
+                COUNT(CASE WHEN pk.status = 'lost' THEN 1 END) as lost_count,
+                COUNT(CASE WHEN pk.status = 'void' THEN 1 END) as void_count
+         FROM telegram_posts p
+         LEFT JOIN telegram_picks pk ON pk.post_id = p.id
+         WHERE p.status IN ('published', 'settled')
+         GROUP BY p.id
+         ORDER BY p.posted_at DESC
+         LIMIT 100`
+      );
 
-        return { success: true, posts: result.rows };
-      } finally {
-        client.release();
-      }
+      return { success: true, posts: result.rows };
     } catch (error: any) {
       logger.error('[Telegram] Error fetching posts:', error);
       return reply.status(500).send({ error: error.message });
+    } finally {
+      client.release();
     }
   });
 
@@ -672,6 +742,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         const messageText = formatDailyListMessage(list);
 
         try {
+          // FIX: NO connection held during Telegram API call
           const result = await telegramBot.sendMessage({
             chat_id: channelId,
             text: messageText,
@@ -685,7 +756,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
           const telegramMessageId = result.result.message_id;
 
-          // Save to database
+          // FIX: Acquire connection AFTER Telegram send succeeds
           const client = await pool.connect();
           try {
             const matchIds = list.matches.map(m => m.match.fs_id).join(',');
