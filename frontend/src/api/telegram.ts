@@ -12,7 +12,26 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 export async function getTodaysMatches() {
   const response = await fetch(`${API_BASE}/footystats/today`);
   if (!response.ok) throw new Error('Failed to fetch matches');
-  return response.json();
+  const json = await response.json();
+
+  // Backend returns { count, matches }, but component expects { data }
+  // Map fs_id to id and add external_id (for now use fs_id as placeholder)
+  const matches = (json.matches || []).map((m: any) => ({
+    ...m,
+    id: m.fs_id,
+    external_id: `fs_${m.fs_id}`, // Placeholder - will be mapped by backend
+    competition_name: m.league_name,
+    btts_potential: m.potentials?.btts,
+    o25_potential: m.potentials?.over25,
+    o15_potential: m.potentials?.avg,
+    team_a_xg_prematch: m.xg?.home,
+    team_b_xg_prematch: m.xg?.away,
+    odds_ft_1: m.odds?.home,
+    odds_ft_x: m.odds?.draw,
+    odds_ft_2: m.odds?.away,
+  }));
+
+  return { data: matches };
 }
 
 /**
