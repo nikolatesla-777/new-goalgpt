@@ -19,7 +19,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { telegramBot } from '../services/telegram/telegram.client';
 import { formatTelegramMessage } from '../services/telegram/turkish.formatter';
 import { footyStatsAPI } from '../services/footystats/footystats.client';
-import { pool } from '../database/connection';
+import { pool, safeQuery } from '../database/connection';
 import { logger } from '../utils/logger';
 import { validateMatchStateForPublish } from '../services/telegram/validators/matchStateValidator';
 import { fetchMatchStateForPublish } from '../services/telegram/matchStateFetcher.service';
@@ -549,7 +549,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         // FIX: Acquire connection for draft post, release BEFORE Telegram API call
         logger.info('[Telegram] 💾 Creating DRAFT post...', logContext);
 
-        dbClient = await pool.connect();
+        let dbClient = await pool.connect();
         let postId;
         try {
           postId = await createDraftPost(match_id, fsIdNum, channelId, messageText, dbClient);
@@ -625,7 +625,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             post_id: postId,
           });
 
-          dbClient = await pool.connect();
+          const dbClient = await pool.connect();
           try {
             for (const pick of picks) {
               await dbClient.query(
