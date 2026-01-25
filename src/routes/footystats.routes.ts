@@ -74,9 +74,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
   });
 
   // Test FootyStats API - ADMIN ONLY
-  fastify.get('/footystats/test', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{
-    Querystring: { q?: string };
-  }>, reply: FastifyReply) => {
+  fastify.get<{ Querystring: { q?: string } }>('/footystats/test', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
     try {
       const { q } = request.query;
       const response = await footyStatsAPI.getLeagueList();
@@ -426,13 +424,13 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           const homeResponse = await footyStatsAPI.getTeamLastX(fsMatch.homeID);
           // Get last 5 matches data (first entry)
           const homeData = homeResponse.data?.find((d: any) => d.last_x_match_num === 5) || homeResponse.data?.[0];
-          homeTeamStats = homeData?.stats;
+          homeTeamStats = (homeData as any)?.stats;
           logger.info(`[FootyStats] Got home team stats for ${fsMatch.homeID}: PPG=${homeTeamStats?.seasonPPG_overall || 'no data'}`);
         }
         if (fsMatch.awayID) {
           const awayResponse = await footyStatsAPI.getTeamLastX(fsMatch.awayID);
           const awayData = awayResponse.data?.find((d: any) => d.last_x_match_num === 5) || awayResponse.data?.[0];
-          awayTeamStats = awayData?.stats;
+          awayTeamStats = (awayData as any)?.stats;
           logger.info(`[FootyStats] Got away team stats for ${fsMatch.awayID}: PPG=${awayTeamStats?.seasonPPG_overall || 'no data'}`);
         }
       } catch (teamError: any) {

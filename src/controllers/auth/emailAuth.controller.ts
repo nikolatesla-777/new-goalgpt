@@ -135,6 +135,7 @@ export async function emailRegister(
       userId: newUser.id,
       email: email, // Use input email (guaranteed non-null)
       phone: newUser.phone,
+      role: newUser.role,
     });
 
     // Return user profile
@@ -148,6 +149,7 @@ export async function emailRegister(
         username: newUser.username,
         profilePhotoUrl: null,
         referralCode: newUser.referral_code,
+        role: newUser.role,
         referralApplied,
         createdAt: newUser.created_at,
         isNewUser: true,
@@ -263,6 +265,7 @@ export async function emailLogin(
       userId: user.id,
       email: email, // Use input email (guaranteed non-null)
       phone: user.phone,
+      role: user.role,
     });
 
     // Return user profile
@@ -276,6 +279,7 @@ export async function emailLogin(
         username: user.username,
         profilePhotoUrl: null,
         referralCode: user.referral_code,
+        role: user.role,
         createdAt: user.created_at,
         isNewUser: false,
         xp: authContext.xp

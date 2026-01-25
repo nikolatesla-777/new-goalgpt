@@ -209,7 +209,7 @@ export async function badgesRoutes(fastify: FastifyInstance) {
   fastify.post<ClaimBadgeRequest>(
     '/claim',
     { preHandler: requireAuth },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<ClaimBadgeRequest>, reply: FastifyReply) => {
       try {
         const userId = request.user!.userId;
         const { badgeId } = request.body;
@@ -248,7 +248,7 @@ export async function badgesRoutes(fastify: FastifyInstance) {
   fastify.post<ToggleBadgeDisplayRequest>(
     '/toggle-display',
     { preHandler: requireAuth },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<ToggleBadgeDisplayRequest>, reply: FastifyReply) => {
       try {
         const userId = request.user!.userId;
         const { badgeId, isDisplayed } = request.body;

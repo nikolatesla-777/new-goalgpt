@@ -140,6 +140,7 @@ export async function phoneLogin(
       userId: userProfile.id,
       email: userProfile.email || '', // Phone users may not have email
       phone: userProfile.phone!,
+      role: userProfile.role,
     });
 
     // 6. Return response
@@ -161,6 +162,7 @@ export async function phoneLogin(
         credits: {
           balance: userProfile.credit_balance || 0,
         },
+        role: userProfile.role,
         isVip: userProfile.is_vip || false,
         createdAt: userProfile.created_at,
       },
@@ -230,7 +232,8 @@ export async function refreshToken(
     const tokens = generateTokens({
       userId: user.id,
       email: user.email || '',
-      phone: user.phone,
+      phone: user.phone || undefined,
+      role: user.role,
     });
 
     return reply.status(200).send({

@@ -15,7 +15,7 @@
 
 import { db } from '../database/kysely';
 import { sql } from 'kysely';
-import { grantXP } from './xp.service';
+import { grantXP, XPTransactionType } from './xp.service';
 import { grantCredits } from './credits.service';
 
 // Daily reward configuration
@@ -225,7 +225,7 @@ export async function claimDailyReward(
     await grantXP({
       userId,
       amount: reward.xp,
-      transactionType: 'daily_login',
+      transactionType: XPTransactionType.DAILY_LOGIN,
       description: `Günlük ödül (Gün ${currentDay})`,
       referenceId: claim.id,
       referenceType: 'daily_reward',

@@ -11,7 +11,7 @@
 
 import { db } from '../database/kysely';
 import { sql } from 'kysely';
-import { grantXP } from './xp.service';
+import { grantXP, XPTransactionType } from './xp.service';
 import { grantCredits } from './credits.service';
 
 // Referral status types
@@ -192,7 +192,7 @@ export async function applyReferralCode(
     await grantXP({
       userId: referrer.id,
       amount: REFERRAL_REWARDS.tier1.referrer_xp,
-      transactionType: 'referral_signup',
+      transactionType: XPTransactionType.REFERRAL_SIGNUP,
       description: `Arkadaşını davet ettin! (${referralCode})`,
       referenceId: referral.id,
       referenceType: 'referral',

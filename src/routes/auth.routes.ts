@@ -126,8 +126,8 @@ export async function authRoutes(fastify: FastifyInstance) {
    */
   fastify.get(
     '/me',
-    { preHandler: requireAuth },
-    async (request, reply) => {
+    { preHandler: requireAuth } as any,
+    async (request: any, reply: any) => {
       try {
         const userId = request.user!.userId;
 
@@ -173,7 +173,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             createdAt: userProfile.created_at,
           },
         });
-      } catch (error) {
+      } catch (error: any) {
         fastify.log.error('Get user profile error:', error);
         return reply.status(500).send({
           error: 'INTERNAL_SERVER_ERROR',
@@ -198,8 +198,8 @@ export async function authRoutes(fastify: FastifyInstance) {
    */
   fastify.post(
     '/logout',
-    { preHandler: requireAuth },
-    async (request, reply) => {
+    { preHandler: requireAuth } as any,
+    async (request: any, reply: any) => {
       try {
         const userId = request.user!.userId;
         const { deviceId } = request.body as { deviceId?: string };
@@ -211,7 +211,7 @@ export async function authRoutes(fastify: FastifyInstance) {
           success: true,
           message: 'Logged out successfully',
         });
-      } catch (error) {
+      } catch (error: any) {
         fastify.log.error('Logout error:', error);
         return reply.status(500).send({
           error: 'INTERNAL_SERVER_ERROR',

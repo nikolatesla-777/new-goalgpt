@@ -37,6 +37,7 @@ export interface UserProfile {
     credits_lifetime_spent: number | null;
     is_vip: boolean;
     vip_expires_at: Date | null;
+    role: 'user' | 'admin' | 'moderator';
 }
 
 /**
@@ -49,6 +50,7 @@ export interface BasicUserInfo {
     phone: string | null;
     username: string | null;
     referral_code: string | null;
+    role: 'user' | 'admin' | 'moderator';
     created_at: Date;
 }
 
@@ -102,6 +104,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
                 'cu.phone',
                 'cu.username',
                 'cu.referral_code',
+                'cu.role',
                 'cu.created_at',
                 'xp.xp_points',
                 'xp.level',
@@ -226,6 +229,7 @@ export async function getUserByOAuthProvider(
                 'cu.phone',
                 'cu.username',
                 'cu.referral_code',
+                'cu.role',
                 'cu.created_at',
             ])
             .where('coi.provider', '=', provider)
@@ -252,7 +256,7 @@ export async function getUserByEmail(email: string): Promise<BasicUserInfo | nul
     try {
         const user = await db
             .selectFrom('customer_users')
-            .select(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'created_at'])
+            .select(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'role', 'created_at'])
             .where('email', '=', email)
             .where('deleted_at', 'is', null)
             .executeTakeFirst();
@@ -275,7 +279,7 @@ export async function getUserByPhone(phone: string): Promise<BasicUserInfo | nul
     try {
         const user = await db
             .selectFrom('customer_users')
-            .select(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'created_at'])
+            .select(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'role', 'created_at'])
             .where('phone', '=', phone)
             .where('deleted_at', 'is', null)
             .executeTakeFirst();
@@ -298,7 +302,7 @@ export async function getUserById(userId: string): Promise<BasicUserInfo | null>
     try {
         const user = await db
             .selectFrom('customer_users')
-            .select(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'created_at'])
+            .select(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'role', 'created_at'])
             .where('id', '=', userId)
             .where('deleted_at', 'is', null)
             .executeTakeFirst();
@@ -329,6 +333,7 @@ export async function getUserByEmailWithPassword(email: string): Promise<(BasicU
                 'phone',
                 'username',
                 'referral_code',
+                'role',
                 'created_at',
                 'password_hash',
             ])
@@ -369,6 +374,7 @@ export async function getUserByPhoneWithPassword(phone: string): Promise<(BasicU
             phone: row.phone,
             username: row.username,
             referral_code: row.referral_code,
+            role: row.role as any,
             created_at: row.created_at,
             password_hash: row.password_hash,
             profile_image_url: row.profile_image_url,
@@ -417,13 +423,14 @@ export async function createEmailPasswordUser(
                     phone: null,
                     username: null,
                     referral_code: referralCode,
+                    role: 'user',
                     is_active: true,
                     is_online: false,
                     two_fa_enabled: false,
                     created_at: new Date(),
                     updated_at: new Date(),
                 })
-                .returning(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'created_at'])
+                .returning(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'role', 'created_at'])
                 .executeTakeFirstOrThrow();
 
             createdUser = newUser;
@@ -516,7 +523,7 @@ export async function createOAuthUser(oauthData: OAuthUserData): Promise<BasicUs
             const newUser = await trx
                 .insertInto('customer_users')
                 .values(userValues)
-                .returning(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'created_at'])
+                .returning(['id', 'email', 'full_name as name', 'phone', 'username', 'referral_code', 'role', 'created_at'])
                 .executeTakeFirstOrThrow();
 
             createdUser = newUser;

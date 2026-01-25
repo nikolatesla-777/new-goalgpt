@@ -17,16 +17,11 @@ import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
 import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
 import { FieldUpdate } from '../repositories/match.repository';
+import { JOB_CONFIG } from './config/jobConfig';
 
 // PR-8B: Using MatchOrchestrator for atomic match updates
-
 // PR-8B.1: Cap concurrent updates to prevent DB pool exhaustion
-// Limit orchestrator calls per tick to reduce connection pressure
-// Can be adjusted in production via environment variable
-const MAX_UPDATES_PER_TICK = (() => {
-  const envValue = parseInt(process.env.MAX_UPDATES_PER_TICK || '50', 10);
-  return Number.isFinite(envValue) && envValue > 0 ? envValue : 50;
-})();
+// Configured via environment variables (see jobConfig.ts)
 
 export class MatchMinuteWorker {
   private matchMinuteService: MatchMinuteService;
@@ -39,14 +34,14 @@ export class MatchMinuteWorker {
 
   /**
    * Process a batch of matches and update their minutes
-   * @param batchSize - Maximum number of matches to process (default: 100, capped at MAX_UPDATES_PER_TICK)
+   * @param batchSize - Maximum number of matches to process (from JOB_CONFIG.MATCH_MINUTE.BATCH_SIZE)
    *
    * PR-8A: Wrapped with JobRunner for overlap guard + timeout + metrics
    * PR-8B.1: Capped to MAX_UPDATES_PER_TICK to prevent DB pool exhaustion
    */
-  async tick(batchSize: number = 100): Promise<void> {
+  async tick(batchSize: number = JOB_CONFIG.MATCH_MINUTE.BATCH_SIZE): Promise<void> {
     // PR-8B.1: Cap batchSize to prevent DB pool exhaustion
-    batchSize = Math.min(batchSize, MAX_UPDATES_PER_TICK);
+    batchSize = Math.min(batchSize, JOB_CONFIG.MATCH_MINUTE.MAX_UPDATES_PER_TICK);
     if (this.isRunning) {
       logger.debug('[MinuteEngine] Tick already running, skipping this run');
       return;
@@ -62,7 +57,7 @@ export class MatchMinuteWorker {
           jobName: 'matchMinute',
           overlapGuard: true,
           advisoryLockKey: LOCK_KEYS.MATCH_MINUTE,
-          timeoutMs: 120000, // 2 minutes
+          timeoutMs: JOB_CONFIG.MATCH_MINUTE.TIMEOUT_MS,
         },
         async (_ctx) => {
           // Original tick() logic unchanged below this line
@@ -106,8 +101,8 @@ export class MatchMinuteWorker {
 
         for (const match of matches) {
           // PR-8B.1: Stop processing after MAX_UPDATES_PER_TICK orchestrator attempts
-          if (attemptedUpdates >= MAX_UPDATES_PER_TICK) {
-            logger.debug(`[MinuteEngine] Reached MAX_UPDATES_PER_TICK=${MAX_UPDATES_PER_TICK}, stopping early`);
+          if (attemptedUpdates >= JOB_CONFIG.MATCH_MINUTE.MAX_UPDATES_PER_TICK) {
+            logger.debug(`[MinuteEngine] Reached MAX_UPDATES_PER_TICK=${JOB_CONFIG.MATCH_MINUTE.MAX_UPDATES_PER_TICK}, stopping early`);
             break;
           }
           const matchId = match.external_id;

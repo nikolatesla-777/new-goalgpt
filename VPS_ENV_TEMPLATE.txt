@@ -14,6 +14,9 @@ THESPORTS_API_BASE_URL=https://api.thesports.com/v1/football
 THESPORTS_API_SECRET=[YOUR_THESPORTS_API_SECRET]
 THESPORTS_API_USER=goalgpt
 
+# FootyStats API (Advanced Betting Statistics)
+FOOTYSTATS_API_KEY=ab3e792f43aa8970c2ebbbffc6b72023f154fec71de2a6183408c0b4bf2b08f6
+
 # Server
 PORT=3000
 NODE_ENV=production

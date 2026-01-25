@@ -48,7 +48,7 @@ export function generateTokens(payload: Omit<JWTPayload, 'iat' | 'exp'>): TokenP
   // Generate access token (short-lived)
   const accessToken = jwt.sign(payload, EFFECTIVE_JWT_SECRET, {
     expiresIn: JWT_ACCESS_TOKEN_EXPIRES_IN,
-  });
+  } as jwt.SignOptions);
 
   // Generate refresh token (long-lived)
   const refreshToken = jwt.sign(
@@ -59,7 +59,7 @@ export function generateTokens(payload: Omit<JWTPayload, 'iat' | 'exp'>): TokenP
     EFFECTIVE_JWT_REFRESH_SECRET,
     {
       expiresIn: JWT_REFRESH_TOKEN_EXPIRES_IN,
-    }
+    } as jwt.SignOptions
   );
 
   // Calculate expiration time in seconds

@@ -8,7 +8,7 @@
 import { db } from '../database/kysely';
 import { logger } from '../utils/logger';
 import { sql } from 'kysely';
-import { grantXP } from '../services/xp.service';
+import { grantXP, XPTransactionType } from '../services/xp.service';
 import { grantCredits } from '../services/credits.service';
 import { sendPushToUser } from '../services/push.service';
 
@@ -238,7 +238,7 @@ async function findUsersWithXPLevel(level: string): Promise<string[]> {
   const results = await db
     .selectFrom('customer_xp')
     .select('customer_user_id')
-    .where('level', '=', level)
+    .where('level', '=', level as any)
     .execute();
 
   return results.map((r) => r.customer_user_id);
@@ -276,7 +276,7 @@ async function unlockBadgeForUser(userId: string, badge: any) {
         customer_user_id: userId,
         badge_id: badge.id,
         unlocked_at: sql`NOW()`,
-      })
+      } as any)
       .execute();
 
     // Update badge total_unlocks
@@ -293,7 +293,7 @@ async function unlockBadgeForUser(userId: string, badge: any) {
       await grantXP({
         userId,
         amount: badge.reward_xp,
-        transactionType: 'badge_unlock',
+        transactionType: XPTransactionType.BADGE_UNLOCK,
         description: `${badge.name_tr} rozeti kazandın!`,
         referenceId: badge.id,
         referenceType: 'badge',

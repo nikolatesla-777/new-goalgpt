@@ -70,7 +70,8 @@ async function runMigrations() {
         is_vip BOOLEAN DEFAULT false,
         old_id INTEGER,
         password_last_changed TIMESTAMP,
-        locale_preference VARCHAR(10) DEFAULT 'tr'
+        locale_preference VARCHAR(10) DEFAULT 'tr',
+        role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'moderator'))
       );
 
       -- Subscription Plans Table

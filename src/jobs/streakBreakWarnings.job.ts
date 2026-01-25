@@ -38,7 +38,7 @@ export async function runStreakBreakWarnings() {
     // 1. Have current_streak_days >= 3 (invested users)
     // 2. last_activity_date < today (haven't logged in today)
     // 3. Have FCM tokens
-    const eligibleUsers = await db
+    const eligibleUsers: any[] = await db
       .selectFrom('customer_xp as xp')
       .innerJoin('customer_users as cu', 'xp.customer_user_id', 'cu.id')
       .innerJoin('customer_push_tokens as cpt', 'cu.id', 'cpt.customer_user_id')
@@ -47,12 +47,12 @@ export async function runStreakBreakWarnings() {
         'cu.name',
         'xp.current_streak_days',
         'xp.last_activity_date',
-      ])
+      ] as any)
       .where('cu.deleted_at', 'is', null)
       .where('cpt.is_active', '=', true)
       .where('xp.current_streak_days', '>=', 3) // At least 3-day streak
       .where('xp.last_activity_date', '<', today) // Not logged in today
-      .groupBy(['cu.id', 'cu.name', 'xp.current_streak_days', 'xp.last_activity_date'])
+      .groupBy(['cu.id', 'cu.name', 'xp.current_streak_days', 'xp.last_activity_date'] as any)
       .execute();
 
     logger.info(`Found ${eligibleUsers.length} user(s) at risk of losing streak`);

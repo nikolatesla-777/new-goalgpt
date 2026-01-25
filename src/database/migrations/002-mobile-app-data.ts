@@ -259,11 +259,12 @@ export async function up(db: Kysely<any>): Promise<void> {
   `.execute(db);
 
   console.log('\n📊 Migration Summary:');
-  console.log(`   Total Users: ${summary.rows[0].total_users}`);
-  console.log(`   Users with XP: ${summary.rows[0].users_with_xp}`);
-  console.log(`   Users with Credits: ${summary.rows[0].users_with_credits}`);
-  console.log(`   Total Badges: ${summary.rows[0].total_badges}`);
-  console.log(`   Users with Referral Code: ${summary.rows[0].users_with_referral}`);
+  const row = summary.rows[0] as any;
+  console.log(`   Total Users: ${row.total_users}`);
+  console.log(`   Users with XP: ${row.users_with_xp}`);
+  console.log(`   Users with Credits: ${row.users_with_credits}`);
+  console.log(`   Total Badges: ${row.total_badges}`);
+  console.log(`   Users with Referral Code: ${row.users_with_referral}`);
   console.log(`   VIP Welcome Bonuses: ${bonusCount}`);
 }
 
@@ -272,7 +273,7 @@ export async function down(db: Kysely<any>): Promise<void> {
 
   // Clear migrated data
   await db.deleteFrom('customer_credit_transactions')
-    .where('metadata', '->', 'migration', '=', 'true')
+    .where(sql`metadata->>'migration'`, '=', 'true')
     .execute();
 
   await db.deleteFrom('customer_daily_rewards').execute();

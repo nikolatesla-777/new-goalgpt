@@ -93,7 +93,7 @@ export class RecentSyncService {
         }
 
         const results = response.results || [];
-        const total = response.total ?? 0;
+        const total = response.pagination?.total ?? 0;
 
         if (results.length === 0 || total === 0) {
           // No more results - stop pagination
