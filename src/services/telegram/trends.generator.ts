@@ -133,7 +133,7 @@ export function generateTurkishTrends(
   const awayTrends: string[] = [];
 
   // Home trends from Form
-  if (data.form?.home?.ppg !== undefined) {
+  if (data.form?.home?.ppg != null) {  // != null checks both null and undefined
     if (data.form.home.ppg >= 2.0) {
       homeTrends.push(`İyi formda (${data.form.home.ppg.toFixed(1)} puan/maç)`);
     } else if (data.form.home.ppg < 1.0) {
@@ -152,7 +152,7 @@ export function generateTurkishTrends(
   }
 
   // Away trends from Form
-  if (data.form?.away?.ppg !== undefined) {
+  if (data.form?.away?.ppg != null) {  // != null checks both null and undefined
     if (data.form.away.ppg >= 2.0) {
       awayTrends.push(`Deplasmanda güçlü (${data.form.away.ppg.toFixed(1)} puan/maç)`);
     } else if (data.form.away.ppg < 1.0) {
