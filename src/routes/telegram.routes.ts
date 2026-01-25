@@ -522,6 +522,16 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         // PHASE-2B: Format message with confidence score
         const messageText = formatTelegramMessage(matchData, picks as any, confidenceScore);
 
+        // 🔍 DEBUG: Check formatted message
+        logger.info('[Telegram] 🔍 DEBUG messageText:', {
+          ...logContext,
+          message_length: messageText.length,
+          has_trends: messageText.includes('Trendler'),
+          has_ev: messageText.includes('Trendler (Ev)'),
+          has_dep: messageText.includes('Trendler (Dep)'),
+          first_200_chars: messageText.substring(0, 200),
+        });
+
         // 9. PHASE-1: TRANSACTION SAFETY - Create DRAFT post first
         // FIX: Acquire connection for draft post, release BEFORE Telegram API call
         logger.info('[Telegram] 💾 Creating DRAFT post...', logContext);
