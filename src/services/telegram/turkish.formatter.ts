@@ -3,6 +3,7 @@
  *
  * Formats match data into Turkish Telegram messages with:
  * - Match header (teams, league, time)
+ * - Confidence score (PHASE-2B)
  * - Statistics (BTTS, Over/Under potentials)
  * - Expected Goals (xG)
  * - Form analysis
@@ -12,10 +13,11 @@
  * - Betting odds
  *
  * @author GoalGPT Team
- * @version 1.0.0
+ * @version 1.1.0 - PHASE-2B: Confidence Score
  */
 
 import { generateTurkishTrends } from './trends.generator';
+import { ConfidenceScoreResult, formatConfidenceScoreForTelegram } from './confidenceScorer.service';
 
 interface Pick {
   market_type: 'BTTS_YES' | 'O25_OVER' | 'O15_OVER' | 'HT_O05_OVER';
@@ -37,10 +39,13 @@ interface MatchData {
 
 /**
  * Format complete Telegram message in Turkish
+ *
+ * PHASE-2B: Now includes confidence score
  */
 export function formatTelegramMessage(
   matchData: MatchData,
-  picks: Pick[] = []
+  picks: Pick[] = [],
+  confidenceScore?: ConfidenceScoreResult
 ): string {
   const { home_name, away_name, league_name, date_unix, potentials, xg, odds, form, h2h, trends } = matchData;
 
@@ -50,7 +55,14 @@ export function formatTelegramMessage(
   const dateStr = matchDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
 
   let message = `⚽ <b>${home_name} vs ${away_name}</b>\n`;
-  message += `🏆 ${league_name || 'Bilinmeyen Lig'} | 🕐 ${dateStr} ${timeStr}\n\n`;
+  message += `🏆 ${league_name || 'Bilinmeyen Lig'} | 🕐 ${dateStr} ${timeStr}\n`;
+
+  // PHASE-2B: Add confidence score
+  if (confidenceScore) {
+    message += `${formatConfidenceScoreForTelegram(confidenceScore)}\n`;
+  }
+
+  message += `\n`;
 
   // Potentials section
   if (potentials?.btts || potentials?.over25 || potentials?.over15) {

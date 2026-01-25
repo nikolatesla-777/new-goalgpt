@@ -23,6 +23,7 @@ import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
 import { validateMatchStateForPublish } from '../services/telegram/validators/matchStateValidator';
 import { validatePicks } from '../services/telegram/validators/pickValidator';
+import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
 
 interface PublishRequest {
   Body: {
@@ -428,7 +429,22 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           },
         };
 
-        const messageText = formatTelegramMessage(matchData, picks as any);
+        // PHASE-2B: Calculate confidence score
+        logger.info('[Telegram] 🎯 Calculating confidence score...', logContext);
+        const confidenceScore = calculateConfidenceScore(fsMatch, homeStats, awayStats);
+        logContext.confidence_score = confidenceScore.score;
+        logContext.confidence_tier = confidenceScore.tier;
+        logContext.missing_count = confidenceScore.missingCount;
+
+        logger.info('[Telegram] ✅ Confidence score calculated', {
+          ...logContext,
+          score: confidenceScore.score,
+          tier: confidenceScore.tier,
+          stars: confidenceScore.stars,
+        });
+
+        // PHASE-2B: Format message with confidence score
+        const messageText = formatTelegramMessage(matchData, picks as any, confidenceScore);
 
         // 9. PHASE-1: TRANSACTION SAFETY - Create DRAFT post first
         logger.info('[Telegram] 💾 Creating DRAFT post...', logContext);
