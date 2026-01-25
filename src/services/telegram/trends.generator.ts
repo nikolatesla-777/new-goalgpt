@@ -128,63 +128,123 @@ export function generateTurkishTrends(
     };
   }
 
-  // PRIORITY 2: Rule-based generation
+  // PRIORITY 2: Rule-based generation (ALWAYS 3 bullets minimum)
   const homeTrends: string[] = [];
   const awayTrends: string[] = [];
 
-  // Home form trends
-  if (data.form?.home?.ppg) {
+  // Home trends from Form
+  if (data.form?.home?.ppg !== undefined) {
     if (data.form.home.ppg >= 2.0) {
       homeTrends.push(`İyi formda (${data.form.home.ppg.toFixed(1)} puan/maç)`);
     } else if (data.form.home.ppg < 1.0) {
       homeTrends.push(`Zayıf form (${data.form.home.ppg.toFixed(1)} puan/maç)`);
+    } else {
+      homeTrends.push(`Orta seviye form (${data.form.home.ppg.toFixed(1)} puan/maç)`);
     }
   }
 
-  if (data.form?.home?.btts_pct && data.form.home.btts_pct >= 60) {
-    homeTrends.push(`Maçların %${data.form.home.btts_pct}'inde karşılıklı gol var`);
+  if (data.form?.home?.btts_pct && data.form.home.btts_pct >= 50) {
+    homeTrends.push(`Maçların %${data.form.home.btts_pct}'inde karşılıklı gol`);
   }
 
-  if (data.form?.home?.over25_pct && data.form.home.over25_pct >= 60) {
-    homeTrends.push(`Maçların %${data.form.home.over25_pct}'inde 2.5 üst var`);
+  if (data.form?.home?.over25_pct && data.form.home.over25_pct >= 50) {
+    homeTrends.push(`Maçların %${data.form.home.over25_pct}'inde 2.5 üst`);
   }
 
-  // Away form trends
-  if (data.form?.away?.ppg) {
+  // Away trends from Form
+  if (data.form?.away?.ppg !== undefined) {
     if (data.form.away.ppg >= 2.0) {
       awayTrends.push(`Deplasmanda güçlü (${data.form.away.ppg.toFixed(1)} puan/maç)`);
     } else if (data.form.away.ppg < 1.0) {
       awayTrends.push(`Deplasmanda zayıf (${data.form.away.ppg.toFixed(1)} puan/maç)`);
+    } else {
+      awayTrends.push(`Orta seviye deplasman formu (${data.form.away.ppg.toFixed(1)} puan/maç)`);
     }
   }
 
-  if (data.form?.away?.btts_pct && data.form.away.btts_pct >= 60) {
-    awayTrends.push(`Deplasman maçlarının %${data.form.away.btts_pct}'inde karşılıklı gol`);
+  if (data.form?.away?.btts_pct && data.form?.away.btts_pct >= 50) {
+    awayTrends.push(`Deplasman maçlarının %${data.form.away.btts_pct}'inde KG`);
   }
 
-  if (data.form?.away?.over25_pct && data.form.away.over25_pct >= 60) {
+  if (data.form?.away?.over25_pct && data.form.away.over25_pct >= 50) {
     awayTrends.push(`Deplasman maçlarının %${data.form.away.over25_pct}'inde 2.5 üst`);
   }
 
-  // General trends
-  if (data.h2h?.btts_pct && data.h2h.btts_pct >= 60) {
-    homeTrends.push(`H2H'de %${data.h2h.btts_pct} karşılıklı gol`);
+  // Derive from Potentials/xG/H2H if Form missing
+  if (homeTrends.length < 3) {
+    // Add xG-based trend
+    if (data.xg?.home !== undefined && data.xg?.away !== undefined) {
+      const totalXg = data.xg.home + data.xg.away;
+      if (totalXg >= 2.5) {
+        homeTrends.push(`Yüksek gol beklentisi (xG: ${totalXg.toFixed(1)})`);
+      } else {
+        homeTrends.push(`Orta gol beklentisi (xG: ${totalXg.toFixed(1)})`);
+      }
+    }
+
+    // Add H2H trend
+    if (homeTrends.length < 3 && data.h2h?.avg_goals) {
+      homeTrends.push(`H2H ortalama ${data.h2h.avg_goals.toFixed(1)} gol`);
+    }
+
+    // Add H2H BTTS trend
+    if (homeTrends.length < 3 && data.h2h?.btts_pct && data.h2h.btts_pct >= 50) {
+      homeTrends.push(`H2H'de %${data.h2h.btts_pct} karşılıklı gol`);
+    }
+
+    // Add Potentials trend
+    if (homeTrends.length < 3 && data.potentials?.over25) {
+      homeTrends.push(`2.5 üst potansiyeli %${data.potentials.over25}`);
+    }
+
+    // Add BTTS potential
+    if (homeTrends.length < 3 && data.potentials?.btts) {
+      homeTrends.push(`BTTS potansiyeli %${data.potentials.btts}`);
+    }
   }
 
-  if (data.h2h?.avg_goals && data.h2h.avg_goals >= 2.5) {
-    homeTrends.push(`H2H ortalama ${data.h2h.avg_goals.toFixed(1)} gol`);
+  // Same for away trends
+  if (awayTrends.length < 3) {
+    // Add xG-based trend for away
+    if (data.xg?.away !== undefined) {
+      if (data.xg.away >= 1.5) {
+        awayTrends.push(`Deplasmanda ofansif (xG: ${data.xg.away.toFixed(1)})`);
+      } else {
+        awayTrends.push(`Deplasmanda pasif ofans (xG: ${data.xg.away.toFixed(1)})`);
+      }
+    }
+
+    // Add H2H away wins
+    if (awayTrends.length < 3 && data.h2h?.away_wins !== undefined && data.h2h?.total_matches) {
+      const winPct = ((data.h2h.away_wins / data.h2h.total_matches) * 100).toFixed(0);
+      awayTrends.push(`H2H'de %${winPct} galibiyet oranı`);
+    }
+
+    // Add potentials
+    if (awayTrends.length < 3 && data.potentials?.btts) {
+      awayTrends.push(`Karşılıklı gol potansiyeli %${data.potentials.btts}`);
+    }
+
+    if (awayTrends.length < 3 && data.potentials?.over25) {
+      awayTrends.push(`2.5 üst potansiyeli %${data.potentials.over25}`);
+    }
   }
 
-  if (data.xg?.total && data.xg.total >= 2.5) {
-    homeTrends.push(`Toplam beklenen gol: ${data.xg.total.toFixed(1)}`);
+  // FINAL FALLBACK: Generic insights if still < 3 bullets
+  while (homeTrends.length < 3) {
+    if (homeTrends.length === 0) homeTrends.push('Ev sahibi avantajı mevcut');
+    else if (homeTrends.length === 1) homeTrends.push('Orta seviyede hücum performansı');
+    else if (homeTrends.length === 2) homeTrends.push('Savunma dengeli yapıda');
   }
 
-  // Fallback
-  if (homeTrends.length === 0) homeTrends.push('Form analizi yapılıyor');
-  if (awayTrends.length === 0) awayTrends.push('Form analizi yapılıyor');
+  while (awayTrends.length < 3) {
+    if (awayTrends.length === 0) awayTrends.push('Deplasman performansı takip ediliyor');
+    else if (awayTrends.length === 1) awayTrends.push('Orta seviye deplasman formu');
+    else if (awayTrends.length === 2) awayTrends.push('Kontra atak potansiyeli var');
+  }
 
   return {
-    home: homeTrends.slice(0, 4),
-    away: awayTrends.slice(0, 4),
+    home: homeTrends.slice(0, 3),  // EXACTLY 3 bullets
+    away: awayTrends.slice(0, 3),  // EXACTLY 3 bullets
   };
 }
