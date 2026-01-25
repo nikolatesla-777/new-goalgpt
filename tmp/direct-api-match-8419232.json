@@ -1,0 +1,883 @@
+{
+  "success": true,
+  "pager": {
+    "current_page": 1,
+    "max_page": 1,
+    "results_per_page": 1,
+    "total_results": 1
+  },
+  "metadata": {
+    "request_limit": "1800",
+    "request_remaining": "1763",
+    "request_reset_message": "Request limit is refreshed every hour."
+  },
+  "data": {
+    "id": 8419232,
+    "homeID": 708,
+    "awayID": 717,
+    "season": "2026",
+    "status": "incomplete",
+    "roundID": 122461,
+    "game_week": 1,
+    "revised_game_week": -1,
+    "homeGoals": [],
+    "awayGoals": [],
+    "homeGoalCount": 0,
+    "awayGoalCount": 0,
+    "totalGoalCount": 0,
+    "team_a_corners": -1,
+    "team_b_corners": -1,
+    "totalCornerCount": -1,
+    "team_a_offsides": -1,
+    "team_b_offsides": -1,
+    "team_a_yellow_cards": -1,
+    "team_b_yellow_cards": -1,
+    "team_a_red_cards": -1,
+    "team_b_red_cards": -1,
+    "team_a_shotsOnTarget": -1,
+    "team_b_shotsOnTarget": -1,
+    "team_a_shotsOffTarget": -1,
+    "team_b_shotsOffTarget": -1,
+    "team_a_shots": -1,
+    "team_b_shots": -1,
+    "team_a_fouls": -1,
+    "team_b_fouls": -1,
+    "team_a_possession": -1,
+    "team_b_possession": -1,
+    "refereeID": null,
+    "coach_a_ID": -1,
+    "coach_b_ID": -1,
+    "stadium_name": "Estadio Juan Carmelo Zerillo",
+    "stadium_location": "Avenida 60 y 118, La Plata, Provincia de Buenos Aires",
+    "team_a_cards_num": -1,
+    "team_b_cards_num": -1,
+    "odds_ft_1": 3.55,
+    "odds_ft_x": 2.9,
+    "odds_ft_2": 2.25,
+    "odds_ft_over05": 1.08,
+    "odds_ft_over15": 1.55,
+    "odds_ft_over25": 2.5,
+    "odds_ft_over35": 5.4,
+    "odds_ft_over45": 11,
+    "odds_ft_under05": 5.7,
+    "odds_ft_under15": 2.3,
+    "odds_ft_under25": 1.46,
+    "odds_ft_under35": 1.15,
+    "odds_ft_under45": 1.01,
+    "odds_btts_yes": 2.34,
+    "odds_btts_no": 1.57,
+    "odds_team_a_cs_yes": 2.8,
+    "odds_team_a_cs_no": 1.38,
+    "odds_team_b_cs_yes": 2.15,
+    "odds_team_b_cs_no": 1.62,
+    "odds_doublechance_1x": 1.4,
+    "odds_doublechance_12": 1.4,
+    "odds_doublechance_x2": 1.24,
+    "odds_1st_half_result_1": 4.98,
+    "odds_1st_half_result_x": 1.77,
+    "odds_1st_half_result_2": 3.04,
+    "odds_2nd_half_result_1": 4.2,
+    "odds_2nd_half_result_x": 2.05,
+    "odds_2nd_half_result_2": 2.7,
+    "odds_dnb_1": 2.25,
+    "odds_dnb_2": 1.57,
+    "odds_corners_over_75": 1.38,
+    "odds_corners_over_85": 1.74,
+    "odds_corners_over_95": 2.13,
+    "odds_corners_over_105": 2.55,
+    "odds_corners_over_115": 3.55,
+    "odds_corners_under_75": 2.7,
+    "odds_corners_under_85": 2.04,
+    "odds_corners_under_95": 1.63,
+    "odds_corners_under_105": 1.5,
+    "odds_corners_under_115": 1.24,
+    "odds_corners_1": 2.63,
+    "odds_corners_x": 7.5,
+    "odds_corners_2": 1.87,
+    "odds_team_to_score_first_1": 2.4,
+    "odds_team_to_score_first_x": 5.75,
+    "odds_team_to_score_first_2": 1.9,
+    "odds_win_to_nil_1": 5,
+    "odds_win_to_nil_2": 3.1,
+    "odds_1st_half_over05": 1.6,
+    "odds_1st_half_over15": 3.9,
+    "odds_1st_half_over25": 11,
+    "odds_1st_half_over35": 41,
+    "odds_1st_half_under05": 2.16,
+    "odds_1st_half_under15": 1.2,
+    "odds_1st_half_under25": 1.02,
+    "odds_1st_half_under35": 0,
+    "odds_2nd_half_over05": 1.38,
+    "odds_2nd_half_over15": 2.81,
+    "odds_2nd_half_over25": 7.1,
+    "odds_2nd_half_over35": 23,
+    "odds_2nd_half_under05": 2.81,
+    "odds_2nd_half_under15": 1.38,
+    "odds_2nd_half_under25": 1.06,
+    "odds_2nd_half_under35": 1.02,
+    "odds_btts_1st_half_yes": 0,
+    "odds_btts_1st_half_no": 0,
+    "odds_btts_2nd_half_yes": 0,
+    "odds_btts_2nd_half_no": 0,
+    "overallGoalCount": 0,
+    "ht_goals_team_a": 0,
+    "ht_goals_team_b": 0,
+    "goals_2hg_team_a": 0,
+    "goals_2hg_team_b": 0,
+    "GoalCount_2hg": 0,
+    "HTGoalCount": 0,
+    "date_unix": 1769293800,
+    "winningTeam": -1,
+    "no_home_away": 1,
+    "btts_potential": 0,
+    "btts_fhg_potential": 0,
+    "btts_2hg_potential": 0,
+    "goalTimingDisabled": 0,
+    "attendance": -1,
+    "corner_timings_recorded": -1,
+    "card_timings_recorded": -1,
+    "team_a_fh_corners": -1,
+    "team_b_fh_corners": -1,
+    "team_a_2h_corners": -1,
+    "team_b_2h_corners": -1,
+    "corner_fh_count": -1,
+    "corner_2h_count": -1,
+    "team_a_fh_cards": -1,
+    "team_b_fh_cards": -1,
+    "team_a_2h_cards": -1,
+    "team_b_2h_cards": -1,
+    "total_fh_cards": -1,
+    "total_2h_cards": -1,
+    "attacks_recorded": -1,
+    "team_a_dangerous_attacks": 0,
+    "team_b_dangerous_attacks": 0,
+    "team_a_attacks": 0,
+    "team_b_attacks": 0,
+    "team_a_xg": 0,
+    "team_b_xg": 0,
+    "total_xg": 0,
+    "team_a_penalties_won": 0,
+    "team_b_penalties_won": 0,
+    "team_a_penalty_goals": 0,
+    "team_b_penalty_goals": 0,
+    "team_a_penalty_missed": 0,
+    "team_b_penalty_missed": 0,
+    "pens_recorded": 1,
+    "goal_timings_recorded": 1,
+    "team_a_0_10_min_goals": 0,
+    "team_b_0_10_min_goals": 0,
+    "team_a_corners_0_10_min": -1,
+    "team_b_corners_0_10_min": -1,
+    "team_a_cards_0_10_min": -1,
+    "team_b_cards_0_10_min": -1,
+    "throwins_recorded": -1,
+    "team_a_throwins": -1,
+    "team_b_throwins": -1,
+    "freekicks_recorded": -1,
+    "team_a_freekicks": -1,
+    "team_b_freekicks": -1,
+    "goalkicks_recorded": -1,
+    "team_a_goalkicks": -1,
+    "team_b_goalkicks": -1,
+    "o45_potential": 0,
+    "o35_potential": 0,
+    "o25_potential": 0,
+    "o15_potential": 0,
+    "o05_potential": 0,
+    "o15HT_potential": 0,
+    "o05HT_potential": 0,
+    "o05_2H_potential": 0,
+    "o15_2H_potential": 0,
+    "corners_potential": 0,
+    "offsides_potential": 0,
+    "cards_potential": 0,
+    "avg_potential": 0,
+    "home_url": "/clubs/gimnasia-y-esgrima-la-plata-708",
+    "home_image": "teams/argentina-gimnasia-y-esgrima-la-plata.png",
+    "home_name": "Gimnasia La Plata",
+    "away_url": "/clubs/racing-club-de-avellaneda-717",
+    "away_image": "teams/argentina-racing-club-de-avellaneda.png",
+    "away_name": "Racing Club",
+    "home_ppg": 0,
+    "away_ppg": 0,
+    "pre_match_home_ppg": 0,
+    "pre_match_away_ppg": 0,
+    "pre_match_teamA_overall_ppg": 0,
+    "pre_match_teamB_overall_ppg": 0,
+    "u45_potential": 0,
+    "u35_potential": 0,
+    "u25_potential": 0,
+    "u15_potential": 0,
+    "u05_potential": 0,
+    "corners_o85_potential": 0,
+    "corners_o95_potential": 0,
+    "corners_o105_potential": 0,
+    "team_a_xg_prematch": 0,
+    "team_b_xg_prematch": 0,
+    "total_xg_prematch": 0,
+    "match_url": "/argentina/gimnasia-y-esgrima-la-plata-vs-racing-club-de-avellaneda-h2h-stats",
+    "competition_id": 16571,
+    "matches_completed_minimum": 0,
+    "lineups": {
+      "team_a": [],
+      "team_b": []
+    },
+    "bench": {
+      "team_a": [],
+      "team_b": []
+    },
+    "team_a_goal_details": [],
+    "team_b_goal_details": [],
+    "trends": null,
+    "homeGoals_timings": [],
+    "awayGoals_timings": [],
+    "team_a_card_details": [],
+    "team_b_card_details": [],
+    "h2h": {
+      "team_a_id": 708,
+      "team_b_id": 717,
+      "previous_matches_results": {
+        "team_a_win_home": 2,
+        "team_a_win_away": 2,
+        "team_b_win_home": 3,
+        "team_b_win_away": 2,
+        "draw": 2,
+        "team_a_wins": 4,
+        "team_b_wins": 5,
+        "totalMatches": 11,
+        "team_a_win_percent": 36,
+        "team_b_win_percent": 45
+      },
+      "betting_stats": {
+        "over05": 9,
+        "over15": 6,
+        "over25": 5,
+        "over35": 3,
+        "over45": 0,
+        "over55": 0,
+        "btts": 4,
+        "clubACS": 4,
+        "clubBCS": 5,
+        "over05Percentage": 82,
+        "over15Percentage": 55,
+        "over25Percentage": 45,
+        "over35Percentage": 27,
+        "over45Percentage": 0,
+        "over55Percentage": 0,
+        "bttsPercentage": 36,
+        "clubACSPercentage": 36,
+        "clubBCSPercentage": 45,
+        "avg_goals": 2.09,
+        "total_goals": 23
+      },
+      "previous_matches_ids": [
+        {
+          "id": 7345238,
+          "date_unix": 1723248000,
+          "team_a_id": 717,
+          "team_b_id": 708,
+          "team_a_goals": 0,
+          "team_b_goals": 1
+        },
+        {
+          "id": 4554552,
+          "date_unix": 1680987600,
+          "team_a_id": 708,
+          "team_b_id": 717,
+          "team_a_goals": 3,
+          "team_b_goals": 1
+        },
+        {
+          "id": 3049828,
+          "date_unix": 1655762400,
+          "team_a_id": 708,
+          "team_b_id": 717,
+          "team_a_goals": 3,
+          "team_b_goals": 1
+        },
+        {
+          "id": 3049579,
+          "date_unix": 1644782400,
+          "team_a_id": 717,
+          "team_b_id": 708,
+          "team_a_goals": 0,
+          "team_b_goals": 0
+        },
+        {
+          "id": 1273396,
+          "date_unix": 1627160400,
+          "team_a_id": 717,
+          "team_b_id": 708,
+          "team_a_goals": 0,
+          "team_b_goals": 0
+        },
+        {
+          "id": 640405,
+          "date_unix": 1568556000,
+          "team_a_id": 708,
+          "team_b_id": 717,
+          "team_a_goals": 1,
+          "team_b_goals": 2
+        },
+        {
+          "id": 477850,
+          "date_unix": 1541961000,
+          "team_a_id": 708,
+          "team_b_id": 717,
+          "team_a_goals": 0,
+          "team_b_goals": 3
+        },
+        {
+          "id": 60063,
+          "date_unix": 1512944100,
+          "team_a_id": 717,
+          "team_b_id": 708,
+          "team_a_goals": 3,
+          "team_b_goals": 1
+        },
+        {
+          "id": 37538,
+          "date_unix": 1494100800,
+          "team_a_id": 717,
+          "team_b_id": 708,
+          "team_a_goals": 1,
+          "team_b_goals": 0
+        },
+        {
+          "id": 460831,
+          "date_unix": 1476922200,
+          "team_a_id": 717,
+          "team_b_id": 708,
+          "team_a_goals": 0,
+          "team_b_goals": 1
+        },
+        {
+          "id": 38239,
+          "date_unix": 1441585800,
+          "team_a_id": 717,
+          "team_b_id": 708,
+          "team_a_goals": 2,
+          "team_b_goals": 0
+        }
+      ]
+    },
+    "tv_stations": null,
+    "weather": {
+      "id": 694596,
+      "fixture_id": 19636518,
+      "venue_id": 60,
+      "temperature": {
+        "day": 30.36,
+        "morning": 22.48,
+        "evening": 29.18,
+        "night": 24.91
+      },
+      "feels_like": {
+        "day": 29.65,
+        "morning": 22.48,
+        "evening": 28.89,
+        "night": 25.08
+      },
+      "wind": {
+        "speed": 6.61,
+        "direction": 46
+      },
+      "humidity": "36%",
+      "pressure": 1013,
+      "clouds": "82%",
+      "description": "broken clouds",
+      "icon": "https://cdn.sportmonks.com/images/weather/04d.png",
+      "type": "forecast",
+      "metric": "celcius",
+      "current": null
+    },
+    "gpt_en": "\n  Gimnasia La Plata vs Racing Club • Estadio Juan Carmelo Zerillo • Week 1, 2026 • Kick-off: 25 Jan\n  Odds: Gimnasia 3.55 • Draw 2.90 • Racing 2.25\n\n  \n    Gimnasia at home: win rate 25%; xG for 1.38; xG against 1.69 — defensive exposure plays a big role here.\n    Racing on the road: win rate 50%; xG for 0.92; xG against 1.35 — relies on compact away structure, modest goal output.\n    Goal expectations: Under 2.5 goals at 1.40 vs Over 2.5 at 2.75 — market leans to a tight, low-scoring affair.\n  \n\n  Analytical read: Gimnasia’s home vulnerability (concede pressure) clashes with Racing’s pragmatic road profile. The away side are the more reliable scorers in the expected-scenario frame, while Gimnasia rarely threaten with high output at Zerillo.\n\n  Predictions: Racing Club to edge a close win, likely 0-1 or 1-2. Expect a measured tempo with chances limited, hence the under 2.5 trend.\n\n  Betting angles:\n    \n      Primary: Racing Club to win.\n      Secondary: Under 2.5 goals.\n      Alternative: Double chance — Racing Club or Draw.\n    \n  \n",
+    "gpt_int": {
+      "es": "Análisis rápido de apuesta: Gimnasia La Plata vs Racing Club, Estadio Juan Carmelo Zerillo, jornada 1 de la temporada 2026.\n\nDatos clave\n- Gimnasia La Plata en casa: tasa de victorias 25% (histórico). En cuanto a xG, recibe 1.69 y anota 1.38 por partido en casa. Defensa en casa muy vulnerable (-67) y ataque con desventaja (-38).\n- Racing Club como visitante: tasa de victorias fuera 50%. xG a favor 0.92 y xG en contra 1.35. Rendimiento defensivo razonable y mejoría relativa fuera.\n- Cuotas del partido: Gimnasia 3.55, Empate 2.90, Racing 2.25.\n- Líneas de gol: Over 1.5 1.55; Over 2.5 2.75; Under 2.5 1.40. Con los números de xG (Gimnasia 1.38 a favor en casa; Racing 0.92 fuera), la tendencia sugiere un partido cerrado, con probabilidad ligeramente mayor de menos de 2.5 goles.\n\nLectura táctica\n- El valor situacional favorece a Racing: fuera de casa, su tasa de victorias es superior y su defensa concede menos de lo que podría esperarse, mientras Gimnasia muestra un rendimiento defensivo débil en casa.\n- El handicap general de Gimnasia en casa es un punto de cuidado: la mezcla de defensa débil y poca eficacia ofensiva en casa eleva el riesgo de perder sin generar un despegue ofensivo claro.\n- Marcador esperado: la probabilidad de un encuentro ajustado es alta; es razonable esperar un partido con pocos tantos.\n\nPronóstico y apuestas recomendadas\n- Apuesta principal (riesgo moderado): Racing Club para ganar (cuota 2.25). Motivo: mejor rendimiento como visitante y mayor probabilidad de sacar los tres puntos frente a una defensa de Gimnasia que suele verse vulnerable en casa.\n- Segunda opción más conservadora: Doble oportunidad — Racing o Empate. Ofrece cobertura ante un posible empate de Gimnasia en su estadio.\n- Comercial/valor adicional: Under 2.5 goles (cuota 1.40). Basado en xG combinadas cercanas a 2.3, es más probable que el choque se quede en 2 o menos goles.\n\nPuntos clave para apostar\n- Si buscas consistencia de cuota, la opción Racing para ganar ofrece una buena relación entre riesgo y probabilidad dadas las tendencias away y la fortaleza relativa de Racing fuera.\n- El partido podría moverse con pocas acciones decisivas; el Under 2.5 es una jugada razonable para quien prioriza el control del tempo y la defensa.\n- Evita apuestas de alto riesgo en marcador exacto o en “ambos anotan” sin respaldo de datos específicos, ya que no hay estadísticas de goles de jugadores para respaldarlo aquí.\n\nConsejo rápido\n- Si ya vas a apostar, considera primero Racing para ganar o doble oportunidad, y complementa con Under 2.5 para cubrir posibles partituras cerradas. Mantén la exposición en cuotas moderadas y ajusta según cualquier news previo al partido.",
+      "pt": "Análise de Aposta: Gimnasia La Plata x Racing Club (Season 2026, Week 1)\n\nContexto rápido\n- Local: Estadio Juan Carmelo Zerillo\n- Odds: Gimnasia 3.55 | Draw 2.90 | Racing 2.25\n- Mercado de gols: Over 1.5 a 1.55 | Over 2.5 a 2.75 | Under 2.5 a 1.40\n- Kick-off: 25 de janeiro\n\nDados-chave relevantes\n- Gimnasia La Plata (em casa)\n  - Taxa de vitória em casa: 25% (baixo para futebol moderno)\n  - xG a favor em casa: 1.38; xG contra em casa: 1.69 (indicando maior vulnerabilidade ofensiva que defensiva em casa)\n  - Vantagens/limites em casa: a sua “vantagem de ataque” está negativa (-38) e a defensiva também negativa (-67), sugerindo um desempenho geralmente endurecido pela condição de mandante\n- Racing Club (fora)\n  - Taxa de vitória fora: 50% (acima da média típica de muitos times que jogam fora)\n  - xG a favor fora: 0.92; xG contra fora: 1.35 (oferece capacidade de evitar gols, porém produz menos gols)\n  - Defesa/ataque fora indicam equilíbrio: boa taxa de vitórias, porém menor geração de gols comparada a equipes que atacam com mais brilho em casa\n- Tendência de gols para o jogo\n  - Mercado de gols aponta para menos de 2.5 gols (1.40) como linha-base sólida; Over 1.5 ainda é viável (1.55) se o jogo abrir cedo\n  - Dados de xG sugerem possibilidades de um duelo com poucas chances líquidas, mas com oponente com capacidade de explorar falhas do adversário\n\nPrevisões e insights\n- Cenário provável: Racing Club é favorito para vencer fora, apoiado pela taxa de vitória fora de 50% e pela capacidade de preservar a defesa. Gimnasia, apesar do mando de casa, apresenta números de ataque e defesa abaixo da média histórica, o que aumenta o risco de sofrer gols.\n- Placar provável (cenário estratégico): 0-1 ou 1-2 para Racing; há chance de ambos marcando, porém a linha de gols costuma ficar abaixo de 2.5.\n- Dicas rápidas de aposta\n  - Aposta de valor (principal): Racing Club para vencer (2.25)\n  - Opção conservadora de gols: Under 2.5 gols (1.40)\n  - Alternativa com retorno maior (se estiver buscando crew de risco): Over 1.5 gols (1.55) combinando com a vitória de Racing (parlay simples)\n\nResumo\n- Racing aparece como favorito para levar os três pontos, explorando uma defesa adversária que costuma sofrer mais no mando de casa.\n- Gimnasia tem desafios de produção ofensiva e maior pressão defensiva em casa, reforçando a chance de vitória visitante.\n- Mercados de gols indicam queda de gols, com Under 2.5 sendo o caminho mais plausível, a menos que haja abertura cedo no jogo.\n\nObservação: sem nomes de jogadores, foco nos padrões de desempenho por equipe, casa/fora e tendências de gols ajudam a embasar as escolhas de apostas para essa estreia da temporada.",
+      "tr": "Turkish betting analizine hoş geldin. Aşağıdaki bilgiler 2026 sezonu, 1. hafta için Gimnasia La Plata vs Racing Club maçı üzerinde ihtimaller ve bahis ipuçlarını özetler. Saha Estadio Juan Carmelo Zerillo.\n\nÖne çıkan noktalar\n- Maç oranları: Racing Club kazanır 2.25, beraberlik 2.90, Gimnasia La Plata kazanır 3.55. Favori Racing görünüyor; ancak ev sahibi için sürpriz riskleri de bulunabilir.\n- Toplam goller: Over 1.5 1.55; Under 2.5 1.40; bu maçta en güvenli görünen seçenekler genelde Over 1.5 ve/veya Over 2.5 yönünde.\n- Ev sahibi Gimnasia La Plata için ev maç istatistikleri zayıf bir tablo gösteriyor: Evde kazanma yüzdesi %25, kazanma ihtimali düşük. Ayrıca evde savunma ve kafi olmayan hücum üretimiyle dikkat çekiyor (evde xG for ~1.38, xG against ~1.69).\n- Misafir Racing Club için deplasmanda durum daha olumlu görünüyor: Deplasman galibiyeti %50’lik bir geçmiş var; deplasmanda kimin daha etkili olduğuna dair xG göstergeleri Racing için savunmada biraz daha dayanıklı ama hücum gücü sınırlı (deplasman xG for ~0.92, xG against ~1.35).\n\nİstatistiklerden öne çıkanlar (yaygın olarak depolanmış değerlerle karşılaştırmalı)\n- Gimnasia La Plata evinde zayıf bir geçmişe sahip: kazanma oranı düşük (%25) ve savunma/attak karşılaştırması menfi. Bu maçta savunması bileşik olarak zorlanabilir.\n- Racing Club deplasmanda güvenilir bir geçmişe sahip: kazanma oranı yaklaşık %50 seviyesinde; savunması kırılgan olsa bile rakibin zayıf ev performansını kullanabilirler.\n- xG karşılaştırmaları: Gimnasia evinde gelen ortalama xG savunması 1.69’a kadar çıkabiliyor; Racing deplasmanda ise xG for yaklaşık 0.92. Bu, Racing’in gol üretiminde sınırlı olsa da Gimnasia’nın savunmasını aşma potansiyelini gösterir.\n\nOlası sonuç ve skor aralığı\n- En olası senaryo: Racing Club galibiyeti ve orta/üst skorlar. Tahmin edilen skor aralığı: 0-1 veya 1-2. Racing’in deplasman verimliliği ve Gimnasia’nın ev performansındaki zayıflama dikkate alınırsa bir gol farkı ihtimali yüksek görünüyor.\n- Toplam gol tahmini: 2–3 gol aralığı muhtemel. Bu yüzden Over 1.5 veya Over 2.5 seçenekleri mantıklı tercih olabilir.\n\nBahis önerileri (kısa ve net)\n- Ana bahis: Racing Club kazanır (2.25) — en mantıklı favori seçim.\n- Toplam gol: Over 1.5 (1.55) — maçın en güvenli gol potansiyeli için uygun.\n- Alternatif fault riskli ama potansiyel yüksek: Over 2.5 (2.75) — daha yüksek risk ama skor potansiyeli de yüksek görünüyor.\n- İlgili kararlar için kısa notlar: Gimnasia’nın evinde rakibi karşılayacak gol üretimi düşük görünse de, Racing’in deplasmanında vuruş kapasitesi kısıtlı olabilir; bu yüzden Over 1.5 tarafı güvenli bir başlangıç, Racing galibiyetiyle birleşen daha yüksek bir risk isteyenler için Over 2.5 de düşünülmeli.\n\nKısa maç akışı ipuçları\n- Maçın başlangıçta stallsız geçmesi ve her iki takımın da skor potansiyeline sahip olması olasıdır. Özellikle ilk yarıda bir gol veya iki gol ihtimali önemli.\n- Ev sahibinin savunması zayıf göründüğünden kontra tehlikesi Racing için temiz bir fırsat yaratabilir; buna karşılık Gimnasia kendi evinde gol üretimini artırma şansı arayabilir.\n\nBottom line\n- Racing Club’in deplasman performansı göz önüne alındığında kazanma ihtimali daha yüksek görünüyor. \n- Bahis için güvenli başlangıç: Racing Club kazanır + Over 1.5.\n- Daha riskli ama potansiyel getirisi yüksek seçenekler: Racing Club kazanır + Over 2.5 veya sadece Over 2.5. \n- Maç Jan 25 tarihinde başlayacak; şu anki verilere göre bu maç için akıllı bahisler Racing lehine ve orta-üst gol aralıklarında yoğunlaşıyor.",
+      "de": "Kurzfassung vor dem Spiel\nGimnasia La Plata empfängt Racing Club im Estadio Juan Carmelo Zerillo. Die Ausgangslage spricht leicht für den Außenseiter auswärts: Racing ist favorisiert (2.25), Gimnasia schwächelt zu Hause (Win 25%, Lose 75%).\n\nWichtige Statistiken (aus den verfügbaren Daten)\n- Gimnasia La Plata (Heim)\n  - Heimbilanz: Sieg 25%, Niederlagen 75%\n  - xG-Daten (Heim): Offense 1.38, Gegenwehr 1.69\n  - Allgemeine Heimstärke/Ausdauer: Gesamtvorteil zu Hause negativ (-53)\n- Racing Club (Auswärts)\n  - Auswärtsbilanz: Sieg 50%, Niederlagen 25%\n  - xG-Daten (Auswärts): Offense 0.92, Gegen-GxG 1.35\n  - Allgemein: Home-Auftritt der Gäste solid, oft konkurrenzfähig auch als Außenseiter\n- Tormärkte\n  - Über 1.5 Tore: 1.55\n  - Über 2.5 Tore: 2.75\n  - Unter 2.5 Tore: 1.40\n  - Ergebniswetten: Gimnasia Sieg 3.55, Remis 2.90, Racing Sieg 2.25\n\nWas bedeutet das für den Kickoff am 25. Januar?\n- Wahrscheinliches Spielbild: Racing Club könnte die Spielkontrolle besser verteidigen und in der Lage sein, zumindest ein Tor zu erzielen, während Gimnasia zu Hause Schwierigkeiten haben könnte, eine starke Offensive zu generieren.\n- Erwartetes Torlevel: Unter 2.5 Tore wirkt plausibel (1.40), da beide Teams defensiv stabiler auftreten können und Gimnasias Heimbilanz eher gegen sich arbeitet.\n- Scoreline-Hypothese: 0:1 oder 0:2 zugunsten von Racing ist realistisch, basierend auf Racing-Ausbaufaktoren und Gimnasias Heimmargen.\n\nWett-Empfehlungen (knapp, fokussiert)\n- Klare Empfehlung: Racing Club gewinnt (Quote ca. 2.25)\n  Begründung: Auswärtsstärke von Racing trifft auf Gimnasias Heimschwäche; Racing hat die stabileren Grundwerte (xG-Verhältnis, Siegesquote auswärts) und geht mit der Favoritenrolle ins Spiel.\n- Value-Wette: Unter 2.5 Tore (Quote ca. 1.40)\n  Begründung: Kombiniert mit der defensive Ausrichtung beider Mannschaften und der tendenziell moderaten Torwahrscheinlichkeit pro Partie in dieser Konstellation, ergibt sich hier ein solides Value-Profil.\n\nHinweis\n- Da es sich um den Saisonauftakt (Woche 1) handelt, können sich Formkurven noch entwickeln. Die hier genannten Kennzahlen geben eine Richtung vor, liefern aber keine Garantie.\n- Fokus auf Wettoptionen mit klaren Wahrscheinlichkeiten: Sieg Racing oder Under 2.5 Tore bieten stabile Ansätze basierend auf den vorliegenden Daten.",
+      "fr": "Analyse rapide Gimnasia La Plata vs Racing Club (Saison 2026, Journée 1)\n\nContexte et tendances clés\n- Racing Club est favori (cotes: victoire 2.25), le chemin à l’extérieur est soutenu par une win rate away à 50% et une défense moyenne à 1.35 xG contre.\n- Gimnasia La Plata a une réalité à domicile plus fragile: seul 25% de victoires à domicile et une défense en déficit (avantage défensif à domicile négatif = -67), avec un xG against à domicile de 1.69, ce qui indique une vulnérabilité défensive notable.\n- Offense de Racing à l’extérieur est modeste (xG pour 0.92), ce qui peut limiter les scores élevés, et favorise plutôt un match serré.\n- Le marché privilégie le Under 2.5 (1.40) et Over 1.5 (1.55), suggérant typiquement un match avec peu de buts mais une probabilité d’au moins deux buts.\n\nDynamiques potentielles\n- Si Gimnasia se replie habilement à domicile, Racing pourra exploiter les transitions, mais le manque d’explosion offensive de Racing dehors peut limiter le score.\n- L’écart de xG entre les deux équipes penche légèrement en faveur de Racing défensivement et en contre-attaque, d’où un potentiel scoreline serré mais en faveur de l’équipe visitante.\n\nPredictions et picks\n- Résultat probable: victoire de Racing Club.\n- Score plausible: 0-2 ou 1-2.\n- Paris recommandé (principal): Racing Club pour gagner.\n- Alternative: double chance X2 (Racing Club ou Match nul).\n- Pari secondaire: Under 2.5 buts.\n\nStatistiques à surveiller\n- Défense de Gimnasia à domicile est un point faible notable; si elle est encore exposée, Racing peut exploiter les espaces.\n- Performance away de Racing (50% victoires) montre une capacité à obtenir des résultats même hors de leurs bases.\n- Si le match reste faible en buts, Under 2.5 est conforme au contexte des chiffres avancés (xG et marchés).\n\nNotes rapides\n- Évitez les paris basés sur des joueurs individuels; l’analyse repose sur les statistiques de performance globale et les tendances domicile/extérieur.\n- Cotes et tendances peuvent évoluer avant le coup d’envoi; ajustez les paris en conséquence.",
+      "ja": "試合情報\n- 対戦: Gimnasia La Plata vs Racing Club\n- シーズン/週: 2026シーズン 開幕戦、ゲームウィーク1\n- 会場: Estadio Juan Carmelo Zerillo\n- オッズ（勝敗オッズ）: Gimnasia 3.55 / 引分 2.90 / Racing Club 2.25\n- アンダー/オーバーオッズ: Over 1.5 1.55 / Over 2.5 2.75 / Under 2.5 1.40 / Under 1.5 2.30\n- ゴールタイミング: 現状データ未定義だが、試合データは記録あり\n- データ出典の補足: 進行中の試合データのため、毎試合の実測値は変動します\n\nキー統計と傾向（ベッター視点で読み解く）\n- アウェーの安定感が光るRacing Club\n  - アウェー勝率: 50%と高水準。開幕戦での自信に結びつく要素です。\n  - アウェーの守備/攻撃レンジ: xG conceded 1.35、xG for 0.92。守備は平均を上回ることが多く、ゴール機会の質は控えめ寄り。\n- ホームのGimnasia La Plataは弱点が目立つ\n  - ホーム勝率: 25%と低調。シーズン序盤の不安材料になり得ます。\n  - ホームでの守備/攻撃傾向: xG対策は守備寄りに傾きがちで、被xGが1.69と高め、攻撃は1.38とやや控えめ。全体的に得点機会の創出力が不足しがちの傾向。\n- 得点の総量感\n  - Under 2.5が1.40と相対的に低リスクと見られており、両チームの“押し切り型”よりも接戦寄りの展開が想定されます。\n  - Over 1.5は1.55で成立可能性はあるものの、全体として2点未満のスコアで終わる場面が多そうです。\n- 開幕戦の不確実性\n  - 公式データの安定性がまだ十分でないため、両陣営の慣れや戦術適用の度合いが勝敗の分岐点になりやすいです。\n\n予想と狙い目（25代以上の男性ベッター向けの実戦観点）\n- 最有力予想: Racing Clubの勝利\n  - 理由: アウェーの勝率の高さ、相対的なホーム弱さ、相手の守備的傾向を踏まえ、Racingが1点を奪い切る展開が現実的。\n- スコアレンジの想定: 0-1 または 1-2\n  - 理屈: 下記の統計からも低得点傾向が強く、相手の守備レンジを崩しきるには1点で十分な可能性が高い。\n- 推奨ベット案\n  - 最有力ベット: Racing Club勝利\n    - 根拠: アウェーでの勝率の高さと相手のホーム課題を踏まえた合理的選択。\n  - セカンドベット: Under 2.5ゴール\n    - 根拠: 低得点の感覚が強く、両チームのxGレンジを見ても2点未満で終わる可能性が高め。\n  - 現金リスクを抑えたい場合の代替案: Racing Club勝利 or Drawのダブルチャンス的観点\n    - ただしオッズは変動するため、現金リスクを抑えたい場合は別途適切な組み合わせを検討してください。\n\n注意点\n- 開幕戦は予想外の展開が起きやすい時期です。戦術の適用度合いや先発の影響で結果が変動する可能性があります。\n- ゴールタイミングデータが現在不完全な状態のため、実際のスコアラインは現地の試合状況を見て判断した方が良いです。\n\n総括\n- Racing Clubのアウェー力とホーム側の不安要素を考慮すると、勝機はRacingに寄りやすい状況です。低得点での決着が濃いと見て、Racing勝利とUnder 2.5の組み合わせが合理的なプランです。場合によってはリスク許容度に応じて「Racing勝ち」の単体ベットを選ぶのが妥当でしょう。",
+      "it": "Analisi rapida per scommesse: Gimnasia La Plata vs Racing Club (stagione 2026, Giornata 1)\n\nContesto\n- Campo: Estadio Juan Carmelo Zerillo\n- Data/Orario: 25 gennaio\n- Quote 1X2: Gimnasia 3.55, Pareggio 2.90, Racing 2.25\n- Totali goal: Over 1.5 a 1.55; Over 2.5 a 2.75; Under 2.5 a 1.40\n- Stato: partita d’apertura, dati di goal timing registrati (1 evento)\n\nPunti chiave statistici (focus su cosa potrebbe guidare il mercato)\n- Racing Club in trasferta: win% 50% (buone performance lontano da casa), 2.25 sulle vittorie fa del Racing il favorito in questa sfida.\n- Gimnasia La Plata in casa: win% 25% e lose% 75% (alta probabilità di سبetto domestico). Storicamente hanno un rendimento di casa fragile, quindi l’avversario potrebbe imporre ritmo.\n- Attacco e difesa di Gimnasia in casa: xG fatti 1.38, xG subiti 1.69. Segno di attacco moderato ma difesa spesso sotto pressione; l’avversario può capitalizzare.\n- Difesa/attacco di Racing in trasferta: xG concessi in trasferta 1.35, xG fatti 0.92. Indica una fase offensiva meno prolificata lontano da casa ma una difesa non estremamente vulnerabile.\n- Valori di potenziale: gli elementi di xG e le percentuali mostrano una gara che potrebbe rimanere contropiedata e tattica, con pochi gol se entrambe le squadre dovessero riuscire a chiudere gli spazi.\n\nSinossi tattica implicita\n- Gimnasia potrebbe concedere spazi all’avversario, data la difesa meno incisiva in casa. Racing potrebbe cercare di sfruttare transizioni rapide, ma l’attacco in trasferta di Racing non è particolarmente prolifico (xG 0.92). Una partita da centrocampo, con contropiedi controllati.\n\nPronostico e suggerimenti di scommessa\n- Pronostico principale: vittoria Racing Club. Le quote (2.25) riflettono la tendenza statistica di Racing in trasferta e l’andamento storico di Gimnasia in casa (basso tasso di vittorie, alto tasso di sconfitte).\n- Segnale secondario (scommessa di valore): Under 2.5 gol. L’offerta a 1.40 è coerente con le medie di xG casa/trasferta indicate (difese robusta e attacchi non eccezionali, potenzialità di una gara tattica con pochi gol).\n- Alternative utili (se cerchi spread: risultato esatto ridotto o doppia chance): potrebbe valere guardare 1X (pareggio o vittoria Racing) per mitigare il rischio, ma la probabilità resta a favore del Racing.\n\nNote operative\n- Tutti i dati qui elencati si basano sulle statistiche fornite e sulle tendenze indicate (xG, percentuali di vittorie/sconfitte, rendimento casa/trasferta). Le dinamiche reali della partita possono variare per infortuni, tattiche di giornata o evento imprevisti.\n\nRiassunto\n- Giro di campo: Racing è favorito per la vittoria, supportato da una trasferta positiva e da una Gimnasia con rendimento casalingo vulnerabile. \n- Scelta principale: scommessa su vittoria Racing Club.\n- Scelta di valore: Under 2.5 gol è un’opzione prudente data la struttura tattica prevista e le cifre di xG.",
+      "se": "Analys och speltips inför Gimnasia La Plata vs Racing Club (2026, omgång 1, Estadio Juan Carmelo Zerillo)\n\nKort om läget\n- Racing Club är favoriterna enligt odds när de är bortaplan; hemmalaget Gimnasia La Plata har starkt sämre hemmaform i genomsnitt den senaste tiden.\n- Målchans och xG: Gimnasia har ett något högre hemma-xG för (~1.38) än vad de släpper in (genomsnittligt motstånd 1.69 i hemma-matcher). Racing som bortalag håller en respektabel defensiv nivå (xG mot ~1.35) medan deras eget bortoxG är lågt (~0.92). Sammanlagt ökar sannolikheten för en måltilldelning runt 2 mål i matchen.\n\nHemma vs borta kraft\n- Gimnasia La Plata (hemma): Vinstprocent 25%, förlust 75% hemma. Det indikerar att laget ofta möter motstånd på hemmaplan och har svårt att få med sig resultatet. Dessutom är hemmaintrycket svagt i förhållande till deras försvar (kapacitet nedanför genomsnittet).\n- Racing Club (borta): Vinstprocent 50%, förlust 25% bortaplan. Starkare bortaplan än många lag i ligan, vilket gör att de ofta får poäng även som gäster.\n\nMålföljd och linjer\n- Över 1.5 mål: 1.55 – sannolikheten för målminst två i matchen är högt betonad.\n- Under 2.5 mål: 1.40 – linjen säger att 2–2 eller 2–0 är vanligt, vilket passar den låga totala xG-inramningen.\n- Över 2.5 mål: 2.75 – möjlig, men inte troligaste scenariot baserat på xG-siffror.\n- Slutresultatindikatorer (baserat på odds): Racing Club som bortafavort med 2.25, Gimnasia hemma 3.55 och oavgjort 2.90.\n\nPrediktioner och nyckelinsikter\n- Mest troliga utgång: Racing Club vinner matchen (bortavinst). Deras bortaprestation och konkurrenskraft indikerar att de kan dra fördel av Gimnasias svaga hemmaform.\n- Antalet mål: Förvänta dig ett målrikt första halvlek men totalt sett ett måttligt antal mål. Under 2.5 mål är det mest sannolika scenariot baserat på xG-siffrorna.\n- Särskilda bettförslag (för 25+ åriga fotbollsbetare som vill ha tydliga markeringar):\n  - Huvudspel: Racing Club att vinna (odds 2.25)\n  - Kompletterande: Under 2.5 mål (odds 1.40)\n  - Taktiskt oddsspel: Kombinationsbet – Racing Club vinner + Under 2.5 mål (potentiell högre avkastning än enbart vinnare)\n- Notera: Gimnasias starka hemmamöten har inte varit övertygande i deras defensiva jämförelser nyligen; mot ett bortasvagt Racing-lag blir det viktigt för Gimnasia att få till en stark defensiv insats, men odds och historiska mönster pekar mot bortovinst.\n\nSammanfattning\n- Förväntningarna pekar mot en bortaseger för Racing Club, ofta med färre än 3 mål totalt i matchen. Under-2.5-målet är ett starkt säkert val, medan utgången av matchens slutresultat lutar åt Racing i detta möte på deras bortaplan.",
+      "ru": "Матч: Gimnasia La Plata vs Racing Club\nСезон: 2026, Тур 1\nСтадион: Estadio Juan Carmelo Zerillo\nДата: 25 января\nСтатус: неполный\n\nКлючевые цифры\n- Победа/ничья/победа гостей: Gimnasia 3.55, ничья 2.90, Racing 2.25\n- Тотал: Over 1.5 — 1.55; Under 2.5 — 1.40; Under 1.5 — 2.30; без значения 0.00 не применяется\n- Домашняя динамика Gimnasia: процент побед 25%, проигрыши 75%; атакующая сила на домашнем поле −38, защитная сила −67, общий показатель −53\n- Гости в выездной игре: победы 50%, поражения 25%\n- Сводка xG: Gimnasia (дом) xG-for 1.38, xG-against 1.69; Racing (выезд) xG-for 0.92, xG-against 1.35\n\nЧто говорят цифры\n- По статистике домашний фактор Gimnasia слабый: малый процент побед дома и слабая оборона на приеме мячей. Это снижает их шансы на домашнюю козырь в начале сезона.\n- Racing на выезде показывает умеренную эффективность по победам (50%), но их нападение в выездной игре не отличается высоким значением xG (0.92). Это значит, что гости в основном зависят от грамотной обороны и конверсии подходящих эпизодов.\n- Совокупные данные xG домашних и выездных команд дают ориентир на счёт около 2.3 ожидаемых голов в любом формате матча. Это указывает на вероятность партии с ниже средней результативностью и большую вероятность Under 2.5.\n\nПрогноз и ставки\n- Основной сценарий: победа Racing Club с минимальным счётом (1:0 или 0:1). Это согласуется с фаворитскими котировками на гостей и текущими цифрами xG.\n- Вероятный исход по тоталам: Under 2.5 гола выглядит наиболее вероятным вариантом на основе xG-данных (линейная сумма 1.38 + 0.92 примерно отражает ситуацию до 2 голов).\n- Ставка дня (консервативнее): победа Racing Club. Вариант покрытия — ставить на Racing или ничью (double chance) в зависимости от доступных опций букмекера.\n- Альтернатива: ставка на меньше 2.5 голов вместе с победой гостей даст сбалансированный риск против возможной ничьей в рамках первых минут.\n\nКлючевые выводы\n- Racing Club выглядит фаворитом исходя из котировок и выездной формы.\n- Gimnasia имеют слабый домашний показатель, что делает их шанс на успешный старт хуже.\n- Ожидается низовая результативность матча; риск перехода к 2 голам маловероятен.\n\nПримечание: данные основаны на текущих статистических сводках и котировках. Матч открыт для корректировок в зависимости от состава, погодных условий и кадровых изменений.",
+      "kr": "다음은 Gimnasia La Plata vs Racing Club(2026 시즌, 1주차, Estadio Juan Carmelo Zerillo) 경기에 대한 간단한 베팅 분석입니다. 25대 초중반이 아니라 25+ 남성 축구 베팅팬 입장에서 핵심만 빠르게 정리했습니다.\n\n주요 포인트\n- 승리 확률 분위기\n  - 원정 승리 가능성이 상대적으로 높아 보입니다. Racing Club의 원정 승률은 약 50%로 양호합니다. Gimnasia는 홈에서의 승률이 25%로 낮은 편이고, 지난 통계에서도 홈에서의 승점이 부진합니다.\n  - 따라서 Racing Club의 승리가 주요 후보 중 하나로 보이고, 무승부의 가능성도 낮지 않지만 Racing의 방문성향을 감안하면 승리 가능성이 더 큽니다.\n\n- 양 팀의 득점 및 수비 성향\n  - Gimnasia의 홈 xG 수치: 득점 기회 창출은 평균 수준(1.38)이나, 홈에서의 실점 가능성은 다소 큽니다(1.69 xG Against). 홈에서의 방어력은 다소 취약한 편입니다.\n  - Racing Club의 원정 xG 수치: 득점 기대치가 낮은 편(0.92)이지만, 원정에서도 상대를 제압하는 능력은 존재합니다(원정 승률 50%). 다만 원정에서는 상대의 공격을 완전히 막아내진 않는 편이라 실제 득점은 1~2골대일 가능성이 있습니다.\n  - 요약: 양 팀 모두 득점 기회가 완전히 막히진 않을 것이나, 수비적으로는 어느 정도 안정성을 기대하기 어렵고, 2골 내외의 소규모 득점 경합 가능성이 있습니다.\n\n- 총 득점 전망\n  - 언더/오버 밸런스: 언더 2.5 골 배당이 1.40으로 비교적 낮아 “2골 이하”가 더 안전한 흐름으로 평가됩니다. 양 팀의 득점 기대치를 고려하면 이 경기가 2골 아래로 끝날 가능성도 충분합니다. 다만 초반 전술적 접근과 양팀의 공격 시도에 따라 2골 이상으로도 나올 여지는 남습니다.\n\n추천 베팅 옵션\n- 주된 베팅 옵션: Racing Club 승\n  - 이유: 원정에서의 강한 승률과 Gimnasia의 약한 홈 흐름의 조합으로 Racing의 승리 가능성이 가장 합리적으로 보입니다. 배당 2.25는 비교적 합리적인 가치로 판단됩니다.\n- 보조 베팅 옵션: 언더 2.5 골\n  - 이유: 두 팀의 xG 흐름과 수비 부담을 고려할 때, 2골 이하로 마무리될 가능성이 높습니다. 배당 1.40은 안전성 면에서 매력적인 선택입니다.\n- 대안 시나리오(리스크 테크니컬): 무승부 가능성도 배당 2.90으로 무시하기 어렵습니다. 승부가 원점에서 엇갈릴 수 있는 경기로도 해석됩니다.\n\n참고 포인트\n- 경기 장소와 일정: Estadio Juan Carmelo Zerillo에서 진행, 1월 25일에 킥오프.\n- 상황 메모: 현재 경기는 상태가 불완료로 표기되어 있으므로 실제 라인업이나 선수 소식에 따라 베팅 전략을 미세 조정하는 것이 좋습니다. 선수명은 언급하지 않는 방식으로 분석을 구성했습니다.\n\n정리\n- 가장 확실한 베팅: Racing Club 승\n- 보조 안전 베팅: 언더 2.5 골\n- 리스크를 감수하고 싶은 경우: 무승부(2.90) 고려 가능\n\n필요하시면 특정 배당 사이트별 핫스팟, 리스크 관리 포인트, 그리고 상황별 핫시나리오도 더 구체적으로 정리해 드리겠습니다.",
+      "nl": "Analyse voor Gimnasia La Plata vs Racing Club (Seizoen 2026, Speelronde 1)\nLocatie: Estadio Juan Carmelo Zerillo\nDatumkick-off: 25 januari\n\nKernpunten\n- Verwachte winnaar: Racing Club lijkt de betere keuze gezien uitwedstrijden. Away-winstpercentage staat op 50%, tegenover Gimnasia thuis met 25% winst. Dat suggereert dat Racing Club een solide uitgangspositie heeft in deze ontmoeting.\n- Doelpuntenbalans: Voor Gimnasia thuis is de xG-forwaarde 1.38 en xG-tegen 1.69, wat duidt op een gemiddelde opbrengst tegen iets hogere defensieve druk. Voor Racing Club uit gezien is de xG-forwaarde 0.92 en xG-tegen 1.35, wat een lagere productie oplevert maar wel relatief efficiënt in uitwedstrijden.\n- Doelpuntenverwachting: de markt geeft een duidelijke voorkeur aan onder 2.5 doelpunten (1.40) ten opzichte van over 2.5 (2.75). Dit wijst op een waarschijnlijk krappe, defensief georiënteerde wedstrijd met weinig goals.\n- Kansverdeling (odds omzet): Home-winst Gimnasia 3.55, Draw 2.90, Away-winst Racing 2.25. De kansen wijzen op een slight bias richting Racing Club, maar geen zekerheid.\n\nWat valt op ten opzichte van de genoemde statistieken\n- Racing Club heeft een relatief sterke uitwedstrijdprestaties (50% winst uit uitwedstrijden). Dat is een aanzienlijk voordeel in deze uitwedstrijd.\n- Gimnasia La Plata laat een lage thuiswinst zien (25%), wat duidt op twijfelachtig thuisvoordeel tegen een actieve uitploeg.\n- De verwachte doelpunten (xG) suggereren geen hoge-scoring pot; de meeste aandacht gaat uit naar een voorzichtig spel met weinig doelpunten.\n\nAanbevolen inzetpunten\n- Primary bet: Under 2.5 goals. Odds 1.40 geven aan dat dit als waarschijnlijk wordt gezien; de combinatie van Racing’s uitrecord en Gimnasia’s thuisdynamiek maakt 2 of minder doelpunten logisch.\n- Secundaire bet: Racing Club om te winnen. Odds 2.25 geven een fatsoenlijke waarde bij de verwachte outcomemix (uitposities en statische trends).\n- Alternatief scenario: een scoreverdeling 0-1 of 1-2 past bij het verwachtingsbeeld van weinig doelpunten maar een uitoverwinning voor Racing Club.\n\nKorte tip voor bettors\n- Kijk naar snelle doelpunten; als Racing Club vroeg op voorsprong komt, verhoogt dat de kans op een gecontroleerde wedstrijd en onder 2.5 doelpunten.\n- Houd rekening met de thuis-/uitrecord van Gimnasia; ze hebben mogelijk moeite om de defensieve druk te weerstaan tegen een mobiele uitploeg.\n\nSamenvatting\n- Verwachte eindstand: vooral Racing Club wint met een kans op weinig goals (0-1 of 1-2).\n- Beste value richting de markt: Under 2.5 goals (1.40), gevolgd door Racing Club om te winnen (2.25).",
+      "dk": "Her er en kort bettinganalyse for Gimnasia La Plata vs Racing Club (Sæson 2026, Runde 1), spilletiden 25. januar på Estadio Juan Carmelo Zerillo. Målgruppen er dig der følger argentinsk fodbold tæt og spiller odds regelmæssigt.\n\nNøgle fakta\n- Odds: Gimnasia vinder 3.55, Uafgjort 2.90, Racing Club vinder 2.25\n- Over/Under: Over 1.5 mål 1.55, Over 2.5 mål 2.75, Under 2.5 mål 1.40\n- Gimnasia hjemme (basale hjemme-statistikker): Vinderandel 25%, taberandel 75%. Angrebssvaghed hjemme vist som -38, forsvarspådrag -67, samlet -53. xG hjemme for 1.38, imod 1.69\n- Racing Club ude (basale ude-statistikker): Vinderandel 50%, taberandel 25%. xG for ude 0.92, imod ude 1.35\n\nVæsentlige tendenser og hvad de betyder\n- Racing Club som udehold virker som favoritten. 50% sejr-rate ude antyder, at de normalt får point i dette slags kampe, og de har et lavt gennemsnitligt eget xG (0.92) men en relativt tålmodig defensiv med lavt xG imod (1.35).\n- Gimnasia som hjemmehold har tydelige udfordringer: lav vinderprocent hjemme og markante negative hjemmebaserede angrebs- og forsvarstal (angrebsvant -38, forsvar -67). Samlet set tyder data på at modstanderen kan få de chancer, og at Gimnasia ikke nødvendigvis presser højere end forventet.\n- Samlet forventet scoring (hjemme XG i gennemsnit for Gimnasia 1.38 og gæst af Racing 0.92) giver et samlet forventet xG omkring 2.3, hvilket gør Under 2.5 mål til en stærk favorit i dette opgør.\n\nPrædiktionspunkter\n- Mest sandsynlige udfald: Racing Club vinder (omkring 44% sandsynlighed baseret på oddsene). Kampens karakter tyder på en tæt affære, hvor Racing måske bryder døden med en enkelt scoring.\n- Antal mål: Under 2.5 mål forventes at slå til (omkring 60–65% sandsynlighed ift. de givne xG-tal). Et scenarie med 0-1 eller 1-2 er plausibelt.\n- Mulige scoringsscenarier: 0-1 eller 1-2 virker plausible, da begge mandskaber har relativt moderate xG-tal og hjemme- vs. udefordelene peger mod en lavere totalscore.\n\nSpiltips (kort og præcist)\n- Hovedtip: Racing Club til at vinde\n  - Begrundelse: Bedst kombination af odds og udeholdets præstationer i gennemsnitlige away-kampe.\n- Andet tip: Under 2.5 mål\n  - Begrundelse: Samlets xG omkring 2.3 og oddsene peger klart imod en høj-scoring kamp.\n- Ekstra mulighed (risikoafhængig): Ingen scorer samtidig (BTTS) eller Correct score omkring 0-1/1-2 kan være værd hvis du vil gå mere specifikt ind.\n\nNoter\n- Der er forsøgt at trække på de tilgængelige data (hjemme- og ude-statistikker samt xG-niveauer). Da der ikke er detaljerede mål-tidsdata tilgængelige i denne kortlægning, fokuseres på de mest robuste signaler: hjemmefordelens svaghed for Gimnasia, Racing Club’s udepræstationer, og de samlede forventede mål.\n- Hold dig opdateret live: Hvis første 15 minutter viser tydeligt offensiv grafik fra Gimnasia uden risiko for kontraløb, kan det ændre forventningen mod en højere score. Omvendt, stærk defensiv disciplin fra Racing kan gøre under 2.5 mål endnu mere sandsynligt.\n\nKort opsummering\nRacing Club er favoritten i dette første møde, men kampen ser ud til at blive tight og lav på mål. Overvåg især første halvlegstype og hvordan Gimnasias hjemmeangreb presser – hvis tempoet ikke stiger tidligt, er Under 2.5 mål og Racing-esejren stærke linjer at holde øje med.",
+      "no": "Kampanalyse: Gimnasia La Plata vs Racing Club\nSesong: 2026, Kampveke: 1, Stadion: Estadio Juan Carmelo Zerillo, Kampdato: 25. januar\n\nNøkkelfakta\n- Hjemmeform Gimnasia: 25% vind, 75% tap; hjemme xG for ca. 1.38, mot ca. 1.69 (svakere i forsvar hjemme). Dette bekrefter en tøff hjemmebane motstand og potensielt sårbare tall i bakre rekke.\n- Bortefordeler Racing Club: 50% vinnrate som gjester; bortemål xG ca. 0.92, bortemotstanderens xG mot ca. 1.35. Indikerer at de ofte finner veien til seier selv om de ikke produserer enormt mye målpoeng borte.\n- Oddsen antyder et jevnt møte: Racing som favoritt (2.25), Gimnasia DNB (3.55), uavgjort 2.90.\n- Over/Under: Over 1.5 mål 1.55, Over 2.5 mål 2.75, Under 2.5 mål 1.40. Indikerer forventet lavt til middels målvolum, med størst tro på under 2.5 mål.\n\nHva statistikkene forteller\n- Gimnasias hjemmeforhold viser at de har et begrenset angrepsanslag (1.38 xG hjemme) samtidig som de slipper inn ganske mye (1.69 xG mot). Dette gir en indikasjon på en kamp der de ofte må forsvare seg, og der motstanderen har plausibel scoringsrisiko.\n- Racing Club har solid vinsttakt som bortelag (50%), men deres xG-for hos bortebane er lavt (0.92) og de slipper inn mer enn de produserer (1.35 xG mot). Dette peker mot en kamp der de sannsynligvis ikke dominerer, men kan gripe sjansen når den byr seg.\n- Totalt sett forventes et lavt til middels målfelt i denne kampen, med Under 2.5 mål som den mest sannsynlige boksen i forhold til xG-profilene og bortebane form.\n\nViktige scenarier å vurdere\n- Racing vinner-scenario: Med bortestatistikk som taler for stabilitet og muligheten til å gripe små scoringsmuligheter, ligger muligheten for en 0-1 eller 1-2-seier tett.\n- Gimnasia-reaksjonsscenario: Hjemmeformen deres er ikke sterk nok til å være tydelig favoritt, men de kan bygge farer og få en skummel start for motstander hvis Racing slurver i kontringssituasjoner.\n- Målvolumet: Under 2.5 mål er mest sannsynlig basert på xG-data og målfrekvensene for begge lag i denne typen kampbildet.\n\nAnbefalte spill\n- Hovedspill: Racing Club til å vinne (Odds 2.25). Sterkere borteforhold og en litt mer effektiv treffsikkerhet mot Gimnasias sårbare hjemmeforsvar taler for en liten favorittseier.\n- 2. Spill: Under 2.5 mål (Odds 1.40). Basert på lavt til middels forventet målvolum i begge lag, spesielt med ++en trussel i bakre rekker og begrenset angrepsproduksjon.\n- Alternative/kombo: Racing Club til å vinne og Under 2.5 mål som en kombinert innsats. Dette gir en rimelig risikojustert mulighet til å fange de lineære forutsetningene i kampen.\n\nKort sagt\n- Forventet kampbilde peker mot en lavt til middels målsetning og en liten favør til Racing Club som bortelag. De som liker sikre eller middels sikre bets, bør vurdere Racing-seier med Under 2.5 mål som en trygg kombinert innsats.",
+      "cz": "Analýza zápasu: Gimnasia La Plata vs Racing Club (Sezóna 2026, kolo 1)  \nMísto: Estadio Juan Carmelo Zerillo. Výkop: 25. ledna. Status zápasu: doplňující, kurzy: Racing Club 2.25, Remíza 2.90, Gimnasia La Plata 3.55. Over 1.5 gólu 1.55, Over 2.5 gólu 2.75, Under 2.5 gólu 1.40.\n\nKlíčové faktory pro sázení\n- Favorit trhu: Racing Club. Kurz 2.25 ukazuje, že sázkové domény očekávají vítězství hostů, což odpovídá jejich formě na venku (50% výher venku).\n- Gimnasia doma má velmi slabou domácí bilanci z pohledu vítězství (cca 25%), což signalizuje, že domácí prostředí pro ně není výraznou výhodou. Obrana na domácím hřišti bývá slabší (xG proti 1.69 na domácí zápasy), zatímco útok na domácí půdě generuje méně než by měl (xG for 1.38).\n- Racing Club venku přináší solidní efektivitu: xG for na venku kolem 0.92 a xG against 1.35 ukazují, že někdy mohou skórovat i proti lepším obranám, ale zároveň bývá jejich obrana udržitelná. Celkově je jejich venkovní win percentage 50%.\n- Očekávaný součet gólů: jednotlivá xG (1.38 domácí útok, 0.92 venkovní útok) dává dohromady přibližně 2.30 očekávaných gólů pro tento zápas, což odpovídá scénáři s 2 góly v utkání. To ladí s trhu, který signalizuje vyšší šanci na 2 góly (Over 1.5 je vysoce pravděpodobné) a současně vyšší pravděpodobnost pod 2.5 (1.40) než nad 2.5 (2.75).\n\nPravděpodobný scénář\n- Výsledek: Racing Club vyhraje (favorit trhu). Doporučený směr sázek: vítěz zápasu - Racing Club.\n- Možný skóre: 0-2 nebo 1-2 (díky venkovní síle Racing a deficitům Gimnasia doma). Očekávaný celkový počet gólů kolem 2, tedy Under 2.5 gólu je častější volba, ale komplexně odpovídá i varianta 2 góly.\n\nDoporučené sázkové body\n- Vítěz zápasu: Racing Club (nejcivilnější výběr vzhledem k formě a kurzu).\n- Počet gólů: Under 2.5 gólu (1.40) – společně se scénářem, že zápas budou mít kolem 2 gólů, je to výživná value sázka vzhledem k xG hodnotám obou týmů.\n- Alternativní tip (rizikovější): Výsledek 0-2 nebo 1-2 – sázka na přesné skóre může být dražší, ale odpovídá preferenci trhu i očekávanému gólovému objemu.\n\nShrnutí\n- Očekávaný zápas má nižší šanci na velké gólové hody (Under 2.5 je favoritem trhu), ale zároveň do hry vstupuje minimálně 2 góly (Over 1.5 je pravděpodobnější než Under 1.5). Racing Club má lepší šanci na vítězství venku, zatímco Gimnasia doma ukazuje slabší domácí statistiky i defenzivní čísla. Při sázení se držte hlavně sázky na vítěze ve prospěch Racing a kombinujte s Under 2.5 gólu pro hodnotovou oporu.",
+      "gr": "Ανάλυση αγώνα: Gimnasia La Plata vs Racing Club\n\nΔεδομένα αγώνα\n- Σαιζόν: 2026, Γύρος 1\n- Γήπεδο: Estadio Juan Carmelo Zerillo\n- Αποδόσεις στοιχημάτων: Gimnasia La Plata 3.55, Ισοπαλία 2.90, Racing Club 2.25\n- Over/Under: Over 1.5 1.55, Over 2.5 2.75, Under 2.5 1.40\n- Ημερομηνία έναρξης: 25 Ιανουαρίου\n- Goal timings: καταγράφονται (ενδείξεις για τη ροή του παιχνιδιού)\n\nΣύνοψη απόδοσης και προφίλ ομάδων\n- Gimnasia La Plata (σπίτι): xG για 1.38, xG κατά αντίπαλου 1.69. Win% στο σπίτι ~25%. Ευάλωτη άμυνα με μεγάλη πιθανότητα να δέχεται γκολ. Τα παραπάνω είναι σχετικά υψηλά/χαμηλά σε σχέση με τον μέσο όρο αντίστοιχων ματς στην κατηγορία.\n- Racing Club (εκτός έδρας): xG για 0.92, xG κατά 1.35. Win% εκτός έδρας ~50%. Διατήρηση ισορροπημένης επιθετικής παραγωγής και αντεπίθεσης με σχετικά καλό ποσοστό νίκης όταν παίζει μακριά από το σπίτι.\n\nΑνάλυση τιμών και πιθανών εξελίξεων\n- Η Racing έχει αρκετή αξιοπιστία εκτός έδρας (50% νίκες) και προβλέπεται να αξιοποιήσει την ευάλωτη άμυνα της Gimnasia στο σπίτι. Οι αριθμοί xG δείχνουν ότι η Gimnasia δέχεται γκολ με συχνότητα που ίσως επιβεβαιώσει την προϋπόθεση για ένα αγώνα με περιορισμένες ευκαιρίες για τους γηπεδούχους.\n- Η Gimnasia έχει μικρή πιθανότητα να βασιστεί σε καθαρή κατοχή και σκοράρει συνήθως σε σχετικά χαμηλό ρυθμό, με σημαντική πιθανότητα να δεχθεί γκολ.\n- Αποδοτικά στοιχεία που αξίζει να τονιστώ: το over 1.5 βρίσκεται σε 1.55, υποδηλώνοντας ότι το ματς μπορεί να ξεπεράσει τα 2 γκολ εύκολα, αλλά το under 2.5 σε 1.40 δείχνει μια κοινή εκτίμηση για λίγο σκορ (2 γκολ ή λιγότερα). Η πραγματικότητα πιθανά ακουμπά σε ένα παιχνίδι με 2 γκολ ή λίγα περισσότερα, ανάλογα με την εξέλιξη της ανάπτυξης.\n\nΚαλύτερες στοιχηματικές προσεγγίσεις (προτάσεις)\n- Κύριο σενάριο (Περιορισμένο σκορ με νίκη της ομάδας που έχει το πλεονέκτημα εκτός έδρας): Racing Club να κερδίσει. Βάσει των δεδομένων, η νίκη της Racing σε απόδοση 2.25 φαίνεται ως λογική επιλογή για παιχνίδι με κοντινό σκορ.\n  - Προτεινόμενο σκορ-πρόβλεψη: 0-1 ή 1-2.\n  - Σκέψη: Η Gimnasia παρουσιάζει αμυντικά προβλήματα στο σπίτι, ενώ η Racing έχει αρκετές πιθανότητες να βρει το δρόμο προς το γκολ χωρίς να δεχθεί υπέρμετρο κίνδυνο.\n\n- Δεύτερη τροχιά στοιχήματος: Under 2.5 goals (1.40)\n  - Αιτιολόγηση: Παρά την πιθανότητα γκολ, οι τάσεις των ομάδων και οι μέσοι όροι xG συνηγορούν σε ένα παιχνίδι με λίγα γκολ, περίπου 2 ή λιγότερα. Αυτή η επιλογή ταιριάζει με το προφίλ των δύο ομάδων.\n\n- Διπλό (Double chance) με βάση την εικόνα: X2 (ισοπαλία ή νίκη Racing)\n  - Αιτιολόγηση: Αν και το 2.25 για νίκη Racing είναι οριακό, ο συνδυασμός με ισοπαλία καλύπτει περισσότερα σενάρια, δεδομένου ότι η Gimnasia έχει χαμηλό ποσοστό νίκης εντός έδρας και η Racing έχει καλή απόδοση εκτός έδρας.\n\nΣυμπερασματικά\n- Προβλέπω Racing Club να έχει το προβάδισμα, με πιθανό τελικό 0-1 ή 1-2, βασιζόμενος στην εκτός έδρας απόδοσή της και την αδύναμη αμυντική απόδοση της Gimnasia στο σπίτι.\n- Υπό το πρίσμα των αποδόσεων, το Under 2.5 γκολ φαίνεται αξιόλογη επιλογή, συμπληρωματικά με ένα από τα σενάρια νίκης της Racing ή το διπλό X2.\n\nΣημείωση: οι αριθμοί βασίζονται σε τα δεδομένα από τις αποδόσεις και τα στατιστικά που δίνονται για το ματς, με έμφαση σε σχέση με την απόδοση των ομάδων σε αντίστοιχους αγώνες. Τα ποσοστά αφορούν συγκεκριμένες παραμέτρους (xG, win rate κ.λπ.) και μπορεί να διαφέρουν με βάση την απόδοση την ημέρα του αγώνα.",
+      "pl": "Analiza zakładowa: Gimnasia La Plata vs Racing Club (1. kolejka, sezon 2026, Estadio Juan Carmelo Zerillo)\n\nGłówne wnioski\n- Goście w wyjazdach wypadają lepiej niż gospodarze na swoim stadionie. Racing Club ma 50% wygranych na wyjeździe (ponad średnią), podczas gdy Gimnasia La Plata w domu ma tylko 25% wygranych (duży minus w porównaniu do średniej).\n- Obrona Gimnasia w domu jest podatna: średnie xG przeciwko wynosi 1.69, co wskazuje na większe szanse na utratę bramki. Ofensywa gospodarzy w domu to 1.38 xG, co nadal jest stosunkowo skromne.\n- Szanse bramek: sumaryczne xG obu zespołów to około 2.30, co sugeruje mecz z kilkoma okazjami, ale nie koniecznie wysokim wynikiem. Pod kątem rynku, Under 2.5 goals (1.40) wydaje się bardziej prawdopodobny niż Over 2.5 (2.75), choć Over 1.5 (1.55) pozostaje realny scenariusz przy dwóch bramkach.\n\nNajważniejsze statystyki do rozważenia\n- Gimnasia La Plata (grając u siebie): 25% wygranych w domu (poniżej średniej); średnie xG przeciwko w domu 1.69; średnie xG for w domu 1.38. Ogólny obraz domowy – słabszy wynik.\n- Racing Club (grając na wyjeździe): 50% wygranych na wyjazdach (powyżej średniej); średnie xG for away 0.92; średnie xG against away 1.35. Silniejsza dyspozycja defensywna i konwersja na wyjeździe.\n- Szanse bramkowe: 2.30 oczekiwane gole łączone, co sugeruje mecz z kilkoma okazjami, ale niekoniecznie wysokim wynikiem.\n\nPrognozy i rekomendacje zakładów\n- Główne typy: Racing Club wygra (1X2) – bezpośredni faworyt wyjazdowy, szanse zależne od stylu gry obu drużyn. Propozycja: postaw na zwycięstwo Racing Club.\n- Alternatywa bez ryzyka: X2 (remis lub zwycięstwo gości) – jeśli chcesz zabezpieczyć, biorąc pod uwagę wyjazdową skuteczność gości.\n- Linia bramek: Under 2.5 goals (1.40) to bezpieczny wybór, bazując na sumie xG ok. 2.30 i defensywnej naturze obu stron; Over 1.5 goals (1.55) również sensowny, jeśli spodziewasz się przynajmniej dwóch trafień.\n- Potencjałowy wariant niżej ryzyka: Over 1.5 goals – prawdopodobnie minimalnie trafny, ze względu na obecność obu stron z możliwościami strzelenia.\n\nPodsumowanie\n- Najbardziej prawdopodobny scenariusz: Racing Club wyjazdowy, wynik w granicach 0-1 lub 1-2. Mecz z kilkoma okazjami po obu stronach, ale bez przesadnie otwartego stylu.\n- Zalecane zakłady: Racing Club wygra; Under 2.5 goals jako główny safety; Over 1.5 goals jako dodatkowa opcja dla kompensacji ryzyka.",
+      "ro": "Analiză pariere: Gimnasia La Plata vs Racing Club (Sezon 2026, Runda 1)\n\nDatele esențiale:\n- Stadion: Estadio Juan Carmelo Zerillo\n- Data kick-off: 25 ianuarie\n- Cote 1X2: Gimnasia La Plata 3.55 | Remiză 2.90 | Racing Club 2.25\n- Over/Under: Over 1.5 goluri 1.55 | Over 2.5 goluri 2.75 | Under 2.5 goluri 1.40\n- Tendințe home/away:\n  - Gimnasia La Plata (acasă): șanse de victorie 25% (foarte scăzute acasă), rată de înfrângere 75%. Atacă cu un impact modest acasă (-38 la atac), defensiva are un regres clar (-67 la defendere). xG-ul la nivel de echipă pe teren propriu: 1.38 for / 1.69 against.\n  - Racing Club (deplasare): șanse de victorie 50% în deplasare (procentă bună), rată de înfrângere 25%. xG în deplasare: 0.92 for / 1.35 against.\n\nAnaliză a datelorXG și implicații pentru meci:\n- Distribuția așteptată a golurilor: Gimnasia acasă generează în medie 1.38 xG, în timp ce Racing în deplasare produce 0.92 xG. Combinat, așteptarea pentru acest meci este în jur de ~2.3 goluri, ceea ce sugerează un meci cu două goluri sau puțin peste.\n- Defensivă vs ofensivă: Gimnasia are dificultăți în apărare pe propriul teren, în timp ce Racing are o defensivă relativ stabilă în deplasare. Acest tipar sugerează că Racing poate gestiona momentele dificile și poate construi în atac.\n\nPredicții de top și concluzii pentru pariuri:\n- Primul pariu-cheie: Racing Club să câștige (cotă 2.25). Aceasta reflectă situația în care Racing are avantaj în deplasare și o probabilitate mai mare de victorie, raportată la forma și xG-urile implicate.\n- Suplimentar: Peste 1.5 goluri (cotă 1.55). Cu o așteptare totală de aproximativ 2.3 goluri, această opțiune pare mingea în poartă destul de des.\n- Opțiune defensivă (valoare mai scăzută): Under 2.5 goluri (cotă 1.40). Dacă pariezi pe această variantă, este bazată pe ideea unei distanțe apropiate între echipe, cu un total de goluri în jur de 2.\n- Scenariu posibil: 0-1 sau 1-2 pentru Racing Club, dar Gimnasia poate să complice jocul prin reperele lor de la începutul sezonului. Așadar, o victorie a oaspeților cu un deficit mic este scenariul cel mai probabi.\n- Recomandare de filtrare a riscului: dacă vrei un pariu mai sigur, mergi pe Racing Club câștigă + peste 1.5 goluri în meci (pariu combinat cu o single bet logică). Pentru un pariu de valoare moderat, Over 1.5 goluri este o alegere solidă.\n\nRezumat:\n- Scenariu așteptat: meci strâns, cu Racing Club având o probabilitate mai mare să închidă în favoarea lor.\n- Recomandări rapide: Racing Club câștigă (principal); Over 1.5 goluri ca secundar; Under 2.5 goluri ca opțiune safety dacă vrei o miză mai defensivă.",
+      "id": "Analisis taruhan singkat: Gimnasia La Plata vs Racing Club (2026, Pekan 1), Estadio Juan Carmelo Zerillo.\n\nGaris besar situasi tim\n- Gimnasia La Plata (tujuan kandang): catatan kandang tidak terlalu bagus (menang 25%, kalah 75%). xG mereka di kandang: ofensif sekitar 1.38, tetapi xG lawan di kandang sekitar 1.69—artinya pertahanan sering kebobolan lebih berbahaya dibanding pola serang mereka. Secara keseluruhan, tekanan menyerang di kandang cenderung melemah, dan ada indikasi risiko kebobolan tinggi.\n- Racing Club (tandang): win rate tandang 50%, cukup solid. xG mereka saat bermain away sekitar 0.92 (serangan relatif rendah), namun kemampuan bertahan mereka di luar kandang juga perlu diperhitungkan dengan xG lawan sekitar 1.35. Secara umum, mereka punya peluang menang meski bukan tim dengan persentase kemenangan tandang yang dominan.\n\nPeluang dan tren penting\n- Peluang menang: Racing Club 2.25 vs Gimnasia 3.55 (seri 2.90). Secara relatif, Racing lebih “bernapas” untuk menang di luar kandang ini.\n- Over/Under yang relevan:\n  - Over 1.5 Goals 1.55 -> peluang gol gabungan cukup tinggi.\n  - Under 2.5 Goals 1.40 -> cenderung kuat; skor rendah lebih mungkin.\n  - Over 2.5 Goals 2.75 -> opsi risiko sedang, tetapi lebih rendah peluang dibandingkan Over 1.5.\n  - Under 1.5 Goals 2.30 -> opsi risiko tinggi jika Anda memprediksi permainan sangat ketat di lini belakang.\n\nPrediksi hasil (kemungkinan besar)\n- Skor utama yang paling masuk akal: Racing Club menang dengan margin tipis, misalnya 0-1 atau 1-2.\n- Kemungkinan skor lain yang layak dipertimbangkan: 1-1 bisa terjadi jika Gimnasia mampu bertahan ketat, tetapi secara tren umum keduanya cenderung memberi ruang di kandang Gimnasia.\n\nSaran taruhan yang disarankan\n- Core bet: Racing Club menang (peluang 2.25).\n- Peluang pendukung yang aman: Under 2.5 goals (1.40). Kombinasi ini sesuai dengan tren serangan rendah di luar kandang dan potensi pertahanan yang cukup solid.\n- Opsi risiko lebih tinggi: Over 1.5 Goals (1.55) atau skor tepat 0-1/1-2 untuk Racing.\n\nIntuisi singkat untuk bettor 25+ tahun\n- Fokus pada dinamika kandang: Gimnasia lemah di kandang, Racing punya peluang untuk memanfaatkan tekanan defensif Gimnasia.\n- Gunakan kombinasi Racing win + Under 2.5 untuk opsi “safe-ish” yang sejalan dengan data xG dan tren gol di kedua tim.\n- Hindari taruhan berisiko tinggi pada kemenangan Gimnasia kecuali ada perubahan form drastis menjelang pertandingan.",
+      "hr": "Predmet: Gimnasia La Plata vs Racing Club – 1. kolo sezone 2026, Estadio Juan Carmelo Zerillo\n\nKratki sažetak\n- Gosti su favoriti prema okladama (Racing 2.25), dok je domaćinu 3.55. Vjerojatnost pobjede gostiju uvelike se temelji na solidnoj gostujućoj statistici, dok Gimnasia u domaćim utakmicama ima loš zapis (25% pobjeda).\n- Očekivani broj golova na temelju xG podataka: Gimnasia domaći xG for 1.38, protiv 1.69; Racing away xG for 0.92, protiv 1.35. Zbroj xG približno 2.30, što bi sugeriralo da se očekuje 2 pogotka po utakmici, ali s izraženom razlikom u kontrolu igre.\n\nKljučne statistike (važnije za oklade)\n- Gimnasia La Plata (domaćin):\n  - Win% doma: 25% (slab rezultat na domaćem terenu)\n  - xG for (domać): 1.38; xG against (domać): 1.69\n  - Napad/nod (domać): -38; obrana: -67; ukupno stanje: -53\n- Racing Club (gosti):\n  - Win% away: 50% (dobar rezultat kada gostuju)\n  - xG for (away): 0.92; xG against (away): 1.35\n- Oklade:\n  - Gimnasia win: 3.55\n  - Draw: 2.90\n  - Racing win: 2.25\n  - Over 1.5: 1.55; Over 2.5: 2.75\n  - Under 1.5: 2.30; Under 2.5: 1.40\n\nAnalitički uvidi\n- Domaća forma Gimnasije nije pokazatelj za pobjedu. Konkretno, njihove brojke govore o slabom domaćem učinku u napadu i obrani, što naglašava prednost gostiju.\n- Racing Club na gostovanjima nije bez izgleda; 50% pobjeda kao gost daje im realnu šansu za pozitivan rezultat u ovom susretu.\n- Očekivani ukupni broj golova blizu 2.3 sugerira da su oba tima sposobna doprinijeti golovima, ali je vjerojatnost za 2 ili više golova realnija nego za čistu nulu.\n\nNajvjerojatniji scenarij i preporučene oklade\n- Najvjerojatniji ishod: Racing Club pobjeda (gostima) uz moguć prijelom od 0-2 ili 1-2. Domaća Gimnasia ima poteškoće protiv gostiju koji imaju solidnu šansu da uzmu tri boda.\n- Opcionalne oklade (za manje rizika):\n  - Primarni fokus: Racing Club pobjeda po kvoti 2.25.\n  - Singl/hedge prilika: Over 1.5 golova po kvoti 1.55 – očekuje se barem dva pogotka ukupno.\n  - Alternativa za hedge: Under 2.5 golova po kvoti 1.40 – moguć scenarij s dva gola ili manje, što je djelomično u skladu s statistikom xG (oko 2.3).\n\nKratka napomena za tipove\n- Ako tražite snažan dogovor uz rizik, kombinacija Racing pobjeda + Under 2.5 golova mogla bi biti logičan izbor ako očekujete čvrstu obranu s manje kompromisa u završnicama.\n- Za manje rizika, fokusirajte se na Racing Club pobjedu kao glavni bet i pokušajte dodati Over 1.5 golova ako želite dodatnu pokrivenost s nižim rizikom.\n\nNapomena\n- Podaci se temelje na dostupnim statistikama: Gimnasia loša domaća forma i velika ovisnost o protivničkim pogocima; Racing solidan nastup u gostima. Time se iznosi obrazac koji podržava vjerodostojnost gostujuće pobjede i očekivani viši prosječni broj golova u ovoj utakmici.",
+      "th": "วิเคราะห์แมตช์: Gimnasia La Plata vs Racing Club\nรายการ: ฤดูกาล 2026, สัปดาห์ที่ 1\nสนาม: Estadio Juan Carmelo Zerillo (เจ้าบ้าน Gimnasia)\nวันแข่ง: 25 มกราคม\n\nราคาต่อรองสำคัญ\n- Gimnasia La Plata ชนะ 3.55\n- เสมอ 2.90\n- Racing Club ชนะ 2.25\n- สูง/ต่ำ: Over 1.5 ประตู 1.55, Over 2.5 ประตู 2.75, Under 2.5 ประตู 1.40\n\nสถิติสำคัญที่ควรดู\n- Gimnasia เล่นในบ้าน: โอกาสชนะในบ้าน 25% ค่อนข้างต่ำ เมื่อเทียบกับช่วงที่ผ่านมาของสโมสร\n- Racing Club เล่นนอกรัง: โอกาสชนะนอกรัง 50% ถือว่าอยู่ในระดับดีสำหรับทีมที่ออกไปเยือน\n- xG ที่เกี่ยวข้อง (ข้อมูล FootyStats)\n  - Gimnasia เล่นในบ้าน: xG ที่ถูกสกัด (เสียประตู) 1.69 ต่อเกม; xG สร้างได้ 1.38 ต่อเกม\n  - Racing Club เล่นนอกรัง: xG ปฏิบัติการรับ (เสียให้คู่แข่ง) 1.35 ต่อเกม; xG ที่ทีมทำได้เมื่อออกไปเยือน 0.92 ต่อเกม\n- แนวรับ/แนวรุกโดยรวม: Gimnasia มีแนวรับที่ถูกกดดันสูงเมื่อเล่นในบ้าน (ค่า xG เสียประตูสูง) ขณะที่ Racing มีศักยภาพในการเล่นนอกรังที่พอไปวัดไปวาได้ แม้จะไม่ใช่ทีมบุกแนวสูงมากก็ตาม\n\nอะไรที่น่าพิจารณาในการเลือกเดิมพัน\n- ความน่าจะเป็นผลชนะ: Racing Club ที่เล่นนอกรังมีสถิติชนะสูงกว่า Gimnasia ในบ้านอย่างชัดเจน (50% vs 25%) ทำให้การเดิมพันชนะของ Racing มีน้ำหนักพอควร\n- แนวโน้มการทำประตู: ค่า Over/Under แสดงว่า Under 2.5 ประตูเป็นตัวเลือกที่ราคาถูกกว่า (1.40) แปลว่าคาดว่าคู่แข่งจะทำประตูรวมกันไม่เกิน 2-3 ประตูค่อนข้างชัดเจน หากมองย้อน xG ที่ทั้งสองทีมสร้างได้น้อยกว่าสถานการณ์การยิงสูง อาจมีเกมที่ไม่บานปลายมาก\n- ถ้าคุณมองหาความเสี่ยงค่อนข้างต่ำ: Under 2.5 ประตู เป็นแนวทางที่เหมาะสม เพราะมีโอกาสเกิดประตูรวมที่ต่ำกว่านี้มากกว่าการเล่นสูง\n\nข้อเสนอเดิมพันที่แนะนำ\n- เดิมพันหลัก: Racing Club ชนะ (2.25) เหมาะกับสถานการณ์ที่ Racing ทำได้ดีในการออกไปเยือน และ Gimnasia มีสถิติเก็บแต้มในบ้านที่ไม่โดดเด่น\n- รองลงมา (hedge): เสมอ (2.90) ถ้าคุณอยากป้องกันความเสี่ยงจากความไม่แน่นอนของเกมเปิดฤดูกาล\n- แนวคิดรอง: Under 2.5 ประตู (1.40) เป็นทางเลือกที่ให้ความเสี่ยงต่ำ เน้นเกมที่แนวรับมีบทบาทมากกว่าแนวรุก\n\nสรุปเชิงยุทธวิธี\n- Racing Club มีทรงเกมนอกรังที่น่ากลัวกว่า Gimnasia ในบ้าน ทั้งในแง่สถิติชนะและแนวรุก/รับ โดยรวมโอกาสชนะของ Racing ดูมีน้ำหนักมากกว่า\n- เกมน่าจะเน้นความระวังด้านแนวรับของ Gimnasia ที่เสียประตูได้ง่ายกว่าปกติเมื่อเล่นในบ้าน ขณะที่ Racing ไม่ใช่ทีมบุกมากมาย แต่มีประสิทธิภาพพอที่จะทำประตูได้\n- เลือก Betting: Racing Club ชนะ หรืออย่างน้อยเสมอหากต้องการ hedge และพิจารณา Under 2.5 ประตูเป็นตัวเลือกความเสี่ยงต่ำประกอบด้วย\n\nข้อมูลสำคัญเพิ่มเติม\n- Kick-off วันที่ 25 มกราคม ที่ Estadio Juan Carmelo Zerillo\n- ข้อมูลประตูจริงยังไม่มีรายละเอียดเวลาทำประตูในสถิติของเกมนี้ (มีการบันทึกบางส่วน แต่เวลาไม่ได้ระบุ)\n\nสรุปสั้นๆ สำหรับนักแทง 25+ ปี: Racing Club มีแนวโน้มทำให้ผลนอกบ้านมีโอกาสชนะสูงกว่า Gimnasia ที่บ้าน ส่วนสกอร์มักไม่สูงมาก ดังนั้นเดิมพัน Racing ชนะ และ/หรือ Under 2.5 ประตู เป็นทางเลือกที่มีความสมเหตุสมผลจากสถิติที่มีอยู่ในตอนนี้",
+      "vi": "Dự đoán phân tích trận đấu: Gimnasia La Plata vs Racing Club (Mùa 2026, Vòng 1)\n\nThông tin nhanh\n- Sân: Estadio Juan Carmelo Zerillo\n- Tỷ lệ cược (điểm mạnh): Racing Club thắng 2.25; Hòa 2.90; Gimnasia La Plata thắng 3.55\n- Over/Under: Over 1.5 goals 1.55; Over 2.5 goals 2.75; Under 2.5 goals 1.40\n- Kick-off: ngày 25 tháng 1\n\nPhân tích và bối cảnh\n- Gimnasia La Plata ở sân nhà: xG đối thủ khi họ chơi tại sân nhà là 1.69, xG của họ sendiri tại nhà là 1.38. Tỷ lệ thắng tại sân nhà chỉ 25%, thua tới 75%. Nhìn vào các số này cho thấy hàng thủ của Gimnasia dễ bị khai thác và khả năng ghi bàn của họ tại sân nhà khá hạn chế.\n- Racing Club khi đá xa nhà (away): xG đối với khi thi đấu xa nhà là 1.35, xG cho ghi bàn là 0.92. Tỷ lệ thắng sân khách khoảng 50%, thua 25%. Điều này cho thấy Racing có khả năng kiểm soát trận đấu tốt hơn khi rời sân nhà và có hiệu quả tấn công ở mức vừa phải, đồng thời phòng ngự đủ chắc chắn.\n- So sánh ngắn gọn: Racing có lợi thế về thể hiện khi chơi trên sân đối thủ và đang hướng tới một trận đấu kiểm soát, trong khi Gimnasia sẽ phải đối mặt áp lực và thiếu hiệu quả trong phản công.\n\nDự đoán kết quả và ý **kiến cược**\n- Dự đoán kết quả: Racing Club thắng với kết quả 1-0 hoặc 2-0. Trận đấu nhiều khả năng ở mức vừa phải về tổng bàn thắng, với khoảng 2 bàn hoặc ít hơn.\n- Phân tích kèo bàn thắng: Với các số liệu hiện tại, Under 2.5 bàn (1.40) có vẻ là lựa chọn an toàn hơn cho nhịp độ trận đấu và sự chắc chắn của hai đội. Nếu bạn tin vào khả năng Racing có bàn sớm và giữ sạch lưới, Racing thắng kèm Under 2.5 có thể là một cặp cược hợp lý.\n- Lựa chọn giá trị khác: Over 1.5 goals (1.55) sẽ phù hợp nếu bạn tin hai đội sẽ ghi được ít nhất 2 bàn; nhưng Under 2.5 vẫn là lựa chọn an toàn hơn dựa trên xG và phong độ hiện có.\n\nGhi chú nhanh cho người chơi\n- Mở màn mùa giải thường mang yếu tố bất ngờ; đây là trận đấu có sự chênh lệch nhỏ về đẳng cấp và đang hướng tới kết quả kiểm soát từ Racing Club.\n- Đặc biệt chú ý cách Gimnasia đối phó với áp lực từ Racing, nếu hàng thủ Gimnasia bị khai thác dễ dẫn đến trận thua có bàn thắng.\n\nTóm lại: Nên nghiêng về một chiến thắng tối thiểu cho Racing Club và khả năng thấp của nhiều bàn thắng. Cược ưu tiên: Racing Club thắng + Under 2.5 bàn.",
+      "zht": "以下為 Gimnasia La Plata vs Racing Club，2026 賽季第一輪的下注分析，適合偏好中長線數據解讀的25+歲男性下注者。\n\n賽事基本重點\n- 比賽：Gimnasia La Plata vs Racing Club\n- 舉辦地：Estadio Juan Carmelo Zerillo\n- 賠率重點（全場勝負與大小球）：Gimnasia 3.55；和局 2.90；Racing Club 2.25\n- 大小球市場：Over 1.5 1.55；Over 2.5 2.75；Under 2.5 1.40\n- 兩隊近期格局傾向：Racing Club 客場勝率 50%，Gimnasia 主場勝率 25%\n\n數據洞察要點\n- Gimnasia 主場攻防表現：主場 xG 進攻約1.38；主場 xG 失球約1.69。結構顯示主場可能面臨對手射門壓力，且防守壓力相對較高。\n- Racing Club 客場表現：客場 xG 進攻約0.92；客場 xG 失球約1.35。進攻相對克制，防守穩健，且客場有一定勝利比重（50%）。\n- 市場趨勢與風險提示：\n  - 勝負潛力：RC 取勝機率較高，賠率約2.25 顯示市場對其勝利偏樂觀；Gimnasia 主場優勢有限，勝率低於 RC。\n  - 進球預期：市場普遍預期本場為小到中等比分，Over 1.5 的賠率顯示至少兩球的概率較高；但 Under 2.5 的 1.40 反映多數投注者預期總進球數在2球以內，總體偏向低比分。\n\n可能比分與投注建議\n- 首要預測方向：Racing Club 小勝或逼平。考慮到客場表現及整體賠率，RC 胜是較合理的主選。\n- 組合投注建議：\n  - 主選：Racing Club 胜（2.25）\n  - 次要選項：雙方皆有得分（BTTS）或 Under 2.5（1.40）作為低風險搭配，若偏好更保守可考慮 Under 2.5 直接。\n- 潛在比分範圍：0-1、0-2、1-2 的出現機會較高，與 RC 的客場勝率與 Gimnasia 的主場防守壓力相符。\n\n結論\n- 此戰偏向客隊取勝，且走向較可能為低至中等得分的局面。若以性價比與風險控制著眼，Racing Club 胜搭配 Under 2.5 的組合相對合理；若看好雙方都能得分，BTTS 也是值得考量的次要選擇。",
+      "cn": "比赛分析：Gimnasia La Plata vs Racing Club（2026 第一轮，Estadio Juan Carmelo Zerillo）\n\n关键数据要点\n- 主队（Gimnasia La Plata）在主场的历史数据较为不利：主场胜率约25%，主场整体优势为负，防守端压力较大，进攻端相对乏力。具体来看，主场 xG 对比为 1.38，对手 xG 1.69，显示防守压力较大且进攻效率不高。\n- 客队（Racing Club）在客场表现相对稳健：客场胜率约 50%，但客场仍有一定被对手制造机会的风险（xG 失守方面，1.35 对比自家进攻 0.92）。\n- 赔率暗示：客胜 2.25，平局 2.90，主胜 3.55。综合看，客队在本场被看作更有把握的一方，但并非高赔率的强势博弈。\n- 进球趋势：全场总进球分布偏向“有两球及以下”的区间（Over 1.5 1.55，Under 2.5 1.40，Over 2.5 2.75，Under 1.5 2.30）。这与两队的历史攻击力与防守压力相呼应，预计全场可能出现1–2球。\n\n战术与对阵解读\n- 主队在自家球场面临的最大挑战是防守端的高压与对手的快速反击威胁，攻防转换速度需要提升。\n- 客队则倾向于把控局面，利用中场 outlet 组织反击，若对手防线稍有松动，具备把握机会打破僵局的能力。\n- 综合看法：客队在本场更有胜算，但主队若在前场保持积极压迫并抓住反击空档，仍有制造威胁的机会。\n\n投注要点与预测\n- 首选推介：Racing Club 客胜，赔率约2.25。基于客队在客场的相对稳定性和主队的防守压力，这个方向具备合理的胜率支撑。\n- 次选关注：总进球数 Under 2.5，赔率约1.40。考虑到两队的进攻效率并不突出，打出两球以下的概率较高。\n- 风险组合（可选）：Racing Club 胜 + Under 2.5（实现双向覆盖，提升稳健性）。\n- 备选观察点：若你偏好追求平局，可以关注平局赔率2.90，但综合对阵趋势，客胜更具说服力。\n\n简要总结\n- 本场更看好客队在客场继续展现相对稳健的表现并带走三分；主队需要在防守端做出明显提升并利用对手可能的防守漏洞制造机会。\n- 进球数倾向偏低，1–2球的结果区间概率较大，结合赔率，Racing Club 胜+Under 2.5是较为务实的组合。",
+      "bg": "Кратък betting анализ за мача: Gimnasia La Plata vs Racing Club\nСезон: 2026 | Кръг: 1 | Стадион: Estadio Juan Carmelo Zerillo | Дата на удар: 25 януари\n\nКлючови факти\n- Смятан фаворит за победа: Racing Club (оферти за победа 2.25) срещу Gimnasia La Plata (3.55). Равенството е 2.90.\n- Над/Под голове: Over 1.5 гола е 1.55, Under 2.5 гола е 1.40, което сочи очакване за по-скоро ниско реализиране (до 2 гола общо).\n- Форма на домакинството: Gimnasia La Plata на дома не е добра тенденцията през тази стойност – 25% победи, 75% загуби. Това подсказва силна уязвимост на домакините.\n- Диверсификация в гостуванията: Racing Club като гост има около 50% печалби и 25% загуби. Това свидетелства за стабилност на отбора в чужбина.\n- xG показатели:\n  - Gimnasia (домакин): средно за отбора при дома 1.38 за, 1.69 против. Това означава, че в повечето случаи срещат повече опасности в защита, отколкото успяват да реализират.\n  - Racing Club (гост): средно за отбора далеч 0.92 за, 1.35 против. Това дава представа за по-сдържен offense, но и солидна защита в чужбина.\n- Тактически контекст: Очаква се Racing Club да доминира в средата и да търси инициатива през първата половина, докато Gimnasia се опитва да затрудни съперника с дефанзивен подход. Възможна е компактна битка с ограничени възможности за голове.\n\nПрогнози и инсайти\n- Най-вероятен сценарий: ниско резултатен двубой, с около 2 гола или по-малко общо. Това подкрепя залог Under 2.5 гола.\n- Вероятен изход: Racing Club да спечели гостейкия мач, базирано на по-добри гостувания и по-устойчиви показатели в чужбина.\n- Възможно залагане с по-дългосрочна стойност: комбиниран залог Racing Club победа с Under 2.5 гола, ако се предлага на специфични пазари.\n\nПрепоръчителни залози (на база наличните коефициенти)\n- Основен залог: Racing Club да спечели мача (около 2.25).\n- Вторичен залог: Under 2.5 гола (около 1.40) – консервативна опция за безопасен двубой с по-малка вероятност за 3+ гола.\n- Възможен вариант за рискови купони: Racing Club победа + Under 2.5 гола (ако се предлага като combo bet).\n\nСтратегия за залагане\n- Фокусирайте се върху Racing Club като фаворит за победа, но потвърдете опцията Under 2.5 гола за по-ниска ставка.\n- Ако търсите стойност, сравнете odds за равенство/победа на Gimnasia при евентуален ранно-голям оборот в началото на мача, но основният риск остава висок за Gimnasia у дома.\n- Следете за live как играят двете страни през първия половин час: ако Racing Club дава характерен натиск, залог за победа може да се затвърди, иначе може да се коригира към по-сигурен Under 2.5 гола.\n\nБележка\n- Данните сочат ясна тенденция към по-ниско количество голове и по-силен гостуващ вектор за Racing Club, което прави Racing Club победата и Under 2.5 гола най-подходящи опции за този мач.",
+      "hu": "Gimnasia La Plata – Racing Club, Estadio Juan Carmelo Zerillo, 2026 szezon, 1. forduló\n\nKulcsfontosságú statisztikák (szem előtt a tippelőknek)\n- Minta alapján Racing idegenben versenyképes: away win% 50%, away xG for 0.92, away xG against 1.35. Ezek a számok arra utalnak, hogy a vendégek képesek gólt szerezni, miközben ellenfelük keveset kap a mezőny harcában.\n- Gimnasia hazai formája gyenge: home win% 25%, hazai xG for 1.38, hazai xG against 1.69. A hazai teljesítmény nem kiemelkedő, és a védekezésben is megfigyelhető a nyitottság.\n- Gólszámítási jelzők: Over 1.5 Goals 1.55, Under 2.5 Goals 1.40, Over 2.5 Goals 2.75. A piac inkább a kisebb gólú játék felé hajlik, de a mérkőzés kezdeti állása alapján mindkét oldal képes lehet szerezni.\n\nPiaci háttér és valószínű forgatókönyvek\n- A hazai esélyek alapján Gimnasia ellenfele lehetőséget kap a gyors kontrákra, de a hazai védekezés átlagos gyengesége miatt könnyen nyílhatnak a helyzetek.\n- Racing idegenben gyakran megbízhatóan játszik, és a győzelemre van esélye, különösen akkor, ha sikerül tartani az egyensúlyt és lelassítani a hazai támadásokat.\n- A piaci vonalak szerint a legvalószínűbb forgatókönyv egy mérsékelt gólú meccs, ahol a 2 gól környéke valószínűbb, és a mérkőzés döntetlen vagy egy szoros Racing-győzelem felé tendál.\n\nJavasolt tipped és esélyek\n- Fő tipp (kiemelten ajánlott): Racing Club győzelem. Odds: 2.25. Erőteljesen alátámasztja a Racing idegenbeli, mérkőzésenkénti 50%-os győzelmi aránya és az ellenfél gyenge hazai védelme miatt lehetősége.\n- Másodlagos tipp: Under 2.5 goals. Odds: 1.40. A statisztikák alapján mindkét oldalnál reális a gólok száma 2 alatt maradjon, különösen ha a Racing a védekezést is megpróbálja kontrollálni.\n- Ha szeretnél extra kockázatmentes opciót, a döntetlen lehetőségének (Draw 2.90) figyelembe vétele is érdekesség, de a jelenlegi adatok alapján a Racing győzelme tűnik a mérkőzés legvalószínűbb kimenetelének.\n\nKiemelt elemzés röviden\n- A hazai oldal gyenge hazai forma és átlagos–magas xG ellenfél ellen nem ad magabiztos védelmet, miközben a vendégek idegenben stabilabbnak tűnnek és gólt is képesek szerezni.\n- A gólok száma vélhetően 2 körül mozoghat; a piac ezt tükrözi az Under 2.5 körüli oddsokkal, miközben a győzelemre irányuló oddsok is beleszólnak a mérkőzés kimenetelébe.\n\nÖsszefoglaló tipp\n- Primary: Racing Club győzelem\n- Secondary: Under 2.5 goals\n- Lehetőség szerint érdemes figyelni a szelvényeknél a kombinációkat (pl. Racing győzelem és Under 2.5), hogy a kockázatot csökkentsd és a likviditást növeld.\n\nMegjegyzés\n- A megadott statisztikák alapján a szezonnyitó mérkőzésen a Racing valószínűbb, hogy sikereket ér el, miközben a gólok száma mérsékelten alakulhat. Nem szerepelnek nevek, és csak a megadott adatokra támaszkodva adtam meg a következtetéseket.",
+      "rs": "Analiza utakmice: Gimnasia La Plata vs Racing Club\nSezona: 2026, 1. kolo, Estadio Juan Carmelo Zerillo, 25. januar\n\nKljučne činjenice\n- Klađenje na pobedu: Racing Club 2.25, Gimnasia La Plata 3.55, nerešeno 2.90. Gostujući favorit podleže manjim šansama, ali nije velika razlika.\n- Broj golova: Over 1.5 1.55, Under 2.5 1.40. Očekivanja su da bude srednje dinamike sa mogućim 2 gola ukupno; volan gleda na solidnu defensivu, ali i na prilike kroz 90 minuta.\n- Forma domaćina: Gimnasia La Plata ima veoma nizak istorijski win% na domaćem terenu (25%), dok su protivnici često uspevali da iskoriste domaći teren.\n- Forma gostiju (u gostima): Racing Club ima 50% pobeda na putu, što ukazuje na aktivnu i agresivnu gostujuću igru, uz relativno sigurnu kontru.\n- Napad i odbrana:\n  - Gimnasia doma: xG za 1.38, xG protiv 1.69 (slabija odbrana, očekivani protivnički golovi su prisutni na domaćem terenu).\n  - Racing gostuje: xG za 0.92, xG protiv 1.35 (manje uspešan u napadu na gostovanju, ali defanzivno solidniji nego kod protivnika u ovoj utakmici).\n- Vertikalna slika iz FootyStats podataka:\n  - Domaći Gimnasia ima značajne defanzivne izazove (prosječan protivnički xG 1.69 kod kuće) uz relativno srednji domaći napad (1.38 xG).\n  - Racing na strani ima stabilniji rezultat u pobedničkim nosama, ali generiše manje xG u napadu nego što prima (0.92 vs 1.35), što ukazuje na šansu za čvrstu utakmicu uz konkurentnu odbranu.\n\nPredviđanja i opklade (insaight za bet-fanove starije od 25)\n- Verovatniji ishod: Racing Club pobeda (2.25). Uzimajući u obzir bolj rezultat na putu i domaću slabiju formu Gimnasje, gostima se pruža prilika da uzmu tri boda.\n- Mogući rezultati: 1-2 ili 1-1 su realne varijante. Ako Gimnasia želi iznenaditi, mora da deaktivira protivnički napad i iskoristi kontranapade; sa druge strane, Racing može da iskoristi prilike iz sredine terena i polugolova odluke.\n- Broj golova: Očekivani spektar 2 gola u meču (s obzirom na Under 2.5 1.40), što podržava predlog da utakmica neće biti eksplozivno otvorena, ali i da ne bi trebalo da prođu svi golovi.\n- Opcije za rizik: Ako volite manji rizik, opcija Under 2.5 zajedno sa pobjedom gostiju nudi sigurniju kombinaciju. Ako tražite srednju dozu rizika, 1-1 ili 1-2 su dobra opcija za kombinovane uplate (mlinovska dinamika meča).\n\nNapomena za klađenje\n- Status utakmice je inicijalno označen kao incompletan; pratite službene izvore pre konačnog klađenja za eventualne promene u sastavima ili terminu.\n\nSažetak\n- Prednost za goste (Racing Club) na osnovu istorijske gostujuće forme i slabog domaćeg trenda Gimnasje.\n- Očekivana niska srednja dinamika golova, sa mogućim dvama golovima ukupno.\n- Opcije: Racing pobeda (2.25), Under 2.5 (1.40), moguća kombinacija 1-1 ili 1-2 kao realne varijante.",
+      "ara": "تحليل مباراة: Gimnasia La Plata vs Racing Club\nالموسم: 2026 | الجولة: 1 | الملعب: Estadio Juan Carmelo Zerillo\n\nالمرتكزات الرئيسية\n- Racing Club خارج الأرض يظهر معدل فوز أقوى (50% فوز خارج الأرض) مقارنة بملعب Gimnasia La Plata الداخلي (فوز 25% فقط). هذا الفرق يشير إلى ميزة نسبية لصالح الفريق الضيف في هذا اللقاء.\n- Gimnasia La Plata يعاني في الدفاع عندما يلعب على أرضه مع أرقام سلبية واضحـة في الدفاع والهجوم معاً، ما يجعل الاستقبال أمراً صعباً أمام خصم منفتح نسبياً خارج أرضه.\n- خطوط الأهداف والاحتمالات: Over 1.5 goals عند 1.55 يشير إلى احتمال تسجيل هدفين على الأقل مُرجّح. Over 2.5 goals عند 2.75 خيار قوي لمن يبحث عن مباراة ذات تسجيل أكثر من هدفين. Under 2.5 goals عند 1.40 خيار أكثر أماناً إذا توقعت لعبة مضبوطة دفاعياً.\n\nإحصاءات مفيدة من البيانات المتاحة\n- Gimnasia La Plata (البيت): معدل الفوز 25%، معدل الخسارة 75% عند اللعب في البيت. هذا يعكس صعوبة الأداء المحلي وتحمّلهم ضغوط الملعب.\n- Racing Club (خارج الأرض): معدل الفوز 50%، معدل الخسارة 25% عندما يلعب خارج ملعبه. این مؤشر قوي لدعم توقع فوز محتمل للضيف.\n- Gimnasia La Plata (البيت) xG: له هجوم بمعدل تقريبي 1.38 في المباراة، وتعارض دفاعي بمعدل تقريبي 1.69 في استقباله للأهداف.\n- Racing Club (خارج الأرض) xG: له هجوم تقريبي 0.92، وهدف ضد تقريبي 1.35. يعني وجود قدرة هجوميه محدودة خارج الأرض، مقابل دفاع ليس ضعيفاً بشكل مفرط.\n\nالتوقعات والسيناريوهات\n- الاحتمال الأقوى من حيث الأرقام: فوز Racing Club. الفرضية مبنية على تفوق الأداء خارج الأرض ووجود فراغ دفاعي محتمل لـ Gimnasia La Plata في ملعبه.\n- توقع عدد الأهداف: المباراة قد تكون ذات معدل متوسط إلى مرتفع من حيث التسجيل. خيار Over 1.5 goals مُناسب كقيمة شراء، بينما Over 2.5 goals يبقى خياراً أعلى مخاطرة لكنه معقول إذا أشارت الأحداث إلى زخـم هجومي من الفريقين.\n- احتمال النسبة على النتيجة الأقرب: فوز Racing Club 1-2 أو 0-2 يعتبران سيناريوهين منطقيين اعتماداً على أرقام xG والدور الدفاعي لكلا الطرفين.\n\nاقتراحات رهان موجزة\n- خيار رئيسي: Racing Club للفوز (2.25).\n- خيار ثانوي متوسط المخاطر: Over 2.5 أهداف (2.75).\n- خيار آمن إضافي: Over 1.5 أهداف (1.55)، خاصة إذا كان لديك ميل لزاوية توقع مباراة مفتوحة من البداية.\n- خيار تعادل محتمل: Draw (2.90) لا يزال قائماً كخيار وسط بين الفريقين.\n\nملاحظات سريعة\n- وجود فارق الأداء الواضح لصالح Racing Club خارج الأرض يجعل خطوة الرهان على الفوز خياراً معقولاً، خصوصاً مع سعر احتمالي مناسب نسبياً.\n- حافظ على القاعدة: إذا كنت تفضّل أماناً إضافياً، يمكن الاكتفاء بخيار Over 1.5 مع مراعاة أن احتمالية تسجيل أكثر من هدفين موجودة لكنها ليست مؤكدة كما هي نقطة Over 2.5.\n\nمعلومة سريعة لتذكير bettors: البيانات المتوفرة تعتمد على أرقام xG وتقييمات الفوز/الخسارة في مساحات اللعب المختلفة، لذا ضعها في الاعتبار ضمن استراتيجيتك العامة للرهان."
+    },
+    "odds_comparison": {
+      "FT Result": {
+        "Draw": {
+          "bwin": "2.90",
+          "Sbo": "2.76",
+          "bet365": "3.00",
+          "1xbet": "2.86",
+          "10Bet": "2.86",
+          "WilliamHill": "2.80",
+          "HKJC": "2.83",
+          "Unibet": "2.88",
+          "188Bet": "2.88",
+          "Betfair": "2.88",
+          "Coral": "3.00",
+          "Dafabet": "2.90",
+          "MelBet": "2.83",
+          "Cashpoint": "2.85",
+          "CloudBet": "2.80",
+          "888Sport": "2.75",
+          "Interwetten": "2.85",
+          "Ladbrokes": "3.00",
+          "Pinnacle": "2.96",
+          "MansionBet": "2.94"
+        },
+        "Home": {
+          "bwin": "3.50",
+          "Sbo": "3.31",
+          "bet365": "3.90",
+          "1xbet": "3.75",
+          "10Bet": "3.60",
+          "WilliamHill": "3.60",
+          "HKJC": "3.45",
+          "Unibet": "3.50",
+          "188Bet": "3.35",
+          "Betfair": "3.70",
+          "Coral": "3.50",
+          "Dafabet": "3.55",
+          "MelBet": "3.83",
+          "Cashpoint": "3.71",
+          "CloudBet": "3.45",
+          "888Sport": "3.30",
+          "Interwetten": "3.55",
+          "Ladbrokes": "3.50",
+          "Pinnacle": "3.97",
+          "MansionBet": "3.15"
+        },
+        "Away": {
+          "bwin": "2.25",
+          "Sbo": "2.25",
+          "bet365": "2.20",
+          "1xbet": "2.22",
+          "10Bet": "2.25",
+          "WilliamHill": "2.20",
+          "HKJC": "2.04",
+          "Unibet": "2.35",
+          "188Bet": "2.31",
+          "Betfair": "2.20",
+          "Coral": "2.25",
+          "Dafabet": "2.26",
+          "MelBet": "2.21",
+          "Cashpoint": "2.25",
+          "CloudBet": "2.20",
+          "888Sport": "2.30",
+          "Interwetten": "2.30",
+          "Ladbrokes": "2.25",
+          "Pinnacle": "2.25",
+          "MansionBet": "2.36"
+        }
+      },
+      "Second Half Result": {
+        "Home": {
+          "10Bet": "3.80",
+          "Unibet": "3.80",
+          "bet365": "3.60",
+          "1xbet": "4.27",
+          "888Sport": "3.70",
+          "WilliamHill": "4.00"
+        },
+        "Draw": {
+          "10Bet": "2.05",
+          "Unibet": "2.14",
+          "bet365": "2.10",
+          "1xbet": "2.10",
+          "888Sport": "2.05",
+          "WilliamHill": "2.00"
+        },
+        "Away": {
+          "10Bet": "2.70",
+          "Unibet": "2.80",
+          "bet365": "2.75",
+          "1xbet": "2.60",
+          "888Sport": "2.80",
+          "WilliamHill": "2.70"
+        }
+      },
+      "Corners": {
+        "Under 11.5": {
+          "1xbet": "1.17",
+          "Unibet": "1.24"
+        },
+        "Over 8.5": {
+          "1xbet": "1.71",
+          "10Bet": "1.70",
+          "Pinnacle": "1.74",
+          "Unibet": "1.67"
+        },
+        "Under 8.5": {
+          "1xbet": "2.02",
+          "10Bet": "2.05",
+          "Pinnacle": "2.06",
+          "Unibet": "2.05"
+        },
+        "Over 9.5": {
+          "1xbet": "2.18",
+          "10Bet": "2.05",
+          "Pinnacle": "2.15",
+          "Unibet": "2.08"
+        },
+        "Under 9.5": {
+          "1xbet": "1.58",
+          "10Bet": "1.70",
+          "Pinnacle": "1.68",
+          "Unibet": "1.65"
+        },
+        "Over 10.5": {
+          "1xbet": "2.90",
+          "Pinnacle": "2.55",
+          "Unibet": "2.70"
+        },
+        "Under 10.5": {
+          "1xbet": "1.33",
+          "Pinnacle": "1.50",
+          "Unibet": "1.40"
+        },
+        "Over 7.5": {
+          "1xbet": "1.39",
+          "Unibet": "1.38"
+        },
+        "Under 7.5": {
+          "1xbet": "2.70",
+          "Unibet": "2.70"
+        },
+        "Over 11.5": {
+          "1xbet": "4.20",
+          "Unibet": "3.55"
+        }
+      },
+      "2nd Half Goals": {
+        "Over 2.5": {
+          "10Bet": "6.80",
+          "Unibet": "7.50",
+          "WilliamHill": "7.00",
+          "1xbet": "7.20",
+          "888Sport": "7.50"
+        },
+        "Over 0.5": {
+          "10Bet": "1.40",
+          "Unibet": "1.41",
+          "WilliamHill": "1.40",
+          "1xbet": "1.38",
+          "888Sport": "1.40"
+        },
+        "Under 2.5": {
+          "10Bet": "1.07",
+          "Unibet": "1.06",
+          "WilliamHill": "1.08",
+          "1xbet": "1.04",
+          "888Sport": "1.06"
+        },
+        "Over 1.5": {
+          "10Bet": "2.88",
+          "Unibet": "2.95",
+          "WilliamHill": "2.80",
+          "1xbet": "2.81",
+          "888Sport": "2.90"
+        },
+        "Under 1.5": {
+          "10Bet": "1.36",
+          "Unibet": "1.35",
+          "WilliamHill": "1.36",
+          "1xbet": "1.38",
+          "888Sport": "1.36"
+        },
+        "Under 0.5": {
+          "10Bet": "2.70",
+          "Unibet": "2.75",
+          "WilliamHill": "2.70",
+          "1xbet": "2.81",
+          "888Sport": "2.63"
+        }
+      },
+      "Half Time Result": {
+        "Home": {
+          "Unibet": "4.10",
+          "WilliamHill": "4.00",
+          "Sbo": "3.86",
+          "bet365": "4.33",
+          "888Sport": "4.00",
+          "10Bet": "4.20",
+          "Pinnacle": "4.85",
+          "188Bet": "3.95",
+          "1xbet": "4.92"
+        },
+        "Draw": {
+          "Unibet": "1.91",
+          "WilliamHill": "1.91",
+          "Sbo": "1.82",
+          "bet365": "1.90",
+          "888Sport": "1.91",
+          "10Bet": "1.83",
+          "Pinnacle": "1.95",
+          "188Bet": "1.89",
+          "1xbet": "1.78"
+        },
+        "Away": {
+          "Unibet": "3.00",
+          "WilliamHill": "2.90",
+          "Sbo": "2.95",
+          "bet365": "3.20",
+          "888Sport": "2.90",
+          "10Bet": "2.95",
+          "Pinnacle": "3.10",
+          "188Bet": "3.15",
+          "1xbet": "3.04"
+        }
+      },
+      "Goals Over/Under": {
+        "Over 1.5": {
+          "Unibet": "1.58",
+          "1xbet": "1.57",
+          "888Sport": "1.60",
+          "10Bet": "1.62",
+          "Pinnacle": "1.60"
+        },
+        "Over 3.5": {
+          "Unibet": "6.25",
+          "1xbet": "5.45",
+          "888Sport": "5.75",
+          "10Bet": "5.75",
+          "Pinnacle": "6.00"
+        },
+        "Under 3.5": {
+          "Unibet": "1.11",
+          "1xbet": "1.08",
+          "888Sport": "1.11",
+          "10Bet": "1.12",
+          "Pinnacle": "1.14"
+        },
+        "Over 0.5": {
+          "Unibet": "1.11",
+          "1xbet": "1.08",
+          "888Sport": "1.13",
+          "10Bet": "1.13",
+          "Pinnacle": "1.14"
+        },
+        "Over 4.5": {
+          "Unibet": "13.00",
+          "1xbet": "12.50",
+          "888Sport": "13.00",
+          "10Bet": "11.00"
+        },
+        "Over 2.5": {
+          "Unibet": "2.88",
+          "1xbet": "2.64",
+          "888Sport": "2.75",
+          "10Bet": "2.88",
+          "Pinnacle": "2.89",
+          "bet365": "2.87"
+        },
+        "Under 2.5": {
+          "Unibet": "1.38",
+          "1xbet": "1.38",
+          "888Sport": "1.40",
+          "10Bet": "1.40",
+          "Pinnacle": "1.44",
+          "bet365": "1.40"
+        },
+        "Under 0.5": {
+          "Unibet": "6.10",
+          "1xbet": "5.80",
+          "888Sport": "5.50",
+          "10Bet": "5.75",
+          "Pinnacle": "6.20"
+        },
+        "Under 1.5": {
+          "Unibet": "2.32",
+          "1xbet": "2.35",
+          "888Sport": "2.25",
+          "10Bet": "2.25",
+          "Pinnacle": "2.45"
+        },
+        "Under 4.5": {
+          "Unibet": "1.01",
+          "1xbet": "1.01",
+          "888Sport": "1.03",
+          "10Bet": "1.03"
+        }
+      },
+      "1st Half Goals": {
+        "Under 0.5": {
+          "WilliamHill": "2.30",
+          "Pinnacle": "2.32",
+          "Unibet": "2.30",
+          "1xbet": "2.18",
+          "10Bet": "2.20"
+        },
+        "Over 2.5": {
+          "WilliamHill": "12.00",
+          "1xbet": "11.00"
+        },
+        "Over 1.5": {
+          "WilliamHill": "3.80",
+          "Unibet": "3.80",
+          "1xbet": "3.90",
+          "10Bet": "3.75"
+        },
+        "Under 2.5": {
+          "WilliamHill": "1.04",
+          "1xbet": "1.02"
+        },
+        "Over 0.5": {
+          "WilliamHill": "1.53",
+          "Pinnacle": "1.62",
+          "Unibet": "1.56",
+          "1xbet": "1.64",
+          "10Bet": "1.60"
+        },
+        "Under 1.5": {
+          "WilliamHill": "1.22",
+          "Unibet": "1.23",
+          "1xbet": "1.20",
+          "10Bet": "1.22"
+        }
+      },
+      "Win To Nil": {
+        "1": {
+          "bet365": "5.00"
+        },
+        "2": {
+          "bet365": "3.40"
+        }
+      },
+      "Corners 1X2": {
+        "Home": {
+          "1xbet": "2.53",
+          "WilliamHill": "2.30",
+          "Unibet": "2.63"
+        },
+        "Draw": {
+          "1xbet": "5.90",
+          "WilliamHill": "8.50",
+          "Unibet": "7.50"
+        },
+        "Away": {
+          "1xbet": "1.87",
+          "WilliamHill": "1.75",
+          "Unibet": "1.63"
+        }
+      },
+      "Both Teams To Score": {
+        "Yes": {
+          "bet365": "2.25",
+          "Unibet": "2.20",
+          "188Bet": "2.30",
+          "10Bet": "2.25",
+          "WilliamHill": "2.20",
+          "Pinnacle": "2.34",
+          "888Sport": "2.20",
+          "1xbet": "2.22"
+        },
+        "No": {
+          "bet365": "1.57",
+          "Unibet": "1.58",
+          "188Bet": "1.60",
+          "10Bet": "1.57",
+          "WilliamHill": "1.60",
+          "Pinnacle": "1.63",
+          "888Sport": "1.60",
+          "1xbet": "1.59"
+        }
+      },
+      "Both Teams to Score in 1st Half": {
+        "Yes": {
+          "Pinnacle": "7.03",
+          "bet365": "7.00",
+          "10Bet": "5.75",
+          "WilliamHill": "6.00",
+          "1xbet": "6.45"
+        },
+        "No": {
+          "Pinnacle": "1.11",
+          "bet365": "1.10",
+          "10Bet": "1.10",
+          "WilliamHill": "1.11",
+          "1xbet": "1.08"
+        }
+      },
+      "Double Chance": {
+        "Home/Away": {
+          "Pinnacle": "1.43",
+          "10Bet": "1.35",
+          "888Sport": "1.40",
+          "WilliamHill": "1.40",
+          "Unibet": "1.40",
+          "Sbo": "1.32",
+          "1xbet": "1.39"
+        },
+        "Home/Draw": {
+          "Pinnacle": "1.69",
+          "10Bet": "1.62",
+          "888Sport": "1.53",
+          "WilliamHill": "1.62",
+          "Unibet": "1.58",
+          "Sbo": "1.63",
+          "1xbet": "1.63"
+        },
+        "Draw/Away": {
+          "Pinnacle": "1.28",
+          "10Bet": "1.28",
+          "888Sport": "1.30",
+          "WilliamHill": "1.25",
+          "Unibet": "1.29",
+          "Sbo": "1.22",
+          "1xbet": "1.25"
+        }
+      },
+      "Clean Sheet - Away": {
+        "No": {
+          "10Bet": "1.62"
+        },
+        "Yes": {
+          "10Bet": "2.15"
+        }
+      },
+      "Both Teams to Score in 2nd Half": {
+        "Yes": {
+          "bet365": "5.00",
+          "10Bet": "4.50",
+          "WilliamHill": "4.50",
+          "1xbet": "4.55"
+        },
+        "No": {
+          "bet365": "1.16",
+          "10Bet": "1.17",
+          "WilliamHill": "1.18",
+          "1xbet": "1.16"
+        }
+      },
+      "Clean Sheet - Home": {
+        "Yes": {
+          "10Bet": "2.80"
+        },
+        "No": {
+          "10Bet": "1.38"
+        }
+      }
+    }
+  },
+  "message": "Usage of the API is bound to our Terms of Use : https://footystats.org/api/documentations/terms-of-use-and-legal"
+}

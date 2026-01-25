@@ -101,6 +101,9 @@ export const LOCK_KEYS = {
   /** Match minute job - updates match minutes */
   MATCH_MINUTE: 910000000026n,
 
+  /** Telegram settlement job - settles published telegram picks */
+  TELEGRAM_SETTLEMENT: 910000000027n,
+
   // ============================================================
   // MATCH-LEVEL LOCKS (920_000_000_xxx + match_id)
   // These prevent concurrent updates to the same match
