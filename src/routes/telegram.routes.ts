@@ -416,28 +416,60 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         let homeStats = null;
         let awayStats = null;
 
+        logger.info('[Telegram] 🔍 Fetching team stats...', {
+          ...logContext,
+          homeID: fsMatch.homeID,
+          awayID: fsMatch.awayID,
+        });
+
         if (fsMatch.homeID) {
           try {
+            logger.info('[Telegram] 🏠 Calling getTeamLastX for home team...', {
+              ...logContext,
+              homeID: fsMatch.homeID,
+            });
             const homeResponse = await footyStatsAPI.getTeamLastX(fsMatch.homeID);
+            logger.info('[Telegram] 🏠 Home team response received:', {
+              ...logContext,
+              has_data: !!homeResponse.data,
+              data_length: homeResponse.data?.length,
+              first_item_keys: homeResponse.data?.[0] ? Object.keys(homeResponse.data[0]) : null,
+            });
             homeStats = homeResponse.data?.[0];
           } catch (err: any) {
-            logger.warn('[Telegram] ⚠️ Could not fetch home team stats', {
+            logger.error('[Telegram] ❌ ERROR fetching home team stats', {
               ...logContext,
               error: err.message,
+              stack: err.stack,
             });
           }
+        } else {
+          logger.warn('[Telegram] ⚠️ No homeID in fsMatch', logContext);
         }
 
         if (fsMatch.awayID) {
           try {
+            logger.info('[Telegram] 🚌 Calling getTeamLastX for away team...', {
+              ...logContext,
+              awayID: fsMatch.awayID,
+            });
             const awayResponse = await footyStatsAPI.getTeamLastX(fsMatch.awayID);
+            logger.info('[Telegram] 🚌 Away team response received:', {
+              ...logContext,
+              has_data: !!awayResponse.data,
+              data_length: awayResponse.data?.length,
+              first_item_keys: awayResponse.data?.[0] ? Object.keys(awayResponse.data[0]) : null,
+            });
             awayStats = awayResponse.data?.[0];
           } catch (err: any) {
-            logger.warn('[Telegram] ⚠️ Could not fetch away team stats', {
+            logger.error('[Telegram] ❌ ERROR fetching away team stats', {
               ...logContext,
               error: err.message,
+              stack: err.stack,
             });
           }
+        } else {
+          logger.warn('[Telegram] ⚠️ No awayID in fsMatch', logContext);
         }
 
         // 8. Get league name from database (ts_matches JOIN ts_competitions)
