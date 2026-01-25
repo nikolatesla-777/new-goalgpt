@@ -17,13 +17,6 @@ import { memoryCache, cacheKeys } from '../utils/cache/memoryCache';
 import { singleFlight } from '../utils/cache/singleFlight';
 import { generatePredictionsCacheKey } from '../utils/cache/cacheKeyGenerator';
 import { deprecateRoute } from '../utils/deprecation.utils';
-// PR-4: Use repository for all DB access
-import {
-    logPredictionRequest,
-    getRequestLogs,
-    getPredictionStats,
-    updatePredictionAccessType
-} from '../repositories/prediction.repository';
 // PR-10: Schema validation
 import { validate } from '../middleware/validation.middleware';
 import {
@@ -134,7 +127,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Receive AI predictions from external sources
      */
     // PR-10: Non-strict validation for external bot submissions
-    fastify.post('/api/predictions/ingest', { preHandler: [validate({ body: ingestPredictionSchema, strict: false })] }, async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
+    fastify.post('/api/predictions/ingest', { preHandler: [validate({ body: ingestPredictionSchema, strict: false }) as any] }, async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
         const startTime = Date.now();
         let responseStatus = 200;
         let responseBody: any;
@@ -198,7 +191,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * @sunset 2026-03-01
      */
     // PR-10: Non-strict validation for external bot submissions
-    fastify.post('/api/v1/ingest/predictions', { preHandler: [validate({ body: ingestPredictionSchema, strict: false })] }, async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
+    fastify.post('/api/v1/ingest/predictions', { preHandler: [validate({ body: ingestPredictionSchema, strict: false }) as any] }, async (request: FastifyRequest<{ Body: IngestBody }>, reply: FastifyReply) => {
         // PR-11: Add deprecation headers
         deprecateRoute(request, reply, {
             canonical: '/api/predictions/ingest',
@@ -736,7 +729,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * SECURITY: Admin-only endpoint
      */
     // PR-10: Validate params and body
-    fastify.put<{ Params: { id: string }; Body: { display_prediction: string } }>('/api/predictions/:id/display', { preHandler: [requireAuth, requireAdmin, validate({ params: predictionIdParamSchema, body: updateDisplaySchema })] }, async (request, reply) => {
+    fastify.put<{ Params: { id: string }; Body: { display_prediction: string } }>('/api/predictions/:id/display', { preHandler: [requireAuth, requireAdmin, validate({ params: predictionIdParamSchema, body: updateDisplaySchema }) as any] }, async (request, reply) => {
         try {
             const { id } = request.params;
             const { display_prediction } = request.body;
@@ -778,7 +771,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * SECURITY: Admin-only endpoint
      */
     // PR-10: Validate body
-    fastify.put<{ Body: { updates: { id: string; display_prediction: string }[] } }>('/api/predictions/bulk-display', { preHandler: [requireAuth, requireAdmin, validate({ body: bulkDisplaySchema })] }, async (request, reply) => {
+    fastify.put<{ Body: { updates: { id: string; display_prediction: string }[] } }>('/api/predictions/bulk-display', { preHandler: [requireAuth, requireAdmin, validate({ body: bulkDisplaySchema }) as any] }, async (request, reply) => {
         try {
             const { updates } = request.body;
 
@@ -816,7 +809,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * SECURITY: Admin-only endpoint
      */
     // PR-10: Validate params and body
-    fastify.put<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>('/api/predictions/:id/access', { preHandler: [requireAuth, requireAdmin, validate({ params: predictionIdParamSchema, body: updateAccessSchema })] }, async (request, reply) => {
+    fastify.put<{ Params: { id: string }; Body: { access_type: 'VIP' | 'FREE' } }>('/api/predictions/:id/access', { preHandler: [requireAuth, requireAdmin, validate({ params: predictionIdParamSchema, body: updateAccessSchema }) as any] }, async (request, reply) => {
         try {
             const { id } = request.params;
             const { access_type } = request.body;
@@ -931,7 +924,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
 
     // SECURITY: Admin authentication required for manual prediction creation
     // PR-10: Validate body
-    fastify.post<{ Body: ManualPredictionBody }>('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin, validate({ body: manualPredictionSchema })] }, async (request, reply) => {
+    fastify.post<{ Body: ManualPredictionBody }>('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin, validate({ body: manualPredictionSchema }) as any] }, async (request, reply) => {
         try {
             const result = await aiPredictionService.createManualPrediction(request.body);
             if (result) {
@@ -968,7 +961,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
 
     // SECURITY: Admin authentication required for coupon creation
     // PR-10: Validate body
-    fastify.post<{ Body: CouponBody }>('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin, validate({ body: manualCouponSchema })] }, async (request, reply) => {
+    fastify.post<{ Body: CouponBody }>('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin, validate({ body: manualCouponSchema }) as any] }, async (request, reply) => {
         try {
             const result = await aiPredictionService.createCoupon(request.body);
             if (result) {
@@ -1024,7 +1017,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
      * Requires admin authentication
      */
     // PR-10: Validate params
-    fastify.post<{ Params: { externalId: string } }>('/api/predictions/match/:externalId', { preHandler: [requireAuth, requireAdmin, validate({ params: externalIdParamSchema })] }, async (request, reply) => {
+    fastify.post<{ Params: { externalId: string } }>('/api/predictions/match/:externalId', { preHandler: [requireAuth, requireAdmin, validate({ params: externalIdParamSchema }) as any] }, async (request, reply) => {
         try {
             const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
 

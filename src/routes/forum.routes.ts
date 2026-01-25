@@ -65,7 +65,7 @@ export default async function forumRoutes(
    * Create a new comment (requires auth)
    */
   // PR-10: Validate params and body
-  fastify.post('/:matchId/comments', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: forumCommentSchema })] }, async (request, reply) => {
+  fastify.post('/:matchId/comments', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: forumCommentSchema }) as any] }, async (request, reply) => {
     try {
       const { matchId } = request.params as { matchId: string };
       const { content, parentId } = request.body as { content: string; parentId?: number };
@@ -107,7 +107,7 @@ export default async function forumRoutes(
    * Delete a comment (requires auth, owner only)
    */
   // PR-10: Validate params
-  fastify.delete('/comments/:commentId', { preHandler: [requireAuth, validate({ params: forumCommentIdParamSchema })] }, async (request, reply) => {
+  fastify.delete('/comments/:commentId', { preHandler: [requireAuth, validate({ params: forumCommentIdParamSchema }) as any] }, async (request, reply) => {
     try {
       const { commentId } = request.params as { commentId: string };
       const userId = (request as any).user?.id;
@@ -140,7 +140,7 @@ export default async function forumRoutes(
    * Like/unlike a comment (requires auth)
    */
   // PR-10: Validate params
-  fastify.post('/comments/:commentId/like', { preHandler: [requireAuth, validate({ params: forumCommentIdParamSchema })] }, async (request, reply) => {
+  fastify.post('/comments/:commentId/like', { preHandler: [requireAuth, validate({ params: forumCommentIdParamSchema }) as any] }, async (request, reply) => {
     try {
       const { commentId } = request.params as { commentId: string };
       const userId = (request as any).user?.id;
@@ -200,7 +200,7 @@ export default async function forumRoutes(
    * Send a chat message (requires auth)
    */
   // PR-10: Validate params and body
-  fastify.post('/:matchId/chat', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: chatMessageSchema })] }, async (request, reply) => {
+  fastify.post('/:matchId/chat', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: chatMessageSchema }) as any] }, async (request, reply) => {
     try {
       const { matchId } = request.params as { matchId: string };
       const { message } = request.body as { message: string };
@@ -244,7 +244,7 @@ export default async function forumRoutes(
    * Delete a chat message (requires auth, owner only)
    */
   // PR-10: Validate params
-  fastify.delete('/chat/:messageId', { preHandler: [requireAuth, validate({ params: messageIdParamSchema })] }, async (request, reply) => {
+  fastify.delete('/chat/:messageId', { preHandler: [requireAuth, validate({ params: messageIdParamSchema }) as any] }, async (request, reply) => {
     try {
       const { messageId } = request.params as { messageId: string };
       const userId = (request as any).user?.id;
@@ -305,7 +305,7 @@ export default async function forumRoutes(
    * Vote on a poll (requires auth)
    */
   // PR-10: Validate params and body
-  fastify.post('/:matchId/poll/vote', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: pollVoteSchema })] }, async (request, reply) => {
+  fastify.post('/:matchId/poll/vote', { preHandler: [requireAuth, validate({ params: forumMatchIdParamSchema, body: pollVoteSchema }) as any] }, async (request, reply) => {
     try {
       const { matchId } = request.params as { matchId: string };
       const { vote } = request.body as { vote: 'home' | 'draw' | 'away' };

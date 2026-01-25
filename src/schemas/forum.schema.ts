@@ -67,9 +67,7 @@ export const chatMessageSchema = z.object({
  * Vote on a poll
  */
 export const pollVoteSchema = z.object({
-  vote: z.enum(['home', 'draw', 'away'], {
-    errorMap: () => ({ message: 'Invalid vote. Must be home, draw, or away' }),
-  }),
+  vote: z.enum(['home', 'draw', 'away']),
 });
 
 // ============================================================

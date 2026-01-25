@@ -60,7 +60,8 @@
     "node-cron": "^3.0.3",
     "pg": "^8.11.3",
     "tsx": "^4.7.0",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/ioredis": "^5.0.0",

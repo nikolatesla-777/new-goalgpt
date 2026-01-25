@@ -80,7 +80,7 @@ function formatZodError(error: ZodError): ValidationErrorResponse {
     success: false,
     error: 'VALIDATION_ERROR',
     message: 'Request validation failed',
-    details: error.errors.map((err) => ({
+    details: error.issues.map((err: any) => ({
       field: err.path.join('.') || 'root',
       message: err.message,
       code: err.code,
@@ -139,14 +139,14 @@ export function validate(options: ValidateOptions) {
         // because browsers/clients often add extra params
         request.query = options.query.parse(request.query);
       }
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof ZodError) {
         // Log validation failure for monitoring
         logger.warn('[Validation] Request validation failed', {
           path: request.url,
           method: request.method,
-          errorCount: error.errors.length,
-          fields: error.errors.map((e) => e.path.join('.')),
+          errorCount: error.issues.length,
+          fields: error.issues.map((e: any) => e.path.join('.')),
         });
 
         return reply.status(400).send(formatZodError(error));

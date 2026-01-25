@@ -99,7 +99,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params and body
   fastify.post<CreateCommentRequest>(
     '/match/:matchId',
-    { preHandler: [requireAuth, validate({ params: matchIdParamSchema, body: createCommentSchema })] },
+    { preHandler: [requireAuth, validate({ params: matchIdParamSchema, body: createCommentSchema }) as any] },
     async (request, reply) => {
       try {
         const userId = request.user!.userId;
@@ -153,7 +153,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params and body
   fastify.post<ReplyCommentRequest>(
     '/:commentId/reply',
-    { preHandler: [requireAuth, validate({ params: commentIdParamSchema, body: replyCommentSchema })] },
+    { preHandler: [requireAuth, validate({ params: commentIdParamSchema, body: replyCommentSchema }) as any] },
     async (request, reply) => {
       try {
         const userId = request.user!.userId;
@@ -217,7 +217,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params
   fastify.post<CommentIdRequest>(
     '/:commentId/like',
-    { preHandler: [requireAuth, validate({ params: commentIdParamSchema })] },
+    { preHandler: [requireAuth, validate({ params: commentIdParamSchema }) as any] },
     async (request, reply) => {
       try {
         const userId = request.user!.userId;
@@ -273,7 +273,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params
   fastify.delete<CommentIdRequest>(
     '/:commentId/like',
-    { preHandler: [requireAuth, validate({ params: commentIdParamSchema })] },
+    { preHandler: [requireAuth, validate({ params: commentIdParamSchema }) as any] },
     async (request, reply) => {
       try {
         const userId = request.user!.userId;
@@ -312,7 +312,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params
   fastify.post<CommentIdRequest>(
     '/:commentId/report',
-    { preHandler: [requireAuth, validate({ params: commentIdParamSchema })] },
+    { preHandler: [requireAuth, validate({ params: commentIdParamSchema }) as any] },
     async (request, reply) => {
       try {
         const userId = request.user!.userId;
@@ -458,7 +458,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params
   fastify.post<CommentIdRequest>(
     '/:commentId/hide',
-    { preHandler: [requireAdmin, validate({ params: commentIdParamSchema })] },
+    { preHandler: [requireAdmin, validate({ params: commentIdParamSchema }) as any] },
     async (request, reply) => {
       try {
         const { commentId } = request.params;
@@ -497,7 +497,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params
   fastify.post<CommentIdRequest>(
     '/:commentId/restore',
-    { preHandler: [requireAdmin, validate({ params: commentIdParamSchema })] },
+    { preHandler: [requireAdmin, validate({ params: commentIdParamSchema }) as any] },
     async (request, reply) => {
       try {
         const { commentId } = request.params;
@@ -536,7 +536,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params
   fastify.delete<CommentIdRequest>(
     '/:commentId',
-    { preHandler: [requireAdmin, validate({ params: commentIdParamSchema })] },
+    { preHandler: [requireAdmin, validate({ params: commentIdParamSchema }) as any] },
     async (request, reply) => {
       try {
         const { commentId } = request.params;
@@ -576,7 +576,7 @@ export async function commentsRoutes(fastify: FastifyInstance) {
   // PR-10: Validate params and body
   fastify.post<TogglePinRequest>(
     '/:commentId/pin',
-    { preHandler: [requireAdmin, validate({ params: commentIdParamSchema, body: togglePinSchema })] },
+    { preHandler: [requireAdmin, validate({ params: commentIdParamSchema, body: togglePinSchema }) as any] },
     async (request, reply) => {
       try {
         const { commentId } = request.params;

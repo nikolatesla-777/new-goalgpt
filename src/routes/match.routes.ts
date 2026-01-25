@@ -209,7 +209,7 @@ export default async function matchRoutes(
    * Useful for manual refresh of stuck matches
    */
   // PR-10: Validate params
-  fastify.post('/:match_id/force-refresh', { preHandler: [validate({ params: matchIdParamSchema })] }, forceRefreshMatch);
+  fastify.post('/:match_id/force-refresh', { preHandler: [validate({ params: matchIdParamSchema }) as any] }, forceRefreshMatch);
 
   /**
    * GET /api/matches/:match_id

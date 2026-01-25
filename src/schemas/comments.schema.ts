@@ -57,7 +57,7 @@ export const replyCommentSchema = z.object({
  * Toggle pin status
  */
 export const togglePinSchema = z.object({
-  isPinned: z.boolean({ required_error: 'isPinned is required' }),
+  isPinned: z.boolean(),
 });
 
 // ============================================================
