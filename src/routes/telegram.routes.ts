@@ -470,11 +470,32 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           }
         }
 
-        // 8. Build message data
+        // 8. Get league name from database (ts_matches JOIN ts_competitions)
+        let leagueName = 'Unknown';
+        try {
+          const leagueResult = await safeQuery<{ name: string }>(
+            `SELECT c.name
+             FROM ts_matches m
+             JOIN ts_competitions c ON c.id = m.competition_id
+             WHERE m.external_id = $1
+             LIMIT 1`,
+            [match_id]
+          );
+          if (leagueResult.length > 0 && leagueResult[0].name) {
+            leagueName = leagueResult[0].name;
+          }
+        } catch (leagueErr) {
+          logger.warn('[Telegram] ⚠️ Could not fetch league name from DB', {
+            ...logContext,
+            error: leagueErr instanceof Error ? leagueErr.message : String(leagueErr),
+          });
+        }
+
+        // 9. Build message data
         const matchData = {
           home_name: fsMatch.home_name,
           away_name: fsMatch.away_name,
-          league_name: (fsMatch as any).competition_name || (fsMatch as any).league_name || 'Unknown',
+          league_name: leagueName,
           date_unix: fsMatch.date_unix,
           potentials: {
             btts: fsMatch.btts_potential,
