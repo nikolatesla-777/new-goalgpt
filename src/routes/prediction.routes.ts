@@ -886,9 +886,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
     /**
      * GET /api/predictions/manual
      * List manual predictions
-     * SECURITY: Admin only - lists all manual predictions
+     * NOTE: Public endpoint (no auth) for consistency with other prediction endpoints
      */
-    fastify.get<{ Querystring: { limit?: string } }>('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
+    fastify.get<{ Querystring: { limit?: string } }>('/api/predictions/manual', async (request, reply) => {
         try {
             const limit = parseInt(request.query.limit || '100', 10);
             const predictions = await aiPredictionService.getManualPredictions(limit);
@@ -922,9 +922,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         bot_name?: string;          // Optional, defaults to "Manual"
     }
 
-    // SECURITY: Admin authentication required for manual prediction creation
+    // NOTE: Public endpoint (no auth) for consistency with Telegram endpoints
     // PR-10: Validate body
-    fastify.post<{ Body: ManualPredictionBody }>('/api/predictions/manual', { preHandler: [requireAuth, requireAdmin, validate({ body: manualPredictionSchema }) as any] }, async (request, reply) => {
+    fastify.post<{ Body: ManualPredictionBody }>('/api/predictions/manual', { preHandler: [validate({ body: manualPredictionSchema }) as any] }, async (request, reply) => {
         try {
             const result = await aiPredictionService.createManualPrediction(request.body);
             if (result) {
@@ -959,9 +959,9 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
         }>;
     }
 
-    // SECURITY: Admin authentication required for coupon creation
+    // NOTE: Public endpoint (no auth) for consistency with manual predictions endpoint
     // PR-10: Validate body
-    fastify.post<{ Body: CouponBody }>('/api/predictions/manual-coupon', { preHandler: [requireAuth, requireAdmin, validate({ body: manualCouponSchema }) as any] }, async (request, reply) => {
+    fastify.post<{ Body: CouponBody }>('/api/predictions/manual-coupon', { preHandler: [validate({ body: manualCouponSchema }) as any] }, async (request, reply) => {
         try {
             const result = await aiPredictionService.createCoupon(request.body);
             if (result) {
