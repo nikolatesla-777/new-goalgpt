@@ -306,64 +306,74 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
         logger.info('[Telegram] ✅ Picks validated', logContext);
 
-        // 5. PHASE-2B-B1: MATCH STATE VALIDATION WITH API PRIMARY
+        // 5. PHASE-2B-B1: MATCH STATE VALIDATION WITH API PRIMARY (OPTIONAL FOR FOOTYSTATS)
         // PRIMARY: TheSports API (real-time status)
         // FALLBACK: Database (stale but reliable)
+        // TEMPORARY FIX: Skip validation for FootyStats placeholder IDs (fs_*)
         logger.info('[Telegram] 🔍 Fetching match state (API primary)...', logContext);
 
         let matchStatusId: number | null = null;
         let stateSource: string = 'unknown';
 
-        try {
-          // PHASE-2B-B1: Use matchStateFetcher (API → DB fallback)
-          const matchStateResult = await fetchMatchStateForPublish(match_id);
+        // TEMPORARY FIX: Skip validation for FootyStats placeholder IDs
+        const isFootyStatsPlaceholder = match_id.startsWith('fs_');
 
-          matchStatusId = matchStateResult.statusId;
-          stateSource = matchStateResult.source;
-          logContext.match_status_id = matchStatusId;
-          logContext.state_source = stateSource;
-          logContext.state_latency_ms = matchStateResult.latencyMs;
-          logContext.state_cached = matchStateResult.cached;
+        if (isFootyStatsPlaceholder) {
+          logger.warn('[Telegram] ⚠️ Skipping match state validation (FootyStats placeholder ID)', logContext);
+          matchStatusId = 1; // Assume NOT_STARTED
+          stateSource = 'placeholder';
+        } else {
+          try {
+            // PHASE-2B-B1: Use matchStateFetcher (API → DB fallback)
+            const matchStateResult = await fetchMatchStateForPublish(match_id);
 
-          // Log fallback usage for monitoring
-          if (matchStateResult.isFallback) {
-            logger.warn('[Telegram] ⚠️ Using DB fallback for match state', logContext);
-          } else {
-            logger.info('[Telegram] ✅ Match state fetched from API', logContext);
-          }
+            matchStatusId = matchStateResult.statusId;
+            stateSource = matchStateResult.source;
+            logContext.match_status_id = matchStatusId;
+            logContext.state_source = stateSource;
+            logContext.state_latency_ms = matchStateResult.latencyMs;
+            logContext.state_cached = matchStateResult.cached;
 
-          // Validate match state (same Phase-2A validator)
-          const stateValidation = validateMatchStateForPublish(matchStatusId, match_id);
+            // Log fallback usage for monitoring
+            if (matchStateResult.isFallback) {
+              logger.warn('[Telegram] ⚠️ Using DB fallback for match state', logContext);
+            } else {
+              logger.info('[Telegram] ✅ Match state fetched from API', logContext);
+            }
 
-          if (!stateValidation.valid) {
-            logger.warn('[Telegram] ❌ Match state validation failed', {
+            // Validate match state (same Phase-2A validator)
+            const stateValidation = validateMatchStateForPublish(matchStatusId, match_id);
+
+            if (!stateValidation.valid) {
+              logger.warn('[Telegram] ❌ Match state validation failed', {
+                ...logContext,
+                error: stateValidation.error,
+                error_code: stateValidation.errorCode,
+              });
+
+              return reply.status(400).send({
+                error: 'Invalid match state',
+                details: stateValidation.error,
+                error_code: stateValidation.errorCode,
+                match_status_id: matchStatusId,
+                state_source: stateSource,
+              });
+            }
+
+            logger.info('[Telegram] ✅ Match state validated (NOT_STARTED)', logContext);
+          } catch (fetchError) {
+            // Both API and DB failed - cannot proceed
+            logger.error('[Telegram] ❌ Failed to fetch match state (API + DB failed)', {
               ...logContext,
-              error: stateValidation.error,
-              error_code: stateValidation.errorCode,
+              error: fetchError instanceof Error ? fetchError.message : String(fetchError),
             });
 
-            return reply.status(400).send({
-              error: 'Invalid match state',
-              details: stateValidation.error,
-              error_code: stateValidation.errorCode,
-              match_status_id: matchStatusId,
-              state_source: stateSource,
+            return reply.status(503).send({
+              error: 'Service temporarily unavailable',
+              details: 'Unable to verify match state. Please try again later.',
+              error_code: 'MATCH_STATE_UNAVAILABLE',
             });
           }
-
-          logger.info('[Telegram] ✅ Match state validated (NOT_STARTED)', logContext);
-        } catch (fetchError) {
-          // Both API and DB failed - cannot proceed
-          logger.error('[Telegram] ❌ Failed to fetch match state (API + DB failed)', {
-            ...logContext,
-            error: fetchError instanceof Error ? fetchError.message : String(fetchError),
-          });
-
-          return reply.status(503).send({
-            error: 'Service temporarily unavailable',
-            details: 'Unable to verify match state. Please try again later.',
-            error_code: 'MATCH_STATE_UNAVAILABLE',
-          });
         }
 
         // 6. Fetch match data from FootyStats
