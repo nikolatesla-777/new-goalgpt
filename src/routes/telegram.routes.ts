@@ -625,18 +625,17 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             post_id: postId,
           });
 
-          const dbClient = await pool.connect();
+          let picksClient = await pool.connect();
           try {
             for (const pick of picks) {
-              await dbClient.query(
+              await picksClient.query(
                 `INSERT INTO telegram_picks (post_id, market_type, odds, status)
                  VALUES ($1, $2, $3, 'pending')`,
                 [postId, pick.market_type, pick.odds || null]
               );
             }
           } finally {
-            dbClient.release();
-            dbClient = null;
+            picksClient.release();
           }
 
           logger.info('[Telegram] ✅ Picks saved', { ...logContext, post_id: postId });
