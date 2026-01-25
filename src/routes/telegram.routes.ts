@@ -483,6 +483,32 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         // 9. Build message data
+
+        // 🔍 DEBUG: Log homeStats and awayStats to check for cards/corners
+        logger.info('[Telegram] 🔍 DEBUG homeStats:', {
+          ...logContext,
+          homeStats: homeStats ? {
+            team_id: homeStats.team_id,
+            ppg: homeStats.seasonPPG_overall,
+            btts_pct: homeStats.seasonBTTSPercentage_overall,
+            corners_avg: homeStats.cornersAVG_overall,
+            cards_avg: homeStats.cardsAVG_overall,
+            all_keys: Object.keys(homeStats),
+          } : null,
+        });
+
+        logger.info('[Telegram] 🔍 DEBUG awayStats:', {
+          ...logContext,
+          awayStats: awayStats ? {
+            team_id: awayStats.team_id,
+            ppg: awayStats.seasonPPG_overall,
+            btts_pct: awayStats.seasonBTTSPercentage_overall,
+            corners_avg: awayStats.cornersAVG_overall,
+            cards_avg: awayStats.cardsAVG_overall,
+            all_keys: Object.keys(awayStats),
+          } : null,
+        });
+
         const matchData = {
           home_name: fsMatch.home_name,
           away_name: fsMatch.away_name,
