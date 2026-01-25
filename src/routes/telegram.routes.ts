@@ -305,40 +305,9 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
         }
 
-        // 3. PHASE-1: IDEMPOTENCY CHECK
-        // FIX: Acquire connection ONCE for ALL DB operations (no API calls in between)
-        logger.info('[Telegram] 🔍 Checking for existing post...', logContext);
-
-        let dbClient = await pool.connect();
-        let existingPost;
-        try {
-          existingPost = await checkExistingPost(match_id, channelId, dbClient);
-
-          if (existingPost) {
-            logger.info(`[Telegram] ✅ IDEMPOTENCY: Post already exists (${existingPost.status})`, {
-              ...logContext,
-              post_id: existingPost.id,
-              status: existingPost.status,
-              telegram_message_id: existingPost.telegram_message_id,
-            });
-
-            // Return existing data - NO-OP
-            return {
-              success: true,
-              telegram_message_id: existingPost.telegram_message_id,
-              post_id: existingPost.id,
-              status: existingPost.status,
-              idempotent: true,
-              message: 'Match already published (idempotent)',
-            };
-          }
-        } finally {
-          // Release BEFORE FootyStats API call
-          dbClient.release();
-          dbClient = null;
-        }
-
-        logger.info('[Telegram] ✅ No existing post found, proceeding with publish', logContext);
+        // 3. PHASE-1: IDEMPOTENCY CHECK - DISABLED (User wants to publish same match multiple times)
+        // Note: User requested ability to publish same match as many times as desired
+        logger.info('[Telegram] ⚠️ IDEMPOTENCY CHECK DISABLED - allowing duplicate publishes', logContext);
 
         // 4. PHASE-2A: PICK VALIDATION
         logger.info('[Telegram] 🔍 Validating picks...', logContext);
@@ -473,6 +442,11 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         // 8. Get league name from database (ts_matches JOIN ts_competitions)
         let leagueName = 'Unknown';
         try {
+          logger.info('[Telegram] 🔍 Fetching league name from DB...', {
+            ...logContext,
+            match_id,
+          });
+
           const leagueResult = await safeQuery<{ name: string }>(
             `SELECT c.name
              FROM ts_matches m
@@ -481,11 +455,27 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
              LIMIT 1`,
             [match_id]
           );
+
+          logger.info('[Telegram] 📊 League query result:', {
+            ...logContext,
+            rows_found: leagueResult.length,
+            league_name: leagueResult[0]?.name || null,
+          });
+
           if (leagueResult.length > 0 && leagueResult[0].name) {
             leagueName = leagueResult[0].name;
+            logger.info('[Telegram] ✅ League name found', {
+              ...logContext,
+              league_name: leagueName,
+            });
+          } else {
+            logger.warn('[Telegram] ⚠️ No league found in DB for match', {
+              ...logContext,
+              match_id,
+            });
           }
         } catch (leagueErr) {
-          logger.warn('[Telegram] ⚠️ Could not fetch league name from DB', {
+          logger.error('[Telegram] ❌ Error fetching league name from DB', {
             ...logContext,
             error: leagueErr instanceof Error ? leagueErr.message : String(leagueErr),
           });
