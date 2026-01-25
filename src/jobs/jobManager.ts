@@ -294,6 +294,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Phase 7: Pre-fetch lineups for matches starting in next 60 minutes',
   },
+  {
+    name: 'Telegram Settlement',
+    schedule: '*/10 * * * *', // Every 10 minutes
+    handler: async () => {
+      const { runTelegramSettlement } = await import('./telegramSettlement.job');
+      await runTelegramSettlement();
+    },
+    enabled: true,
+    description: 'Settle Telegram published picks for finished matches',
+  },
 ];
 
 /**

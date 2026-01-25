@@ -62,6 +62,7 @@ import { announcementsRoutes } from './announcements.routes';
 // External Integrations
 import { footyStatsRoutes } from './footystats.routes';
 import { partnersRoutes } from './partners.routes';
+import { telegramRoutes } from './telegram.routes';
 
 // ============================================================================
 // CENTRAL REGISTRATION FUNCTION
@@ -140,6 +141,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // Partner management
     adminAPI.register(partnersRoutes, { prefix: '/api/partners' });
+
+    // Telegram publishing
+    adminAPI.register(telegramRoutes, { prefix: '/api' });
   });
 
   // ============================================================================
