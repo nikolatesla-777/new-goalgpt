@@ -45,6 +45,9 @@ function convertFootyStatsTrendsToTurkish(
   const turkish: string[] = [];
 
   for (const trend of trends.slice(0, 4)) {  // Max 4 per team
+    // Skip if text is undefined/null
+    if (!trend || !trend.text) continue;
+
     const text = trend.text.toLowerCase();
     const sentiment = trend.sentiment;
 
