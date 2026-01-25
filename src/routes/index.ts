@@ -141,9 +141,6 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // Partner management
     adminAPI.register(partnersRoutes, { prefix: '/api/partners' });
-
-    // Telegram publishing
-    adminAPI.register(telegramRoutes, { prefix: '/api' });
   });
 
   // ============================================================================
@@ -180,4 +177,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // FootyStats integration (may have mixed endpoints)
   app.register(footyStatsRoutes, { prefix: '/api' });
+
+  // Telegram publishing (TEMPORARY: PUBLIC for development, will add auth later)
+  app.register(telegramRoutes, { prefix: '/api' });
 }
