@@ -31,73 +31,77 @@ interface FootyStatsData {
     total?: number;
   };
   trends?: {
-    home?: Array<{ sentiment: string; text: string }>;
-    away?: Array<{ sentiment: string; text: string }>;
+    home?: Array<[string, string]>;  // ✅ [sentiment, text] tuples
+    away?: Array<[string, string]>;  // ✅ [sentiment, text] tuples
   };
 }
 
 /**
  * Convert FootyStats English trends to Turkish dipnot format
  * NOT literal translation - rewrite as Turkish bullet notes
+ *
+ * ✅ FIX: FootyStats returns trends as tuples [sentiment, text], NOT objects
  */
 function convertFootyStatsTrendsToTurkish(
-  trends: Array<{ sentiment: string; text: string }>,
+  trends: Array<[string, string]>,  // ✅ Changed from object to tuple
   teamName: string
 ): string[] {
   const turkish: string[] = [];
 
-  for (const trend of trends.slice(0, 4)) {  // Max 4 per team
-    // Skip if text is undefined/null
-    if (!trend || !trend.text) continue;
+  for (const trendTuple of trends.slice(0, 4)) {  // Max 4 per team
+    // Skip if invalid
+    if (!trendTuple || !Array.isArray(trendTuple) || trendTuple.length < 2) continue;
 
-    const text = trend.text.toLowerCase();
-    const sentiment = trend.sentiment;
+    const [sentiment, text] = trendTuple;  // ✅ Destructure tuple: [sentiment, text]
+    if (!text) continue;
+
+    const textLower = text.toLowerCase();
 
     // Extract key facts and convert to Turkish dipnot
-    if (text.includes('won') && text.includes('last')) {
-      const matchCount = text.match(/last (\d+)/)?.[1];
-      const winCount = text.match(/won (\d+)/)?.[1];
+    if (textLower.includes('won') && textLower.includes('last')) {
+      const matchCount = textLower.match(/last (\d+)/)?.[1];
+      const winCount = textLower.match(/won (\d+)/)?.[1];
       if (matchCount && winCount) {
         turkish.push(`Son ${matchCount} maçta ${winCount} galibiyet`);
       }
-    } else if (text.includes('not won') || text.includes('without a win')) {
-      const matchCount = text.match(/last (\d+)/)?.[1] || text.match(/(\d+) games/)?.[1];
+    } else if (textLower.includes('not won') || textLower.includes('without a win')) {
+      const matchCount = textLower.match(/last (\d+)/)?.[1] || textLower.match(/(\d+) games/)?.[1];
       if (matchCount) {
         turkish.push(`Son ${matchCount} maçta galibiyetsiz`);
       }
-    } else if (text.includes('clean sheet')) {
-      const count = text.match(/(\d+) clean sheet/)?.[1];
+    } else if (textLower.includes('clean sheet')) {
+      const count = textLower.match(/(\d+) clean sheet/)?.[1];
       if (count) {
         turkish.push(`${count} maçta kalesini gole kapatmış`);
       } else {
         turkish.push('Savunma güçlü, temiz çıkışlar yapıyor');
       }
-    } else if (text.includes('both teams scoring') || text.includes('btts')) {
-      const pct = text.match(/(\d+)%/)?.[1] || text.match(/(\d+)\/(\d+)/)?.[1];
+    } else if (textLower.includes('both teams scoring') || textLower.includes('btts')) {
+      const pct = textLower.match(/(\d+)%/)?.[1] || textLower.match(/(\d+)\/(\d+)/)?.[1];
       if (pct) {
         turkish.push(`Maçların %${pct}'inde karşılıklı gol var`);
       } else {
         turkish.push('Karşılıklı gol sıklığı yüksek');
       }
-    } else if (text.includes('scored') && text.includes('last')) {
-      const goals = text.match(/scored (\d+)/)?.[1];
-      const matches = text.match(/last (\d+)/)?.[1];
+    } else if (textLower.includes('scored') && textLower.includes('last')) {
+      const goals = textLower.match(/scored (\d+)/)?.[1];
+      const matches = textLower.match(/last (\d+)/)?.[1];
       if (goals && matches) {
         turkish.push(`Son ${matches} maçta ${goals} gol atmış`);
       }
-    } else if (text.includes('conceded') && text.includes('last')) {
-      const goals = text.match(/conceded (\d+)/)?.[1];
-      const matches = text.match(/last (\d+)/)?.[1];
+    } else if (textLower.includes('conceded') && textLower.includes('last')) {
+      const goals = textLower.match(/conceded (\d+)/)?.[1];
+      const matches = textLower.match(/last (\d+)/)?.[1];
       if (goals && matches) {
         turkish.push(`Son ${matches} maçta ${goals} gol yemiş`);
       }
-    } else if (text.includes('over 2.5') || text.includes('2.5 goals')) {
-      const count = text.match(/(\d+) of/)?.[1] || text.match(/last (\d+)/)?.[1];
+    } else if (textLower.includes('over 2.5') || textLower.includes('2.5 goals')) {
+      const count = textLower.match(/(\d+) of/)?.[1] || textLower.match(/last (\d+)/)?.[1];
       if (count) {
         turkish.push(`Son ${count} maçın çoğunda 2.5 üst gerçekleşmiş`);
       }
-    } else if (text.includes('points per game') || text.includes('ppg')) {
-      const ppg = text.match(/(\d+\.\d+)/)?.[1];
+    } else if (textLower.includes('points per game') || textLower.includes('ppg')) {
+      const ppg = textLower.match(/(\d+\.\d+)/)?.[1];
       if (ppg) {
         turkish.push(`Maç başı ortalama ${ppg} puan alıyor`);
       }
