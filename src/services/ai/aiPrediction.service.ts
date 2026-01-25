@@ -1683,7 +1683,7 @@ export class AIPredictionService {
 
             const predictionId = crypto.randomUUID();
             const externalId = `manual_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-            const botName = data.bot_name || 'Alert System';
+            const botName = data.bot_name || 'Alert_System';
 
             // Insert into ai_predictions with NEW 29-column schema
             await client.query(`

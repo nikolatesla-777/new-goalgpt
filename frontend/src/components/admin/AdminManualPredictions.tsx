@@ -197,7 +197,7 @@ export function AdminManualPredictions() {
                     minute: minute,
                     prediction: finalPrediction,
                     access_type: accessType,
-                    bot_name: 'Alert System'
+                    bot_name: 'Alert_System'
                 };
 
                 const res = await fetch(`${API_BASE}/predictions/manual`, {
@@ -213,7 +213,8 @@ export function AdminManualPredictions() {
                     setSelectedMatch(null);
                     setMinute(0);
                 } else {
-                    alert('Tahmin oluşturulamadı!');
+                    const errorData = await res.json();
+                    alert(`Tahmin oluşturulamadı: ${errorData.error || 'Bilinmeyen hata'}`);
                 }
             }
         } catch (err) {
