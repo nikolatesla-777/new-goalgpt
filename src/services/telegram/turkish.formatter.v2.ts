@@ -30,6 +30,8 @@ interface MatchData {
     btts?: number;
     over25?: number;
     over15?: number;
+    corners?: number;  // ✅ ADD: Match-level corner expectation (e.g., 9.4)
+    cards?: number;    // ✅ ADD: Match-level card expectation (e.g., 4.9)
   };
   xg?: {
     home?: number;
@@ -116,33 +118,41 @@ export function formatTelegramMessageV2(
   message += `• İY 0.5 ÜST eğilimi: ${iyTrend}\n\n`;
 
   // 🟨 KART ANALİZİ
-  if (form?.home?.cards_avg || form?.away?.cards_avg) {
+  if (potentials?.cards) {
     message += `🟨 <b>KART ANALİZİ</b>\n`;
-    if (form.home?.cards_avg) {
-      message += `• ${home_name}: ${form.home.cards_avg.toFixed(1)} kart / maç\n`;
-    }
-    if (form.away?.cards_avg) {
-      message += `• ${away_name}: ${form.away.cards_avg.toFixed(1)} kart / maç\n`;
+    message += `• Beklenen toplam kart: ${potentials.cards.toFixed(1)}\n`;
+
+    // Optional: Show team averages if available
+    if (form?.home?.cards_avg || form?.away?.cards_avg) {
+      if (form.home?.cards_avg) {
+        message += `• ${home_name} ortalaması: ${form.home.cards_avg.toFixed(1)} kart/maç\n`;
+      }
+      if (form.away?.cards_avg) {
+        message += `• ${away_name} ortalaması: ${form.away.cards_avg.toFixed(1)} kart/maç\n`;
+      }
     }
 
-    const totalCards = (form.home?.cards_avg || 0) + (form.away?.cards_avg || 0);
-    const cardTrend = totalCards >= 5 ? 'YÜKSEK' : totalCards >= 4 ? 'ORTA–YÜKSEK' : 'ORTA';
-    message += `• Toplam kart beklentisi: ${cardTrend}\n\n`;
+    const cardTrend = potentials.cards >= 5 ? 'YÜKSEK' : potentials.cards >= 4 ? 'ORTA–YÜKSEK' : 'ORTA';
+    message += `• Kart eğilimi: ${cardTrend}\n\n`;
   }
 
   // 🚩 KORNER ANALİZİ
-  if (form?.home?.corners_avg || form?.away?.corners_avg) {
+  if (potentials?.corners) {
     message += `🚩 <b>KORNER ANALİZİ</b>\n`;
-    if (form.home?.corners_avg) {
-      message += `• ${home_name}: ${form.home.corners_avg.toFixed(1)} korner / maç\n`;
-    }
-    if (form.away?.corners_avg) {
-      message += `• ${away_name}: ${form.away.corners_avg.toFixed(1)} korner / maç\n`;
+    message += `• Beklenen toplam korner: ${potentials.corners.toFixed(1)}\n`;
+
+    // Optional: Show team averages if available
+    if (form?.home?.corners_avg || form?.away?.corners_avg) {
+      if (form.home?.corners_avg) {
+        message += `• ${home_name} ortalaması: ${form.home.corners_avg.toFixed(1)} korner/maç\n`;
+      }
+      if (form.away?.corners_avg) {
+        message += `• ${away_name} ortalaması: ${form.away.corners_avg.toFixed(1)} korner/maç\n`;
+      }
     }
 
-    const totalCorners = (form.home?.corners_avg || 0) + (form.away?.corners_avg || 0);
-    const cornerTrend = totalCorners >= 12 ? 'YÜKSEK' : totalCorners >= 10 ? 'ORTA–YÜKSEK' : 'ORTA';
-    message += `• Toplam korner eğilimi: ${cornerTrend}\n\n`;
+    const cornerTrend = potentials.corners >= 12 ? 'YÜKSEK' : potentials.corners >= 10 ? 'ORTA–YÜKSEK' : 'ORTA';
+    message += `• Korner eğilimi: ${cornerTrend}\n\n`;
   }
 
   // ⚡ xG BEKLENTİSİ

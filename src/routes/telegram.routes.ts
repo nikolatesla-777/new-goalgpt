@@ -416,60 +416,28 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         let homeStats = null;
         let awayStats = null;
 
-        logger.info('[Telegram] 🔍 Fetching team stats...', {
-          ...logContext,
-          homeID: fsMatch.homeID,
-          awayID: fsMatch.awayID,
-        });
-
         if (fsMatch.homeID) {
           try {
-            logger.info('[Telegram] 🏠 Calling getTeamLastX for home team...', {
-              ...logContext,
-              homeID: fsMatch.homeID,
-            });
             const homeResponse = await footyStatsAPI.getTeamLastX(fsMatch.homeID);
-            logger.info('[Telegram] 🏠 Home team response received:', {
-              ...logContext,
-              has_data: !!homeResponse.data,
-              data_length: homeResponse.data?.length,
-              first_item_keys: homeResponse.data?.[0] ? Object.keys(homeResponse.data[0]) : null,
-            });
             homeStats = homeResponse.data?.[0];
           } catch (err: any) {
-            logger.error('[Telegram] ❌ ERROR fetching home team stats', {
+            logger.error('[Telegram] Error fetching home team stats', {
               ...logContext,
               error: err.message,
-              stack: err.stack,
             });
           }
-        } else {
-          logger.warn('[Telegram] ⚠️ No homeID in fsMatch', logContext);
         }
 
         if (fsMatch.awayID) {
           try {
-            logger.info('[Telegram] 🚌 Calling getTeamLastX for away team...', {
-              ...logContext,
-              awayID: fsMatch.awayID,
-            });
             const awayResponse = await footyStatsAPI.getTeamLastX(fsMatch.awayID);
-            logger.info('[Telegram] 🚌 Away team response received:', {
-              ...logContext,
-              has_data: !!awayResponse.data,
-              data_length: awayResponse.data?.length,
-              first_item_keys: awayResponse.data?.[0] ? Object.keys(awayResponse.data[0]) : null,
-            });
             awayStats = awayResponse.data?.[0];
           } catch (err: any) {
-            logger.error('[Telegram] ❌ ERROR fetching away team stats', {
+            logger.error('[Telegram] Error fetching away team stats', {
               ...logContext,
               error: err.message,
-              stack: err.stack,
             });
           }
-        } else {
-          logger.warn('[Telegram] ⚠️ No awayID in fsMatch', logContext);
         }
 
         // 8. Get league name from database (ts_matches JOIN ts_competitions)
@@ -515,30 +483,10 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         // 9. Build message data
-
-        // 🔍 DEBUG: Log homeStats and awayStats to check for cards/corners
-        logger.info('[Telegram] 🔍 DEBUG homeStats:', {
+        logger.info('[Telegram] 📊 Team stats loaded', {
           ...logContext,
-          homeStats: homeStats ? {
-            team_id: homeStats.team_id,
-            ppg: homeStats.seasonPPG_overall,
-            btts_pct: homeStats.seasonBTTSPercentage_overall,
-            corners_avg: homeStats.cornersAVG_overall,
-            cards_avg: homeStats.cardsAVG_overall,
-            all_keys: Object.keys(homeStats),
-          } : null,
-        });
-
-        logger.info('[Telegram] 🔍 DEBUG awayStats:', {
-          ...logContext,
-          awayStats: awayStats ? {
-            team_id: awayStats.team_id,
-            ppg: awayStats.seasonPPG_overall,
-            btts_pct: awayStats.seasonBTTSPercentage_overall,
-            corners_avg: awayStats.cornersAVG_overall,
-            cards_avg: awayStats.cardsAVG_overall,
-            all_keys: Object.keys(awayStats),
-          } : null,
+          has_home_stats: !!homeStats,
+          has_away_stats: !!awayStats,
         });
 
         const matchData = {
@@ -550,6 +498,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             btts: fsMatch.btts_potential,
             over25: fsMatch.o25_potential,
             over15: (fsMatch as any).o15_potential,
+            corners: fsMatch.corners_potential,  // ✅ ADD: Match-level corner expectation
+            cards: fsMatch.cards_potential,      // ✅ ADD: Match-level card expectation
           },
           xg: {
             home: fsMatch.team_a_xg_prematch,
