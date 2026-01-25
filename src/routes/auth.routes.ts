@@ -7,6 +7,20 @@ import { legacyLogin, checkLegacyUser, migrateToOAuth } from '../controllers/aut
 import { requireAuth } from '../middleware/auth.middleware';
 // PR-4: Use repository for all user DB access
 import { getUserProfile, deactivatePushTokens } from '../repositories/user.repository';
+// PR-10: Schema validation
+import { validate } from '../middleware/validation.middleware';
+import {
+  emailLoginSchema,
+  emailRegisterSchema,
+  googleSignInSchema,
+  appleSignInSchema,
+  phoneLoginSchema,
+  refreshTokenSchema,
+  logoutSchema,
+  legacyLoginSchema,
+  legacyCheckSchema,
+  migrateOAuthSchema,
+} from '../schemas/auth.schema';
 // PR-11: Deprecation utilities
 import { deprecateRoute } from '../utils/deprecation.utils';
 
@@ -30,7 +44,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - user: { id, email, name, xp, credits, isVip, ... }
    * - tokens: { accessToken, refreshToken, expiresIn }
    */
-  fastify.post('/login', emailLogin);
+  fastify.post('/login', { preHandler: [validate({ body: emailLoginSchema }) as any as any] }, emailLogin);
 
   /**
    * POST /api/auth/register
@@ -47,7 +61,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - user: { id, email, name, xp, credits, isVip, ... }
    * - tokens: { accessToken, refreshToken, expiresIn }
    */
-  fastify.post('/register', emailRegister);
+  fastify.post('/register', { preHandler: [validate({ body: emailRegisterSchema }) as any] }, emailRegister);
 
   /**
    * POST /api/auth/google/signin
@@ -63,7 +77,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - user: { id, email, name, xp, credits, isVip, ... }
    * - tokens: { accessToken, refreshToken, expiresIn }
    */
-  fastify.post('/google/signin', googleSignIn);
+  fastify.post('/google/signin', { preHandler: [validate({ body: googleSignInSchema }) as any] }, googleSignIn);
 
   /**
    * POST /api/auth/apple/signin
@@ -81,7 +95,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - user: { id, email, name, xp, credits, isVip, ... }
    * - tokens: { accessToken, refreshToken, expiresIn }
    */
-  fastify.post('/apple/signin', appleSignIn);
+  fastify.post('/apple/signin', { preHandler: [validate({ body: appleSignInSchema }) as any] }, appleSignIn);
 
   /**
    * POST /api/auth/phone/login
@@ -98,7 +112,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - user: { id, phone, name, xp, credits, isVip, ... }
    * - tokens: { accessToken, refreshToken, expiresIn }
    */
-  fastify.post('/phone/login', phoneLogin);
+  fastify.post('/phone/login', { preHandler: [validate({ body: phoneLoginSchema }) as any] }, phoneLogin);
 
   /**
    * POST /api/auth/refresh
@@ -111,7 +125,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - success: boolean
    * - tokens: { accessToken, refreshToken, expiresIn }
    */
-  fastify.post('/refresh', refreshToken);
+  fastify.post('/refresh', { preHandler: [validate({ body: refreshTokenSchema }) as any] }, refreshToken);
 
   /**
    * GET /api/auth/me
@@ -198,8 +212,8 @@ export async function authRoutes(fastify: FastifyInstance) {
    */
   fastify.post(
     '/logout',
-    { preHandler: requireAuth } as any,
-    async (request: any, reply: any) => {
+    { preHandler: [requireAuth, validate({ body: logoutSchema }) as any] },
+    async (request, reply) => {
       try {
         const userId = request.user!.userId;
         const { deviceId } = request.body as { deviceId?: string };
@@ -244,7 +258,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - tokens: { accessToken, refreshToken, expiresIn }
    * - migration: { available: true, message: string }
    */
-  fastify.post('/legacy/login', async (request, reply) => {
+  fastify.post('/legacy/login', { preHandler: [validate({ body: legacyLoginSchema }) as any] }, async (request, reply) => {
     // PR-11: Add deprecation headers
     deprecateRoute(request, reply, {
       canonical: '/api/auth/phone/login',
@@ -273,7 +287,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - hasPassword: boolean
    * - isLegacyUser: boolean
    */
-  fastify.post('/legacy/check', async (request, reply) => {
+  fastify.post('/legacy/check', { preHandler: [validate({ body: legacyCheckSchema }) as any] }, async (request, reply) => {
     // PR-11: Add deprecation headers
     deprecateRoute(request, reply, {
       canonical: '/api/auth/phone/login',
@@ -307,7 +321,7 @@ export async function authRoutes(fastify: FastifyInstance) {
    * - message: string
    * - provider: string
    */
-  fastify.post('/legacy/migrate-oauth', { preHandler: requireAuth }, async (request, reply) => {
+  fastify.post('/legacy/migrate-oauth', { preHandler: [requireAuth, validate({ body: migrateOAuthSchema }) as any] }, async (request, reply) => {
     // PR-11: Add deprecation headers
     deprecateRoute(request, reply, {
       canonical: '/api/auth/google/signin',
