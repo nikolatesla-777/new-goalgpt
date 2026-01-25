@@ -1,0 +1,373 @@
+/**
+ * Telegram Daily Lists Service
+ *
+ * Generates daily prediction lists for Telegram channel:
+ * - Over 2.5 Goals
+ * - BTTS (Both Teams To Score)
+ * - First Half Over 0.5 Goals
+ *
+ * STRICT RULES:
+ * - Only NOT_STARTED matches
+ * - 3-5 matches per list max
+ * - Confidence-based filtering (prefer HIGH/MEDIUM)
+ * - Skip if insufficient data
+ *
+ * @author GoalGPT Team
+ * @version 1.0.0 - Telegram-focused automation
+ */
+
+import { footyStatsAPI } from '../footystats/footystats.client';
+import { logger } from '../../utils/logger';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+interface FootyStatsMatch {
+  fs_id: number;
+  home_name: string;
+  away_name: string;
+  league_name: string;
+  date_unix: number;
+  status: string;
+  potentials?: {
+    btts?: number;
+    over25?: number;
+    avg?: number;
+  };
+  xg?: {
+    home?: number;
+    away?: number;
+  };
+  odds?: {
+    home?: number;
+    draw?: number;
+    away?: number;
+  };
+}
+
+interface MatchCandidate {
+  match: FootyStatsMatch;
+  confidence: number;
+  reason: string;
+}
+
+export interface DailyList {
+  market: 'OVER_25' | 'BTTS' | 'HT_OVER_05';
+  title: string;
+  emoji: string;
+  matches: MatchCandidate[];
+  generated_at: number;
+}
+
+// ============================================================================
+// CONFIDENCE CALCULATION
+// ============================================================================
+
+/**
+ * Calculate confidence score for Over 2.5 market
+ */
+function calculateOver25Confidence(match: FootyStatsMatch): number {
+  let score = 0;
+  let factors = 0;
+
+  // Potential (max 40 points)
+  if (match.potentials?.over25) {
+    score += (match.potentials.over25 / 100) * 40;
+    factors++;
+  }
+
+  // xG Total (max 30 points)
+  if (match.xg?.home && match.xg?.away) {
+    const totalXg = match.xg.home + match.xg.away;
+    if (totalXg >= 3.0) score += 30;
+    else if (totalXg >= 2.5) score += 20;
+    else if (totalXg >= 2.0) score += 10;
+    factors++;
+  }
+
+  // BTTS correlation (max 20 points)
+  if (match.potentials?.btts) {
+    score += (match.potentials.btts / 100) * 20;
+    factors++;
+  }
+
+  // Avg potential (max 10 points)
+  if (match.potentials?.avg) {
+    score += (match.potentials.avg / 100) * 10;
+    factors++;
+  }
+
+  // If less than 2 factors, return 0 (insufficient data)
+  if (factors < 2) return 0;
+
+  return Math.round(score);
+}
+
+/**
+ * Calculate confidence score for BTTS market
+ */
+function calculateBTTSConfidence(match: FootyStatsMatch): number {
+  let score = 0;
+  let factors = 0;
+
+  // BTTS Potential (max 50 points)
+  if (match.potentials?.btts) {
+    score += (match.potentials.btts / 100) * 50;
+    factors++;
+  }
+
+  // xG balance (max 30 points) - both teams should have decent xG
+  if (match.xg?.home && match.xg?.away) {
+    const minXg = Math.min(match.xg.home, match.xg.away);
+    if (minXg >= 1.0) score += 30;
+    else if (minXg >= 0.7) score += 20;
+    else if (minXg >= 0.5) score += 10;
+    factors++;
+  }
+
+  // Over 2.5 correlation (max 20 points)
+  if (match.potentials?.over25) {
+    score += (match.potentials.over25 / 100) * 20;
+    factors++;
+  }
+
+  // If less than 2 factors, return 0
+  if (factors < 2) return 0;
+
+  return Math.round(score);
+}
+
+/**
+ * Calculate confidence score for First Half Over 0.5 market
+ */
+function calculateHTOver05Confidence(match: FootyStatsMatch): number {
+  let score = 0;
+  let factors = 0;
+
+  // Total xG as proxy for attacking intent (max 40 points)
+  if (match.xg?.home && match.xg?.away) {
+    const totalXg = match.xg.home + match.xg.away;
+    if (totalXg >= 2.5) score += 40;
+    else if (totalXg >= 2.0) score += 30;
+    else if (totalXg >= 1.5) score += 20;
+    factors++;
+  }
+
+  // Over 2.5 potential (max 30 points)
+  if (match.potentials?.over25) {
+    score += (match.potentials.over25 / 100) * 30;
+    factors++;
+  }
+
+  // BTTS potential (max 20 points)
+  if (match.potentials?.btts) {
+    score += (match.potentials.btts / 100) * 20;
+    factors++;
+  }
+
+  // Avg potential (max 10 points)
+  if (match.potentials?.avg) {
+    score += (match.potentials.avg / 100) * 10;
+    factors++;
+  }
+
+  // If less than 2 factors, return 0
+  if (factors < 2) return 0;
+
+  return Math.round(score);
+}
+
+// ============================================================================
+// FILTERING & SELECTION
+// ============================================================================
+
+/**
+ * Filter matches by market and confidence threshold
+ */
+function filterMatchesByMarket(
+  matches: FootyStatsMatch[],
+  market: 'OVER_25' | 'BTTS' | 'HT_OVER_05',
+  minConfidence: number = 50
+): MatchCandidate[] {
+  const candidates: MatchCandidate[] = [];
+
+  for (const match of matches) {
+    // Skip if not NOT_STARTED
+    if (match.status !== 'incomplete') continue;
+
+    // Calculate confidence based on market
+    let confidence = 0;
+    let reason = '';
+
+    switch (market) {
+      case 'OVER_25':
+        confidence = calculateOver25Confidence(match);
+        reason = `O2.5: %${match.potentials?.over25 || 0}, xG: ${((match.xg?.home || 0) + (match.xg?.away || 0)).toFixed(1)}`;
+        break;
+      case 'BTTS':
+        confidence = calculateBTTSConfidence(match);
+        reason = `BTTS: %${match.potentials?.btts || 0}, xG: ${(match.xg?.home || 0).toFixed(1)}-${(match.xg?.away || 0).toFixed(1)}`;
+        break;
+      case 'HT_OVER_05':
+        confidence = calculateHTOver05Confidence(match);
+        reason = `İY Potansiyel, xG: ${((match.xg?.home || 0) + (match.xg?.away || 0)).toFixed(1)}`;
+        break;
+    }
+
+    // Skip if below threshold or insufficient data
+    if (confidence < minConfidence) continue;
+
+    candidates.push({ match, confidence, reason });
+  }
+
+  // Sort by confidence descending
+  return candidates.sort((a, b) => b.confidence - a.confidence);
+}
+
+/**
+ * Select top matches for a list (max 5)
+ */
+function selectTopMatches(
+  candidates: MatchCandidate[],
+  maxMatches: number = 5
+): MatchCandidate[] {
+  // Prefer HIGH (>70) and MEDIUM (50-70) confidence
+  const high = candidates.filter(c => c.confidence >= 70);
+  const medium = candidates.filter(c => c.confidence >= 50 && c.confidence < 70);
+
+  let selected: MatchCandidate[] = [];
+
+  // Strategy: Fill with HIGH first, then MEDIUM if needed
+  if (high.length >= 3) {
+    selected = high.slice(0, maxMatches);
+  } else if (high.length + medium.length >= 3) {
+    selected = [...high, ...medium].slice(0, maxMatches);
+  } else {
+    // Not enough matches
+    return [];
+  }
+
+  return selected;
+}
+
+// ============================================================================
+// MAIN GENERATION FUNCTION
+// ============================================================================
+
+/**
+ * Generate all daily lists for Telegram
+ *
+ * @returns Array of DailyList objects (empty if no eligible matches)
+ */
+export async function generateDailyLists(): Promise<DailyList[]> {
+  logger.info('[TelegramDailyLists] 🚀 Starting daily list generation...');
+
+  try {
+    // 1. Fetch today's matches from FootyStats
+    const response = await footyStatsAPI.getTodaysMatches();
+    const allMatches: FootyStatsMatch[] = response.matches || [];
+
+    logger.info(`[TelegramDailyLists] 📊 Fetched ${allMatches.length} matches from FootyStats`);
+
+    if (allMatches.length === 0) {
+      logger.warn('[TelegramDailyLists] ⚠️ No matches available today');
+      return [];
+    }
+
+    // 2. Generate lists for each market
+    const lists: DailyList[] = [];
+    const timestamp = Date.now();
+
+    // A) Over 2.5 Goals
+    const over25Candidates = filterMatchesByMarket(allMatches, 'OVER_25', 55);
+    const over25Selected = selectTopMatches(over25Candidates, 5);
+    if (over25Selected.length >= 3) {
+      lists.push({
+        market: 'OVER_25',
+        title: 'Günün 2.5 ÜST Maçları',
+        emoji: '📈',
+        matches: over25Selected,
+        generated_at: timestamp,
+      });
+      logger.info(`[TelegramDailyLists] ✅ Over 2.5 list: ${over25Selected.length} matches`);
+    } else {
+      logger.warn(`[TelegramDailyLists] ⚠️ Over 2.5 list: Insufficient matches (${over25Selected.length})`);
+    }
+
+    // B) BTTS
+    const bttsCandiates = filterMatchesByMarket(allMatches, 'BTTS', 55);
+    const bttsSelected = selectTopMatches(bttsCandiates, 5);
+    if (bttsSelected.length >= 3) {
+      lists.push({
+        market: 'BTTS',
+        title: 'Günün BTTS Maçları',
+        emoji: '⚽',
+        matches: bttsSelected,
+        generated_at: timestamp,
+      });
+      logger.info(`[TelegramDailyLists] ✅ BTTS list: ${bttsSelected.length} matches`);
+    } else {
+      logger.warn(`[TelegramDailyLists] ⚠️ BTTS list: Insufficient matches (${bttsSelected.length})`);
+    }
+
+    // C) First Half Over 0.5
+    const htOver05Candidates = filterMatchesByMarket(allMatches, 'HT_OVER_05', 50);
+    const htOver05Selected = selectTopMatches(htOver05Candidates, 5);
+    if (htOver05Selected.length >= 3) {
+      lists.push({
+        market: 'HT_OVER_05',
+        title: 'Günün İY 0.5 ÜST Maçları',
+        emoji: '⏱️',
+        matches: htOver05Selected,
+        generated_at: timestamp,
+      });
+      logger.info(`[TelegramDailyLists] ✅ HT Over 0.5 list: ${htOver05Selected.length} matches`);
+    } else {
+      logger.warn(`[TelegramDailyLists] ⚠️ HT Over 0.5 list: Insufficient matches (${htOver05Selected.length})`);
+    }
+
+    // 3. Log final result
+    if (lists.length === 0) {
+      logger.warn('[TelegramDailyLists] ❌ NO_ELIGIBLE_MATCHES - No lists generated');
+    } else {
+      logger.info(`[TelegramDailyLists] 🎯 Generated ${lists.length} lists successfully`);
+    }
+
+    return lists;
+
+  } catch (error: any) {
+    logger.error('[TelegramDailyLists] ❌ Error generating lists:', error);
+    throw error;
+  }
+}
+
+/**
+ * Format a daily list as Telegram message
+ */
+export function formatDailyListMessage(list: DailyList): string {
+  const { emoji, title, matches } = list;
+
+  let message = `${emoji} <b>${title.toUpperCase()}</b>\n\n`;
+
+  matches.forEach((candidate, index) => {
+    const { match, confidence, reason } = candidate;
+    const num = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'][index];
+
+    const matchTime = new Date(match.date_unix * 1000);
+    const timeStr = matchTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+    const confidenceEmoji = confidence >= 70 ? '🔥' : '⭐';
+
+    message += `${num} <b>${match.home_name} vs ${match.away_name}</b>\n`;
+    message += `🕒 ${timeStr} | 🏆 ${match.league_name || 'Bilinmiyor'}\n`;
+    message += `${confidenceEmoji} Güven: ${confidence}/100\n`;
+    message += `📊 ${reason}\n\n`;
+  });
+
+  message += `⚠️ <b>Not:</b>\n`;
+  message += `• Liste istatistiksel verilere dayanır\n`;
+  message += `• Canlıya girmeden önce oran ve kadro kontrolü önerilir\n`;
+
+  return message;
+}

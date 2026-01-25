@@ -304,6 +304,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Settle Telegram published picks for finished matches',
   },
+  {
+    name: 'Telegram Daily Lists',
+    schedule: '0 10 * * *', // Daily at 10:00 AM UTC (13:00 Turkey time)
+    handler: async () => {
+      const { runTelegramDailyListsJob } = await import('./telegramDailyLists.job');
+      await runTelegramDailyListsJob();
+    },
+    enabled: true,
+    description: 'Automated daily prediction lists for Telegram (Over 2.5, BTTS, HT Over 0.5)',
+  },
 ];
 
 /**

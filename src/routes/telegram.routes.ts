@@ -25,6 +25,7 @@ import { validateMatchStateForPublish } from '../services/telegram/validators/ma
 import { fetchMatchStateForPublish } from '../services/telegram/matchStateFetcher.service';
 import { validatePicks } from '../services/telegram/validators/pickValidator';
 import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
+import { generateDailyLists, formatDailyListMessage } from '../services/telegram/dailyLists.service';
 
 interface PublishRequest {
   Body: {
@@ -607,6 +608,159 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
       }
     } catch (error: any) {
       logger.error('[Telegram] Error fetching posts:', error);
+      return reply.status(500).send({ error: error.message });
+    }
+  });
+
+  /**
+   * POST /telegram/publish/daily-lists
+   * Generate and publish daily prediction lists (automated)
+   *
+   * STRICT RULES:
+   * - Only NOT_STARTED matches
+   * - 3-5 matches per list max
+   * - Confidence-based filtering
+   * - Skip if insufficient data
+   */
+  fastify.post('/telegram/publish/daily-lists', async (request, reply) => {
+    const startTime = Date.now();
+    const logContext = { operation: 'daily_lists_publish' };
+
+    try {
+      logger.info('[TelegramDailyLists] 🚀 Starting daily lists publication...', logContext);
+
+      // 1. Check bot configuration
+      if (!telegramBot.isConfigured()) {
+        return reply.status(503).send({ error: 'Telegram bot not configured' });
+      }
+
+      const channelId = process.env.TELEGRAM_CHANNEL_ID || '';
+      if (!channelId) {
+        return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
+      }
+
+      // 2. Generate daily lists
+      logger.info('[TelegramDailyLists] 📊 Generating lists...', logContext);
+      const lists = await generateDailyLists();
+
+      if (lists.length === 0) {
+        logger.warn('[TelegramDailyLists] ⚠️ NO_ELIGIBLE_MATCHES - No lists to publish', logContext);
+        return {
+          success: false,
+          message: 'NO_ELIGIBLE_MATCHES',
+          lists_generated: 0,
+          reason: 'Insufficient matches with required confidence levels',
+        };
+      }
+
+      logger.info(`[TelegramDailyLists] ✅ Generated ${lists.length} lists`, {
+        ...logContext,
+        list_count: lists.length,
+        markets: lists.map(l => l.market),
+      });
+
+      // 3. Publish each list to Telegram
+      const publishedLists: any[] = [];
+
+      for (const list of lists) {
+        logger.info(`[TelegramDailyLists] 📡 Publishing ${list.market} list...`, {
+          ...logContext,
+          market: list.market,
+          match_count: list.matches.length,
+        });
+
+        const messageText = formatDailyListMessage(list);
+
+        try {
+          const result = await telegramBot.sendMessage({
+            chat_id: channelId,
+            text: messageText,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+          });
+
+          if (!result.ok) {
+            throw new Error(`Telegram API returned ok=false for ${list.market}`);
+          }
+
+          const telegramMessageId = result.result.message_id;
+
+          // Save to database
+          const client = await pool.connect();
+          try {
+            const matchIds = list.matches.map(m => m.match.fs_id).join(',');
+
+            await client.query(
+              `INSERT INTO telegram_posts (match_id, channel_id, telegram_message_id, content, status, metadata)
+               VALUES ($1, $2, $3, $4, 'published', $5)`,
+              [
+                `daily_list_${list.market}_${Date.now()}`, // Unique ID for list
+                channelId,
+                telegramMessageId,
+                messageText,
+                JSON.stringify({
+                  list_type: 'daily',
+                  market: list.market,
+                  match_ids: matchIds,
+                  match_count: list.matches.length,
+                  confidence_scores: list.matches.map(m => m.confidence),
+                  generated_at: list.generated_at,
+                }),
+              ]
+            );
+          } finally {
+            client.release();
+          }
+
+          publishedLists.push({
+            market: list.market,
+            title: list.title,
+            match_count: list.matches.length,
+            telegram_message_id: telegramMessageId,
+            avg_confidence: Math.round(
+              list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
+            ),
+          });
+
+          logger.info(`[TelegramDailyLists] ✅ Published ${list.market} list`, {
+            ...logContext,
+            market: list.market,
+            message_id: telegramMessageId,
+          });
+
+        } catch (err: any) {
+          logger.error(`[TelegramDailyLists] ❌ Failed to publish ${list.market} list`, {
+            ...logContext,
+            market: list.market,
+            error: err.message,
+          });
+        }
+      }
+
+      const elapsedMs = Date.now() - startTime;
+      logger.info('[TelegramDailyLists] ✅ Daily lists publication complete', {
+        ...logContext,
+        lists_generated: lists.length,
+        lists_published: publishedLists.length,
+        elapsed_ms: elapsedMs,
+      });
+
+      return {
+        success: true,
+        lists_generated: lists.length,
+        lists_published: publishedLists.length,
+        published_lists: publishedLists,
+        elapsed_ms: elapsedMs,
+      };
+
+    } catch (error: any) {
+      const elapsedMs = Date.now() - startTime;
+      logger.error('[TelegramDailyLists] ❌ Daily lists publication failed', {
+        ...logContext,
+        error: error.message,
+        stack: error.stack,
+        elapsed_ms: elapsedMs,
+      });
       return reply.status(500).send({ error: error.message });
     }
   });
