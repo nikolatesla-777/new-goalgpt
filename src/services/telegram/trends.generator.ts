@@ -8,6 +8,8 @@
  * @version 1.0.0
  */
 
+import { logger } from '../../utils/logger';
+
 interface FootyStatsData {
   potentials?: {
     btts?: number;
@@ -120,7 +122,7 @@ export function generateTurkishTrends(
   awayTeam: string,
   data: FootyStatsData
 ): { home: string[]; away: string[] } {
-  console.log('[TrendsGenerator] Input data:', {
+  logger.info('[TrendsGenerator] Input data:', {
     hasFootyStatsTrends: !!data.trends?.home,
     footyStatsTrendsCount: data.trends?.home?.length || 0,
     hasForm: !!data.form,
@@ -131,14 +133,14 @@ export function generateTurkishTrends(
 
   // PRIORITY 1: Use FootyStats trends if available
   if (data.trends?.home && data.trends.home.length > 0) {
-    console.log('[TrendsGenerator] Using FootyStats trends');
+    logger.info('[TrendsGenerator] Using FootyStats trends');
     return {
       home: convertFootyStatsTrendsToTurkish(data.trends.home, homeTeam),
       away: convertFootyStatsTrendsToTurkish(data.trends.away || [], awayTeam),
     };
   }
 
-  console.log('[TrendsGenerator] Using rule-based generation');
+  logger.info('[TrendsGenerator] Using rule-based generation');
   // PRIORITY 2: Rule-based generation (ALWAYS 3 bullets minimum)
   const homeTrends: string[] = [];
   const awayTrends: string[] = [];
@@ -259,7 +261,7 @@ export function generateTurkishTrends(
     away: awayTrends.slice(0, 3),  // EXACTLY 3 bullets
   };
 
-  console.log('[TrendsGenerator] Final result:', {
+  logger.info('[TrendsGenerator] Final result:', {
     home_count: result.home.length,
     away_count: result.away.length,
     home: result.home,

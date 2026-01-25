@@ -18,6 +18,7 @@
 
 import { generateTurkishTrends } from './trends.generator';
 import { ConfidenceScoreResult, formatConfidenceScoreForTelegram } from './confidenceScorer.service';
+import { logger } from '../../utils/logger';
 
 interface Pick {
   market_type: 'BTTS_YES' | 'O25_OVER' | 'O15_OVER' | 'HT_O05_OVER';
@@ -107,7 +108,7 @@ export function formatTelegramMessage(
   });
 
   // DEBUG: Log trends data
-  console.log('[TurkishFormatter] Trend data generated:', {
+  logger.info('[TurkishFormatter] Trend data generated:', {
     home_count: trendData.home.length,
     away_count: trendData.away.length,
     home: trendData.home,
