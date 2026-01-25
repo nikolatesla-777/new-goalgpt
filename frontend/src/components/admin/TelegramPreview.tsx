@@ -78,6 +78,29 @@ export function TelegramPreview({ match, picks, onPickToggle, onPublish, publish
     previewMessage += `Toplam: ${(match.team_a_xg_prematch + match.team_b_xg_prematch).toFixed(2)}\n\n`;
   }
 
+  // Trends section (always show 3 bullets per team)
+  const totalXg = (match.team_a_xg_prematch || 0) + (match.team_b_xg_prematch || 0);
+
+  previewMessage += `🧠 Trendler (Ev):\n`;
+  if (totalXg >= 2.5) {
+    previewMessage += `• Yüksek gol beklentisi (xG: ${totalXg.toFixed(1)})\n`;
+  } else {
+    previewMessage += `• Orta gol beklentisi (xG: ${totalXg.toFixed(1)})\n`;
+  }
+  previewMessage += `• Ev sahibi avantajı mevcut\n`;
+  previewMessage += `• Orta seviyede hücum performansı\n`;
+  previewMessage += `\n`;
+
+  previewMessage += `🧠 Trendler (Dep):\n`;
+  if ((match.team_b_xg_prematch || 0) >= 1.5) {
+    previewMessage += `• Deplasmanda ofansif (xG: ${(match.team_b_xg_prematch || 0).toFixed(1)})\n`;
+  } else {
+    previewMessage += `• Deplasmanda pasif ofans (xG: ${(match.team_b_xg_prematch || 0).toFixed(1)})\n`;
+  }
+  previewMessage += `• Orta seviye deplasman formu\n`;
+  previewMessage += `• Kontra atak potansiyeli var\n`;
+  previewMessage += `\n`;
+
   if (picks.length > 0) {
     previewMessage += `🎯 Tahmini Piyasalar:\n`;
     picks.forEach(pick => {
