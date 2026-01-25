@@ -19,6 +19,7 @@
 import { generateTurkishTrends } from './trends.generator';
 import { ConfidenceScoreResult, formatConfidenceScoreForTelegram } from './confidenceScorer.service';
 import { logger } from '../../utils/logger';
+import { logger } from '../../utils/logger';
 
 interface Pick {
   market_type: 'BTTS_YES' | 'O25_OVER' | 'O15_OVER' | 'HT_O05_OVER';
