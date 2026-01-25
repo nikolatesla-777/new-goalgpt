@@ -18,6 +18,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { telegramBot } from '../services/telegram/telegram.client';
 import { formatTelegramMessage } from '../services/telegram/turkish.formatter';
+import { formatTelegramMessageV2 } from '../services/telegram/turkish.formatter.v2';
 import { footyStatsAPI } from '../services/footystats/footystats.client';
 import { pool, safeQuery } from '../database/connection';
 import { logger } from '../utils/logger';
@@ -497,8 +498,20 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             away: fsMatch.team_b_xg_prematch,
           },
           form: {
-            home: homeStats ? { ppg: homeStats.seasonPPG_overall } : null,
-            away: awayStats ? { ppg: awayStats.seasonPPG_overall } : null,
+            home: homeStats ? {
+              ppg: homeStats.seasonPPG_overall,
+              btts_pct: homeStats.seasonBTTSPercentage_overall,
+              over25_pct: homeStats.seasonOver25Percentage_overall,
+              corners_avg: homeStats.cornersAVG_overall,
+              cards_avg: homeStats.cardsAVG_overall,
+            } : null,
+            away: awayStats ? {
+              ppg: awayStats.seasonPPG_overall,
+              btts_pct: awayStats.seasonBTTSPercentage_overall,
+              over25_pct: awayStats.seasonOver25Percentage_overall,
+              corners_avg: awayStats.cornersAVG_overall,
+              cards_avg: awayStats.cardsAVG_overall,
+            } : null,
           },
           h2h: fsMatch.h2h ? {
             total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
@@ -530,8 +543,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           stars: confidenceScore.stars,
         });
 
-        // PHASE-2B: Format message with confidence score
-        const messageText = formatTelegramMessage(matchData, picks as any, confidenceScore);
+        // PHASE-2B: Format message with NEW V2 template (enhanced format)
+        const messageText = formatTelegramMessageV2(matchData, picks as any, confidenceScore);
 
         // 🔍 DEBUG: Check formatted message
         console.log('\n' + '='.repeat(80));
