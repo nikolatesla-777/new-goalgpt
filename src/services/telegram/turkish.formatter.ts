@@ -106,6 +106,14 @@ export function formatTelegramMessage(
     trends,
   });
 
+  // DEBUG: Log trends data
+  console.log('[TurkishFormatter] Trend data generated:', {
+    home_count: trendData.home.length,
+    away_count: trendData.away.length,
+    home: trendData.home,
+    away: trendData.away,
+  });
+
   if (trendData.home.length > 0) {
     message += `🧠 <b>Trendler (Ev):</b>\n`;
     trendData.home.forEach(trend => {
