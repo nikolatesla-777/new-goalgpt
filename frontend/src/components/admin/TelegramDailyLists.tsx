@@ -39,6 +39,13 @@ interface DailyList {
   matches: Match[];
   preview: string;
   generated_at: number;
+  performance?: {
+    total: number;
+    won: number;
+    lost: number;
+    pending: number;
+    win_rate: number;
+  };
 }
 
 interface DailyListsResponse {
@@ -359,57 +366,98 @@ export function TelegramDailyLists() {
                           style={{ width: `${list.avg_confidence}%` }}
                         ></div>
                       </div>
+
+                      {/* Performance Stats (if available) */}
+                      {list.performance && list.performance.total > 0 && (
+                        <div className="mt-3 flex items-center gap-3 text-sm">
+                          <div className="bg-white bg-opacity-25 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-2">
+                            <span className="font-medium opacity-90">Performans:</span>
+                            <span className="font-bold">
+                              {list.performance.won}/{list.performance.total}
+                            </span>
+                            {list.performance.pending === 0 && (
+                              <span className="text-xs">
+                                ({list.performance.win_rate}% {list.performance.win_rate >= 70 ? '✅' : list.performance.win_rate >= 50 ? '⚠️' : '❌'})
+                              </span>
+                            )}
+                          </div>
+                          {list.performance.pending > 0 && (
+                            <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-1 text-xs">
+                              <span className="animate-pulse">⏳</span>
+                              <span>{list.performance.pending} bekliyor</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Matches Preview */}
                   <div className="p-6">
                     <div className="space-y-3 mb-4">
-                      {list.matches.slice(0, isExpanded ? undefined : 3).map((match, idx) => (
-                        <div
-                          key={match.fs_id}
-                          className={`${config.lightBg} rounded-xl p-4 border-2 border-transparent hover:border-gray-200 transition-all duration-200`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-lg font-bold text-gray-400">#{idx + 1}</span>
-                                <span className="text-sm font-bold text-gray-900 truncate">
-                                  {match.home_name} vs {match.away_name}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-4 text-xs text-gray-500">
-                                <span className="flex items-center gap-1">
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  {new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </span>
-                                <span className="truncate">{match.league_name}</span>
-                              </div>
-                            </div>
-                            <div className={`px-3 py-1 rounded-lg font-bold text-sm ${
-                              match.confidence >= 80 ? 'bg-green-100 text-green-700' :
-                              match.confidence >= 70 ? 'bg-blue-100 text-blue-700' :
-                              'bg-yellow-100 text-yellow-700'
-                            }`}>
-                              {match.confidence >= 80 ? '🔥' : match.confidence >= 70 ? '⭐' : '💡'} {match.confidence}
-                            </div>
-                          </div>
+                      {list.matches.slice(0, isExpanded ? undefined : 3).map((match, idx) => {
+                        // Determine match status
+                        const now = Math.floor(Date.now() / 1000);
+                        const matchStarted = match.date_unix <= now;
+                        const matchFinished = match.date_unix <= (now - 2 * 60 * 60); // 2 hours after start = finished
 
-                          {match.xg && (
-                            <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
-                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                              </svg>
-                              xG: {match.xg.home?.toFixed(1)} - {match.xg.away?.toFixed(1)}
+                        return (
+                          <div
+                            key={match.fs_id}
+                            className={`${config.lightBg} rounded-xl p-4 border-2 border-transparent hover:border-gray-200 transition-all duration-200 ${
+                              matchStarted ? 'opacity-60' : ''
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-lg font-bold text-gray-400">#{idx + 1}</span>
+                                  <span className={`text-sm font-bold truncate ${matchStarted ? 'text-gray-500' : 'text-gray-900'}`}>
+                                    {match.home_name} vs {match.away_name}
+                                  </span>
+                                  {matchStarted && (
+                                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                      matchFinished
+                                        ? 'bg-gray-200 text-gray-600'
+                                        : 'bg-red-100 text-red-600 animate-pulse'
+                                    }`}>
+                                      {matchFinished ? 'BİTTİ' : 'CANLI'}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-4 text-xs text-gray-500">
+                                  <span className="flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </span>
+                                  <span className="truncate">{match.league_name}</span>
+                                </div>
+                              </div>
+                              <div className={`px-3 py-1 rounded-lg font-bold text-sm ${
+                                match.confidence >= 80 ? 'bg-green-100 text-green-700' :
+                                match.confidence >= 70 ? 'bg-blue-100 text-blue-700' :
+                                'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {match.confidence >= 80 ? '🔥' : match.confidence >= 70 ? '⭐' : '💡'} {match.confidence}
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      ))}
+
+                            {match.xg && (
+                              <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                </svg>
+                                xG: {match.xg.home?.toFixed(1)} - {match.xg.away?.toFixed(1)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* Show More/Less Button */}
