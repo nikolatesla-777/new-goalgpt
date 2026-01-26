@@ -330,6 +330,78 @@ function translateFullTrend(text: string, teamName: string): string {
     }
   }
 
+  // Pattern 11: "Things have not been going well in front of goal" - Scoring struggles
+  if (lower.includes('not been going') && lower.includes('front of goal')) {
+    const failedToScoreMatch = lower.match(/failing to score in (\d+) of the last (\d+) games/);
+    if (failedToScoreMatch) {
+      return `Hücumda zorlanıyor, son ${failedToScoreMatch[2]} maçın ${failedToScoreMatch[1]}'inde gol atamadı.`;
+    }
+    return 'Gol yollarında sıkıntı yaşıyor.';
+  }
+
+  // Pattern 12: "fired blanks" - Failed to score
+  if (lower.includes('fired blanks')) {
+    let result = '';
+    const blanksMatch = lower.match(/fired blanks in (\d+) games/);
+    const percentMatch = lower.match(/that's (\d+)% of games/);
+    const scoredMatch = lower.match(/last (\d+) games.*?scored.*?(\d+) goals/);
+
+    if (blanksMatch) {
+      result = `Sezon boyunca ${blanksMatch[1]} maçta gol atamadı`;
+      if (percentMatch) {
+        result += ` (maçların %${percentMatch[1]}'i)`;
+      }
+      if (scoredMatch) {
+        result += `. Buna rağmen son ${scoredMatch[1]} maçta ${scoredMatch[2]} gol attı`;
+      }
+      return result + '.';
+    }
+  }
+
+  // Pattern 13: "Superb stuff ... unbeaten" - Unbeaten streak
+  if ((lower.includes('superb stuff') || lower.includes('excellent')) && lower.includes('unbeaten')) {
+    const venue = lower.includes('away from home') ? 'deplasmanda' : lower.includes('at home') ? 'ev sahibi' : '';
+    const unbeatenMatch = lower.match(/unbeaten in (\d+) games/);
+
+    if (unbeatenMatch) {
+      const games = unbeatenMatch[1];
+      if (venue) {
+        return `${venue.charAt(0).toUpperCase() + venue.slice(1)} son ${games} maçtır yenilmiyor. Bu seriye devam edebilecek mi?`;
+      }
+      return `Son ${games} maçtır yenilmiyor. Harika bir performans sergiliyor.`;
+    }
+  }
+
+  // Pattern 14: "Scoring is not an issue" - Strong scoring record
+  if (lower.includes('scoring is not an issue')) {
+    const venue = lower.includes('away from home') ? 'deplasmanda' : lower.includes('at home') ? 'ev sahibi' : '';
+    const streakMatch = lower.match(/scored in the last (\d+) games/);
+
+    if (streakMatch) {
+      const games = streakMatch[1];
+      if (venue) {
+        return `${venue.charAt(0).toUpperCase() + venue.slice(1)} gol atmada sıkıntı yaşamıyor, son ${games} maçın hepsinde gol attı.`;
+      }
+      return `Son ${games} maçın hepsinde gol attı. Golcü formda.`;
+    }
+    return 'Gol atmada hiç sıkıntı yaşamıyor.';
+  }
+
+  // Pattern 15: "Momentum is really building" - Building momentum
+  if (lower.includes('momentum') && lower.includes('building')) {
+    const streakMatch = lower.match(/gone (\d+) games without losing/);
+    const winsMatch = lower.match(/won (\d+) of the last (\d+) games/);
+
+    let result = 'Momentum yakalıyor';
+    if (streakMatch) {
+      result += `, son ${streakMatch[1]} maçtır kaybetmiyor`;
+    }
+    if (winsMatch) {
+      result += `. Son ${winsMatch[2]} maçta ${winsMatch[1]} galibiyet aldı`;
+    }
+    return result + '.';
+  }
+
   // Fallback: Generic translation based on sentiment
   if (lower.includes('great') || lower.includes('good form')) {
     return 'İyi bir performans sergiliyor.';
