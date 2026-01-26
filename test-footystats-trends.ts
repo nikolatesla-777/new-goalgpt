@@ -3,8 +3,8 @@ import { footyStatsAPI } from './src/services/footystats/footystats.client';
 
 async function testTrends() {
   try {
-    // Maccabi Tel Aviv match (fsMatchId from user's last test)
-    const matchId = 8232162;  // From user's screenshot
+    // Eyüpspor vs Beşiktaş
+    const matchId = 8231875;
     
     console.log(`Fetching match ${matchId}...`);
     const response = await footyStatsAPI.getMatchDetails(matchId);

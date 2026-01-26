@@ -476,18 +476,18 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         },
         form: {
           home: homeTeamStats ? {
-            overall: homeTeamStats.formRun_overall || null,
-            home_only: homeTeamStats.formRun_home || null,
             ppg: homeTeamStats.seasonPPG_overall || null,
             btts_pct: homeTeamStats.seasonBTTSPercentage_overall || null,
             over25_pct: homeTeamStats.seasonOver25Percentage_overall || null,
+            overall: homeTeamStats.formRun_overall || null,          // Form string (e.g. "WWLDW")
+            home_only: homeTeamStats.formRun_home || null,           // Home-only form
           } : null,
           away: awayTeamStats ? {
-            overall: awayTeamStats.formRun_overall || null,
-            away_only: awayTeamStats.formRun_away || null,
             ppg: awayTeamStats.seasonPPG_overall || null,
             btts_pct: awayTeamStats.seasonBTTSPercentage_overall || null,
             over25_pct: awayTeamStats.seasonOver25Percentage_overall || null,
+            overall: awayTeamStats.formRun_overall || null,           // Form string (e.g. "LWDWW")
+            away_only: awayTeamStats.formRun_away || null,           // Away-only form
           } : null,
         },
         h2h: fsMatch.h2h ? {
@@ -514,11 +514,15 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
                   ppg: homeTeamStats.seasonPPG_overall,
                   btts_pct: homeTeamStats.seasonBTTSPercentage_overall,
                   over25_pct: homeTeamStats.seasonOver25Percentage_overall,
+                  overall: homeTeamStats.formRun_overall || null,       // NEW: Form string
+                  home_only: homeTeamStats.formRun_home || null,         // NEW: Home form
                 } : null,
                 away: awayTeamStats ? {
                   ppg: awayTeamStats.seasonPPG_overall,
                   btts_pct: awayTeamStats.seasonBTTSPercentage_overall,
                   over25_pct: awayTeamStats.seasonOver25Percentage_overall,
+                  overall: awayTeamStats.formRun_overall || null,        // NEW: Form string
+                  away_only: awayTeamStats.formRun_away || null,         // NEW: Away form
                 } : null,
               },
               h2h: fsMatch.h2h ? {
