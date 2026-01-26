@@ -461,32 +461,34 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         matchLeagueMap.set(key, row.league_name);
       });
 
-      // DEBUG: Log league query results
-      console.log('[FootyStats] League query DEBUG:', {
-        total_rows: leagueNamesResult.rows.length,
-        sample_keys: Array.from(matchLeagueMap.keys()).slice(0, 3),
-        unique_teams_searched: uniqueTeamNames.length,
-        sample_teams: uniqueTeamNames.slice(0, 3),
-        all_keys: Array.from(matchLeagueMap.keys())
-      });
 
       // Return matches with potentials, logos, and league names
       const matches = response.data.map((m: any, index: number) => {
         const homeLogo = teamLogosMap.get(m.home_name.toLowerCase()) || null;
         const awayLogo = teamLogosMap.get(m.away_name.toLowerCase()) || null;
         const matchKey = `${m.home_name}|${m.away_name}`.toLowerCase();
-        const leagueName = matchLeagueMap.get(matchKey) || 'Unknown League';
+        let leagueName = matchLeagueMap.get(matchKey);
 
-        // DEBUG: Log first match lookup
-        if (index === 0) {
-          console.log('[FootyStats] First match lookup DEBUG:', {
-            matchKey,
-            leagueName,
-            found: matchLeagueMap.has(matchKey),
-            home_name: m.home_name,
-            away_name: m.away_name
-          });
+        // Fuzzy fallback: if exact match not found, try partial matching
+        if (!leagueName) {
+          const homeNameLower = m.home_name.toLowerCase();
+          const awayNameLower = m.away_name.toLowerCase();
+
+          for (const [key, value] of matchLeagueMap.entries()) {
+            const [dbHome, dbAway] = key.split('|');
+
+            // Check if both team names partially match
+            const homeMatch = dbHome.includes(homeNameLower) || homeNameLower.includes(dbHome.split(' ')[0]);
+            const awayMatch = dbAway.includes(awayNameLower) || awayNameLower.includes(dbAway.split(' ')[0]);
+
+            if (homeMatch && awayMatch) {
+              leagueName = value;
+              break;
+            }
+          }
         }
+
+        leagueName = leagueName || 'Unknown League';
 
         return {
           fs_id: m.id,
