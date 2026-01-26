@@ -396,65 +396,77 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         return { count: 0, matches: [] };
       }
 
-      // 🔍 DEBUG: Log first match to see available fields
-      if (response.data.length > 0) {
-        const sampleMatch = response.data[0];
-        console.error('\n🔍 [FootyStats API] Available fields:', Object.keys(sampleMatch));
-        console.error('🔍 [FootyStats API] Sample match:', JSON.stringify({
-          id: sampleMatch.id,
-          home_name: sampleMatch.home_name,
-          away_name: sampleMatch.away_name,
-          competition_name: (sampleMatch as any).competition_name,
-          league_name: (sampleMatch as any).league_name,
-          country: (sampleMatch as any).country,
-          league: (sampleMatch as any).league,
-          competition: (sampleMatch as any).competition,
-          all_data: sampleMatch
-        }, null, 2).substring(0, 1000));
+      // Helper: Get match data from TheSports DB (league + logos) - SINGLE QUERY
+      const { pool } = await import('../database/connection');
+
+      // Build team names list for bulk query
+      const allTeamNames = response.data.flatMap((m: any) => [m.home_name, m.away_name]);
+      const uniqueTeamNames = [...new Set(allTeamNames)];
+
+      // Bulk fetch team logos
+      const teamLogosResult = await pool.query(
+        `SELECT name, logo_url FROM ts_teams WHERE name = ANY($1::text[])`,
+        [uniqueTeamNames]
+      );
+
+      const teamLogosMap = new Map<string, string>();
+      teamLogosResult.rows.forEach((row: any) => {
+        teamLogosMap.set(row.name.toLowerCase(), row.logo_url);
+      });
+
+      // Fuzzy fallback for teams not found - build fuzzy queries
+      const missingTeams = uniqueTeamNames.filter(name =>
+        !teamLogosMap.has(name.toLowerCase())
+      );
+
+      if (missingTeams.length > 0) {
+        const fuzzyConditions = missingTeams.map(name => {
+          const firstWord = name.split(' ')[0];
+          return `LOWER(name) LIKE '%${firstWord.toLowerCase()}%'`;
+        }).join(' OR ');
+
+        const fuzzyResult = await pool.query(
+          `SELECT name, logo_url FROM ts_teams WHERE ${fuzzyConditions} LIMIT ${missingTeams.length}`
+        );
+
+        fuzzyResult.rows.forEach((row: any) => {
+          const matchingTeam = missingTeams.find(t =>
+            row.name.toLowerCase().includes(t.split(' ')[0].toLowerCase())
+          );
+          if (matchingTeam && !teamLogosMap.has(matchingTeam.toLowerCase())) {
+            teamLogosMap.set(matchingTeam.toLowerCase(), row.logo_url);
+          }
+        });
       }
 
-      // Helper: Get team logo from TheSports DB
-      const getTeamLogo = async (teamName: string): Promise<string | null> => {
-        try {
-          // Query ts_teams table directly for logo_url by fuzzy name match
-          const { pool } = await import('../database/connection');
+      // Bulk fetch league names from ts_matches by team names
+      const leagueNamesResult = await pool.query(
+        `SELECT DISTINCT
+           t1.name as home_name,
+           t2.name as away_name,
+           c.name as league_name
+         FROM ts_matches m
+         INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
+         INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+         INNER JOIN ts_competitions c ON m.competition_id = c.external_id
+         WHERE (t1.name = ANY($1::text[]) OR t2.name = ANY($1::text[]))
+           AND m.match_time >= NOW() - INTERVAL '7 days'
+           AND m.match_time <= NOW() + INTERVAL '7 days'`,
+        [uniqueTeamNames]
+      );
 
-          // Try exact match first
-          let result = await pool.query(
-            `SELECT logo_url FROM ts_teams WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-            [teamName]
-          );
+      const matchLeagueMap = new Map<string, string>();
+      leagueNamesResult.rows.forEach((row: any) => {
+        const key = `${row.home_name}|${row.away_name}`.toLowerCase();
+        matchLeagueMap.set(key, row.league_name);
+      });
 
-          if (result.rows.length > 0 && result.rows[0].logo_url) {
-            return result.rows[0].logo_url;
-          }
-
-          // Fuzzy match by first word (e.g., "Manchester United" → "Manchester")
-          const firstWord = teamName.split(' ')[0];
-          if (firstWord && firstWord.length >= 3) {
-            result = await pool.query(
-              `SELECT logo_url FROM ts_teams WHERE LOWER(name) LIKE LOWER($1) LIMIT 1`,
-              [`%${firstWord}%`]
-            );
-
-            if (result.rows.length > 0 && result.rows[0].logo_url) {
-              return result.rows[0].logo_url;
-            }
-          }
-
-          return null;
-        } catch (err) {
-          logger.warn(`[FootyStats] Failed to fetch logo for ${teamName}: ${err}`);
-          return null;
-        }
-      };
-
-      // Return matches with potentials and logos
-      const matches = await Promise.all(response.data.map(async (m: any) => {
-        const [homeLogo, awayLogo] = await Promise.all([
-          getTeamLogo(m.home_name),
-          getTeamLogo(m.away_name)
-        ]);
+      // Return matches with potentials, logos, and league names
+      const matches = response.data.map((m: any) => {
+        const homeLogo = teamLogosMap.get(m.home_name.toLowerCase()) || null;
+        const awayLogo = teamLogosMap.get(m.away_name.toLowerCase()) || null;
+        const matchKey = `${m.home_name}|${m.away_name}`.toLowerCase();
+        const leagueName = matchLeagueMap.get(matchKey) || 'Unknown League';
 
         return {
           fs_id: m.id,
@@ -462,7 +474,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           away_name: m.away_name,
           home_logo: homeLogo,
           away_logo: awayLogo,
-          league_name: m.competition_name || m.league_name || 'Unknown League',
+          league_name: leagueName,
           country: m.country || null,
           date_unix: m.date_unix,
           status: m.status,
