@@ -541,14 +541,39 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             }
           );
 
-          // Return Turkish trends with sentiment (for color-coding in frontend)
+          // Helper function to determine sentiment from Turkish text
+          const determineSentiment = (text: string): string => {
+            const lowerText = text.toLowerCase();
+
+            // Positive indicators
+            if (lowerText.includes('galibiyet') ||
+                lowerText.includes('güçlü') ||
+                lowerText.includes('yüksek gol') ||
+                lowerText.includes('iyi form') ||
+                lowerText.includes('kalesini gole kapatmış')) {
+              return 'great';
+            }
+
+            // Negative indicators
+            if (lowerText.includes('galibiyetsiz') ||
+                lowerText.includes('zayıf') ||
+                lowerText.includes('gol yemiş') ||
+                lowerText.includes('form dalgalan')) {
+              return 'bad';
+            }
+
+            // Neutral/informational
+            return 'neutral';
+          };
+
+          // Return Turkish trends with smart sentiment detection
           return {
             home: turkishTrends.home.map((text: string) => ({
-              sentiment: 'good', // Default sentiment for Turkish trends
+              sentiment: determineSentiment(text),
               text,
             })),
             away: turkishTrends.away.map((text: string) => ({
-              sentiment: 'good', // Default sentiment for Turkish trends
+              sentiment: determineSentiment(text),
               text,
             })),
           };
