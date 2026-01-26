@@ -285,6 +285,16 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         picks_count: picks.length,
       };
 
+      // 🔍 DIAGNOSTIC: Route tracking
+      logger.info('[Telegram] 🔍 ROUTE DIAGNOSTIC', {
+        ...logContext,
+        route: 'POST /telegram/publish/match/:fsMatchId',
+        user_agent: request.headers['user-agent'],
+        referer: request.headers['referer'],
+        origin: request.headers['origin'],
+        body: request.body,
+      });
+
       logger.info('[Telegram] 📤 Publish request received', logContext);
 
       try {
@@ -412,6 +422,17 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           return reply.status(404).send({ error: 'Match not found in FootyStats' });
         }
 
+        // 🔍 DEBUG: Check if corners/cards potentials exist
+        logger.info('[Telegram] 🔍 fsMatch potentials check:', {
+          ...logContext,
+          has_corners: !!fsMatch.corners_potential,
+          has_cards: !!fsMatch.cards_potential,
+          corners_value: fsMatch.corners_potential,
+          cards_value: fsMatch.cards_potential,
+          btts_value: fsMatch.btts_potential,
+          over25_value: fsMatch.o25_potential,
+        });
+
         // 7. Fetch team stats
         let homeStats = null;
         let awayStats = null;
@@ -489,6 +510,14 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           has_away_stats: !!awayStats,
         });
 
+        // 🔍 DEBUG: Log fsMatch corners and cards
+        console.error('\n🔍🔍🔍 [Telegram Publish] fsMatch data check:');
+        console.error('  fsMatch.corners_potential:', fsMatch.corners_potential);
+        console.error('  fsMatch.cards_potential:', fsMatch.cards_potential);
+        console.error('  fsMatch.btts_potential:', fsMatch.btts_potential);
+        console.error('  typeof corners:', typeof fsMatch.corners_potential);
+        console.error('  typeof cards:', typeof fsMatch.cards_potential);
+
         const matchData = {
           home_name: fsMatch.home_name,
           away_name: fsMatch.away_name,
@@ -537,6 +566,13 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           },
         };
 
+        // 🔍 DEBUG: Verify matchData.potentials has corners and cards
+        console.error('\n🔍🔍🔍 [Telegram Publish] matchData.potentials check:');
+        console.error('  matchData.potentials.corners:', matchData.potentials.corners);
+        console.error('  matchData.potentials.cards:', matchData.potentials.cards);
+        console.error('  matchData.potentials.btts:', matchData.potentials.btts);
+        console.error('  Full potentials:', JSON.stringify(matchData.potentials, null, 2));
+
         // PHASE-2B: Calculate confidence score
         logger.info('[Telegram] 🎯 Calculating confidence score...', logContext);
         const confidenceScore = calculateConfidenceScore(fsMatch, homeStats, awayStats);
@@ -551,8 +587,30 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           stars: confidenceScore.stars,
         });
 
+        // 🔍 DEBUG: Log matchData.potentials before formatting
+        console.error('\n🔍🔍🔍 [TELEGRAM DEBUG] matchData.potentials:', JSON.stringify(matchData.potentials, null, 2));
+        logger.info('[Telegram] 🔍 matchData.potentials:', {
+          ...logContext,
+          potentials: matchData.potentials,
+        });
+
         // PHASE-2B: Format message with NEW V2 template (enhanced format)
         const messageText = formatTelegramMessageV2(matchData, picks as any, confidenceScore);
+
+        // 🔍 DIAGNOSTIC: Formatter tracking
+        logger.info('[Telegram] 🔍 FORMATTER DIAGNOSTIC', {
+          ...logContext,
+          formatter: 'formatTelegramMessageV2',
+          template_version: 'V2-KART-KORNER-ENABLED',
+          message_length: messageText.length,
+          message_preview: messageText.substring(0, 200),
+          has_kart: messageText.includes('🟨'),
+          has_korner: messageText.includes('🚩'),
+        });
+
+        // 🔍 DEBUG: Check if KART/KORNER sections are in message
+        console.error('🔍🔍🔍 [TELEGRAM DEBUG] Message has KART:', messageText.includes('KART'));
+        console.error('🔍🔍🔍 [TELEGRAM DEBUG] Message has KORNER:', messageText.includes('KORNER'));
 
         // 🔍 DEBUG: Check formatted message
         console.log('\n' + '='.repeat(80));

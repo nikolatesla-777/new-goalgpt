@@ -74,6 +74,15 @@ export function formatTelegramMessageV2(
 ): string {
   const { home_name, away_name, league_name, date_unix, potentials, xg, odds, form, h2h } = matchData;
 
+  // 🔍 DEBUG: Log received potentials data
+  console.error('\n🔍🔍🔍 [Formatter V2] Received potentials:');
+  console.error('  potentials.corners:', potentials?.corners);
+  console.error('  potentials.cards:', potentials?.cards);
+  console.error('  potentials.btts:', potentials?.btts);
+  console.error('  typeof corners:', typeof potentials?.corners);
+  console.error('  typeof cards:', typeof potentials?.cards);
+  console.error('  Full potentials:', JSON.stringify(potentials, null, 2));
+
   // Date formatting
   const matchDate = new Date(date_unix * 1000);
   const timeStr = matchDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
@@ -117,8 +126,8 @@ export function formatTelegramMessageV2(
   const iyTrend = (form?.home?.btts_pct || 0) + (form?.away?.btts_pct || 0) >= 100 ? 'YÜKSEK' : 'ORTA';
   message += `• İY 0.5 ÜST eğilimi: ${iyTrend}\n\n`;
 
-  // 🟨 KART ANALİZİ
-  if (potentials?.cards) {
+  // 🟨 KART ANALİZİ - ALWAYS SHOW IF DATA EXISTS
+  if (potentials?.cards !== undefined && potentials?.cards !== null) {
     message += `🟨 <b>KART ANALİZİ</b>\n`;
     message += `• Beklenen toplam kart: ${potentials.cards.toFixed(1)}\n`;
 

@@ -37,6 +37,9 @@ export async function getHealth(
     service: 'goalgpt-server',
     uptime_s: uptimeSeconds,
     timestamp: new Date().toISOString(),
+    commit: '8bdbb88', // Current commit hash
+    formatter_version: 'V2-KART-KORNER-ENABLED',
+    build_time: serverStartTime,
   });
 }
 

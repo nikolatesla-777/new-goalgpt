@@ -19,6 +19,8 @@ import {
   clearAllMappings,
   runMigrations
 } from '../repositories/footystats.repository';
+// Import Turkish trends converter
+import { generateTurkishTrends } from '../services/telegram/trends.generator';
 
 export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> {
   // NOTE: Debug endpoint /footystats/debug-db DELETED for security (exposed DB schema)
@@ -371,6 +373,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           btts: m.btts_potential,
           over25: m.o25_potential,
           avg: m.avg_potential,
+          corners: m.corners_potential,  // ✅ ADD: Match corner potential
+          cards: m.cards_potential,      // ✅ ADD: Match card potential
         },
         xg: {
           home: m.team_a_xg_prematch,
@@ -403,6 +407,14 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       try {
         const matchResponse = await footyStatsAPI.getMatchDetails(fsIdNum);
         fsMatch = matchResponse.data;
+
+        // 🔍 DEBUG: Log corners and cards from API
+        console.error('\n🔍🔍🔍 [FootyStats API] Raw match data for', fsIdNum);
+        console.error('  corners_potential:', fsMatch.corners_potential);
+        console.error('  cards_potential:', fsMatch.cards_potential);
+        console.error('  btts_potential:', fsMatch.btts_potential);
+        console.error('  o25_potential:', fsMatch.o25_potential);
+
         logger.info(`[FootyStats] Got match details for ${fsIdNum}`);
       } catch (matchErr: any) {
         logger.warn(`[FootyStats] Could not get match details: ${matchErr.message}`);
@@ -486,16 +498,58 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage || null,
           avg_goals: fsMatch.h2h.betting_stats?.avg_goals || null,
         } : null,
-        trends: {
-          home: (fsMatch.trends?.home || []).map((t: any) => ({
-            sentiment: Array.isArray(t) ? t[0] : (t.sentiment || 'neutral'),
-            text: Array.isArray(t) ? t[1] : (t.text || String(t)),
-          })),
-          away: (fsMatch.trends?.away || []).map((t: any) => ({
-            sentiment: Array.isArray(t) ? t[0] : (t.sentiment || 'neutral'),
-            text: Array.isArray(t) ? t[1] : (t.text || String(t)),
-          })),
-        },
+        trends: (() => {
+          // Convert FootyStats trends to Turkish using trends.generator
+          const turkishTrends = generateTurkishTrends(
+            fsMatch.home_name || 'Home Team',
+            fsMatch.away_name || 'Away Team',
+            {
+              potentials: {
+                btts: fsMatch.btts_potential,
+                over25: fsMatch.o25_potential,
+                over15: fsMatch.avg_potential ? Math.min(Math.round(fsMatch.avg_potential * 30), 95) : null,
+              },
+              form: {
+                home: homeTeamStats ? {
+                  ppg: homeTeamStats.seasonPPG_overall,
+                  btts_pct: homeTeamStats.seasonBTTSPercentage_overall,
+                  over25_pct: homeTeamStats.seasonOver25Percentage_overall,
+                } : null,
+                away: awayTeamStats ? {
+                  ppg: awayTeamStats.seasonPPG_overall,
+                  btts_pct: awayTeamStats.seasonBTTSPercentage_overall,
+                  over25_pct: awayTeamStats.seasonOver25Percentage_overall,
+                } : null,
+              },
+              h2h: fsMatch.h2h ? {
+                total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
+                btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage,
+                avg_goals: fsMatch.h2h.betting_stats?.avg_goals,
+              } : undefined,
+              xg: {
+                home: fsMatch.team_a_xg_prematch || homeTeamStats?.xg_for_avg_overall,
+                away: fsMatch.team_b_xg_prematch || awayTeamStats?.xg_for_avg_overall,
+                total: null,
+              },
+              trends: {
+                home: fsMatch.trends?.home || [],
+                away: fsMatch.trends?.away || [],
+              },
+            }
+          );
+
+          // Return Turkish trends with sentiment (for color-coding in frontend)
+          return {
+            home: turkishTrends.home.map((text: string) => ({
+              sentiment: 'good', // Default sentiment for Turkish trends
+              text,
+            })),
+            away: turkishTrends.away.map((text: string) => ({
+              sentiment: 'good', // Default sentiment for Turkish trends
+              text,
+            })),
+          };
+        })(),
         // Debug: raw data for troubleshooting
         _debug: {
           has_h2h_raw: !!fsMatch.h2h,
