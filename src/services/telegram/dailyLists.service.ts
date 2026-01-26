@@ -329,10 +329,6 @@ function filterMatchesByMarket(
     // Skip if not NOT_STARTED
     if (match.status !== 'incomplete') continue;
 
-    // Skip if match already started (time-based check)
-    const now = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
-    if (match.date_unix <= now) continue;
-
     // Calculate confidence based on market
     let confidence = 0;
     let reason = '';
