@@ -26,7 +26,7 @@ import { validateMatchStateForPublish } from '../services/telegram/validators/ma
 import { fetchMatchStateForPublish } from '../services/telegram/matchStateFetcher.service';
 import { validatePicks } from '../services/telegram/validators/pickValidator';
 import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
-import { generateDailyLists, formatDailyListMessage } from '../services/telegram/dailyLists.service';
+import { getDailyLists, refreshDailyLists, formatDailyListMessage } from '../services/telegram/dailyLists.service';
 
 interface PublishRequest {
   Body: {
@@ -1009,8 +1009,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       logger.info('[TelegramDailyLists] 📊 Fetching today\'s lists...');
 
-      // Generate lists (doesn't publish)
-      const lists = await generateDailyLists();
+      // Get lists from database (or generate if not exists)
+      const lists = await getDailyLists();
 
       if (lists.length === 0) {
         return {
@@ -1103,9 +1103,9 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
       }
 
-      // 2. Generate all daily lists
-      logger.info('[TelegramDailyLists] 📊 Generating lists...', logContext);
-      const lists = await generateDailyLists();
+      // 2. Get daily lists from database (or generate if not exists)
+      logger.info('[TelegramDailyLists] 📊 Getting lists...', logContext);
+      const lists = await getDailyLists();
 
       // 3. Find the specific list by market
       const targetList = lists.find(l => l.market === market);
@@ -1232,9 +1232,9 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
       }
 
-      // 2. Generate daily lists
-      logger.info('[TelegramDailyLists] 📊 Generating lists...', logContext);
-      const lists = await generateDailyLists();
+      // 2. Get daily lists from database (or generate if not exists)
+      logger.info('[TelegramDailyLists] 📊 Getting lists...', logContext);
+      const lists = await getDailyLists();
 
       if (lists.length === 0) {
         logger.warn('[TelegramDailyLists] ⚠️ NO_ELIGIBLE_MATCHES - No lists to publish', logContext);
@@ -1350,6 +1350,52 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error: any) {
       const elapsedMs = Date.now() - startTime;
       logger.error('[TelegramDailyLists] ❌ Daily lists publication failed', {
+        ...logContext,
+        error: error.message,
+        stack: error.stack,
+        elapsed_ms: elapsedMs,
+      });
+      return reply.status(500).send({ error: error.message });
+    }
+  });
+
+  /**
+   * POST /telegram/daily-lists/refresh
+   * Force refresh daily lists (admin function)
+   */
+  fastify.post('/telegram/daily-lists/refresh', async (request, reply) => {
+    const logContext = { endpoint: 'POST /telegram/daily-lists/refresh' };
+    const startTime = Date.now();
+
+    try {
+      logger.info('[TelegramDailyLists] 🔄 FORCE REFRESH requested...', logContext);
+
+      // Force refresh (will regenerate and overwrite database)
+      const lists = await refreshDailyLists();
+
+      const elapsedMs = Date.now() - startTime;
+
+      logger.info(`[TelegramDailyLists] ✅ Force refresh completed`, {
+        ...logContext,
+        lists_generated: lists.length,
+        elapsed_ms: elapsedMs,
+      });
+
+      return {
+        success: true,
+        lists_generated: lists.length,
+        lists: lists.map(l => ({
+          market: l.market,
+          title: l.title,
+          matches_count: l.matches.length,
+          avg_confidence: l.avg_confidence || 0,
+        })),
+        elapsed_ms: elapsedMs,
+      };
+
+    } catch (error: any) {
+      const elapsedMs = Date.now() - startTime;
+      logger.error('[TelegramDailyLists] ❌ Force refresh failed', {
         ...logContext,
         error: error.message,
         stack: error.stack,

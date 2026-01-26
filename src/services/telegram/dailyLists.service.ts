@@ -6,18 +6,21 @@
  * - BTTS (Both Teams To Score)
  * - First Half Over 0.5 Goals
  *
- * STRICT RULES:
- * - Only NOT_STARTED matches
+ * DATABASE-FIRST APPROACH:
+ * - Lists generated ONCE per day, stored in database
+ * - Lists remain STABLE throughout the day
+ * - Started matches STAY in list for performance tracking
  * - 3-5 matches per list max
  * - Confidence-based filtering (prefer HIGH/MEDIUM)
  * - Skip if insufficient data
  *
  * @author GoalGPT Team
- * @version 1.0.0 - Telegram-focused automation
+ * @version 2.0.0 - Database persistence added
  */
 
 import { footyStatsAPI } from '../footystats/footystats.client';
 import { logger } from '../../utils/logger';
+import { safeQuery } from '../../database/connection';
 
 // ============================================================================
 // TYPES
@@ -55,11 +58,21 @@ interface MatchCandidate {
 }
 
 export interface DailyList {
-  market: 'OVER_25' | 'BTTS' | 'HT_OVER_05' | 'CORNERS' | 'CARDS';
+  market: 'OVER_25' | 'OVER_15' | 'BTTS' | 'HT_OVER_05' | 'CORNERS' | 'CARDS';
   title: string;
   emoji: string;
   matches: MatchCandidate[];
+  matches_count?: number;
+  avg_confidence?: number;
+  preview?: string;
   generated_at: number;
+  performance?: {
+    total: number;
+    won: number;
+    lost: number;
+    pending: number;
+    win_rate: number;
+  };
 }
 
 // ============================================================================
@@ -326,8 +339,8 @@ function filterMatchesByMarket(
   const candidates: MatchCandidate[] = [];
 
   for (const match of matches) {
-    // Skip if not NOT_STARTED
-    if (match.status !== 'incomplete') continue;
+    // ✅ NO STATUS FILTER - Include all matches (started or not)
+    // Lists are stored in database and remain stable throughout the day
 
     // Calculate confidence based on market
     let confidence = 0;
@@ -572,7 +585,8 @@ export function formatDailyListMessage(list: DailyList): string {
 
   matches.forEach((candidate, index) => {
     const { match, confidence, reason } = candidate;
-    const num = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'][index];
+    const nums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+    const num = nums[index] || `${index + 1}️⃣`;
 
     const matchTime = new Date(match.date_unix * 1000);
     const timeStr = matchTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
@@ -590,4 +604,164 @@ export function formatDailyListMessage(list: DailyList): string {
   message += `• Canlıya girmeden önce oran ve kadro kontrolü önerilir\n`;
 
   return message;
+}
+
+// ============================================================================
+// DATABASE FUNCTIONS
+// ============================================================================
+
+/**
+ * Save daily lists to database
+ */
+async function saveDailyListsToDatabase(date: string, lists: DailyList[]): Promise<void> {
+  logger.info(`[TelegramDailyLists] 💾 Saving ${lists.length} lists to database for ${date}...`);
+
+  for (const list of lists) {
+    const matchesCount = list.matches.length;
+    const avgConfidence = Math.round(
+      list.matches.reduce((sum, m) => sum + m.confidence, 0) / matchesCount
+    );
+
+    const preview = formatDailyListMessage(list);
+
+    try {
+      await safeQuery(
+        `INSERT INTO telegram_daily_lists
+          (market, list_date, title, emoji, matches_count, avg_confidence, matches, preview, generated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9))
+         ON CONFLICT (market, list_date)
+         DO UPDATE SET
+           matches = EXCLUDED.matches,
+           matches_count = EXCLUDED.matches_count,
+           avg_confidence = EXCLUDED.avg_confidence,
+           preview = EXCLUDED.preview,
+           updated_at = NOW()`,
+        [
+          list.market,
+          date,
+          list.title,
+          list.emoji,
+          matchesCount,
+          avgConfidence,
+          JSON.stringify(list.matches),
+          preview,
+          list.generated_at / 1000,
+        ]
+      );
+
+      logger.info(`[TelegramDailyLists] ✅ Saved ${list.market} list (${matchesCount} matches)`);
+    } catch (error: any) {
+      logger.error(`[TelegramDailyLists] ❌ Failed to save ${list.market} list:`, error);
+    }
+  }
+}
+
+/**
+ * Get daily lists from database
+ */
+async function getDailyListsFromDatabase(date: string): Promise<DailyList[] | null> {
+  logger.info(`[TelegramDailyLists] 🔍 Checking database for lists on ${date}...`);
+
+  try {
+    const rows = await safeQuery<{
+      market: string;
+      title: string;
+      emoji: string;
+      matches: any;
+      matches_count: number;
+      avg_confidence: number;
+      preview: string;
+      generated_at: Date;
+    }>(
+      `SELECT market, title, emoji, matches, matches_count, avg_confidence, preview,
+              EXTRACT(EPOCH FROM generated_at)::bigint * 1000 as generated_at
+       FROM telegram_daily_lists
+       WHERE list_date = $1
+       ORDER BY
+         CASE market
+           WHEN 'OVER_25' THEN 1
+           WHEN 'OVER_15' THEN 2
+           WHEN 'BTTS' THEN 3
+           WHEN 'HT_OVER_05' THEN 4
+           WHEN 'CORNERS' THEN 5
+           WHEN 'CARDS' THEN 6
+         END`,
+      [date]
+    );
+
+    if (rows.length === 0) {
+      logger.info(`[TelegramDailyLists] ⚠️ No lists found in database for ${date}`);
+      return null;
+    }
+
+    const lists: DailyList[] = rows.map((row) => ({
+      market: row.market as any,
+      title: row.title,
+      emoji: row.emoji,
+      matches: JSON.parse(row.matches as any),
+      matches_count: row.matches_count,
+      avg_confidence: row.avg_confidence,
+      preview: row.preview,
+      generated_at: Number(row.generated_at),
+    }));
+
+    logger.info(`[TelegramDailyLists] ✅ Loaded ${lists.length} lists from database`);
+    return lists;
+  } catch (error: any) {
+    logger.error(`[TelegramDailyLists] ❌ Database query failed:`, error);
+    return null;
+  }
+}
+
+/**
+ * Get daily lists (database-first, generate if missing)
+ *
+ * @param date - ISO date string (YYYY-MM-DD), defaults to today
+ * @returns Array of DailyList objects
+ */
+export async function getDailyLists(date?: string): Promise<DailyList[]> {
+  // Default to today in Istanbul timezone (UTC+3)
+  const targetDate = date || new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+
+  logger.info(`[TelegramDailyLists] 📅 Getting lists for ${targetDate}...`);
+
+  // 1. Try to get from database first (CACHE)
+  const cachedLists = await getDailyListsFromDatabase(targetDate);
+  if (cachedLists && cachedLists.length > 0) {
+    logger.info(`[TelegramDailyLists] ✅ Using cached lists from database`);
+    return cachedLists;
+  }
+
+  // 2. Cache miss - generate new lists
+  logger.info(`[TelegramDailyLists] 🔄 Cache miss - generating new lists...`);
+  const newLists = await generateDailyLists();
+
+  // 3. Save to database
+  if (newLists.length > 0) {
+    await saveDailyListsToDatabase(targetDate, newLists);
+  }
+
+  return newLists;
+}
+
+/**
+ * Force refresh daily lists (admin function)
+ *
+ * @param date - ISO date string (YYYY-MM-DD), defaults to today
+ * @returns Array of DailyList objects
+ */
+export async function refreshDailyLists(date?: string): Promise<DailyList[]> {
+  const targetDate = date || new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+
+  logger.info(`[TelegramDailyLists] 🔄 FORCE REFRESH for ${targetDate}...`);
+
+  // Generate new lists
+  const newLists = await generateDailyLists();
+
+  // Save to database (will overwrite existing)
+  if (newLists.length > 0) {
+    await saveDailyListsToDatabase(targetDate, newLists);
+  }
+
+  return newLists;
 }

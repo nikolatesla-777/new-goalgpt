@@ -314,6 +314,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Automated daily prediction lists for Telegram (Over 2.5, BTTS, HT Over 0.5)',
   },
+  {
+    name: 'Daily Lists Generation',
+    schedule: '0 9 * * *', // Daily at 09:00 UTC (12:00 Turkey time / TSİ)
+    handler: async () => {
+      const { runDailyListsGeneration } = await import('./dailyListsGeneration.job');
+      await runDailyListsGeneration();
+    },
+    enabled: true,
+    description: 'Generate and store daily prediction lists to database (runs once per day at noon)',
+  },
 ];
 
 /**

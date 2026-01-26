@@ -107,6 +107,9 @@ export const LOCK_KEYS = {
   /** Telegram daily lists job - publishes daily prediction lists */
   TELEGRAM_DAILY_LISTS: 910000000028n,
 
+  /** Daily lists generation - generates and stores daily prediction lists */
+  DAILY_LISTS_GENERATION: 910000000029n,
+
   // ============================================================
   // MATCH-LEVEL LOCKS (920_000_000_xxx + match_id)
   // These prevent concurrent updates to the same match
