@@ -531,7 +531,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           }
           // Get last 5 matches data (first entry)
           const homeData = homeResponse.data?.find((d: any) => d.last_x_match_num === 5) || homeResponse.data?.[0];
-          homeTeamStats = homeData;  // FIX: stats are directly in homeData, not in .stats property
+          homeTeamStats = (homeData as any)?.stats;  // CORRECT: stats are inside .stats property!
           logger.info(`[FootyStats] Home stats - PPG: ${homeTeamStats?.seasonPPG_overall}, BTTS: ${homeTeamStats?.seasonBTTSPercentage_overall}%`);
         }
         if (fsMatch.awayID) {
@@ -542,7 +542,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             logger.info(`[FootyStats] First element keys: ${Object.keys(awayResponse.data[0]).join(', ')}`);
           }
           const awayData = awayResponse.data?.find((d: any) => d.last_x_match_num === 5) || awayResponse.data?.[0];
-          awayTeamStats = awayData;  // FIX: stats are directly in awayData, not in .stats property
+          awayTeamStats = (awayData as any)?.stats;  // CORRECT: stats are inside .stats property!
           logger.info(`[FootyStats] Away stats - PPG: ${awayTeamStats?.seasonPPG_overall}, BTTS: ${awayTeamStats?.seasonBTTSPercentage_overall}%`);
         }
       } catch (teamError: any) {
