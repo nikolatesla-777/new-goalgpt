@@ -36,6 +36,7 @@ interface FootyStatsMatch {
   potentials?: {
     btts?: number;
     over25?: number;
+    over15?: number;   // ✅ ADD: Over 1.5 potential
     avg?: number;
     corners?: number;  // ✅ ADD: Match corner potential (e.g., 9.4)
     cards?: number;    // ✅ ADD: Match card potential (e.g., 4.9)
