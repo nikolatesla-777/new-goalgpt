@@ -16,6 +16,7 @@ const AdminBots = lazy(() => import('./components/admin').then(m => ({ default: 
 const AdminBotDetail = lazy(() => import('./components/admin').then(m => ({ default: m.AdminBotDetail })));
 const AdminManualPredictions = lazy(() => import('./components/admin').then(m => ({ default: m.AdminManualPredictions })));
 const TelegramPublisher = lazy(() => import('./components/admin').then(m => ({ default: m.TelegramPublisher })));
+const TelegramDailyLists = lazy(() => import('./components/admin').then(m => ({ default: m.TelegramDailyLists })));
 const AIPredictionsPage = lazy(() => import('./components/ai/AIPredictionsPage').then(m => ({ default: m.AIPredictionsPage })));
 const AIAnalysisLab = lazy(() => import('./components/ai-lab').then(m => ({ default: m.AIAnalysisLab })));
 
@@ -92,6 +93,7 @@ function App() {
               <Route path="/admin/bots/:botName" element={<Suspense fallback={<LoadingFallback />}><AdminBotDetail /></Suspense>} />
               <Route path="/admin/manual-predictions" element={<Suspense fallback={<LoadingFallback />}><AdminManualPredictions /></Suspense>} />
               <Route path="/admin/telegram" element={<Suspense fallback={<LoadingFallback />}><TelegramPublisher /></Suspense>} />
+              <Route path="/admin/telegram/daily-lists" element={<Suspense fallback={<LoadingFallback />}><TelegramDailyLists /></Suspense>} />
 
               {/* Livescore with Nested Routes for Tabs (NEW) */}
               <Route path="/livescore" element={

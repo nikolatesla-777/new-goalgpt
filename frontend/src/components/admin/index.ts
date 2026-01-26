@@ -13,4 +13,5 @@ export { AdminManualPredictions } from './AdminManualPredictions';
 export { TelegramPublisher } from './TelegramPublisher';
 export { TelegramMatchCard } from './TelegramMatchCard';
 export { TelegramPreview } from './TelegramPreview';
+export { TelegramDailyLists } from './TelegramDailyLists';
 

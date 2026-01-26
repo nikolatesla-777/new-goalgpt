@@ -93,6 +93,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
         items: [
             { path: '/admin/bots', label: 'Bot Kurallari', icon: BotsIcon },
             { path: '/admin/telegram', label: 'Telegram Yayin', icon: TelegramIcon },
+            { path: '/admin/telegram/daily-lists', label: 'Gunluk Listeler', icon: TelegramIcon },
             { path: '/admin/settings', label: 'Ayarlar', icon: SettingsIcon },
         ],
     },

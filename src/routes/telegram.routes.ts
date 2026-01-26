@@ -784,6 +784,64 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * GET /telegram/daily-lists/today
+   * Get today's generated daily lists (preview without publishing)
+   */
+  fastify.get('/telegram/daily-lists/today', async (request, reply) => {
+    try {
+      logger.info('[TelegramDailyLists] 📊 Fetching today\'s lists...');
+
+      // Generate lists (doesn't publish)
+      const lists = await generateDailyLists();
+
+      if (lists.length === 0) {
+        return {
+          success: true,
+          lists_count: 0,
+          lists: [],
+          message: 'No eligible matches found for today',
+        };
+      }
+
+      // Format response with match details
+      const formattedLists = lists.map(list => ({
+        market: list.market,
+        title: list.title,
+        emoji: list.emoji,
+        matches_count: list.matches.length,
+        avg_confidence: Math.round(
+          list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
+        ),
+        matches: list.matches.map(m => ({
+          fs_id: m.match.fs_id,
+          home_name: m.match.home_name,
+          away_name: m.match.away_name,
+          league_name: m.match.league_name,
+          date_unix: m.match.date_unix,
+          confidence: m.confidence,
+          reason: m.reason,
+          potentials: m.match.potentials,
+          xg: m.match.xg,
+          odds: m.match.odds,
+        })),
+        preview: formatDailyListMessage(list),
+        generated_at: list.generated_at,
+      }));
+
+      return {
+        success: true,
+        lists_count: lists.length,
+        lists: formattedLists,
+        generated_at: Date.now(),
+      };
+
+    } catch (error: any) {
+      logger.error('[TelegramDailyLists] ❌ Error fetching today\'s lists:', error);
+      return reply.status(500).send({ error: error.message });
+    }
+  });
+
+  /**
    * POST /telegram/publish/daily-lists
    * Generate and publish daily prediction lists (automated)
    *
