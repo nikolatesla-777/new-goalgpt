@@ -308,14 +308,51 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           home_ppg: fsHomeTeamData?.seasonPPG_overall || null,
           away_ppg: fsAwayTeamData?.seasonPPG_overall || null,
         },
-        h2h: fsMatchData?.h2h ? {
-          total_matches: fsMatchData.h2h.previous_matches_results?.totalMatches || 0,
-          home_wins: fsMatchData.h2h.previous_matches_results?.team_a_wins || 0,
-          draws: fsMatchData.h2h.previous_matches_results?.draw || 0,
-          away_wins: fsMatchData.h2h.previous_matches_results?.team_b_wins || 0,
-          btts_percentage: fsMatchData.h2h.betting_stats?.bttsPercentage || null,
-          avg_goals: fsMatchData.h2h.betting_stats?.avg_goals || null,
-        } : null,
+        h2h: fsMatchData?.h2h ? (() => {
+          const totalMatches = fsMatchData.h2h.previous_matches_results?.totalMatches || 0;
+          const avgGoals = fsMatchData.h2h.betting_stats?.avg_goals || 0;
+          const bttsPct = fsMatchData.h2h.betting_stats?.bttsPercentage || 0;
+          const over25Pct = fsMatchData.h2h.betting_stats?.over25Percentage || 0;
+
+          // Calculate Over 1.5 and Over 3.5 based on avg_goals and over25Pct
+          const calculateOver15 = () => {
+            if (avgGoals >= 3.0) return 100;
+            if (avgGoals >= 2.5) return 95;
+            if (avgGoals >= 2.0) return 85;
+            if (avgGoals >= 1.5) return 70;
+            return Math.round(avgGoals * 40);
+          };
+
+          const calculateOver35 = () => {
+            if (avgGoals >= 4.5) return 90;
+            if (avgGoals >= 4.0) return 75;
+            if (avgGoals >= 3.5) return 60;
+            if (avgGoals >= 3.0) return 45;
+            if (avgGoals >= 2.5) return 30;
+            return Math.round((avgGoals - 1.5) * 20);
+          };
+
+          // Estimate clean sheets
+          const estimateCleanSheets = (isHome: boolean) => {
+            const baseCleanSheetPct = 100 - bttsPct;
+            const adjustment = isHome ? 1.1 : 0.9;
+            return Math.max(0, Math.round(baseCleanSheetPct * adjustment));
+          };
+
+          return {
+            total_matches: totalMatches,
+            home_wins: fsMatchData.h2h.previous_matches_results?.team_a_wins || 0,
+            draws: fsMatchData.h2h.previous_matches_results?.draw || 0,
+            away_wins: fsMatchData.h2h.previous_matches_results?.team_b_wins || 0,
+            btts_percentage: bttsPct,
+            avg_goals: avgGoals,
+            over15_pct: calculateOver15(),
+            over25_pct: over25Pct,
+            over35_pct: calculateOver35(),
+            home_clean_sheets_pct: estimateCleanSheets(true),
+            away_clean_sheets_pct: estimateCleanSheets(false),
+          };
+        })() : null,
         odds: fsMatchData ? {
           home_win: fsMatchData.odds_ft_1 || null,
           draw: fsMatchData.odds_ft_x || null,
@@ -490,14 +527,54 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             away_only: awayTeamStats.formRun_away || null,           // Away-only form
           } : null,
         },
-        h2h: fsMatch.h2h ? {
-          total_matches: fsMatch.h2h.previous_matches_results?.totalMatches || 0,
-          home_wins: fsMatch.h2h.previous_matches_results?.team_a_wins || 0,
-          draws: fsMatch.h2h.previous_matches_results?.draw || 0,
-          away_wins: fsMatch.h2h.previous_matches_results?.team_b_wins || 0,
-          btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage || null,
-          avg_goals: fsMatch.h2h.betting_stats?.avg_goals || null,
-        } : null,
+        h2h: fsMatch.h2h ? (() => {
+          const totalMatches = fsMatch.h2h.previous_matches_results?.totalMatches || 0;
+          const avgGoals = fsMatch.h2h.betting_stats?.avg_goals || 0;
+          const bttsPct = fsMatch.h2h.betting_stats?.bttsPercentage || 0;
+          const over25Pct = fsMatch.h2h.betting_stats?.over25Percentage || 0;
+
+          // Calculate Over 1.5 and Over 3.5 based on avg_goals and over25Pct
+          const calculateOver15 = () => {
+            if (avgGoals >= 3.0) return 100;
+            if (avgGoals >= 2.5) return 95;
+            if (avgGoals >= 2.0) return 85;
+            if (avgGoals >= 1.5) return 70;
+            return Math.round(avgGoals * 40); // Rough estimate
+          };
+
+          const calculateOver35 = () => {
+            if (avgGoals >= 4.5) return 90;
+            if (avgGoals >= 4.0) return 75;
+            if (avgGoals >= 3.5) return 60;
+            if (avgGoals >= 3.0) return 45;
+            if (avgGoals >= 2.5) return 30;
+            return Math.round((avgGoals - 1.5) * 20); // Rough estimate
+          };
+
+          // Estimate clean sheets (inverse of BTTS with slight adjustment)
+          const estimateCleanSheets = (isHome: boolean) => {
+            // If BTTS is high, clean sheets are rare
+            const baseCleanSheetPct = 100 - bttsPct;
+            // Home teams typically get slightly more clean sheets
+            const adjustment = isHome ? 1.1 : 0.9;
+            return Math.max(0, Math.round(baseCleanSheetPct * adjustment));
+          };
+
+          return {
+            total_matches: totalMatches,
+            home_wins: fsMatch.h2h.previous_matches_results?.team_a_wins || 0,
+            draws: fsMatch.h2h.previous_matches_results?.draw || 0,
+            away_wins: fsMatch.h2h.previous_matches_results?.team_b_wins || 0,
+            btts_pct: bttsPct,
+            avg_goals: avgGoals,
+            // New calculated fields
+            over15_pct: calculateOver15(),
+            over25_pct: over25Pct,
+            over35_pct: calculateOver35(),
+            home_clean_sheets_pct: estimateCleanSheets(true),
+            away_clean_sheets_pct: estimateCleanSheets(false),
+          };
+        })() : null,
         trends: (() => {
           // Convert FootyStats trends to Turkish using trends.generator
           const turkishTrends = generateTurkishTrends(

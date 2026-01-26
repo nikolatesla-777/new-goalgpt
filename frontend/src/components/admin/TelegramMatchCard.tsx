@@ -62,6 +62,11 @@ interface MatchDetails {
     away_wins: number;
     btts_pct: number | null;
     avg_goals: number | null;
+    over15_pct?: number;
+    over25_pct?: number;
+    over35_pct?: number;
+    home_clean_sheets_pct?: number;
+    away_clean_sheets_pct?: number;
   } | null;
   trends: {
     home: Array<{ sentiment: string; text: string }>;
@@ -344,25 +349,248 @@ export function TelegramMatchCard({ match, isSelected, onSelect }: Props) {
                 </div>
               )}
 
-              {/* Head to Head */}
+              {/* Head to Head - Enhanced Version */}
               {detailsData.h2h && detailsData.h2h.total_matches > 0 && (
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#1f2937', marginBottom: '8px' }}>
-                    🔄 KAFA KAFAYA (Son {detailsData.h2h.total_matches} Maç)
+                <div style={{
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>🔄</span>
+                    <span>KAFA KAFAYA ANALİZİ</span>
+                    <span style={{ fontSize: '11px', fontWeight: '500', color: '#64748b' }}>
+                      (Son {detailsData.h2h.total_matches} Maç)
+                    </span>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                    <div style={{ marginBottom: '4px' }}>
-                      {match.home_name}: {detailsData.h2h.home_wins}G | Beraberlik: {detailsData.h2h.draws} | {match.away_name}: {detailsData.h2h.away_wins}G
+
+                  {/* Win/Draw/Loss Stats with Percentages */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                      <span>{match.home_name}</span>
+                      <span style={{ color: '#94a3b8' }}>Beraberlik</span>
+                      <span>{match.away_name}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      {detailsData.h2h.btts_pct && (
-                        <span>BTTS: %{detailsData.h2h.btts_pct}</span>
-                      )}
-                      {detailsData.h2h.avg_goals && (
-                        <span>Ort. Gol: {detailsData.h2h.avg_goals.toFixed(1)}</span>
-                      )}
+                    <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                      <div style={{
+                        flex: detailsData.h2h.home_wins,
+                        minWidth: detailsData.h2h.home_wins > 0 ? '30px' : '0',
+                        height: '32px',
+                        background: '#10b981',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: 'white'
+                      }}>
+                        {detailsData.h2h.home_wins > 0 && `${detailsData.h2h.home_wins}G`}
+                      </div>
+                      <div style={{
+                        flex: detailsData.h2h.draws,
+                        minWidth: detailsData.h2h.draws > 0 ? '30px' : '0',
+                        height: '32px',
+                        background: '#64748b',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: 'white'
+                      }}>
+                        {detailsData.h2h.draws > 0 && `${detailsData.h2h.draws}B`}
+                      </div>
+                      <div style={{
+                        flex: detailsData.h2h.away_wins,
+                        minWidth: detailsData.h2h.away_wins > 0 ? '30px' : '0',
+                        height: '32px',
+                        background: '#3b82f6',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: 'white'
+                      }}>
+                        {detailsData.h2h.away_wins > 0 && `${detailsData.h2h.away_wins}G`}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '600', color: '#64748b' }}>
+                      <span>{Math.round((detailsData.h2h.home_wins / detailsData.h2h.total_matches) * 100)}%</span>
+                      <span>{Math.round((detailsData.h2h.draws / detailsData.h2h.total_matches) * 100)}%</span>
+                      <span>{Math.round((detailsData.h2h.away_wins / detailsData.h2h.total_matches) * 100)}%</span>
                     </div>
                   </div>
+
+                  {/* Goal Statistics */}
+                  <div style={{ marginBottom: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
+                      📊 GOL İSTATİSTİKLERİ
+                    </div>
+
+                    {/* Over 1.5 */}
+                    {detailsData.h2h.over15_pct !== undefined && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                          <span style={{ color: '#64748b', fontWeight: '500' }}>Over 1.5</span>
+                          <span style={{ fontWeight: '700', color: '#1e293b' }}>
+                            %{detailsData.h2h.over15_pct}
+                            <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: '4px' }}>
+                              ({Math.round((detailsData.h2h.over15_pct / 100) * detailsData.h2h.total_matches)}/{detailsData.h2h.total_matches})
+                            </span>
+                          </span>
+                        </div>
+                        <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${detailsData.h2h.over15_pct}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Over 2.5 */}
+                    {detailsData.h2h.over25_pct !== undefined && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                          <span style={{ color: '#64748b', fontWeight: '500' }}>Over 2.5</span>
+                          <span style={{ fontWeight: '700', color: '#1e293b' }}>
+                            %{detailsData.h2h.over25_pct}
+                            <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: '4px' }}>
+                              ({Math.round((detailsData.h2h.over25_pct / 100) * detailsData.h2h.total_matches)}/{detailsData.h2h.total_matches})
+                            </span>
+                          </span>
+                        </div>
+                        <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${detailsData.h2h.over25_pct}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Over 3.5 */}
+                    {detailsData.h2h.over35_pct !== undefined && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                          <span style={{ color: '#64748b', fontWeight: '500' }}>Over 3.5</span>
+                          <span style={{ fontWeight: '700', color: '#1e293b' }}>
+                            %{detailsData.h2h.over35_pct}
+                            <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: '4px' }}>
+                              ({Math.round((detailsData.h2h.over35_pct / 100) * detailsData.h2h.total_matches)}/{detailsData.h2h.total_matches})
+                            </span>
+                          </span>
+                        </div>
+                        <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${detailsData.h2h.over35_pct}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* BTTS */}
+                    {detailsData.h2h.btts_pct !== undefined && detailsData.h2h.btts_pct !== null && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                          <span style={{ color: '#64748b', fontWeight: '500' }}>BTTS (Karşılıklı Gol)</span>
+                          <span style={{ fontWeight: '700', color: '#1e293b' }}>
+                            %{detailsData.h2h.btts_pct}
+                            <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: '4px' }}>
+                              ({Math.round((detailsData.h2h.btts_pct / 100) * detailsData.h2h.total_matches)}/{detailsData.h2h.total_matches})
+                            </span>
+                          </span>
+                        </div>
+                        <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${detailsData.h2h.btts_pct}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%)',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Average Goals */}
+                    {detailsData.h2h.avg_goals && (
+                      <div style={{
+                        marginTop: '12px',
+                        padding: '8px 12px',
+                        background: '#f1f5f9',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
+                          Ortalama Gol
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>
+                          {detailsData.h2h.avg_goals.toFixed(1)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Clean Sheets */}
+                  {(detailsData.h2h.home_clean_sheets_pct !== undefined || detailsData.h2h.away_clean_sheets_pct !== undefined) && (
+                    <div style={{ paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
+                        🛡️ KALE TEMİZ
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        {detailsData.h2h.home_clean_sheets_pct !== undefined && (
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '4px', fontWeight: '500' }}>
+                              {match.home_name}
+                            </div>
+                            <div style={{
+                              padding: '8px',
+                              background: '#ecfdf5',
+                              borderRadius: '6px',
+                              textAlign: 'center',
+                              border: '1px solid #a7f3d0'
+                            }}>
+                              <div style={{ fontSize: '16px', fontWeight: '700', color: '#059669' }}>
+                                %{detailsData.h2h.home_clean_sheets_pct}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {detailsData.h2h.away_clean_sheets_pct !== undefined && (
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '4px', fontWeight: '500' }}>
+                              {match.away_name}
+                            </div>
+                            <div style={{
+                              padding: '8px',
+                              background: '#eff6ff',
+                              borderRadius: '6px',
+                              textAlign: 'center',
+                              border: '1px solid #bfdbfe'
+                            }}>
+                              <div style={{ fontSize: '16px', fontWeight: '700', color: '#2563eb' }}>
+                                %{detailsData.h2h.away_clean_sheets_pct}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
