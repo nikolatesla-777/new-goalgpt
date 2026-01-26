@@ -402,6 +402,80 @@ function translateFullTrend(text: string, teamName: string): string {
     return result + '.';
   }
 
+  // Pattern 16: "has enjoyed playing at home/away ... unbeaten in X games"
+  if (lower.includes('enjoyed playing') || (lower.includes('currently unbeaten') && (lower.includes('at home') || lower.includes('away')))) {
+    const venue = lower.includes('at home') ? 'ev sahibi' : lower.includes('away') ? 'deplasman' : '';
+    const unbeatenMatch = lower.match(/unbeaten in (\d+) games/);
+
+    if (unbeatenMatch) {
+      const games = unbeatenMatch[1];
+      if (venue) {
+        return `${venue.charAt(0).toUpperCase() + venue.slice(1)} oynarken son ${games} maçtır yenilmiyor.`;
+      }
+      return `Son ${games} maçtır yenilmiyor.`;
+    }
+  }
+
+  // Pattern 17: "will be confident of scoring ... record of scoring in every single home/away game"
+  if (lower.includes('confident of scoring') || lower.includes('record of scoring')) {
+    const venue = lower.includes('home game') ? 'ev sahibi' : lower.includes('away game') ? 'deplasman' : '';
+    if (lower.includes('every single')) {
+      if (venue) {
+        return `${venue.charAt(0).toUpperCase() + venue.slice(1)} maçlarında her maç gol atıyor ve bugün de güvenli görünüyor.`;
+      }
+      return 'Her maç gol atıyor, bugün de gol atacağına güveniyor.';
+    }
+  }
+
+  // Pattern 18: "has had no trouble finding the back of the net ... scored in last X games"
+  if (lower.includes('no trouble finding the back of the net') || lower.includes('no trouble') && lower.includes('scoring')) {
+    const venue = lower.includes('home games') ? 'ev sahibi' : lower.includes('away games') ? 'deplasman' : '';
+    const streakMatch = lower.match(/last (\d+) (?:home |away )?games/);
+    const goalsMatch = lower.match(/scored (\d+) goals/);
+
+    let result = 'Gol bulmakta hiç zorlanmıyor';
+    if (streakMatch) {
+      result += `, son ${streakMatch[1]} ${venue} maçın hepsinde gol attı`;
+    }
+    if (goalsMatch) {
+      result += ` (${goalsMatch[1]} gol)`;
+    }
+    return result + '.';
+  }
+
+  // Pattern 19: "put together a good run of form ... gone X games without defeat"
+  if (lower.includes('put together') && lower.includes('run of form')) {
+    const withoutDefeatMatch = lower.match(/gone (\d+) games without defeat/);
+    if (withoutDefeatMatch) {
+      return `İyi bir form yakaladı ve son ${withoutDefeatMatch[1]} maçtır yenilmiyor.`;
+    }
+    return 'İyi bir form tutturdu.';
+  }
+
+  // Pattern 20: "looking to keep up the momentum ... having lost just X game from the last Y"
+  if (lower.includes('keep up') && (lower.includes('momentum') || lower.includes('form'))) {
+    const lostMatch = lower.match(/lost just (\d+) games? from the last (\d+)/);
+    if (lostMatch) {
+      const lost = lostMatch[1];
+      const total = lostMatch[2];
+      return `Momentumu sürdürmek istiyor, son ${total} maçta sadece ${lost} mağlubiyet aldı.`;
+    }
+    return 'Momentumu sürdürmek istiyor.';
+  }
+
+  // Pattern 21: "has been on fire recently" - Hot streak
+  if (lower.includes('on fire') || lower.includes('in hot form')) {
+    return 'Son dönemde ateş püskürüyor.';
+  }
+
+  // Pattern 22: "keep a clean sheet" / "kept X clean sheets"
+  if (lower.includes('clean sheet')) {
+    const keptMatch = lower.match(/kept (\d+) clean sheets? in (?:the )?last (\d+)/);
+    if (keptMatch) {
+      return `Son ${keptMatch[2]} maçta ${keptMatch[1]} kez kalesini gole kapatmış.`;
+    }
+  }
+
   // Fallback: Generic translation based on sentiment
   if (lower.includes('great') || lower.includes('good form')) {
     return 'İyi bir performans sergiliyor.';
