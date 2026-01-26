@@ -266,7 +266,31 @@ export async function generateDailyLists(): Promise<DailyList[]> {
   try {
     // 1. Fetch today's matches from FootyStats
     const response = await footyStatsAPI.getTodaysMatches();
-    const allMatches: FootyStatsMatch[] = response.matches || [];
+    const rawMatches = response.data || [];  // ✅ FIX: Use response.data, not response.matches
+
+    // ✅ FIX: Transform FootyStats raw data to expected structure
+    const allMatches: FootyStatsMatch[] = rawMatches.map((m: any) => ({
+      fs_id: m.id,
+      home_name: m.home_name,
+      away_name: m.away_name,
+      league_name: m.competition_name || m.league_name || 'Unknown',
+      date_unix: m.date_unix,
+      status: m.status,
+      potentials: {
+        btts: m.btts_potential,
+        over25: m.o25_potential,
+        avg: m.avg_potential,
+      },
+      xg: {
+        home: m.team_a_xg_prematch,
+        away: m.team_b_xg_prematch,
+      },
+      odds: {
+        home: m.odds_ft_1,
+        draw: m.odds_ft_x,
+        away: m.odds_ft_2,
+      },
+    }));
 
     logger.info(`[TelegramDailyLists] 📊 Fetched ${allMatches.length} matches from FootyStats`);
 

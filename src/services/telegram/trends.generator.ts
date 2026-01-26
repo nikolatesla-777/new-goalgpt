@@ -476,6 +476,17 @@ function translateFullTrend(text: string, teamName: string): string {
     }
   }
 
+  // Pattern 23: "X's defence will have to be at their best to stop Y from scoring"
+  if (lower.includes('defence will have to be at their best') || lower.includes('defense will have to be at their best')) {
+    // Extract team names
+    const stopFromScoringMatch = lower.match(/stop ([\w\s]+) from scoring/);
+    if (stopFromScoringMatch) {
+      const opponent = stopFromScoringMatch[1].trim();
+      return `Savunma çok dikkatli olmalı, ${opponent} gol atmakta zorlanmıyor.`;
+    }
+    return 'Savunma en iyi performansını göstermeli.';
+  }
+
   // Fallback: Generic translation based on sentiment
   if (lower.includes('great') || lower.includes('good form')) {
     return 'İyi bir performans sergiliyor.';
