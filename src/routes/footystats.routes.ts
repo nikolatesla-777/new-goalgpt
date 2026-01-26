@@ -399,8 +399,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       // 🔍 DEBUG: Log first match to see available fields
       if (response.data.length > 0) {
         const sampleMatch = response.data[0];
-        logger.info('[FootyStats] Sample match available fields:', Object.keys(sampleMatch));
-        logger.info('[FootyStats] Sample match data:', {
+        console.error('\n🔍 [FootyStats API] Available fields:', Object.keys(sampleMatch));
+        console.error('🔍 [FootyStats API] Sample match:', JSON.stringify({
           id: sampleMatch.id,
           home_name: sampleMatch.home_name,
           away_name: sampleMatch.away_name,
@@ -409,7 +409,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           country: (sampleMatch as any).country,
           league: (sampleMatch as any).league,
           competition: (sampleMatch as any).competition,
-        });
+          all_data: sampleMatch
+        }, null, 2).substring(0, 1000));
       }
 
       // Helper: Get team logo from TheSports DB
