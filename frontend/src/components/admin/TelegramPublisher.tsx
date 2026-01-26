@@ -9,6 +9,8 @@ interface Match {
   id: number;
   home_name: string;
   away_name: string;
+  home_logo?: string | null;
+  away_logo?: string | null;
   competition_name?: string;
   date_unix: number;
   btts_potential?: number;
@@ -22,6 +24,23 @@ interface Match {
   external_id?: string;
   corners_potential?: number;
   cards_potential?: number;
+  shots_potential?: number;
+  fouls_potential?: number;
+  trends?: {
+    home?: Array<{ sentiment: string; text: string }>;
+    away?: Array<{ sentiment: string; text: string }>;
+  };
+  h2h?: {
+    total_matches?: number;
+    home_wins?: number;
+    draws?: number;
+    away_wins?: number;
+    btts_pct?: number;
+    avg_goals?: number;
+    over15_pct?: number;
+    over25_pct?: number;
+    over35_pct?: number;
+  };
 }
 
 interface Pick {
@@ -328,11 +347,38 @@ export function TelegramPublisher() {
                               </svg>
                               {timeStr}
                               <span className="mx-1">•</span>
-                              <span>{match.competition_name || 'Bilinmeyen Lig'}</span>
+                              <span className="font-medium">{match.competition_name || 'Bilinmeyen Lig'}</span>
                             </div>
-                            <h3 className="text-lg font-bold text-gray-900">
-                              {match.home_name} <span className="text-gray-400 font-normal">vs</span> {match.away_name}
-                            </h3>
+
+                            {/* Team Names with Logos */}
+                            <div className="flex items-center gap-3">
+                              {/* Home Team */}
+                              <div className="flex items-center gap-2 flex-1">
+                                {match.home_logo ? (
+                                  <img src={match.home_logo} alt={match.home_name} className="w-8 h-8 object-contain" />
+                                ) : (
+                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                    <span className="text-lg">⚽</span>
+                                  </div>
+                                )}
+                                <span className="text-lg font-bold text-gray-900">{match.home_name}</span>
+                              </div>
+
+                              {/* VS Separator */}
+                              <span className="text-gray-400 font-normal px-2">vs</span>
+
+                              {/* Away Team */}
+                              <div className="flex items-center gap-2 flex-1 justify-end">
+                                <span className="text-lg font-bold text-gray-900">{match.away_name}</span>
+                                {match.away_logo ? (
+                                  <img src={match.away_logo} alt={match.away_name} className="w-8 h-8 object-contain" />
+                                ) : (
+                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                    <span className="text-lg">⚽</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -382,29 +428,158 @@ export function TelegramPublisher() {
                         {/* Expanded Details */}
                         {isExpanded && (
                           <div className="mt-4 pt-4 border-t border-gray-200 space-y-6">
-                            {/* Match Stats */}
-                            <div className="space-y-3">
-                              {match.corners_potential && (
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-gray-600">🚩 Korner Potansiyeli</span>
-                                  <span className="font-semibold text-gray-900">{match.corners_potential.toFixed(1)}</span>
-                                </div>
-                              )}
-                              {match.cards_potential && (
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-gray-600">🟨 Kart Potansiyeli</span>
-                                  <span className="font-semibold text-gray-900">{match.cards_potential.toFixed(1)}</span>
-                                </div>
-                              )}
-                              {match.odds_ft_1 && match.odds_ft_x && match.odds_ft_2 && (
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-gray-600">💰 Oranlar</span>
-                                  <span className="font-semibold text-gray-900">
-                                    {match.odds_ft_1.toFixed(2)} - {match.odds_ft_x.toFixed(2)} - {match.odds_ft_2.toFixed(2)}
-                                  </span>
-                                </div>
-                              )}
+                            {/* FootyStats Analiz Verileri */}
+                            <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-4 border border-gray-200">
+                              <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                <span className="text-lg">📊</span>
+                                FootyStats Analiz Verileri
+                              </h4>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                {match.corners_potential && (
+                                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                                    <div className="text-xs text-gray-500 mb-1">🚩 Korner</div>
+                                    <div className="text-xl font-bold text-gray-900">{match.corners_potential.toFixed(1)}</div>
+                                  </div>
+                                )}
+                                {match.cards_potential && (
+                                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                                    <div className="text-xs text-gray-500 mb-1">🟨 Kart</div>
+                                    <div className="text-xl font-bold text-gray-900">{match.cards_potential.toFixed(1)}</div>
+                                  </div>
+                                )}
+                                {match.shots_potential && (
+                                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                                    <div className="text-xs text-gray-500 mb-1">🎯 Şut</div>
+                                    <div className="text-xl font-bold text-gray-900">{match.shots_potential}</div>
+                                  </div>
+                                )}
+                                {match.fouls_potential && (
+                                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                                    <div className="text-xs text-gray-500 mb-1">🚫 Faul</div>
+                                    <div className="text-xl font-bold text-gray-900">{match.fouls_potential}</div>
+                                  </div>
+                                )}
+                                {match.odds_ft_1 && match.odds_ft_x && match.odds_ft_2 && (
+                                  <div className="bg-white rounded-lg p-3 border border-gray-200 col-span-2">
+                                    <div className="text-xs text-gray-500 mb-1">💰 Oranlar</div>
+                                    <div className="text-lg font-bold text-gray-900">
+                                      {match.odds_ft_1.toFixed(2)} - {match.odds_ft_x.toFixed(2)} - {match.odds_ft_2.toFixed(2)}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
+
+                            {/* H2H Stats */}
+                            {match.h2h && match.h2h.total_matches && match.h2h.total_matches > 0 && (
+                              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
+                                <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                  <span className="text-lg">🤝</span>
+                                  Kafa Kafaya ({match.h2h.total_matches} Maç)
+                                </h4>
+
+                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                  <div className="bg-white rounded-lg p-2 text-center border border-purple-200">
+                                    <div className="text-xs text-gray-500">Ev Galip</div>
+                                    <div className="text-lg font-bold text-green-600">{match.h2h.home_wins || 0}</div>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-2 text-center border border-purple-200">
+                                    <div className="text-xs text-gray-500">Berabere</div>
+                                    <div className="text-lg font-bold text-gray-600">{match.h2h.draws || 0}</div>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-2 text-center border border-purple-200">
+                                    <div className="text-xs text-gray-500">Dep Galip</div>
+                                    <div className="text-lg font-bold text-blue-600">{match.h2h.away_wins || 0}</div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2 text-sm">
+                                  {match.h2h.avg_goals && (
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600">⚽ Ortalama Gol</span>
+                                      <span className="font-semibold">{match.h2h.avg_goals.toFixed(1)}</span>
+                                    </div>
+                                  )}
+                                  {match.h2h.btts_pct && (
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600">🔄 BTTS</span>
+                                      <span className="font-semibold">{match.h2h.btts_pct}%</span>
+                                    </div>
+                                  )}
+                                  {match.h2h.over25_pct && (
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600">📈 2.5 Üst</span>
+                                      <span className="font-semibold">{match.h2h.over25_pct}%</span>
+                                    </div>
+                                  )}
+                                  {match.h2h.over15_pct && (
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600">🎯 1.5 Üst</span>
+                                      <span className="font-semibold">{match.h2h.over15_pct}%</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Trends */}
+                            {match.trends && (match.trends.home?.length || match.trends.away?.length) && (
+                              <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
+                                <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                  <span className="text-lg">📈</span>
+                                  Form Trendleri
+                                </h4>
+
+                                {match.trends.home && match.trends.home.length > 0 && (
+                                  <div className="mb-4">
+                                    <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                      {match.home_logo ? (
+                                        <img src={match.home_logo} alt="" className="w-4 h-4 object-contain" />
+                                      ) : '⚽'}
+                                      {match.home_name}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      {match.trends.home.slice(0, 4).map((trend, idx) => (
+                                        <div key={idx} className="flex items-start gap-2 text-xs">
+                                          <span className={`
+                                            ${trend.sentiment === 'great' ? 'text-green-600' : ''}
+                                            ${trend.sentiment === 'good' ? 'text-blue-600' : ''}
+                                            ${trend.sentiment === 'bad' ? 'text-red-600' : ''}
+                                            ${trend.sentiment === 'neutral' ? 'text-gray-600' : ''}
+                                          `}>•</span>
+                                          <span className="text-gray-700">{trend.text}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {match.trends.away && match.trends.away.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                      {match.away_logo ? (
+                                        <img src={match.away_logo} alt="" className="w-4 h-4 object-contain" />
+                                      ) : '⚽'}
+                                      {match.away_name}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      {match.trends.away.slice(0, 4).map((trend, idx) => (
+                                        <div key={idx} className="flex items-start gap-2 text-xs">
+                                          <span className={`
+                                            ${trend.sentiment === 'great' ? 'text-green-600' : ''}
+                                            ${trend.sentiment === 'good' ? 'text-blue-600' : ''}
+                                            ${trend.sentiment === 'bad' ? 'text-red-600' : ''}
+                                            ${trend.sentiment === 'neutral' ? 'text-gray-600' : ''}
+                                          `}>•</span>
+                                          <span className="text-gray-700">{trend.text}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
 
                             {/* Telegram Publish Panel */}
                             <div className="pt-4 border-t-2 border-gray-100">

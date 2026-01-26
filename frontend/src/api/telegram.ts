@@ -15,20 +15,29 @@ export async function getTodaysMatches() {
   const json = await response.json();
 
   // Backend returns { count, matches }, but component expects { data }
-  // Map fs_id to id and add external_id (for now use fs_id as placeholder)
+  // Map fs_id to id and add external_id
   const matches = (json.matches || []).map((m: any) => ({
     ...m,
     id: m.fs_id,
-    external_id: `fs_${m.fs_id}`, // Placeholder - will be mapped by backend
-    competition_name: m.league_name,
+    external_id: `fs_${m.fs_id}`,
+    competition_name: m.league_name || 'Unknown League',
     btts_potential: m.potentials?.btts,
     o25_potential: m.potentials?.over25,
-    o15_potential: m.potentials?.avg,
+    o15_potential: m.potentials?.over15 || m.potentials?.avg,
     team_a_xg_prematch: m.xg?.home,
     team_b_xg_prematch: m.xg?.away,
     odds_ft_1: m.odds?.home,
     odds_ft_x: m.odds?.draw,
     odds_ft_2: m.odds?.away,
+    home_logo: m.home_logo,
+    away_logo: m.away_logo,
+    // Analytics for detailed view
+    corners_potential: m.potentials?.corners,
+    cards_potential: m.potentials?.cards,
+    shots_potential: m.potentials?.shots,
+    fouls_potential: m.potentials?.fouls,
+    trends: m.trends,
+    h2h: m.h2h,
   }));
 
   return { data: matches };

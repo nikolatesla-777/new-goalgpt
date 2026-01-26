@@ -399,20 +399,35 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       // Helper: Get team logo from TheSports DB
       const getTeamLogo = async (teamName: string): Promise<string | null> => {
         try {
-          const teamMapping = await getTeamMapping(teamName);
-          if (teamMapping.length > 0 && teamMapping[0].ts_logo) {
-            return teamMapping[0].ts_logo;
+          // Query ts_teams table directly for logo_url by fuzzy name match
+          const { pool } = await import('../database/connection');
+
+          // Try exact match first
+          let result = await pool.query(
+            `SELECT logo_url FROM ts_teams WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+            [teamName]
+          );
+
+          if (result.rows.length > 0 && result.rows[0].logo_url) {
+            return result.rows[0].logo_url;
           }
-          // Fuzzy match by first word
+
+          // Fuzzy match by first word (e.g., "Manchester United" → "Manchester")
           const firstWord = teamName.split(' ')[0];
           if (firstWord && firstWord.length >= 3) {
-            const fuzzyMatch = await getTeamMapping(firstWord);
-            if (fuzzyMatch.length > 0 && fuzzyMatch[0].ts_logo) {
-              return fuzzyMatch[0].ts_logo;
+            result = await pool.query(
+              `SELECT logo_url FROM ts_teams WHERE LOWER(name) LIKE LOWER($1) LIMIT 1`,
+              [`%${firstWord}%`]
+            );
+
+            if (result.rows.length > 0 && result.rows[0].logo_url) {
+              return result.rows[0].logo_url;
             }
           }
+
           return null;
         } catch (err) {
+          logger.warn(`[FootyStats] Failed to fetch logo for ${teamName}: ${err}`);
           return null;
         }
       };
