@@ -583,6 +583,13 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           // Get last 5 matches data (first entry)
           const homeData = homeResponse.data?.find((d: any) => d.last_x_match_num === 5) || homeResponse.data?.[0];
           homeTeamStats = (homeData as any)?.stats;  // CORRECT: stats are inside .stats property!
+
+          // 🔍 DEBUG: Log ALL available fields in stats object
+          if (homeTeamStats) {
+            console.error('\n🔍 [FootyStats API] ALL HOME TEAM STATS FIELDS:');
+            console.error(JSON.stringify(homeTeamStats, null, 2));
+          }
+
           logger.info(`[FootyStats] Home stats - PPG: ${homeTeamStats?.seasonPPG_overall}, BTTS: ${homeTeamStats?.seasonBTTSPercentage_overall}%`);
         }
         if (fsMatch.awayID) {
@@ -594,6 +601,13 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           }
           const awayData = awayResponse.data?.find((d: any) => d.last_x_match_num === 5) || awayResponse.data?.[0];
           awayTeamStats = (awayData as any)?.stats;  // CORRECT: stats are inside .stats property!
+
+          // 🔍 DEBUG: Log ALL available fields in stats object
+          if (awayTeamStats) {
+            console.error('\n🔍 [FootyStats API] ALL AWAY TEAM STATS FIELDS:');
+            console.error(JSON.stringify(awayTeamStats, null, 2));
+          }
+
           logger.info(`[FootyStats] Away stats - PPG: ${awayTeamStats?.seasonPPG_overall}, BTTS: ${awayTeamStats?.seasonBTTSPercentage_overall}%`);
         }
       } catch (teamError: any) {

@@ -784,6 +784,90 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * Calculate performance for a daily list (check finished matches)
+   */
+  async function calculateListPerformance(list: any): Promise<{
+    total: number;
+    won: number;
+    lost: number;
+    pending: number;
+    win_rate: number;
+  }> {
+    const now = Math.floor(Date.now() / 1000);
+    let won = 0;
+    let lost = 0;
+    let pending = 0;
+
+    for (const candidate of list.matches) {
+      const match = candidate.match;
+      const marketType = list.market;
+
+      // Check if match is finished (>2 hours after start)
+      const matchFinished = match.date_unix <= (now - 2 * 60 * 60);
+
+      if (!matchFinished) {
+        pending++;
+        continue;
+      }
+
+      // Get match result from TheSports database
+      try {
+        const result = await safeQuery(
+          `SELECT home_score_display, away_score_display FROM ts_matches WHERE external_id = $1 LIMIT 1`,
+          [`fs_${match.fs_id}`]
+        );
+
+        if (result.length === 0) {
+          pending++; // No result yet
+          continue;
+        }
+
+        const homeScore = parseInt(result[0].home_score_display) || 0;
+        const awayScore = parseInt(result[0].away_score_display) || 0;
+        const totalGoals = homeScore + awayScore;
+
+        // Check market result
+        let isWin = false;
+        switch (marketType) {
+          case 'OVER_25':
+            isWin = totalGoals >= 3;
+            break;
+          case 'OVER_15':
+            isWin = totalGoals >= 2;
+            break;
+          case 'BTTS':
+            isWin = homeScore > 0 && awayScore > 0;
+            break;
+          case 'HT_OVER_05':
+            // Would need HT score, skip for now
+            pending++;
+            continue;
+          case 'CORNERS':
+          case 'CARDS':
+            // Would need detailed stats, skip for now
+            pending++;
+            continue;
+        }
+
+        if (isWin) {
+          won++;
+        } else {
+          lost++;
+        }
+      } catch (err) {
+        logger.error('[TelegramDailyLists] Error checking match result:', err);
+        pending++;
+      }
+    }
+
+    const total = list.matches.length;
+    const settled = won + lost;
+    const win_rate = settled > 0 ? Math.round((won / settled) * 100) : 0;
+
+    return { total, won, lost, pending, win_rate };
+  }
+
+  /**
    * GET /telegram/daily-lists/today
    * Get today's generated daily lists (preview without publishing)
    */
@@ -803,30 +887,38 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         };
       }
 
-      // Format response with match details
-      const formattedLists = lists.map(list => ({
-        market: list.market,
-        title: list.title,
-        emoji: list.emoji,
-        matches_count: list.matches.length,
-        avg_confidence: Math.round(
-          list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
-        ),
-        matches: list.matches.map(m => ({
-          fs_id: m.match.fs_id,
-          home_name: m.match.home_name,
-          away_name: m.match.away_name,
-          league_name: m.match.league_name,
-          date_unix: m.match.date_unix,
-          confidence: m.confidence,
-          reason: m.reason,
-          potentials: m.match.potentials,
-          xg: m.match.xg,
-          odds: m.match.odds,
-        })),
-        preview: formatDailyListMessage(list),
-        generated_at: list.generated_at,
-      }));
+      // Format response with match details + performance calculation
+      const formattedLists = await Promise.all(
+        lists.map(async (list) => {
+          // Calculate performance for finished matches
+          const performance = await calculateListPerformance(list);
+
+          return {
+            market: list.market,
+            title: list.title,
+            emoji: list.emoji,
+            matches_count: list.matches.length,
+            avg_confidence: Math.round(
+              list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
+            ),
+            matches: list.matches.map(m => ({
+              fs_id: m.match.fs_id,
+              home_name: m.match.home_name,
+              away_name: m.match.away_name,
+              league_name: m.match.league_name,
+              date_unix: m.match.date_unix,
+              confidence: m.confidence,
+              reason: m.reason,
+              potentials: m.match.potentials,
+              xg: m.match.xg,
+              odds: m.match.odds,
+            })),
+            preview: formatDailyListMessage(list),
+            generated_at: list.generated_at,
+            performance,
+          };
+        })
+      );
 
       return {
         success: true,
