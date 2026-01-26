@@ -450,8 +450,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
          INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
          INNER JOIN ts_competitions c ON m.competition_id = c.external_id
          WHERE (t1.name = ANY($1::text[]) OR t2.name = ANY($1::text[]))
-           AND m.match_time >= NOW() - INTERVAL '7 days'
-           AND m.match_time <= NOW() + INTERVAL '7 days'`,
+           AND m.match_time >= extract(epoch from NOW() - INTERVAL '7 days')::bigint
+           AND m.match_time <= extract(epoch from NOW() + INTERVAL '7 days')::bigint`,
         [uniqueTeamNames]
       );
 
