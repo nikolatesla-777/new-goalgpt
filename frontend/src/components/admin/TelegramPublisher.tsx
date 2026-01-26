@@ -58,11 +58,10 @@ export function TelegramPublisher() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [selectedPicks, setSelectedPicks] = useState<string[]>([]);
+  const [matchPicks, setMatchPicks] = useState<Record<number, string[]>>({});
   const [botHealth, setBotHealth] = useState<BotHealth | null>(null);
-  const [publishing, setPublishing] = useState(false);
-  const [publishSuccess, setPublishSuccess] = useState(false);
+  const [publishing, setPublishing] = useState<number | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState<number | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
 
   useEffect(() => {
@@ -92,49 +91,51 @@ export function TelegramPublisher() {
     }
   };
 
-  const handleMatchSelect = (match: Match) => {
-    setSelectedMatch(match);
-    setSelectedPicks([]);
-    setPublishSuccess(false);
-  };
-
-  const handlePickToggle = (marketType: string) => {
-    if (selectedPicks.includes(marketType)) {
-      setSelectedPicks(selectedPicks.filter(p => p !== marketType));
+  const handlePickToggle = (matchId: number, marketType: string) => {
+    const currentPicks = matchPicks[matchId] || [];
+    if (currentPicks.includes(marketType)) {
+      setMatchPicks({
+        ...matchPicks,
+        [matchId]: currentPicks.filter(p => p !== marketType)
+      });
     } else {
-      setSelectedPicks([...selectedPicks, marketType]);
+      setMatchPicks({
+        ...matchPicks,
+        [matchId]: [...currentPicks, marketType]
+      });
     }
   };
 
-  const handlePublish = async () => {
-    if (!selectedMatch || !selectedMatch.external_id) {
+  const handlePublish = async (match: Match) => {
+    if (!match.external_id) {
       alert('⚠️ Maç external_id\'ye sahip olmalı');
       return;
     }
 
-    if (selectedPicks.length === 0) {
+    const picks = matchPicks[match.id] || [];
+    if (picks.length === 0) {
       alert('⚠️ En az bir tahmin seçmelisiniz');
       return;
     }
 
-    setPublishing(true);
+    setPublishing(match.id);
     setError(null);
     try {
-      const picks = selectedPicks.map(marketType => ({
+      const pickObjects = picks.map(marketType => ({
         market_type: marketType,
         odds: undefined
       }));
 
-      await publishToTelegram(selectedMatch.id, selectedMatch.external_id, picks);
-      setPublishSuccess(true);
+      await publishToTelegram(match.id, match.external_id, pickObjects);
+      setPublishSuccess(match.id);
 
       setTimeout(() => {
-        setPublishSuccess(false);
+        setPublishSuccess(null);
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Yayınlama hatası');
     } finally {
-      setPublishing(false);
+      setPublishing(null);
     }
   };
 
@@ -244,8 +245,8 @@ export function TelegramPublisher() {
             <div className="bg-white rounded-2xl p-6 border-2 border-gray-100 hover:border-orange-200 hover:shadow-xl transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Seçili Maç</p>
-                  <p className="text-3xl font-bold text-gray-900">{selectedMatch ? 1 : 0}</p>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Yayınlanan</p>
+                  <p className="text-3xl font-bold text-gray-900">{publishSuccess ? 1 : 0}</p>
                 </div>
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
                   <span className="text-2xl">✓</span>
@@ -269,28 +270,25 @@ export function TelegramPublisher() {
         )}
 
         {/* Success Message */}
-        {publishSuccess && (
+        {publishSuccess !== null && (
           <div className="mb-6 bg-green-50 border-2 border-green-200 rounded-xl p-4 flex items-start gap-3">
             <svg className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
               <h4 className="font-semibold text-green-800 mb-1">Başarılı!</h4>
-              <p className="text-green-600">Tahmin Telegram'da yayınlandı</p>
+              <p className="text-green-600">Maç Telegram'da yayınlandı</p>
             </div>
           </div>
         )}
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* Left: Matches List (2/3 width) */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <span>🎯</span>
-                Bugünün Maçları ({matches.length})
-              </h2>
+        <div className="max-w-5xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span>🎯</span>
+              Bugünün Maçları ({matches.length})
+            </h2>
 
               {matches.length === 0 ? (
                 <div className="text-center py-16">
@@ -309,21 +307,17 @@ export function TelegramPublisher() {
               ) : (
                 <div className="space-y-4">
                   {matches.map((match) => {
-                    const isSelected = selectedMatch?.id === match.id;
                     const isExpanded = expandedMatch === match.id;
                     const matchDate = new Date(match.date_unix * 1000);
                     const timeStr = matchDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+                    const currentPicks = matchPicks[match.id] || [];
+                    const isPublishing = publishing === match.id;
+                    const isPublishSuccess = publishSuccess === match.id;
 
                     return (
                       <div
                         key={match.id}
-                        className={`
-                          rounded-xl p-5 border-2 transition-all duration-300 cursor-pointer
-                          ${isSelected
-                            ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-lg'
-                            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'}
-                        `}
-                        onClick={() => handleMatchSelect(match)}
+                        className="rounded-xl p-5 border-2 transition-all duration-300 border-gray-200 bg-white hover:shadow-md"
                       >
                         {/* Match Header */}
                         <div className="flex items-center justify-between mb-3">
@@ -339,20 +333,6 @@ export function TelegramPublisher() {
                             <h3 className="text-lg font-bold text-gray-900">
                               {match.home_name} <span className="text-gray-400 font-normal">vs</span> {match.away_name}
                             </h3>
-                          </div>
-
-                          {/* Selection Indicator */}
-                          <div
-                            className={`
-                              w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 ml-4
-                              ${isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300 bg-white'}
-                            `}
-                          >
-                            {isSelected && (
-                              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
                           </div>
                         </div>
 
@@ -401,27 +381,142 @@ export function TelegramPublisher() {
 
                         {/* Expanded Details */}
                         {isExpanded && (
-                          <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
-                            {match.corners_potential && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600">🚩 Korner Potansiyeli</span>
-                                <span className="font-semibold text-gray-900">{match.corners_potential.toFixed(1)}</span>
+                          <div className="mt-4 pt-4 border-t border-gray-200 space-y-6">
+                            {/* Match Stats */}
+                            <div className="space-y-3">
+                              {match.corners_potential && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-gray-600">🚩 Korner Potansiyeli</span>
+                                  <span className="font-semibold text-gray-900">{match.corners_potential.toFixed(1)}</span>
+                                </div>
+                              )}
+                              {match.cards_potential && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-gray-600">🟨 Kart Potansiyeli</span>
+                                  <span className="font-semibold text-gray-900">{match.cards_potential.toFixed(1)}</span>
+                                </div>
+                              )}
+                              {match.odds_ft_1 && match.odds_ft_x && match.odds_ft_2 && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-gray-600">💰 Oranlar</span>
+                                  <span className="font-semibold text-gray-900">
+                                    {match.odds_ft_1.toFixed(2)} - {match.odds_ft_x.toFixed(2)} - {match.odds_ft_2.toFixed(2)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Telegram Publish Panel */}
+                            <div className="pt-4 border-t-2 border-gray-100">
+                              <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-2xl p-6 border-2 border-blue-100">
+                                {/* Panel Header */}
+                                <div className="flex items-center gap-3 mb-4">
+                                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                                    <span className="text-2xl">📤</span>
+                                  </div>
+                                  <h3 className="text-xl font-bold text-gray-900">Yayın Paneli</h3>
+                                </div>
+
+                                {/* Selected Match Info */}
+                                <div className="mb-5 p-4 bg-white/80 backdrop-blur-sm rounded-xl border border-blue-200/50">
+                                  <div className="text-xs text-blue-600 mb-1 font-semibold uppercase tracking-wide">Seçili Maç</div>
+                                  <div className="font-bold text-gray-900">
+                                    {match.home_name} <span className="text-gray-400 font-normal">vs</span> {match.away_name}
+                                  </div>
+                                </div>
+
+                                {/* Picks Selection */}
+                                <div className="mb-5">
+                                  <h4 className="text-sm font-bold text-gray-700 mb-3">Tahminleri Seç</h4>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    {AVAILABLE_PICKS.map((pick) => {
+                                      const isSelected = currentPicks.includes(pick.market_type);
+                                      return (
+                                        <button
+                                          key={pick.market_type}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handlePickToggle(match.id, pick.market_type);
+                                          }}
+                                          className={`
+                                            p-4 rounded-xl border-2 text-left transition-all duration-200
+                                            ${isSelected
+                                              ? 'border-blue-500 bg-white shadow-lg'
+                                              : 'border-gray-200 bg-white/60 hover:border-gray-300 hover:bg-white hover:shadow-md'}
+                                          `}
+                                        >
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="text-2xl">{pick.emoji}</span>
+                                            <div
+                                              className={`
+                                                w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0
+                                                ${isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}
+                                              `}
+                                            >
+                                              {isSelected && (
+                                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <span className={`text-sm font-semibold ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
+                                            {pick.label}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                {/* Publish Button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePublish(match);
+                                  }}
+                                  disabled={isPublishing || currentPicks.length === 0}
+                                  className={`
+                                    w-full py-4 rounded-xl font-bold text-white text-lg
+                                    bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600
+                                    hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700
+                                    hover:shadow-2xl hover:scale-[1.02]
+                                    active:scale-[0.98]
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                    transition-all duration-200
+                                    flex items-center justify-center gap-3
+                                    ${isPublishSuccess ? 'bg-gradient-to-r from-green-600 to-emerald-600' : ''}
+                                  `}
+                                >
+                                  {isPublishing ? (
+                                    <>
+                                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                      <span>Yayınlanıyor...</span>
+                                    </>
+                                  ) : isPublishSuccess ? (
+                                    <>
+                                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      <span>Yayınlandı ✓</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                      </svg>
+                                      <span>Telegram'a Yayınla</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                {currentPicks.length === 0 && (
+                                  <p className="text-xs text-gray-600 text-center mt-3 font-medium">
+                                    En az bir tahmin seçmelisiniz
+                                  </p>
+                                )}
                               </div>
-                            )}
-                            {match.cards_potential && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600">🟨 Kart Potansiyeli</span>
-                                <span className="font-semibold text-gray-900">{match.cards_potential.toFixed(1)}</span>
-                              </div>
-                            )}
-                            {match.odds_ft_1 && match.odds_ft_x && match.odds_ft_2 && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600">💰 Oranlar</span>
-                                <span className="font-semibold text-gray-900">
-                                  {match.odds_ft_1.toFixed(2)} - {match.odds_ft_x.toFixed(2)} - {match.odds_ft_2.toFixed(2)}
-                                </span>
-                              </div>
-                            )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -431,121 +526,6 @@ export function TelegramPublisher() {
               )}
             </div>
           </div>
-
-          {/* Right: Publish Panel (1/3 width) */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-6">
-              <div className="bg-white rounded-2xl shadow-lg p-6 border-2 border-gray-100">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <span>📤</span>
-                  Yayın Paneli
-                </h2>
-
-                {!selectedMatch ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                      </svg>
-                    </div>
-                    <p className="text-gray-500 text-sm">
-                      ← Bir maç seçin
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Selected Match Info */}
-                    <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200">
-                      <div className="text-sm text-blue-600 mb-1 font-medium">Seçili Maç</div>
-                      <div className="font-bold text-gray-900 text-sm">
-                        {selectedMatch.home_name} vs {selectedMatch.away_name}
-                      </div>
-                    </div>
-
-                    {/* Picks Selection */}
-                    <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Tahminleri Seç</h3>
-                      <div className="space-y-2">
-                        {AVAILABLE_PICKS.map((pick) => {
-                          const isSelected = selectedPicks.includes(pick.market_type);
-                          return (
-                            <button
-                              key={pick.market_type}
-                              onClick={() => handlePickToggle(pick.market_type)}
-                              className={`
-                                w-full p-3 rounded-xl border-2 text-left transition-all duration-200
-                                ${isSelected
-                                  ? 'border-blue-500 bg-blue-50 shadow-md'
-                                  : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'}
-                              `}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-2xl">{pick.emoji}</span>
-                                  <span className={`font-medium ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
-                                    {pick.label}
-                                  </span>
-                                </div>
-                                <div
-                                  className={`
-                                    w-6 h-6 rounded-full border-2 flex items-center justify-center
-                                    ${isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}
-                                  `}
-                                >
-                                  {isSelected && (
-                                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Publish Button */}
-                    <button
-                      onClick={handlePublish}
-                      disabled={publishing || selectedPicks.length === 0}
-                      className={`
-                        w-full py-4 rounded-xl font-bold text-white text-lg
-                        bg-gradient-to-r from-blue-600 to-indigo-600
-                        hover:from-blue-700 hover:to-indigo-700
-                        hover:shadow-xl hover:scale-[1.02]
-                        active:scale-[0.98]
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        transition-all duration-200
-                        flex items-center justify-center gap-3
-                      `}
-                    >
-                      {publishing ? (
-                        <>
-                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>Yayınlanıyor...</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                          </svg>
-                          <span>Telegram'a Yayınla</span>
-                        </>
-                      )}
-                    </button>
-
-                    {selectedPicks.length === 0 && (
-                      <p className="text-xs text-gray-500 text-center mt-2">
-                        En az bir tahmin seçmelisiniz
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
