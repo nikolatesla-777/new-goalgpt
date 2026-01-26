@@ -410,8 +410,16 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           btts: m.btts_potential,
           over25: m.o25_potential,
           avg: m.avg_potential,
-          corners: m.corners_potential,  // ✅ ADD: Match corner potential
-          cards: m.cards_potential,      // ✅ ADD: Match card potential
+          corners: m.corners_potential,  // ✅ Match corner potential
+          cards: m.cards_potential,      // ✅ Match card potential
+          // Calculate Shots Potential (xG based: ~6 shots per 1.0 xG)
+          shots: m.team_a_xg_prematch && m.team_b_xg_prematch
+            ? Math.round((m.team_a_xg_prematch + m.team_b_xg_prematch) * 6)
+            : null,
+          // Calculate Fouls Potential (base 20 + corner-based adjustment)
+          fouls: m.corners_potential
+            ? Math.round(20 + (m.corners_potential * 0.5))
+            : null,
         },
         xg: {
           home: m.team_a_xg_prematch,
@@ -461,7 +469,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         return reply.status(404).send({ error: 'Match not found in FootyStats' });
       }
 
-      // 2. Try to get team form data (stats are inside .stats object)
+      // 2. Try to get team form data (FootyStats returns stats directly in array elements)
       let homeTeamStats: any = null;
       let awayTeamStats: any = null;
 
@@ -470,14 +478,14 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           const homeResponse = await footyStatsAPI.getTeamLastX(fsMatch.homeID);
           // Get last 5 matches data (first entry)
           const homeData = homeResponse.data?.find((d: any) => d.last_x_match_num === 5) || homeResponse.data?.[0];
-          homeTeamStats = (homeData as any)?.stats;
-          logger.info(`[FootyStats] Got home team stats for ${fsMatch.homeID}: PPG=${homeTeamStats?.seasonPPG_overall || 'no data'}`);
+          homeTeamStats = homeData;  // FIX: stats are directly in homeData, not in .stats property
+          logger.info(`[FootyStats] Got home team stats for ${fsMatch.homeID}: PPG=${homeTeamStats?.seasonPPG_overall || 'no data'}, BTTS=${homeTeamStats?.seasonBTTSPercentage_overall || 'no data'}%, O2.5=${homeTeamStats?.seasonOver25Percentage_overall || 'no data'}%`);
         }
         if (fsMatch.awayID) {
           const awayResponse = await footyStatsAPI.getTeamLastX(fsMatch.awayID);
           const awayData = awayResponse.data?.find((d: any) => d.last_x_match_num === 5) || awayResponse.data?.[0];
-          awayTeamStats = (awayData as any)?.stats;
-          logger.info(`[FootyStats] Got away team stats for ${fsMatch.awayID}: PPG=${awayTeamStats?.seasonPPG_overall || 'no data'}`);
+          awayTeamStats = awayData;  // FIX: stats are directly in awayData, not in .stats property
+          logger.info(`[FootyStats] Got away team stats for ${fsMatch.awayID}: PPG=${awayTeamStats?.seasonPPG_overall || 'no data'}, BTTS=${awayTeamStats?.seasonBTTSPercentage_overall || 'no data'}%, O2.5=${awayTeamStats?.seasonOver25Percentage_overall || 'no data'}%`);
         }
       } catch (teamError: any) {
         logger.warn(`[FootyStats] Could not fetch team form: ${teamError.message}`);
@@ -497,6 +505,35 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           over15: fsMatch.avg_potential ? Math.min(Math.round(fsMatch.avg_potential * 30), 95) : null,
           corners: fsMatch.corners_potential || null,
           cards: fsMatch.cards_potential || null,
+          // Calculate Shots Potential (using real team shot averages)
+          shots: (() => {
+            // PRIORITY 1: Use real team shot averages (home team's home avg + away team's away avg)
+            const homeShotsAvg = homeTeamStats?.shotsAVG_home || 0;
+            const awayShotsAvg = awayTeamStats?.shotsAVG_away || 0;
+
+            if (homeShotsAvg > 0 && awayShotsAvg > 0) {
+              return Math.round(homeShotsAvg + awayShotsAvg);
+            }
+
+            // PRIORITY 2: Use overall averages if home/away not available
+            const homeShotsOverall = homeTeamStats?.shotsAVG_overall || 0;
+            const awayShotsOverall = awayTeamStats?.shotsAVG_overall || 0;
+
+            if (homeShotsOverall > 0 && awayShotsOverall > 0) {
+              return Math.round(homeShotsOverall + awayShotsOverall);
+            }
+
+            // FALLBACK: Use xG-based calculation (~6 shots per 1.0 xG)
+            const homeXg = fsMatch.team_a_xg_prematch || homeTeamStats?.xg_for_avg_overall || 0;
+            const awayXg = fsMatch.team_b_xg_prematch || awayTeamStats?.xg_for_avg_overall || 0;
+            const totalXg = homeXg + awayXg;
+            return totalXg > 0 ? Math.round(totalXg * 6) : null;
+          })(),
+          // Calculate Fouls Potential (base 20 + corner-based adjustment)
+          fouls: (() => {
+            const cornersPot = fsMatch.corners_potential || 0;
+            return cornersPot > 0 ? Math.round(20 + (cornersPot * 0.5)) : null;
+          })(),
         },
         xg: {
           home: fsMatch.team_a_xg_prematch || homeTeamStats?.xg_for_avg_overall || null,
