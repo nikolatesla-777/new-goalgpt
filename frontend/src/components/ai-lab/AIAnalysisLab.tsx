@@ -36,6 +36,8 @@ interface MatchData {
         over15_potential: number | null;
         corners_potential: number | null;
         cards_potential: number | null;
+        shots_potential?: number | null;
+        fouls_potential?: number | null;
     };
     xg: {
         home_xg_prematch: number | null;
@@ -111,6 +113,8 @@ interface FSMatchDetail {
         over15: number | null;
         corners: number | null;
         cards: number | null;
+        shots?: number | null;
+        fouls?: number | null;
     };
     xg: {
         home: number | null;
@@ -261,6 +265,19 @@ function TrendItem({ type, text }: { type: string; text: string }) {
     );
 }
 
+// Tooltip Component
+function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
+    return (
+        <div className="relative group inline-block">
+            {children}
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50 shadow-lg border border-gray-700">
+                {text}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+            </div>
+        </div>
+    );
+}
+
 // No Data Placeholder
 function NoDataPlaceholder({ message }: { message: string }) {
     return (
@@ -284,7 +301,7 @@ export function AIAnalysisLab() {
     // FootyStats detail panel state
     const [selectedFsMatch, setSelectedFsMatch] = useState<FSMatchDetail | null>(null);
     const [fsLoading, setFsLoading] = useState(false);
-    const [fsDetailTab, setFsDetailTab] = useState<'potentials' | 'form' | 'h2h' | 'trends' | 'odds'>('potentials');
+    const [fsDetailTab, setFsDetailTab] = useState<'overview' | 'potentials' | 'form' | 'h2h' | 'trends' | 'ai-prediction' | 'odds'>('overview');
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -370,6 +387,8 @@ export function AIAnalysisLab() {
                         over15: match.potentials.avg ? Math.min(Math.round(match.potentials.avg * 30), 95) : null,
                         corners: null,
                         cards: null,
+                        shots: null,
+                        fouls: null,
                     },
                     xg: {
                         home: match.xg?.home || null,
@@ -401,6 +420,8 @@ export function AIAnalysisLab() {
                     over15: null,
                     corners: null,
                     cards: null,
+                    shots: null,
+                    fouls: null,
                 },
                 xg: {
                     home: match.xg?.home || null,
@@ -625,11 +646,12 @@ export function AIAnalysisLab() {
                     {/* Tab Navigation */}
                     <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
                         {[
+                            { id: 'overview', label: '📊 Özet', icon: ChartBar },
                             { id: 'potentials', label: 'Potansiyeller', icon: Target },
                             { id: 'form', label: 'Form', icon: TrendUp },
                             { id: 'h2h', label: 'H2H', icon: Users },
                             { id: 'trends', label: 'Trendler', icon: Lightning },
-                            { id: 'odds', label: 'Oranlar', icon: ChartBar },
+                            { id: 'ai-prediction', label: '🎲 AI Tahmini', icon: Lightning },
                         ].map((tab) => (
                             <button
                                 key={tab.id}
@@ -648,48 +670,253 @@ export function AIAnalysisLab() {
 
                     {/* Tab Content */}
                     <div className="min-h-[300px]">
+                        {/* Overview Tab */}
+                        {fsDetailTab === 'overview' && (
+                            <div className="space-y-6">
+                                {/* Key Stats Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {/* xG Card */}
+                                    <div className="bg-gradient-to-br from-cyan-900/40 to-blue-900/40 rounded-xl p-6 border border-cyan-500/20">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                                                <ChartBar className="w-6 h-6 text-cyan-400" />
+                                            </div>
+                                            <h3 className="text-lg font-bold text-white">xG (Beklenen Gol)</h3>
+                                        </div>
+                                        <div className="flex justify-between items-center mb-3">
+                                            <div className="text-center">
+                                                <div className="text-sm text-gray-400">Ev Sahibi</div>
+                                                <div className="text-3xl font-bold text-cyan-400">
+                                                    {selectedFsMatch.xg.home?.toFixed(2) || '-'}
+                                                </div>
+                                            </div>
+                                            <div className="text-2xl text-gray-500">vs</div>
+                                            <div className="text-center">
+                                                <div className="text-sm text-gray-400">Deplasman</div>
+                                                <div className="text-3xl font-bold text-orange-400">
+                                                    {selectedFsMatch.xg.away?.toFixed(2) || '-'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {selectedFsMatch.xg.total && (
+                                            <div className="mt-4 pt-4 border-t border-cyan-500/20 text-center">
+                                                <div className="text-sm text-gray-400">Toplam xG</div>
+                                                <div className="text-2xl font-bold text-white">
+                                                    {selectedFsMatch.xg.total.toFixed(2)}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Top Potentials Card */}
+                                    <div className="bg-gradient-to-br from-green-900/40 to-emerald-900/40 rounded-xl p-6 border border-green-500/20">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                                                <Target className="w-6 h-6 text-green-400" />
+                                            </div>
+                                            <h3 className="text-lg font-bold text-white">Öne Çıkan</h3>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {selectedFsMatch.potentials.btts && selectedFsMatch.potentials.btts >= 70 && (
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-gray-300">BTTS</span>
+                                                    <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 font-bold text-sm">
+                                                        %{selectedFsMatch.potentials.btts}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {selectedFsMatch.potentials.over25 && selectedFsMatch.potentials.over25 >= 60 && (
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-gray-300">Over 2.5</span>
+                                                    <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 font-bold text-sm">
+                                                        %{selectedFsMatch.potentials.over25}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {selectedFsMatch.potentials.over15 && selectedFsMatch.potentials.over15 >= 80 && (
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-gray-300">Over 1.5</span>
+                                                    <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 font-bold text-sm">
+                                                        %{selectedFsMatch.potentials.over15}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {selectedFsMatch.potentials.shots && (
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-gray-300">Şut Tahmini</span>
+                                                    <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 font-bold text-sm">
+                                                        {selectedFsMatch.potentials.shots}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Odds Card */}
+                                    {selectedFsMatch.odds && (
+                                        <div className="bg-gradient-to-br from-purple-900/40 to-pink-900/40 rounded-xl p-6 border border-purple-500/20">
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                                    <span className="text-2xl">💰</span>
+                                                </div>
+                                                <h3 className="text-lg font-bold text-white">Oranlar</h3>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {selectedFsMatch.odds.home && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-gray-300">1 (Ev Sahibi)</span>
+                                                        <span className="text-xl font-bold text-green-400">
+                                                            {selectedFsMatch.odds.home.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {selectedFsMatch.odds.draw && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-gray-300">X (Beraberlik)</span>
+                                                        <span className="text-xl font-bold text-gray-400">
+                                                            {selectedFsMatch.odds.draw.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {selectedFsMatch.odds.away && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-gray-300">2 (Deplasman)</span>
+                                                        <span className="text-xl font-bold text-orange-400">
+                                                            {selectedFsMatch.odds.away.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Quick Recommendations */}
+                                {selectedFsMatch.h2h && (
+                                    <div className="bg-gradient-to-br from-yellow-900/20 to-orange-900/20 rounded-xl p-6 border border-yellow-500/20">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <span className="text-2xl">💡</span>
+                                            <h3 className="text-lg font-bold text-white">Hızlı Öneriler</h3>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {selectedFsMatch.h2h.btts_pct && selectedFsMatch.h2h.btts_pct >= 70 && (
+                                                <div className="flex items-start gap-3">
+                                                    <span className="text-green-400 text-xl mt-1">✓</span>
+                                                    <div>
+                                                        <div className="font-semibold text-white">BTTS Güvenli</div>
+                                                        <div className="text-sm text-gray-400">
+                                                            H2H'de %{selectedFsMatch.h2h.btts_pct} karşılıklı gol
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {selectedFsMatch.h2h.avg_goals && selectedFsMatch.h2h.avg_goals >= 3 && (
+                                                <div className="flex items-start gap-3">
+                                                    <span className="text-yellow-400 text-xl mt-1">⚡</span>
+                                                    <div>
+                                                        <div className="font-semibold text-white">Gollü Maç Bekleniyor</div>
+                                                        <div className="text-sm text-gray-400">
+                                                            H2H ortalama: {selectedFsMatch.h2h.avg_goals.toFixed(1)} gol
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {selectedFsMatch.xg.total && selectedFsMatch.xg.total >= 3 && (
+                                                <div className="flex items-start gap-3">
+                                                    <span className="text-cyan-400 text-xl mt-1">📊</span>
+                                                    <div>
+                                                        <div className="font-semibold text-white">Yüksek xG</div>
+                                                        <div className="text-sm text-gray-400">
+                                                            Toplam xG: {selectedFsMatch.xg.total.toFixed(2)} (Gol beklentisi yüksek)
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {selectedFsMatch.h2h.total_matches && selectedFsMatch.h2h.total_matches >= 5 && (
+                                                <div className="flex items-start gap-3">
+                                                    <span className="text-purple-400 text-xl mt-1">📋</span>
+                                                    <div>
+                                                        <div className="font-semibold text-white">Zengin H2H Verisi</div>
+                                                        <div className="text-sm text-gray-400">
+                                                            Son {selectedFsMatch.h2h.total_matches} maç kaydı mevcut
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Potentials Tab */}
                         {fsDetailTab === 'potentials' && (
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                                <div className="bg-gray-700/50 rounded-lg p-4 text-center">
-                                    <div className="text-sm text-gray-400 mb-2">BTTS</div>
-                                    <div className="text-3xl font-bold text-green-400">
-                                        {selectedFsMatch.potentials.btts ? `%${selectedFsMatch.potentials.btts}` : '-'}
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                                <Tooltip text="Karşılıklı Gol (Both Teams To Score) - Her iki takımın da gol atma olasılığı">
+                                    <div className="bg-gray-700/50 rounded-lg p-4 text-center hover:bg-gray-700 transition cursor-help">
+                                        <div className="text-sm text-gray-400 mb-2">BTTS</div>
+                                        <div className="text-3xl font-bold text-green-400">
+                                            {selectedFsMatch.potentials.btts ? `%${selectedFsMatch.potentials.btts}` : '-'}
+                                        </div>
+                                        {selectedFsMatch.potentials.btts && (
+                                            <ProgressBar value={selectedFsMatch.potentials.btts} color="green" />
+                                        )}
                                     </div>
-                                    {selectedFsMatch.potentials.btts && (
-                                        <ProgressBar value={selectedFsMatch.potentials.btts} color="green" />
-                                    )}
-                                </div>
-                                <div className="bg-gray-700/50 rounded-lg p-4 text-center">
-                                    <div className="text-sm text-gray-400 mb-2">2.5 Üst</div>
-                                    <div className="text-3xl font-bold text-blue-400">
-                                        {selectedFsMatch.potentials.over25 ? `%${selectedFsMatch.potentials.over25}` : '-'}
+                                </Tooltip>
+                                <Tooltip text="Maçta 2.5 üstü gol atılma ihtimali">
+                                    <div className="bg-gray-700/50 rounded-lg p-4 text-center hover:bg-gray-700 transition cursor-help">
+                                        <div className="text-sm text-gray-400 mb-2">2.5 Üst</div>
+                                        <div className="text-3xl font-bold text-blue-400">
+                                            {selectedFsMatch.potentials.over25 ? `%${selectedFsMatch.potentials.over25}` : '-'}
+                                        </div>
+                                        {selectedFsMatch.potentials.over25 && (
+                                            <ProgressBar value={selectedFsMatch.potentials.over25} color="blue" />
+                                        )}
                                     </div>
-                                    {selectedFsMatch.potentials.over25 && (
-                                        <ProgressBar value={selectedFsMatch.potentials.over25} color="blue" />
-                                    )}
-                                </div>
-                                <div className="bg-gray-700/50 rounded-lg p-4 text-center">
-                                    <div className="text-sm text-gray-400 mb-2">1.5 Üst</div>
-                                    <div className="text-3xl font-bold text-purple-400">
-                                        {selectedFsMatch.potentials.over15 ? `%${selectedFsMatch.potentials.over15}` : '-'}
+                                </Tooltip>
+                                <Tooltip text="Maçta 1.5 üstü gol atılma ihtimali">
+                                    <div className="bg-gray-700/50 rounded-lg p-4 text-center hover:bg-gray-700 transition cursor-help">
+                                        <div className="text-sm text-gray-400 mb-2">1.5 Üst</div>
+                                        <div className="text-3xl font-bold text-purple-400">
+                                            {selectedFsMatch.potentials.over15 ? `%${selectedFsMatch.potentials.over15}` : '-'}
+                                        </div>
+                                        {selectedFsMatch.potentials.over15 && (
+                                            <ProgressBar value={selectedFsMatch.potentials.over15} color="purple" />
+                                        )}
                                     </div>
-                                    {selectedFsMatch.potentials.over15 && (
-                                        <ProgressBar value={selectedFsMatch.potentials.over15} color="purple" />
-                                    )}
-                                </div>
-                                <div className="bg-gray-700/50 rounded-lg p-4 text-center">
-                                    <div className="text-sm text-gray-400 mb-2">Korner</div>
-                                    <div className="text-3xl font-bold text-yellow-400">
-                                        {selectedFsMatch.potentials.corners?.toFixed(1) || '-'}
+                                </Tooltip>
+                                <Tooltip text="Tahmini toplam korner sayısı">
+                                    <div className="bg-gray-700/50 rounded-lg p-4 text-center hover:bg-gray-700 transition cursor-help">
+                                        <div className="text-sm text-gray-400 mb-2">Korner</div>
+                                        <div className="text-3xl font-bold text-yellow-400">
+                                            {selectedFsMatch.potentials.corners?.toFixed(1) || '-'}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="bg-gray-700/50 rounded-lg p-4 text-center">
-                                    <div className="text-sm text-gray-400 mb-2">Kart</div>
-                                    <div className="text-3xl font-bold text-red-400">
-                                        {selectedFsMatch.potentials.cards?.toFixed(1) || '-'}
+                                </Tooltip>
+                                <Tooltip text="Tahmini toplam kart sayısı">
+                                    <div className="bg-gray-700/50 rounded-lg p-4 text-center hover:bg-gray-700 transition cursor-help">
+                                        <div className="text-sm text-gray-400 mb-2">Kart</div>
+                                        <div className="text-3xl font-bold text-red-400">
+                                            {selectedFsMatch.potentials.cards?.toFixed(1) || '-'}
+                                        </div>
                                     </div>
-                                </div>
+                                </Tooltip>
+                                <Tooltip text="Tahmini toplam şut sayısı (takımların sezon ortalamasına göre)">
+                                    <div className="bg-gray-700/50 rounded-lg p-4 text-center hover:bg-gray-700 transition cursor-help">
+                                        <div className="text-sm text-gray-400 mb-2">Şut</div>
+                                        <div className="text-3xl font-bold text-cyan-400">
+                                            {selectedFsMatch.potentials.shots?.toFixed(0) || '-'}
+                                        </div>
+                                    </div>
+                                </Tooltip>
+                                <Tooltip text="Tahmini toplam faul sayısı">
+                                    <div className="bg-gray-700/50 rounded-lg p-4 text-center hover:bg-gray-700 transition cursor-help">
+                                        <div className="text-sm text-gray-400 mb-2">Faul</div>
+                                        <div className="text-3xl font-bold text-orange-400">
+                                            {selectedFsMatch.potentials.fouls?.toFixed(0) || '-'}
+                                        </div>
+                                    </div>
+                                </Tooltip>
 
                                 {/* xG Section */}
                                 {(selectedFsMatch.xg.home || selectedFsMatch.xg.away) && (
@@ -830,256 +1057,363 @@ export function AIAnalysisLab() {
                             </div>
                         )}
 
-                        {/* H2H Tab - Enhanced */}
+                        {/* H2H Tab - Premium Design with AI Prediction */}
                         {fsDetailTab === 'h2h' && (
-                            <div className="bg-gray-700/50 rounded-lg p-6">
+                            <div className="space-y-6">
                                 {selectedFsMatch.h2h ? (
                                     <>
-                                        {/* Header */}
-                                        <div className="text-center mb-6">
-                                            <h3 className="text-xl font-bold text-white mb-1">🔄 KAFA KAFAYA ANALİZİ</h3>
-                                            <div className="text-sm text-gray-400">Son {selectedFsMatch.h2h.total_matches} Karşılaşma</div>
-                                        </div>
+                                        {/* AI TAHMİN ANALİZİ */}
+                                        {(() => {
+                                            const h2h = selectedFsMatch.h2h;
+                                            const homeWinPct = Math.round((h2h.home_wins / h2h.total_matches) * 100);
+                                            const drawPct = Math.round((h2h.draws / h2h.total_matches) * 100);
+                                            const awayWinPct = Math.round((h2h.away_wins / h2h.total_matches) * 100);
 
-                                        {/* Win/Draw/Loss Bar Chart */}
-                                        <div className="mb-8">
-                                            <div className="flex justify-between text-sm font-semibold text-gray-300 mb-2">
-                                                <span>{selectedFsMatch.home_name}</span>
-                                                <span className="text-gray-500">Beraberlik</span>
-                                                <span>{selectedFsMatch.away_name}</span>
-                                            </div>
-                                            <div className="flex gap-1 mb-2 h-10">
-                                                <div
-                                                    style={{
-                                                        flex: selectedFsMatch.h2h.home_wins,
-                                                        minWidth: selectedFsMatch.h2h.home_wins > 0 ? '40px' : '0',
-                                                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                                        borderRadius: '8px',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        fontSize: '14px',
-                                                        fontWeight: 'bold',
-                                                        color: 'white'
-                                                    }}
-                                                >
-                                                    {selectedFsMatch.h2h.home_wins > 0 && `${selectedFsMatch.h2h.home_wins}G`}
-                                                </div>
-                                                <div
-                                                    style={{
-                                                        flex: selectedFsMatch.h2h.draws,
-                                                        minWidth: selectedFsMatch.h2h.draws > 0 ? '40px' : '0',
-                                                        background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
-                                                        borderRadius: '8px',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        fontSize: '14px',
-                                                        fontWeight: 'bold',
-                                                        color: 'white'
-                                                    }}
-                                                >
-                                                    {selectedFsMatch.h2h.draws > 0 && `${selectedFsMatch.h2h.draws}B`}
-                                                </div>
-                                                <div
-                                                    style={{
-                                                        flex: selectedFsMatch.h2h.away_wins,
-                                                        minWidth: selectedFsMatch.h2h.away_wins > 0 ? '40px' : '0',
-                                                        background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                                                        borderRadius: '8px',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        fontSize: '14px',
-                                                        fontWeight: 'bold',
-                                                        color: 'white'
-                                                    }}
-                                                >
-                                                    {selectedFsMatch.h2h.away_wins > 0 && `${selectedFsMatch.h2h.away_wins}G`}
-                                                </div>
-                                            </div>
-                                            <div className="flex justify-between text-sm font-semibold text-gray-400">
-                                                <span>{Math.round((selectedFsMatch.h2h.home_wins / selectedFsMatch.h2h.total_matches) * 100)}%</span>
-                                                <span>{Math.round((selectedFsMatch.h2h.draws / selectedFsMatch.h2h.total_matches) * 100)}%</span>
-                                                <span>{Math.round((selectedFsMatch.h2h.away_wins / selectedFsMatch.h2h.total_matches) * 100)}%</span>
-                                            </div>
-                                        </div>
+                                            // AI Tahmin Algoritması
+                                            const predictWinner = () => {
+                                                if (homeWinPct > awayWinPct + 20) return 'home';
+                                                if (awayWinPct > homeWinPct + 20) return 'away';
+                                                if (drawPct > 25) return 'draw';
+                                                return homeWinPct > awayWinPct ? 'home' : 'away';
+                                            };
 
-                                        {/* Goal Statistics */}
-                                        <div className="mb-6">
-                                            <h4 className="text-base font-semibold text-gray-300 mb-4 flex items-center gap-2">
-                                                <ChartBar className="w-5 h-5 text-blue-400" />
-                                                GOL İSTATİSTİKLERİ
-                                            </h4>
+                                            const prediction = predictWinner();
+                                            const confidence = Math.max(homeWinPct, drawPct, awayWinPct);
+                                            const avgGoals = h2h.avg_goals || 0;
+                                            const bttsPrediction = (h2h.btts_pct || 0) > 60;
+                                            const over25Prediction = (h2h.over25_pct || 0) > 60;
 
-                                            {/* Over 1.5 */}
-                                            {selectedFsMatch.h2h.over15_pct !== undefined && (
-                                                <div className="mb-4">
-                                                    <div className="flex justify-between text-sm mb-2">
-                                                        <span className="text-gray-400">Over 1.5</span>
-                                                        <span className="font-bold text-white">
-                                                            %{selectedFsMatch.h2h.over15_pct}
-                                                            <span className="text-xs text-gray-500 ml-2">
-                                                                ({Math.round((selectedFsMatch.h2h.over15_pct / 100) * selectedFsMatch.h2h.total_matches)}/{selectedFsMatch.h2h.total_matches})
-                                                            </span>
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-800 rounded-full h-2.5">
-                                                        <div
-                                                            className="h-2.5 rounded-full transition-all duration-500"
-                                                            style={{
-                                                                width: `${selectedFsMatch.h2h.over15_pct}%`,
-                                                                background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Over 2.5 */}
-                                            {selectedFsMatch.h2h.over25_pct !== undefined && (
-                                                <div className="mb-4">
-                                                    <div className="flex justify-between text-sm mb-2">
-                                                        <span className="text-gray-400">Over 2.5</span>
-                                                        <span className="font-bold text-white">
-                                                            %{selectedFsMatch.h2h.over25_pct}
-                                                            <span className="text-xs text-gray-500 ml-2">
-                                                                ({Math.round((selectedFsMatch.h2h.over25_pct / 100) * selectedFsMatch.h2h.total_matches)}/{selectedFsMatch.h2h.total_matches})
-                                                            </span>
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-800 rounded-full h-2.5">
-                                                        <div
-                                                            className="h-2.5 rounded-full transition-all duration-500"
-                                                            style={{
-                                                                width: `${selectedFsMatch.h2h.over25_pct}%`,
-                                                                background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)'
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Over 3.5 */}
-                                            {selectedFsMatch.h2h.over35_pct !== undefined && (
-                                                <div className="mb-4">
-                                                    <div className="flex justify-between text-sm mb-2">
-                                                        <span className="text-gray-400">Over 3.5</span>
-                                                        <span className="font-bold text-white">
-                                                            %{selectedFsMatch.h2h.over35_pct}
-                                                            <span className="text-xs text-gray-500 ml-2">
-                                                                ({Math.round((selectedFsMatch.h2h.over35_pct / 100) * selectedFsMatch.h2h.total_matches)}/{selectedFsMatch.h2h.total_matches})
-                                                            </span>
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-800 rounded-full h-2.5">
-                                                        <div
-                                                            className="h-2.5 rounded-full transition-all duration-500"
-                                                            style={{
-                                                                width: `${selectedFsMatch.h2h.over35_pct}%`,
-                                                                background: 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)'
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* BTTS */}
-                                            {selectedFsMatch.h2h.btts_pct !== undefined && selectedFsMatch.h2h.btts_pct !== null && (
-                                                <div className="mb-4">
-                                                    <div className="flex justify-between text-sm mb-2">
-                                                        <span className="text-gray-400">BTTS (Karşılıklı Gol)</span>
-                                                        <span className="font-bold text-white">
-                                                            %{selectedFsMatch.h2h.btts_pct}
-                                                            <span className="text-xs text-gray-500 ml-2">
-                                                                ({Math.round((selectedFsMatch.h2h.btts_pct / 100) * selectedFsMatch.h2h.total_matches)}/{selectedFsMatch.h2h.total_matches})
-                                                            </span>
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-800 rounded-full h-2.5">
-                                                        <div
-                                                            className="h-2.5 rounded-full transition-all duration-500"
-                                                            style={{
-                                                                width: `${selectedFsMatch.h2h.btts_pct}%`,
-                                                                background: 'linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%)'
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Average Goals */}
-                                            {selectedFsMatch.h2h.avg_goals && (
-                                                <div className="mt-4 bg-gray-800 rounded-lg p-4 flex justify-between items-center">
-                                                    <span className="text-sm text-gray-400">Ortalama Gol</span>
-                                                    <span className="text-2xl font-bold text-blue-400">
-                                                        {selectedFsMatch.h2h.avg_goals.toFixed(1)}
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Clean Sheets */}
-                                        {(selectedFsMatch.h2h.home_clean_sheets_pct !== undefined || selectedFsMatch.h2h.away_clean_sheets_pct !== undefined) && (
-                                            <div>
-                                                <h4 className="text-base font-semibold text-gray-300 mb-4 flex items-center gap-2">
-                                                    <Flag className="w-5 h-5 text-cyan-400" />
-                                                    KALE TEMİZ
-                                                </h4>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    {selectedFsMatch.h2h.home_clean_sheets_pct !== undefined && (
+                                            return (
+                                                <div className="bg-gradient-to-br from-purple-900/40 to-blue-900/40 rounded-xl p-6 border border-purple-500/20 shadow-2xl">
+                                                    <div className="flex items-center gap-3 mb-6">
+                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                                                            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                                            </svg>
+                                                        </div>
                                                         <div>
-                                                            <div className="text-xs text-gray-400 mb-2">
-                                                                {selectedFsMatch.home_name}
+                                                            <h3 className="text-2xl font-bold text-white">AI TAHMİN ANALİZİ</h3>
+                                                            <p className="text-sm text-purple-300">Son {h2h.total_matches} maç verisine dayalı akıllı tahmin</p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Ana Tahmin */}
+                                                    <div className="bg-black/30 rounded-xl p-6 mb-6 backdrop-blur-sm">
+                                                        <div className="text-center mb-4">
+                                                            <div className="text-sm text-gray-400 mb-2">ÖNERİLEN TAHMİN</div>
+                                                            <div className="text-3xl font-bold text-white mb-2">
+                                                                {prediction === 'home' ? `${selectedFsMatch.home_name} Kazanır` :
+                                                                 prediction === 'away' ? `${selectedFsMatch.away_name} Kazanır` :
+                                                                 'Beraberlik'}
                                                             </div>
-                                                            <div
-                                                                style={{
-                                                                    padding: '12px',
-                                                                    background: '#ecfdf5',
-                                                                    borderRadius: '8px',
-                                                                    textAlign: 'center',
-                                                                    border: '1px solid #a7f3d0'
-                                                                }}
-                                                            >
-                                                                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
-                                                                    %{selectedFsMatch.h2h.home_clean_sheets_pct}
+                                                            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30">
+                                                                <span className="text-green-400 font-semibold">Güven: %{confidence}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Diğer Tahminler */}
+                                                        <div className="grid grid-cols-3 gap-3 mt-6">
+                                                            <div className="bg-gray-800/50 rounded-lg p-3 text-center border border-gray-700/50">
+                                                                <div className="text-xs text-gray-400 mb-1">Gol Tahmini</div>
+                                                                <div className="text-lg font-bold text-yellow-400">
+                                                                    {avgGoals < 2.5 ? 'Under 2.5' : 'Over 2.5'}
                                                                 </div>
+                                                                <div className="text-xs text-gray-500 mt-1">Ort: {avgGoals.toFixed(1)}</div>
+                                                            </div>
+                                                            <div className="bg-gray-800/50 rounded-lg p-3 text-center border border-gray-700/50">
+                                                                <div className="text-xs text-gray-400 mb-1">BTTS</div>
+                                                                <div className="text-lg font-bold text-purple-400">
+                                                                    {bttsPrediction ? 'Evet' : 'Hayır'}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500 mt-1">%{h2h.btts_pct}</div>
+                                                            </div>
+                                                            <div className="bg-gray-800/50 rounded-lg p-3 text-center border border-gray-700/50">
+                                                                <div className="text-xs text-gray-400 mb-1">Gollü Maç</div>
+                                                                <div className="text-lg font-bold text-cyan-400">
+                                                                    {over25Prediction ? 'Muhtemel' : 'Düşük'}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500 mt-1">%{h2h.over25_pct}</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Analiz Notları */}
+                                                    <div className="space-y-2">
+                                                        <div className="flex items-start gap-3 text-sm text-gray-300">
+                                                            <span className="text-green-400 mt-1">✓</span>
+                                                            <span>
+                                                                <strong>{selectedFsMatch.away_name}</strong> son {h2h.total_matches} maçta {h2h.away_wins} kez kazandı
+                                                                <span className="text-green-400 ml-1">(%{awayWinPct})</span>
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-start gap-3 text-sm text-gray-300">
+                                                            <span className="text-yellow-400 mt-1">⚡</span>
+                                                            <span>
+                                                                Ortalama <strong>{avgGoals.toFixed(1)} gol</strong> atılıyor -
+                                                                {avgGoals > 3 ? ' Çok gollü maçlar' : avgGoals > 2.5 ? ' Gollü maçlar' : ' Az gollü maçlar'}
+                                                            </span>
+                                                        </div>
+                                                        {bttsPrediction && (
+                                                            <div className="flex items-start gap-3 text-sm text-gray-300">
+                                                                <span className="text-purple-400 mt-1">⚽</span>
+                                                                <span>
+                                                                    Karşılıklı gol <strong>%{h2h.btts_pct}</strong> oranla muhtemel
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* H2H İstatistikleri Grid */}
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                            {/* Sol Kolon: Win Stats ve Goal Stats */}
+                                            <div className="space-y-6">
+                                                {/* Win/Draw/Loss Card */}
+                                                <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700/50 shadow-lg">
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                                            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                                            </svg>
+                                                        </div>
+                                                        <h4 className="text-lg font-bold text-white">Galibiyet Dağılımı</h4>
+                                                    </div>
+
+                                                    {/* Team Names */}
+                                                    <div className="flex justify-between text-sm font-medium text-gray-400 mb-3 px-1">
+                                                        <span>{selectedFsMatch.home_name}</span>
+                                                        <span>Beraberlik</span>
+                                                        <span>{selectedFsMatch.away_name}</span>
+                                                    </div>
+
+                                                    {/* Bar Chart */}
+                                                    <div className="flex gap-2 mb-3 h-12">
+                                                        <div
+                                                            style={{
+                                                                flex: selectedFsMatch.h2h.home_wins,
+                                                                minWidth: selectedFsMatch.h2h.home_wins > 0 ? '50px' : '0',
+                                                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                                                borderRadius: '10px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                fontSize: '16px',
+                                                                fontWeight: 'bold',
+                                                                color: 'white',
+                                                                boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
+                                                            }}
+                                                        >
+                                                            {selectedFsMatch.h2h.home_wins > 0 && `${selectedFsMatch.h2h.home_wins}`}
+                                                        </div>
+                                                        <div
+                                                            style={{
+                                                                flex: selectedFsMatch.h2h.draws,
+                                                                minWidth: selectedFsMatch.h2h.draws > 0 ? '50px' : '0',
+                                                                background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+                                                                borderRadius: '10px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                fontSize: '16px',
+                                                                fontWeight: 'bold',
+                                                                color: 'white',
+                                                                boxShadow: '0 4px 6px -1px rgba(100, 116, 139, 0.3)'
+                                                            }}
+                                                        >
+                                                            {selectedFsMatch.h2h.draws > 0 && `${selectedFsMatch.h2h.draws}`}
+                                                        </div>
+                                                        <div
+                                                            style={{
+                                                                flex: selectedFsMatch.h2h.away_wins,
+                                                                minWidth: selectedFsMatch.h2h.away_wins > 0 ? '50px' : '0',
+                                                                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                                                borderRadius: '10px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                fontSize: '16px',
+                                                                fontWeight: 'bold',
+                                                                color: 'white',
+                                                                boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)'
+                                                            }}
+                                                        >
+                                                            {selectedFsMatch.h2h.away_wins > 0 && `${selectedFsMatch.h2h.away_wins}`}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Percentages */}
+                                                    <div className="flex justify-between text-sm font-bold px-1">
+                                                        <span className="text-green-400">{Math.round((selectedFsMatch.h2h.home_wins / selectedFsMatch.h2h.total_matches) * 100)}%</span>
+                                                        <span className="text-gray-400">{Math.round((selectedFsMatch.h2h.draws / selectedFsMatch.h2h.total_matches) * 100)}%</span>
+                                                        <span className="text-blue-400">{Math.round((selectedFsMatch.h2h.away_wins / selectedFsMatch.h2h.total_matches) * 100)}%</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Goal Statistics Card */}
+                                                <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700/50 shadow-lg">
+                                                    <div className="flex items-center gap-2 mb-5">
+                                                        <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                                                            <ChartBar className="w-5 h-5 text-yellow-400" />
+                                                        </div>
+                                                        <h4 className="text-lg font-bold text-white">Gol İstatistikleri</h4>
+                                                    </div>
+
+                                                    {/* Over 1.5 */}
+                                                    {selectedFsMatch.h2h.over15_pct !== undefined && (
+                                                        <div className="mb-4">
+                                                            <div className="flex justify-between text-sm mb-2">
+                                                                <span className="text-gray-300 font-medium">Over 1.5</span>
+                                                                <span className="font-bold text-white">
+                                                                    %{selectedFsMatch.h2h.over15_pct}
+                                                                    <span className="text-xs text-gray-500 ml-2">
+                                                                        ({Math.round((selectedFsMatch.h2h.over15_pct / 100) * selectedFsMatch.h2h.total_matches)}/{selectedFsMatch.h2h.total_matches})
+                                                                    </span>
+                                                                </span>
+                                                            </div>
+                                                            <div className="w-full bg-gray-900 rounded-full h-3 shadow-inner">
+                                                                <div
+                                                                    className="h-3 rounded-full transition-all duration-500 shadow-lg"
+                                                                    style={{
+                                                                        width: `${selectedFsMatch.h2h.over15_pct}%`,
+                                                                        background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
+                                                                    }}
+                                                                />
                                                             </div>
                                                         </div>
                                                     )}
-                                                    {selectedFsMatch.h2h.away_clean_sheets_pct !== undefined && (
-                                                        <div>
-                                                            <div className="text-xs text-gray-400 mb-2">
-                                                                {selectedFsMatch.away_name}
+
+                                                    {/* Over 2.5 */}
+                                                    {selectedFsMatch.h2h.over25_pct !== undefined && (
+                                                        <div className="mb-4">
+                                                            <div className="flex justify-between text-sm mb-2">
+                                                                <span className="text-gray-300 font-medium">Over 2.5</span>
+                                                                <span className="font-bold text-white">
+                                                                    %{selectedFsMatch.h2h.over25_pct}
+                                                                    <span className="text-xs text-gray-500 ml-2">
+                                                                        ({Math.round((selectedFsMatch.h2h.over25_pct / 100) * selectedFsMatch.h2h.total_matches)}/{selectedFsMatch.h2h.total_matches})
+                                                                    </span>
+                                                                </span>
                                                             </div>
-                                                            <div
-                                                                style={{
-                                                                    padding: '12px',
-                                                                    background: '#eff6ff',
-                                                                    borderRadius: '8px',
-                                                                    textAlign: 'center',
-                                                                    border: '1px solid #bfdbfe'
-                                                                }}
-                                                            >
-                                                                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#2563eb' }}>
-                                                                    %{selectedFsMatch.h2h.away_clean_sheets_pct}
-                                                                </div>
+                                                            <div className="w-full bg-gray-900 rounded-full h-3 shadow-inner">
+                                                                <div
+                                                                    className="h-3 rounded-full transition-all duration-500 shadow-lg"
+                                                                    style={{
+                                                                        width: `${selectedFsMatch.h2h.over25_pct}%`,
+                                                                        background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)'
+                                                                    }}
+                                                                />
                                                             </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Over 3.5 */}
+                                                    {selectedFsMatch.h2h.over35_pct !== undefined && (
+                                                        <div className="mb-4">
+                                                            <div className="flex justify-between text-sm mb-2">
+                                                                <span className="text-gray-300 font-medium">Over 3.5</span>
+                                                                <span className="font-bold text-white">
+                                                                    %{selectedFsMatch.h2h.over35_pct}
+                                                                    <span className="text-xs text-gray-500 ml-2">
+                                                                        ({Math.round((selectedFsMatch.h2h.over35_pct / 100) * selectedFsMatch.h2h.total_matches)}/{selectedFsMatch.h2h.total_matches})
+                                                                    </span>
+                                                                </span>
+                                                            </div>
+                                                            <div className="w-full bg-gray-900 rounded-full h-3 shadow-inner">
+                                                                <div
+                                                                    className="h-3 rounded-full transition-all duration-500 shadow-lg"
+                                                                    style={{
+                                                                        width: `${selectedFsMatch.h2h.over35_pct}%`,
+                                                                        background: 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)'
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* BTTS */}
+                                                    {selectedFsMatch.h2h.btts_pct !== undefined && selectedFsMatch.h2h.btts_pct !== null && (
+                                                        <div className="mb-4">
+                                                            <div className="flex justify-between text-sm mb-2">
+                                                                <span className="text-gray-300 font-medium">BTTS (Karşılıklı Gol)</span>
+                                                                <span className="font-bold text-white">
+                                                                    %{selectedFsMatch.h2h.btts_pct}
+                                                                    <span className="text-xs text-gray-500 ml-2">
+                                                                        ({Math.round((selectedFsMatch.h2h.btts_pct / 100) * selectedFsMatch.h2h.total_matches)}/{selectedFsMatch.h2h.total_matches})
+                                                                    </span>
+                                                                </span>
+                                                            </div>
+                                                            <div className="w-full bg-gray-900 rounded-full h-3 shadow-inner">
+                                                                <div
+                                                                    className="h-3 rounded-full transition-all duration-500 shadow-lg"
+                                                                    style={{
+                                                                        width: `${selectedFsMatch.h2h.btts_pct}%`,
+                                                                        background: 'linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%)'
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Average Goals Highlight */}
+                                                    {selectedFsMatch.h2h.avg_goals && (
+                                                        <div className="mt-5 bg-gradient-to-r from-blue-900/40 to-purple-900/40 rounded-lg p-4 flex justify-between items-center border border-blue-500/20">
+                                                            <span className="text-sm text-gray-300 font-medium">Ortalama Gol</span>
+                                                            <span className="text-3xl font-bold text-blue-400">
+                                                                {selectedFsMatch.h2h.avg_goals.toFixed(1)}
+                                                            </span>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
-                                        )}
 
-                                        {/* Previous Match Results */}
-                                        {selectedFsMatch.h2h.matches && selectedFsMatch.h2h.matches.length > 0 && (
-                                            <div className="mt-6">
-                                                <h4 className="text-base font-semibold text-gray-300 mb-4 flex items-center gap-2">
-                                                    <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                    </svg>
-                                                    SON MAÇLAR ({selectedFsMatch.h2h.matches.length})
-                                                </h4>
+                                            {/* Sağ Kolon: Clean Sheets ve Son Maçlar */}
+                                            <div className="space-y-6">
+                                                {/* Clean Sheets Card */}
+                                                {(selectedFsMatch.h2h.home_clean_sheets_pct !== undefined || selectedFsMatch.h2h.away_clean_sheets_pct !== undefined) && (
+                                                    <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700/50 shadow-lg">
+                                                        <div className="flex items-center gap-2 mb-5">
+                                                            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                                                                <Flag className="w-5 h-5 text-cyan-400" />
+                                                            </div>
+                                                            <h4 className="text-lg font-bold text-white">Kale Temiz</h4>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            {selectedFsMatch.h2h.home_clean_sheets_pct !== undefined && (
+                                                                <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/30 rounded-lg p-4 border border-green-500/20">
+                                                                    <div className="text-xs text-gray-400 mb-3">{selectedFsMatch.home_name}</div>
+                                                                    <div className="text-4xl font-bold text-green-400 mb-1">
+                                                                        %{selectedFsMatch.h2h.home_clean_sheets_pct}
+                                                                    </div>
+                                                                    <div className="text-xs text-gray-500">Temiz kale oranı</div>
+                                                                </div>
+                                                            )}
+                                                            {selectedFsMatch.h2h.away_clean_sheets_pct !== undefined && (
+                                                                <div className="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 rounded-lg p-4 border border-blue-500/20">
+                                                                    <div className="text-xs text-gray-400 mb-3">{selectedFsMatch.away_name}</div>
+                                                                    <div className="text-4xl font-bold text-blue-400 mb-1">
+                                                                        %{selectedFsMatch.h2h.away_clean_sheets_pct}
+                                                                    </div>
+                                                                    <div className="text-xs text-gray-500">Temiz kale oranı</div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Son Maçlar Card */}
+                                                {selectedFsMatch.h2h.matches && selectedFsMatch.h2h.matches.length > 0 && (
+                                                    <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700/50 shadow-lg">
+                                                        <div className="flex items-center gap-2 mb-5">
+                                                            <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                                                                <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                                </svg>
+                                                            </div>
+                                                            <h4 className="text-lg font-bold text-white">Son Maçlar</h4>
+                                                            <span className="ml-auto text-sm text-gray-400">({selectedFsMatch.h2h.matches.length})</span>
+                                                        </div>
                                                 <div className="space-y-2 max-h-96 overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                                                     {selectedFsMatch.h2h.matches.slice(0, 10).map((match, idx) => {
                                                         const matchDate = new Date(match.date_unix * 1000);
@@ -1125,6 +1459,8 @@ export function AIAnalysisLab() {
                                                 </div>
                                             </div>
                                         )}
+                                            </div>
+                                        </div>
                                     </>
                                 ) : (
                                     <NoDataPlaceholder message="H2H verisi mevcut değil" />
@@ -1158,6 +1494,233 @@ export function AIAnalysisLab() {
                                     ) : (
                                         <NoDataPlaceholder message="Trend verisi yok" />
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* AI Prediction Tab */}
+                        {fsDetailTab === 'ai-prediction' && (
+                            <div className="space-y-6">
+                                {/* AI Prediction Header */}
+                                <div className="bg-gradient-to-br from-purple-900/40 to-pink-900/40 rounded-xl p-6 border border-purple-500/20">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                            <Sparkle className="w-7 h-7 text-purple-400" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-bold text-white">AI Tahmin Motoru</h3>
+                                            <p className="text-sm text-gray-400">xG, Form ve H2H analizi</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Confidence Score */}
+                                    {selectedFsMatch.xg.total && (
+                                        <div className="mt-6">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-sm text-gray-400">Tahmin Güvenilirliği</span>
+                                                <span className="text-lg font-bold text-white">
+                                                    {Math.min(
+                                                        Math.round(
+                                                            ((selectedFsMatch.xg.total || 0) * 15) +
+                                                            ((selectedFsMatch.potentials.btts || 0) * 0.3) +
+                                                            ((selectedFsMatch.h2h?.total_matches || 0) * 2)
+                                                        ),
+                                                        95
+                                                    )}%
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-gray-700 rounded-full h-3">
+                                                <div
+                                                    className="h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                                                    style={{
+                                                        width: `${Math.min(
+                                                            Math.round(
+                                                                ((selectedFsMatch.xg.total || 0) * 15) +
+                                                                ((selectedFsMatch.potentials.btts || 0) * 0.3) +
+                                                                ((selectedFsMatch.h2h?.total_matches || 0) * 2)
+                                                            ),
+                                                            95
+                                                        )}%`
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* AI Recommendations */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* High Confidence Picks */}
+                                    {selectedFsMatch.potentials.btts && selectedFsMatch.potentials.btts >= 70 && (
+                                        <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/30 rounded-xl p-5 border border-green-500/30">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <CheckCircle className="w-6 h-6 text-green-400" />
+                                                <span className="text-lg font-bold text-white">Yüksek Güvenilirlik</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between p-3 bg-black/20 rounded-lg">
+                                                    <span className="text-gray-200">BTTS (Karşılıklı Gol)</span>
+                                                    <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 font-bold text-sm">
+                                                        %{selectedFsMatch.potentials.btts}
+                                                    </span>
+                                                </div>
+                                                {selectedFsMatch.h2h?.btts_pct && (
+                                                    <div className="text-xs text-gray-400 mt-2 pl-3">
+                                                        📊 H2H: %{selectedFsMatch.h2h.btts_pct} karşılıklı gol
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedFsMatch.potentials.over15 && selectedFsMatch.potentials.over15 >= 85 && (
+                                        <div className="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 rounded-xl p-5 border border-blue-500/30">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <CheckCircle className="w-6 h-6 text-blue-400" />
+                                                <span className="text-lg font-bold text-white">Çok Güvenli</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between p-3 bg-black/20 rounded-lg">
+                                                    <span className="text-gray-200">Over 1.5 Gol</span>
+                                                    <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 font-bold text-sm">
+                                                        %{selectedFsMatch.potentials.over15}
+                                                    </span>
+                                                </div>
+                                                {selectedFsMatch.xg.total && (
+                                                    <div className="text-xs text-gray-400 mt-2 pl-3">
+                                                        ⚡ Toplam xG: {selectedFsMatch.xg.total.toFixed(2)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedFsMatch.potentials.over25 && selectedFsMatch.potentials.over25 >= 60 && (
+                                        <div className="bg-gradient-to-br from-purple-900/30 to-violet-900/30 rounded-xl p-5 border border-purple-500/30">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Target className="w-6 h-6 text-purple-400" />
+                                                <span className="text-lg font-bold text-white">İyi Potansiyel</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between p-3 bg-black/20 rounded-lg">
+                                                    <span className="text-gray-200">Over 2.5 Gol</span>
+                                                    <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 font-bold text-sm">
+                                                        %{selectedFsMatch.potentials.over25}
+                                                    </span>
+                                                </div>
+                                                {selectedFsMatch.h2h?.avg_goals && (
+                                                    <div className="text-xs text-gray-400 mt-2 pl-3">
+                                                        📈 H2H Ortalama: {selectedFsMatch.h2h.avg_goals.toFixed(1)} gol/maç
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Shots & Corners Combined */}
+                                    {(selectedFsMatch.potentials.shots || selectedFsMatch.potentials.corners) && (
+                                        <div className="bg-gradient-to-br from-yellow-900/30 to-orange-900/30 rounded-xl p-5 border border-yellow-500/30">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Lightning className="w-6 h-6 text-yellow-400" />
+                                                <span className="text-lg font-bold text-white">Alternatif Bahisler</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {selectedFsMatch.potentials.shots && (
+                                                    <div className="flex items-center justify-between p-3 bg-black/20 rounded-lg">
+                                                        <span className="text-gray-200">Toplam Şut</span>
+                                                        <span className="text-cyan-400 font-bold">
+                                                            {selectedFsMatch.potentials.shots} tahmini
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {selectedFsMatch.potentials.corners && (
+                                                    <div className="flex items-center justify-between p-3 bg-black/20 rounded-lg">
+                                                        <span className="text-gray-200">Toplam Korner</span>
+                                                        <span className="text-yellow-400 font-bold">
+                                                            {selectedFsMatch.potentials.corners.toFixed(1)} tahmini
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Match Insights */}
+                                <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-6 border border-gray-700">
+                                    <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                        <Brain className="w-5 h-5 text-purple-400" />
+                                        AI Maç Analizi
+                                    </h4>
+                                    <div className="space-y-3">
+                                        {selectedFsMatch.xg.home && selectedFsMatch.xg.away && (
+                                            <div className="flex items-start gap-3 p-3 bg-cyan-500/10 rounded-lg border-l-2 border-cyan-500">
+                                                <ChartBar className="w-5 h-5 text-cyan-400 mt-0.5" />
+                                                <div className="text-sm text-gray-300">
+                                                    {selectedFsMatch.xg.home > selectedFsMatch.xg.away ? (
+                                                        <>
+                                                            <span className="font-semibold text-cyan-400">{selectedFsMatch.home_name}</span> ev sahibi avantajına sahip.
+                                                            xG farkı: {(selectedFsMatch.xg.home - selectedFsMatch.xg.away).toFixed(2)}
+                                                        </>
+                                                    ) : selectedFsMatch.xg.away > selectedFsMatch.xg.home ? (
+                                                        <>
+                                                            <span className="font-semibold text-orange-400">{selectedFsMatch.away_name}</span> deplasmanda güçlü.
+                                                            xG farkı: {(selectedFsMatch.xg.away - selectedFsMatch.xg.home).toFixed(2)}
+                                                        </>
+                                                    ) : (
+                                                        <>Takımlar arasında dengeli bir maç bekleniyor.</>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {selectedFsMatch.form?.home?.ppg !== undefined && selectedFsMatch.form?.away?.ppg !== undefined && selectedFsMatch.form.home.ppg !== null && selectedFsMatch.form.away.ppg !== null && (
+                                            <div className="flex items-start gap-3 p-3 bg-green-500/10 rounded-lg border-l-2 border-green-500">
+                                                <TrendUp className="w-5 h-5 text-green-400 mt-0.5" />
+                                                <div className="text-sm text-gray-300">
+                                                    Form analizi: <span className="font-semibold">{selectedFsMatch.home_name}</span> (
+                                                    <span className="text-cyan-400">{selectedFsMatch.form.home.ppg.toFixed(1)} PPG</span>) vs{' '}
+                                                    <span className="font-semibold">{selectedFsMatch.away_name}</span> (
+                                                    <span className="text-orange-400">{selectedFsMatch.form.away.ppg.toFixed(1)} PPG</span>)
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {selectedFsMatch.h2h && selectedFsMatch.h2h.total_matches > 0 && (
+                                            <div className="flex items-start gap-3 p-3 bg-purple-500/10 rounded-lg border-l-2 border-purple-500">
+                                                <Users className="w-5 h-5 text-purple-400 mt-0.5" />
+                                                <div className="text-sm text-gray-300">
+                                                    Son {selectedFsMatch.h2h.total_matches} karşılaşmada:{' '}
+                                                    <span className="font-semibold text-cyan-400">{selectedFsMatch.h2h.home_wins}G</span> /{' '}
+                                                    <span className="font-semibold text-gray-400">{selectedFsMatch.h2h.draws}B</span> /{' '}
+                                                    <span className="font-semibold text-orange-400">{selectedFsMatch.h2h.away_wins}G</span>
+                                                    {selectedFsMatch.h2h.avg_goals && (
+                                                        <> - Ortalama {selectedFsMatch.h2h.avg_goals.toFixed(1)} gol/maç</>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {selectedFsMatch.potentials.shots && selectedFsMatch.potentials.shots > 25 && (
+                                            <div className="flex items-start gap-3 p-3 bg-yellow-500/10 rounded-lg border-l-2 border-yellow-500">
+                                                <Lightning className="w-5 h-5 text-yellow-400 mt-0.5" />
+                                                <div className="text-sm text-gray-300">
+                                                    Hareketli bir maç bekleniyor! Tahmini <span className="font-semibold text-cyan-400">{selectedFsMatch.potentials.shots}</span> şut atılacak.
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Risk Warning */}
+                                <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Warning className="w-5 h-5 text-red-400" />
+                                        <span className="text-sm font-semibold text-red-400">Uyarı</span>
+                                    </div>
+                                    <p className="text-xs text-gray-400">
+                                        Bu tahminler AI analizi ve istatistiklere dayanmaktadır. Bahis oynarken sorumlu olun ve kaybetmeyi göze alamayacağınız parayla bahis oynamayın.
+                                    </p>
                                 </div>
                             </div>
                         )}
