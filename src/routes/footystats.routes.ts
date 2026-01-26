@@ -445,12 +445,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         const matchResponse = await footyStatsAPI.getMatchDetails(fsIdNum);
         fsMatch = matchResponse.data;
 
-        // 🔍 DEBUG: Log corners and cards from API
-        console.error('\n🔍🔍🔍 [FootyStats API] Raw match data for', fsIdNum);
-        console.error('  corners_potential:', fsMatch.corners_potential);
-        console.error('  cards_potential:', fsMatch.cards_potential);
-        console.error('  btts_potential:', fsMatch.btts_potential);
-        console.error('  o25_potential:', fsMatch.o25_potential);
+        // 🔍 DEBUG: Log H2H structure
+        console.error('\n🔍 [FootyStats API] H2H data for', fsIdNum);
+        console.error('  h2h:', JSON.stringify(fsMatch.h2h, null, 2));
 
         logger.info(`[FootyStats] Got match details for ${fsIdNum}`);
       } catch (matchErr: any) {
@@ -573,6 +570,15 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             over35_pct: calculateOver35(),
             home_clean_sheets_pct: estimateCleanSheets(true),
             away_clean_sheets_pct: estimateCleanSheets(false),
+            // Match results
+            matches: fsMatch.h2h.previous_matches_ids?.map((m: any) => ({
+              date_unix: m.date_unix,
+              home_team_id: m.team_a_id,
+              away_team_id: m.team_b_id,
+              home_goals: m.team_a_goals,
+              away_goals: m.team_b_goals,
+              score: `${m.team_a_goals}-${m.team_b_goals}`,
+            })) || [],
           };
         })() : null,
         trends: (() => {

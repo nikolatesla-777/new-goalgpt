@@ -150,6 +150,14 @@ export interface FootyStatsMatch {
       over25Percentage: number;
       avg_goals: number;
     };
+    previous_matches_ids?: Array<{
+      id: number;
+      date_unix: number;
+      team_a_id: number;
+      team_b_id: number;
+      team_a_goals: number;
+      team_b_goals: number;
+    }>;
   };
 }
 

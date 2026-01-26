@@ -138,6 +138,14 @@ interface FSMatchDetail {
         over35_pct?: number;
         home_clean_sheets_pct?: number;
         away_clean_sheets_pct?: number;
+        matches?: Array<{
+            date_unix: number;
+            home_team_id: number;
+            away_team_id: number;
+            home_goals: number;
+            away_goals: number;
+            score: string;
+        }>;
     };
     trends?: {
         home: Array<{ sentiment: string; text: string }>;
@@ -1059,6 +1067,61 @@ export function AIAnalysisLab() {
                                                             </div>
                                                         </div>
                                                     )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Previous Match Results */}
+                                        {selectedFsMatch.h2h.matches && selectedFsMatch.h2h.matches.length > 0 && (
+                                            <div className="mt-6">
+                                                <h4 className="text-base font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                                                    <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                    SON MAÇLAR ({selectedFsMatch.h2h.matches.length})
+                                                </h4>
+                                                <div className="space-y-2 max-h-96 overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                                                    {selectedFsMatch.h2h.matches.slice(0, 10).map((match, idx) => {
+                                                        const matchDate = new Date(match.date_unix * 1000);
+                                                        const homeTeamName = match.home_team_id === parseInt(selectedFsMatch.fs_id.toString().slice(0, 4))
+                                                            ? selectedFsMatch.home_name
+                                                            : selectedFsMatch.away_name;
+                                                        const awayTeamName = match.away_team_id === parseInt(selectedFsMatch.fs_id.toString().slice(0, 4))
+                                                            ? selectedFsMatch.away_name
+                                                            : selectedFsMatch.home_name;
+                                                        const isHomeWin = match.home_goals > match.away_goals;
+                                                        const isAwayWin = match.away_goals > match.home_goals;
+                                                        const isDraw = match.home_goals === match.away_goals;
+
+                                                        return (
+                                                            <div key={idx} className="bg-gray-600/30 rounded-lg p-3 hover:bg-gray-600/50 transition-colors">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className="flex-1 text-right pr-3">
+                                                                        <span className={`text-sm font-medium ${isHomeWin ? 'text-green-400' : isDraw ? 'text-gray-300' : 'text-gray-400'}`}>
+                                                                            {homeTeamName}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-3 px-4 py-2 bg-gray-700/50 rounded-md">
+                                                                        <span className={`text-xl font-bold ${isHomeWin ? 'text-green-400' : isDraw ? 'text-gray-300' : 'text-gray-400'}`}>
+                                                                            {match.home_goals}
+                                                                        </span>
+                                                                        <span className="text-gray-500 font-bold">-</span>
+                                                                        <span className={`text-xl font-bold ${isAwayWin ? 'text-blue-400' : isDraw ? 'text-gray-300' : 'text-gray-400'}`}>
+                                                                            {match.away_goals}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex-1 pl-3">
+                                                                        <span className={`text-sm font-medium ${isAwayWin ? 'text-blue-400' : isDraw ? 'text-gray-300' : 'text-gray-400'}`}>
+                                                                            {awayTeamName}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-center text-xs text-gray-500">
+                                                                    {matchDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         )}
