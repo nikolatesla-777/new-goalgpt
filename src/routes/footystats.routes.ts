@@ -461,12 +461,29 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         matchLeagueMap.set(key, row.league_name);
       });
 
+      // DEBUG: Log league query results
+      logger.info('[FootyStats] League query results:', {
+        total_rows: leagueNamesResult.rows.length,
+        sample_keys: Array.from(matchLeagueMap.keys()).slice(0, 3),
+        unique_teams_searched: uniqueTeamNames.length,
+        sample_teams: uniqueTeamNames.slice(0, 3)
+      });
+
       // Return matches with potentials, logos, and league names
-      const matches = response.data.map((m: any) => {
+      const matches = response.data.map((m: any, index: number) => {
         const homeLogo = teamLogosMap.get(m.home_name.toLowerCase()) || null;
         const awayLogo = teamLogosMap.get(m.away_name.toLowerCase()) || null;
         const matchKey = `${m.home_name}|${m.away_name}`.toLowerCase();
         const leagueName = matchLeagueMap.get(matchKey) || 'Unknown League';
+
+        // DEBUG: Log first match lookup
+        if (index === 0) {
+          logger.info('[FootyStats] First match lookup:', {
+            matchKey,
+            leagueName,
+            found: matchLeagueMap.has(matchKey)
+          });
+        }
 
         return {
           fs_id: m.id,
