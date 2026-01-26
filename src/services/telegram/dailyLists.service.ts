@@ -269,6 +269,48 @@ function calculateCardsConfidence(match: FootyStatsMatch): number {
   return Math.round(score);
 }
 
+/**
+ * Calculate confidence score for Over 1.5 goals market
+ */
+function calculateOver15Confidence(match: FootyStatsMatch): number {
+  let score = 0;
+  let factors = 0;
+
+  // Over 1.5 potential as primary indicator (max 50 points)
+  if (match.potentials?.over15) {
+    const over15 = match.potentials.over15;
+    // Score based on percentage
+    if (over15 >= 90) score += 50;
+    else if (over15 >= 85) score += 45;
+    else if (over15 >= 80) score += 40;
+    else if (over15 >= 75) score += 35;
+    else if (over15 >= 70) score += 30;
+    else score += 20;
+    factors++;
+  }
+
+  // Total xG as strong indicator (max 30 points)
+  if (match.xg?.home && match.xg?.away) {
+    const totalXg = match.xg.home + match.xg.away;
+    if (totalXg >= 2.5) score += 30;
+    else if (totalXg >= 2.0) score += 25;
+    else if (totalXg >= 1.5) score += 20;
+    else if (totalXg >= 1.2) score += 10;
+    factors++;
+  }
+
+  // Over 2.5 correlation (max 20 points)
+  if (match.potentials?.over25) {
+    score += (match.potentials.over25 / 100) * 20;
+    factors++;
+  }
+
+  // If less than 2 factors, return 0
+  if (factors < 2) return 0;
+
+  return Math.round(score);
+}
+
 // ============================================================================
 // FILTERING & SELECTION
 // ============================================================================
@@ -278,7 +320,7 @@ function calculateCardsConfidence(match: FootyStatsMatch): number {
  */
 function filterMatchesByMarket(
   matches: FootyStatsMatch[],
-  market: 'OVER_25' | 'BTTS' | 'HT_OVER_05',
+  market: 'OVER_25' | 'OVER_15' | 'BTTS' | 'HT_OVER_05' | 'CORNERS' | 'CARDS',
   minConfidence: number = 50
 ): MatchCandidate[] {
   const candidates: MatchCandidate[] = [];
@@ -295,6 +337,10 @@ function filterMatchesByMarket(
       case 'OVER_25':
         confidence = calculateOver25Confidence(match);
         reason = `O2.5: %${match.potentials?.over25 || 0}, xG: ${((match.xg?.home || 0) + (match.xg?.away || 0)).toFixed(1)}`;
+        break;
+      case 'OVER_15':
+        confidence = calculateOver15Confidence(match);
+        reason = `O1.5: %${match.potentials?.over15 || 0}, xG: ${((match.xg?.home || 0) + (match.xg?.away || 0)).toFixed(1)}`;
         break;
       case 'BTTS':
         confidence = calculateBTTSConfidence(match);
@@ -378,6 +424,7 @@ export async function generateDailyLists(): Promise<DailyList[]> {
       potentials: {
         btts: m.btts_potential,
         over25: m.o25_potential,
+        over15: m.o15_potential,       // ✅ ADD: Over 1.5 potential
         avg: m.avg_potential,
         corners: m.corners_potential,  // ✅ ADD: Match corner potential
         cards: m.cards_potential,      // ✅ ADD: Match card potential
@@ -420,7 +467,23 @@ export async function generateDailyLists(): Promise<DailyList[]> {
       logger.warn(`[TelegramDailyLists] ⚠️ Over 2.5 list: Insufficient matches (${over25Selected.length})`);
     }
 
-    // B) BTTS
+    // B) Over 1.5 Goals (10 matches)
+    const over15Candidates = filterMatchesByMarket(allMatches, 'OVER_15', 55);
+    const over15Selected = selectTopMatches(over15Candidates, 10);
+    if (over15Selected.length >= 5) {
+      lists.push({
+        market: 'OVER_15',
+        title: 'Günün 1.5 ÜST Maçları',
+        emoji: '🎯',
+        matches: over15Selected,
+        generated_at: timestamp,
+      });
+      logger.info(`[TelegramDailyLists] ✅ Over 1.5 list: ${over15Selected.length} matches`);
+    } else {
+      logger.warn(`[TelegramDailyLists] ⚠️ Over 1.5 list: Insufficient matches (${over15Selected.length})`);
+    }
+
+    // C) BTTS
     const bttsCandiates = filterMatchesByMarket(allMatches, 'BTTS', 55);
     const bttsSelected = selectTopMatches(bttsCandiates, 5);
     if (bttsSelected.length >= 3) {
@@ -436,7 +499,7 @@ export async function generateDailyLists(): Promise<DailyList[]> {
       logger.warn(`[TelegramDailyLists] ⚠️ BTTS list: Insufficient matches (${bttsSelected.length})`);
     }
 
-    // C) First Half Over 0.5
+    // D) First Half Over 0.5
     const htOver05Candidates = filterMatchesByMarket(allMatches, 'HT_OVER_05', 50);
     const htOver05Selected = selectTopMatches(htOver05Candidates, 5);
     if (htOver05Selected.length >= 3) {
@@ -452,7 +515,7 @@ export async function generateDailyLists(): Promise<DailyList[]> {
       logger.warn(`[TelegramDailyLists] ⚠️ HT Over 0.5 list: Insufficient matches (${htOver05Selected.length})`);
     }
 
-    // D) Corners
+    // E) Corners
     const cornersCandidates = filterMatchesByMarket(allMatches, 'CORNERS', 50);
     const cornersSelected = selectTopMatches(cornersCandidates, 5);
     if (cornersSelected.length >= 3) {
@@ -468,7 +531,7 @@ export async function generateDailyLists(): Promise<DailyList[]> {
       logger.warn(`[TelegramDailyLists] ⚠️ Corners list: Insufficient matches (${cornersSelected.length})`);
     }
 
-    // E) Cards
+    // F) Cards
     const cardsCandidates = filterMatchesByMarket(allMatches, 'CARDS', 50);
     const cardsSelected = selectTopMatches(cardsCandidates, 5);
     if (cardsSelected.length >= 3) {

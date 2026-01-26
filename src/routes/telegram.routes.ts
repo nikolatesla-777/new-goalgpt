@@ -842,6 +842,132 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * POST /telegram/publish/daily-list/:market
+   * Publish a single daily list by market type
+   *
+   * Markets: OVER_25, BTTS, HT_OVER_05, CORNERS, CARDS
+   */
+  fastify.post('/telegram/publish/daily-list/:market', async (request, reply) => {
+    const startTime = Date.now();
+    const { market } = request.params as { market: string };
+    const logContext = { operation: 'single_list_publish', market };
+
+    try {
+      logger.info(`[TelegramDailyLists] 🚀 Publishing single list: ${market}`, logContext);
+
+      // 1. Check bot configuration
+      if (!telegramBot.isConfigured()) {
+        return reply.status(503).send({ error: 'Telegram bot not configured' });
+      }
+
+      const channelId = process.env.TELEGRAM_CHANNEL_ID || '';
+      if (!channelId) {
+        return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
+      }
+
+      // 2. Generate all daily lists
+      logger.info('[TelegramDailyLists] 📊 Generating lists...', logContext);
+      const lists = await generateDailyLists();
+
+      // 3. Find the specific list by market
+      const targetList = lists.find(l => l.market === market);
+
+      if (!targetList) {
+        logger.warn(`[TelegramDailyLists] ⚠️ List not found for market: ${market}`, logContext);
+        return reply.status(404).send({
+          success: false,
+          error: `No list generated for market: ${market}`,
+          message: 'List not available or insufficient matches',
+        });
+      }
+
+      logger.info(`[TelegramDailyLists] ✅ Found list for ${market}`, {
+        ...logContext,
+        match_count: targetList.matches.length,
+        avg_confidence: Math.round(
+          targetList.matches.reduce((sum, m) => sum + m.confidence, 0) / targetList.matches.length
+        ),
+      });
+
+      // 4. Format and publish to Telegram
+      const messageText = formatDailyListMessage(targetList);
+
+      logger.info(`[TelegramDailyLists] 📡 Sending to Telegram...`, logContext);
+
+      const result = await telegramBot.sendMessage({
+        chat_id: channelId,
+        text: messageText,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      });
+
+      if (!result.ok) {
+        throw new Error(`Telegram API returned ok=false for ${market}`);
+      }
+
+      const telegramMessageId = result.result.message_id;
+
+      logger.info(`[TelegramDailyLists] ✅ Published to Telegram`, {
+        ...logContext,
+        telegram_message_id: telegramMessageId,
+      });
+
+      // 5. Save to database
+      const client = await pool.connect();
+      try {
+        const matchIds = targetList.matches.map(m => m.match.fs_id).join(',');
+
+        await client.query(
+          `INSERT INTO telegram_posts (match_id, channel_id, telegram_message_id, content, status, metadata)
+           VALUES ($1, $2, $3, $4, 'published', $5)`,
+          [
+            `daily_list_${market}_${Date.now()}`,
+            channelId,
+            telegramMessageId,
+            messageText,
+            JSON.stringify({
+              list_type: 'daily',
+              market: targetList.market,
+              match_ids: matchIds,
+              match_count: targetList.matches.length,
+              confidence_scores: targetList.matches.map(m => m.confidence),
+              generated_at: targetList.generated_at,
+            }),
+          ]
+        );
+
+        logger.info(`[TelegramDailyLists] 💾 Saved to database`, logContext);
+
+      } finally {
+        client.release();
+      }
+
+      // 6. Return success response
+      const duration = Date.now() - startTime;
+
+      return {
+        success: true,
+        market: targetList.market,
+        title: targetList.title,
+        telegram_message_id: telegramMessageId,
+        match_count: targetList.matches.length,
+        avg_confidence: Math.round(
+          targetList.matches.reduce((sum, m) => sum + m.confidence, 0) / targetList.matches.length
+        ),
+        duration_ms: duration,
+      };
+
+    } catch (error: any) {
+      logger.error(`[TelegramDailyLists] ❌ Error publishing ${market}:`, error);
+      return reply.status(500).send({
+        success: false,
+        error: error.message,
+        market,
+      });
+    }
+  });
+
+  /**
    * POST /telegram/publish/daily-lists
    * Generate and publish daily prediction lists (automated)
    *

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
 // Inline SVG Icons
+
 const CalendarIcon = ({ className }: { className?: string }) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
@@ -83,6 +84,7 @@ interface DailyListsResponse {
 
 const MARKET_LABELS: Record<string, string> = {
   OVER_25: '2.5 ÜST',
+  OVER_15: '1.5 ÜST',
   BTTS: 'BTTS (Karşılıklı Gol)',
   HT_OVER_05: 'İY 0.5 ÜST',
   CORNERS: 'KORNER',
@@ -91,6 +93,7 @@ const MARKET_LABELS: Record<string, string> = {
 
 const MARKET_COLORS: Record<string, string> = {
   OVER_25: 'bg-blue-100 text-blue-800 border-blue-300',
+  OVER_15: 'bg-indigo-100 text-indigo-800 border-indigo-300',
   BTTS: 'bg-green-100 text-green-800 border-green-300',
   HT_OVER_05: 'bg-purple-100 text-purple-800 border-purple-300',
   CORNERS: 'bg-orange-100 text-orange-800 border-orange-300',
@@ -100,7 +103,7 @@ const MARKET_COLORS: Record<string, string> = {
 export function TelegramDailyLists() {
   const [lists, setLists] = useState<DailyList[]>([]);
   const [loading, setLoading] = useState(true);
-  const [publishing, setPublishing] = useState(false);
+  const [publishingMarket, setPublishingMarket] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
@@ -112,6 +115,8 @@ export function TelegramDailyLists() {
       if (!response.ok) throw new Error('API hatası');
 
       const data: DailyListsResponse = await response.json();
+      console.log('📊 Daily Lists API Response:', data.lists_count, 'lists');
+      console.log('Markets:', data.lists.map(l => l.market));
       setLists(data.lists || []);
       setLastUpdated(data.generated_at);
     } catch (err: any) {
@@ -121,15 +126,15 @@ export function TelegramDailyLists() {
     }
   };
 
-  const publishLists = async () => {
-    if (!confirm('Tüm listeleri Telegram\'a yayınlamak istediğinizden emin misiniz?')) {
+  const publishSingleList = async (list: DailyList) => {
+    if (!confirm(`"${list.title}" listesini Telegram'a yayınlamak istediğinizden emin misiniz?`)) {
       return;
     }
 
-    setPublishing(true);
+    setPublishingMarket(list.market);
     setError(null);
     try {
-      const response = await fetch('/api/telegram/publish/daily-lists', {
+      const response = await fetch(`/api/telegram/publish/daily-list/${list.market}`, {
         method: 'POST',
       });
 
@@ -138,7 +143,7 @@ export function TelegramDailyLists() {
       const result = await response.json();
 
       if (result.success) {
-        alert(`✅ Başarılı!\n\n${result.lists_published} liste yayınlandı.`);
+        alert(`✅ Başarılı!\n\n"${list.title}" Telegram'a yayınlandı.\nMesaj ID: ${result.telegram_message_id}`);
         await fetchLists(); // Refresh
       } else {
         alert(`⚠️ ${result.message || 'Yayınlama başarısız'}`);
@@ -147,7 +152,7 @@ export function TelegramDailyLists() {
       setError(err.message);
       alert(`❌ Hata: ${err.message}`);
     } finally {
-      setPublishing(false);
+      setPublishingMarket(null);
     }
   };
 
@@ -193,14 +198,6 @@ export function TelegramDailyLists() {
               >
                 <RefreshCwIcon className="w-4 h-4" />
                 Yenile
-              </button>
-              <button
-                onClick={publishLists}
-                disabled={publishing || lists.length === 0}
-                className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <SendIcon className="w-4 h-4" />
-                {publishing ? 'Yayınlanıyor...' : 'Telegram\'a Yayınla'}
               </button>
             </div>
           </div>
@@ -294,16 +291,16 @@ export function TelegramDailyLists() {
                   ))}
                 </div>
 
-                {/* Preview Section */}
+                {/* Publish Button */}
                 <div className="border-t border-gray-200 p-4 bg-gray-50">
-                  <details className="cursor-pointer">
-                    <summary className="text-sm font-semibold text-gray-700 hover:text-blue-600">
-                      📱 Telegram Mesaj Önizleme
-                    </summary>
-                    <pre className="mt-3 text-xs bg-white border border-gray-200 rounded p-3 overflow-x-auto whitespace-pre-wrap">
-                      {list.preview}
-                    </pre>
-                  </details>
+                  <button
+                    onClick={() => publishSingleList(list)}
+                    disabled={publishingMarket === list.market}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                  >
+                    <SendIcon className="w-5 h-5" />
+                    {publishingMarket === list.market ? 'Yayınlanıyor...' : 'Telegram\'a Yayınla'}
+                  </button>
                 </div>
               </div>
             ))}
