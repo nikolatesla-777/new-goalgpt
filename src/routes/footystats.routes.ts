@@ -462,11 +462,12 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       });
 
       // DEBUG: Log league query results
-      logger.info('[FootyStats] League query results:', {
+      console.log('[FootyStats] League query DEBUG:', {
         total_rows: leagueNamesResult.rows.length,
         sample_keys: Array.from(matchLeagueMap.keys()).slice(0, 3),
         unique_teams_searched: uniqueTeamNames.length,
-        sample_teams: uniqueTeamNames.slice(0, 3)
+        sample_teams: uniqueTeamNames.slice(0, 3),
+        all_keys: Array.from(matchLeagueMap.keys())
       });
 
       // Return matches with potentials, logos, and league names
@@ -478,10 +479,12 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
         // DEBUG: Log first match lookup
         if (index === 0) {
-          logger.info('[FootyStats] First match lookup:', {
+          console.log('[FootyStats] First match lookup DEBUG:', {
             matchKey,
             leagueName,
-            found: matchLeagueMap.has(matchKey)
+            found: matchLeagueMap.has(matchKey),
+            home_name: m.home_name,
+            away_name: m.away_name
           });
         }
 
