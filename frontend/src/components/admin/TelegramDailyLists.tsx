@@ -85,12 +85,16 @@ const MARKET_LABELS: Record<string, string> = {
   OVER_25: '2.5 ÜST',
   BTTS: 'BTTS (Karşılıklı Gol)',
   HT_OVER_05: 'İY 0.5 ÜST',
+  CORNERS: 'KORNER',
+  CARDS: 'KART',
 };
 
 const MARKET_COLORS: Record<string, string> = {
   OVER_25: 'bg-blue-100 text-blue-800 border-blue-300',
   BTTS: 'bg-green-100 text-green-800 border-green-300',
   HT_OVER_05: 'bg-purple-100 text-purple-800 border-purple-300',
+  CORNERS: 'bg-orange-100 text-orange-800 border-orange-300',
+  CARDS: 'bg-yellow-100 text-yellow-800 border-yellow-300',
 };
 
 export function TelegramDailyLists() {

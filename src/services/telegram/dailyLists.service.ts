@@ -34,6 +34,8 @@ interface FootyStatsMatch {
     btts?: number;
     over25?: number;
     avg?: number;
+    corners?: number;  // ✅ ADD: Match corner potential (e.g., 9.4)
+    cards?: number;    // ✅ ADD: Match card potential (e.g., 4.9)
   };
   xg?: {
     home?: number;
@@ -53,7 +55,7 @@ interface MatchCandidate {
 }
 
 export interface DailyList {
-  market: 'OVER_25' | 'BTTS' | 'HT_OVER_05';
+  market: 'OVER_25' | 'BTTS' | 'HT_OVER_05' | 'CORNERS' | 'CARDS';
   title: string;
   emoji: string;
   matches: MatchCandidate[];
@@ -178,6 +180,95 @@ function calculateHTOver05Confidence(match: FootyStatsMatch): number {
   return Math.round(score);
 }
 
+/**
+ * Calculate confidence score for Corners market
+ */
+function calculateCornersConfidence(match: FootyStatsMatch): number {
+  let score = 0;
+  let factors = 0;
+
+  // Corners potential as primary indicator (max 50 points)
+  if (match.potentials?.corners) {
+    const corners = match.potentials.corners;
+    // Score based on expected corner count
+    if (corners >= 12) score += 50;
+    else if (corners >= 10) score += 40;
+    else if (corners >= 9) score += 30;
+    else if (corners >= 8) score += 20;
+    else score += 10;
+    factors++;
+  }
+
+  // Over 2.5 correlation (attacking intent) (max 25 points)
+  if (match.potentials?.over25) {
+    score += (match.potentials.over25 / 100) * 25;
+    factors++;
+  }
+
+  // Total xG correlation (max 15 points)
+  if (match.xg?.home && match.xg?.away) {
+    const totalXg = match.xg.home + match.xg.away;
+    if (totalXg >= 3.0) score += 15;
+    else if (totalXg >= 2.5) score += 10;
+    else if (totalXg >= 2.0) score += 5;
+    factors++;
+  }
+
+  // Avg potential (max 10 points)
+  if (match.potentials?.avg) {
+    score += (match.potentials.avg / 100) * 10;
+    factors++;
+  }
+
+  // If less than 2 factors, return 0
+  if (factors < 2) return 0;
+
+  return Math.round(score);
+}
+
+/**
+ * Calculate confidence score for Cards market
+ */
+function calculateCardsConfidence(match: FootyStatsMatch): number {
+  let score = 0;
+  let factors = 0;
+
+  // Cards potential as primary indicator (max 50 points)
+  if (match.potentials?.cards) {
+    const cards = match.potentials.cards;
+    // Score based on expected card count
+    if (cards >= 6) score += 50;
+    else if (cards >= 5) score += 40;
+    else if (cards >= 4.5) score += 30;
+    else if (cards >= 4) score += 20;
+    else score += 10;
+    factors++;
+  }
+
+  // BTTS correlation (competitive match) (max 25 points)
+  if (match.potentials?.btts) {
+    score += (match.potentials.btts / 100) * 25;
+    factors++;
+  }
+
+  // Over 2.5 correlation (max 15 points)
+  if (match.potentials?.over25) {
+    score += (match.potentials.over25 / 100) * 15;
+    factors++;
+  }
+
+  // Avg potential (max 10 points)
+  if (match.potentials?.avg) {
+    score += (match.potentials.avg / 100) * 10;
+    factors++;
+  }
+
+  // If less than 2 factors, return 0
+  if (factors < 2) return 0;
+
+  return Math.round(score);
+}
+
 // ============================================================================
 // FILTERING & SELECTION
 // ============================================================================
@@ -212,6 +303,14 @@ function filterMatchesByMarket(
       case 'HT_OVER_05':
         confidence = calculateHTOver05Confidence(match);
         reason = `İY Potansiyel, xG: ${((match.xg?.home || 0) + (match.xg?.away || 0)).toFixed(1)}`;
+        break;
+      case 'CORNERS':
+        confidence = calculateCornersConfidence(match);
+        reason = `Korner: ${match.potentials?.corners?.toFixed(1) || 0}, O2.5: %${match.potentials?.over25 || 0}`;
+        break;
+      case 'CARDS':
+        confidence = calculateCardsConfidence(match);
+        reason = `Kart: ${match.potentials?.cards?.toFixed(1) || 0}, BTTS: %${match.potentials?.btts || 0}`;
         break;
     }
 
@@ -280,6 +379,8 @@ export async function generateDailyLists(): Promise<DailyList[]> {
         btts: m.btts_potential,
         over25: m.o25_potential,
         avg: m.avg_potential,
+        corners: m.corners_potential,  // ✅ ADD: Match corner potential
+        cards: m.cards_potential,      // ✅ ADD: Match card potential
       },
       xg: {
         home: m.team_a_xg_prematch,
@@ -349,6 +450,38 @@ export async function generateDailyLists(): Promise<DailyList[]> {
       logger.info(`[TelegramDailyLists] ✅ HT Over 0.5 list: ${htOver05Selected.length} matches`);
     } else {
       logger.warn(`[TelegramDailyLists] ⚠️ HT Over 0.5 list: Insufficient matches (${htOver05Selected.length})`);
+    }
+
+    // D) Corners
+    const cornersCandidates = filterMatchesByMarket(allMatches, 'CORNERS', 50);
+    const cornersSelected = selectTopMatches(cornersCandidates, 5);
+    if (cornersSelected.length >= 3) {
+      lists.push({
+        market: 'CORNERS',
+        title: 'Günün KORNER Maçları',
+        emoji: '🚩',
+        matches: cornersSelected,
+        generated_at: timestamp,
+      });
+      logger.info(`[TelegramDailyLists] ✅ Corners list: ${cornersSelected.length} matches`);
+    } else {
+      logger.warn(`[TelegramDailyLists] ⚠️ Corners list: Insufficient matches (${cornersSelected.length})`);
+    }
+
+    // E) Cards
+    const cardsCandidates = filterMatchesByMarket(allMatches, 'CARDS', 50);
+    const cardsSelected = selectTopMatches(cardsCandidates, 5);
+    if (cardsSelected.length >= 3) {
+      lists.push({
+        market: 'CARDS',
+        title: 'Günün KART Maçları',
+        emoji: '🟨',
+        matches: cardsSelected,
+        generated_at: timestamp,
+      });
+      logger.info(`[TelegramDailyLists] ✅ Cards list: ${cardsSelected.length} matches`);
+    } else {
+      logger.warn(`[TelegramDailyLists] ⚠️ Cards list: Insufficient matches (${cardsSelected.length})`);
     }
 
     // 3. Log final result
