@@ -473,7 +473,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       let homeTeamStats: any = null;
       let awayTeamStats: any = null;
 
-      logger.info(`[FootyStats DEBUG] Match ${matchId} team IDs: homeID=${fsMatch.homeID}, awayID=${fsMatch.awayID}`);
+      logger.info(`[FootyStats DEBUG] Match ${fsIdNum} team IDs: homeID=${fsMatch.homeID}, awayID=${fsMatch.awayID}`);
 
       try {
         if (fsMatch.homeID) {
