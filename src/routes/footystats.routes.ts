@@ -396,40 +396,71 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         return { count: 0, matches: [] };
       }
 
-      // Return matches with potentials
-      const matches = response.data.map((m: any) => ({
-        fs_id: m.id,
-        home_name: m.home_name,
-        away_name: m.away_name,
-        league_name: m.competition_name || m.league_name || null,
-        country: m.country || null,
-        date_unix: m.date_unix,
-        status: m.status,
-        score: m.homeGoalCount != null ? `${m.homeGoalCount}-${m.awayGoalCount}` : null,
-        potentials: {
-          btts: m.btts_potential,
-          over25: m.o25_potential,
-          avg: m.avg_potential,
-          corners: m.corners_potential,  // ✅ Match corner potential
-          cards: m.cards_potential,      // ✅ Match card potential
-          // Calculate Shots Potential (xG based: ~6 shots per 1.0 xG)
-          shots: m.team_a_xg_prematch && m.team_b_xg_prematch
-            ? Math.round((m.team_a_xg_prematch + m.team_b_xg_prematch) * 6)
-            : null,
-          // Calculate Fouls Potential (base 20 + corner-based adjustment)
-          fouls: m.corners_potential
-            ? Math.round(20 + (m.corners_potential * 0.5))
-            : null,
-        },
-        xg: {
-          home: m.team_a_xg_prematch,
-          away: m.team_b_xg_prematch,
-        },
-        odds: {
-          home: m.odds_ft_1,
-          draw: m.odds_ft_x,
-          away: m.odds_ft_2,
+      // Helper: Get team logo from TheSports DB
+      const getTeamLogo = async (teamName: string): Promise<string | null> => {
+        try {
+          const teamMapping = await getTeamMapping(teamName);
+          if (teamMapping.length > 0 && teamMapping[0].ts_logo) {
+            return teamMapping[0].ts_logo;
+          }
+          // Fuzzy match by first word
+          const firstWord = teamName.split(' ')[0];
+          if (firstWord && firstWord.length >= 3) {
+            const fuzzyMatch = await getTeamMapping(firstWord);
+            if (fuzzyMatch.length > 0 && fuzzyMatch[0].ts_logo) {
+              return fuzzyMatch[0].ts_logo;
+            }
+          }
+          return null;
+        } catch (err) {
+          return null;
         }
+      };
+
+      // Return matches with potentials and logos
+      const matches = await Promise.all(response.data.map(async (m: any) => {
+        const [homeLogo, awayLogo] = await Promise.all([
+          getTeamLogo(m.home_name),
+          getTeamLogo(m.away_name)
+        ]);
+
+        return {
+          fs_id: m.id,
+          home_name: m.home_name,
+          away_name: m.away_name,
+          home_logo: homeLogo,
+          away_logo: awayLogo,
+          league_name: m.competition_name || m.league_name || 'Unknown League',
+          country: m.country || null,
+          date_unix: m.date_unix,
+          status: m.status,
+          score: m.homeGoalCount != null ? `${m.homeGoalCount}-${m.awayGoalCount}` : null,
+          potentials: {
+            btts: m.btts_potential,
+            over25: m.o25_potential,
+            avg: m.avg_potential,
+            over15: m.o15_potential,
+            corners: m.corners_potential,
+            cards: m.cards_potential,
+            shots: m.team_a_xg_prematch && m.team_b_xg_prematch
+              ? Math.round((m.team_a_xg_prematch + m.team_b_xg_prematch) * 6)
+              : null,
+            fouls: m.corners_potential
+              ? Math.round(20 + (m.corners_potential * 0.5))
+              : null,
+          },
+          xg: {
+            home: m.team_a_xg_prematch,
+            away: m.team_b_xg_prematch,
+          },
+          odds: {
+            home: m.odds_ft_1,
+            draw: m.odds_ft_x,
+            away: m.odds_ft_2,
+          },
+          trends: m.trends || null,
+          h2h: m.h2h || null,
+        };
       }));
 
       return { count: matches.length, matches };
@@ -473,17 +504,25 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       let homeTeamStats: any = null;
       let awayTeamStats: any = null;
 
+      logger.info(`[FootyStats] Match ${fsIdNum} - homeID: ${fsMatch.homeID}, awayID: ${fsMatch.awayID}`);
+
       try {
         if (fsMatch.homeID) {
+          logger.info(`[FootyStats] Fetching lastX for home team ${fsMatch.homeID}`);
           const homeResponse = await footyStatsAPI.getTeamLastX(fsMatch.homeID);
+          logger.info(`[FootyStats] Home response - data exists: ${!!homeResponse.data}, length: ${homeResponse.data?.length || 0}`);
           // Get last 5 matches data (first entry)
           const homeData = homeResponse.data?.find((d: any) => d.last_x_match_num === 5) || homeResponse.data?.[0];
           homeTeamStats = homeData;  // FIX: stats are directly in homeData, not in .stats property
+          logger.info(`[FootyStats] Home stats - PPG: ${homeTeamStats?.seasonPPG_overall}, BTTS: ${homeTeamStats?.seasonBTTSPercentage_overall}%`);
         }
         if (fsMatch.awayID) {
+          logger.info(`[FootyStats] Fetching lastX for away team ${fsMatch.awayID}`);
           const awayResponse = await footyStatsAPI.getTeamLastX(fsMatch.awayID);
+          logger.info(`[FootyStats] Away response - data exists: ${!!awayResponse.data}, length: ${awayResponse.data?.length || 0}`);
           const awayData = awayResponse.data?.find((d: any) => d.last_x_match_num === 5) || awayResponse.data?.[0];
           awayTeamStats = awayData;  // FIX: stats are directly in awayData, not in .stats property
+          logger.info(`[FootyStats] Away stats - PPG: ${awayTeamStats?.seasonPPG_overall}, BTTS: ${awayTeamStats?.seasonBTTSPercentage_overall}%`);
         }
       } catch (teamError: any) {
         logger.warn(`[FootyStats] Could not fetch team form: ${teamError.message}`);
