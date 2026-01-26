@@ -478,8 +478,11 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       try {
         if (fsMatch.homeID) {
           const homeResponse = await footyStatsAPI.getTeamLastX(fsMatch.homeID);
-          // DEBUG: Log raw response
-          logger.info(`[FootyStats DEBUG] Home team ${fsMatch.homeID} raw response:`, JSON.stringify(homeResponse, null, 2));
+          // DEBUG: Log raw response structure
+          logger.info(`[FootyStats DEBUG] Home team ${fsMatch.homeID} - Response has data: ${!!homeResponse.data}, data length: ${homeResponse.data?.length || 0}, data is array: ${Array.isArray(homeResponse.data)}`);
+          if (homeResponse.data && homeResponse.data.length > 0) {
+            logger.info(`[FootyStats DEBUG] First element keys:`, Object.keys(homeResponse.data[0]));
+          }
           // Get last 5 matches data (first entry)
           const homeData = homeResponse.data?.find((d: any) => d.last_x_match_num === 5) || homeResponse.data?.[0];
           homeTeamStats = homeData;  // FIX: stats are directly in homeData, not in .stats property
@@ -487,8 +490,11 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         }
         if (fsMatch.awayID) {
           const awayResponse = await footyStatsAPI.getTeamLastX(fsMatch.awayID);
-          // DEBUG: Log raw response
-          logger.info(`[FootyStats DEBUG] Away team ${fsMatch.awayID} raw response:`, JSON.stringify(awayResponse, null, 2));
+          // DEBUG: Log raw response structure
+          logger.info(`[FootyStats DEBUG] Away team ${fsMatch.awayID} - Response has data: ${!!awayResponse.data}, data length: ${awayResponse.data?.length || 0}, data is array: ${Array.isArray(awayResponse.data)}`);
+          if (awayResponse.data && awayResponse.data.length > 0) {
+            logger.info(`[FootyStats DEBUG] First element keys:`, Object.keys(awayResponse.data[0]));
+          }
           const awayData = awayResponse.data?.find((d: any) => d.last_x_match_num === 5) || awayResponse.data?.[0];
           awayTeamStats = awayData;  // FIX: stats are directly in awayData, not in .stats property
           logger.info(`[FootyStats] Got away team stats for ${fsMatch.awayID}: PPG=${awayTeamStats?.seasonPPG_overall || 'no data'}, BTTS=${awayTeamStats?.seasonBTTSPercentage_overall || 'no data'}%, O2.5=${awayTeamStats?.seasonOver25Percentage_overall || 'no data'}%`);
