@@ -481,7 +481,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           // DEBUG: Log raw response structure
           logger.info(`[FootyStats DEBUG] Home team ${fsMatch.homeID} - Response has data: ${!!homeResponse.data}, data length: ${homeResponse.data?.length || 0}, data is array: ${Array.isArray(homeResponse.data)}`);
           if (homeResponse.data && homeResponse.data.length > 0) {
-            console.error(`[FootyStats DEBUG] First element:`, JSON.stringify(homeResponse.data[0], null, 2));
+            const sample = homeResponse.data[0];
+            logger.info(`[FootyStats DEBUG] First element sample - last_x_match_num: ${sample?.last_x_match_num}, team_id: ${sample?.team_id}, seasonPPG_overall: ${sample?.seasonPPG_overall}`);
           }
           // Get last 5 matches data (first entry)
           const homeData = homeResponse.data?.find((d: any) => d.last_x_match_num === 5) || homeResponse.data?.[0];
@@ -493,7 +494,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           // DEBUG: Log raw response structure
           logger.info(`[FootyStats DEBUG] Away team ${fsMatch.awayID} - Response has data: ${!!awayResponse.data}, data length: ${awayResponse.data?.length || 0}, data is array: ${Array.isArray(awayResponse.data)}`);
           if (awayResponse.data && awayResponse.data.length > 0) {
-            console.error(`[FootyStats DEBUG] First element:`, JSON.stringify(awayResponse.data[0], null, 2));
+            const sample = awayResponse.data[0];
+            logger.info(`[FootyStats DEBUG] First element sample - last_x_match_num: ${sample?.last_x_match_num}, team_id: ${sample?.team_id}, seasonPPG_overall: ${sample?.seasonPPG_overall}`);
           }
           const awayData = awayResponse.data?.find((d: any) => d.last_x_match_num === 5) || awayResponse.data?.[0];
           awayTeamStats = awayData;  // FIX: stats are directly in awayData, not in .stats property
