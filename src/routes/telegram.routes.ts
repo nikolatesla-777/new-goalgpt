@@ -810,21 +810,50 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         continue;
       }
 
-      // Get match result from TheSports database
+      // Get match result from TheSports database (match by team names + time window)
       try {
+        // Extract first word of team names for fuzzy matching
+        const homeFirstWord = match.home_name.split(' ')[0].toLowerCase();
+        const awayFirstWord = match.away_name.split(' ')[0].toLowerCase();
+        const timeWindow = 3600; // +/- 1 hour
+
         const result = await safeQuery(
-          `SELECT home_score_display, away_score_display FROM ts_matches WHERE external_id = $1 LIMIT 1`,
-          [`fs_${match.fs_id}`]
+          `SELECT m.home_score_display, m.away_score_display, m.status_id,
+                  m.home_scores, m.away_scores,
+                  t1.name as home_team_name, t2.name as away_team_name
+           FROM ts_matches m
+           INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
+           INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+           WHERE (LOWER(t1.name) LIKE $1 OR LOWER(t1.name) LIKE $2)
+             AND (LOWER(t2.name) LIKE $3 OR LOWER(t2.name) LIKE $4)
+             AND m.match_time >= $5
+             AND m.match_time <= $6
+             AND m.status_id = 8
+           LIMIT 1`,
+          [
+            `%${homeFirstWord}%`,
+            `${homeFirstWord}%`,
+            `%${awayFirstWord}%`,
+            `${awayFirstWord}%`,
+            match.date_unix - timeWindow,
+            match.date_unix + timeWindow
+          ]
         );
 
         if (result.length === 0) {
-          pending++; // No result yet
+          pending++; // No result yet or not finished
           continue;
         }
 
         const homeScore = parseInt(result[0].home_score_display) || 0;
         const awayScore = parseInt(result[0].away_score_display) || 0;
         const totalGoals = homeScore + awayScore;
+
+        logger.info(`[TelegramDailyLists] Match found: ${result[0].home_team_name} ${homeScore}-${awayScore} ${result[0].away_team_name}`, {
+          fs_id: match.fs_id,
+          footystats_teams: `${match.home_name} vs ${match.away_name}`,
+          thesports_teams: `${result[0].home_team_name} vs ${result[0].away_team_name}`,
+        });
 
         // Check market result
         let isWin = false;
@@ -839,9 +868,23 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             isWin = homeScore > 0 && awayScore > 0;
             break;
           case 'HT_OVER_05':
-            // Would need HT score, skip for now
-            pending++;
-            continue;
+            // Extract HT score from JSON arrays
+            try {
+              const homeScores = JSON.parse(result[0].home_scores || '[]');
+              const awayScores = JSON.parse(result[0].away_scores || '[]');
+              const htHomeScore = homeScores[0]?.score || 0;
+              const htAwayScore = awayScores[0]?.score || 0;
+              const htTotalGoals = htHomeScore + htAwayScore;
+              isWin = htTotalGoals >= 1;
+              logger.info(`[TelegramDailyLists] HT Score: ${htHomeScore}-${htAwayScore}, Result: ${isWin ? 'WON' : 'LOST'}`, {
+                fs_id: match.fs_id,
+              });
+            } catch (err) {
+              logger.warn('[TelegramDailyLists] Failed to parse HT scores, marking as pending', { fs_id: match.fs_id });
+              pending++;
+              continue;
+            }
+            break;
           case 'CORNERS':
           case 'CARDS':
             // Would need detailed stats, skip for now
