@@ -505,7 +505,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           trends: m.trends || null,
           h2h: m.h2h || null,
         };
-      }));
+      });
 
       return { count: matches.length, matches };
     } catch (error: any) {
