@@ -523,6 +523,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
               },
               h2h: fsMatch.h2h ? {
                 total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
+                home_wins: fsMatch.h2h.previous_matches_results?.team_a_wins,
+                draws: fsMatch.h2h.previous_matches_results?.draw,
+                away_wins: fsMatch.h2h.previous_matches_results?.team_b_wins,
                 btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage,
                 avg_goals: fsMatch.h2h.betting_stats?.avg_goals,
               } : undefined,
