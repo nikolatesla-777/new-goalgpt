@@ -670,18 +670,126 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         },
         form: {
           home: homeTeamStats ? {
-            ppg: homeTeamStats.seasonPPG_overall || null,
-            btts_pct: homeTeamStats.seasonBTTSPercentage_overall || null,
-            over25_pct: homeTeamStats.seasonOver25Percentage_overall || null,
-            overall: homeTeamStats.formRun_overall || null,          // Form string (e.g. "WWLDW")
-            home_only: homeTeamStats.formRun_home || null,           // Home-only form
+            // Form strings for badges (e.g. "WWLDW")
+            formRun_overall: homeTeamStats.formRun_overall || null,
+            formRun_home: homeTeamStats.formRun_home || null,
+            formRun_away: homeTeamStats.formRun_away || null,
+
+            // PPG (Points Per Game) for each context
+            ppg_overall: homeTeamStats.seasonPPG_overall || null,
+            ppg_home: homeTeamStats.seasonPPG_home || null,
+            ppg_away: homeTeamStats.seasonPPG_away || null,
+
+            // Win Percentage
+            win_pct_overall: homeTeamStats.seasonWinPercentage_overall || null,
+            win_pct_home: homeTeamStats.seasonWinPercentage_home || null,
+            win_pct_away: homeTeamStats.seasonWinPercentage_away || null,
+
+            // Average Goals (total goals per match)
+            avg_goals_overall: homeTeamStats.goalsAVG_overall || null,
+            avg_goals_home: homeTeamStats.goalsAVG_home || null,
+            avg_goals_away: homeTeamStats.goalsAVG_away || null,
+
+            // Goals Scored (goals for per match)
+            scored_overall: homeTeamStats.goalsFor_overall || homeTeamStats.scoredAVG_overall || null,
+            scored_home: homeTeamStats.goalsFor_home || homeTeamStats.scoredAVG_home || null,
+            scored_away: homeTeamStats.goalsFor_away || homeTeamStats.scoredAVG_away || null,
+
+            // Goals Conceded (goals against per match)
+            conceded_overall: homeTeamStats.goalsAgainst_overall || homeTeamStats.concededAVG_overall || null,
+            conceded_home: homeTeamStats.goalsAgainst_home || homeTeamStats.concededAVG_home || null,
+            conceded_away: homeTeamStats.goalsAgainst_away || homeTeamStats.concededAVG_away || null,
+
+            // BTTS (Both Teams To Score) Percentage
+            btts_pct_overall: homeTeamStats.seasonBTTSPercentage_overall || null,
+            btts_pct_home: homeTeamStats.seasonBTTSPercentage_home || null,
+            btts_pct_away: homeTeamStats.seasonBTTSPercentage_away || null,
+
+            // Clean Sheet Percentage
+            cs_pct_overall: homeTeamStats.cleanSheetPercentage_overall || null,
+            cs_pct_home: homeTeamStats.cleanSheetPercentage_home || null,
+            cs_pct_away: homeTeamStats.cleanSheetPercentage_away || null,
+
+            // Failed To Score Percentage
+            fts_pct_overall: homeTeamStats.failToScorePercentage_overall || null,
+            fts_pct_home: homeTeamStats.failToScorePercentage_home || null,
+            fts_pct_away: homeTeamStats.failToScorePercentage_away || null,
+
+            // Over 2.5 Goals Percentage
+            over25_pct_overall: homeTeamStats.seasonOver25Percentage_overall || null,
+            over25_pct_home: homeTeamStats.seasonOver25Percentage_home || null,
+            over25_pct_away: homeTeamStats.seasonOver25Percentage_away || null,
+
+            // xG (Expected Goals)
+            xg_overall: homeTeamStats.xg_for_avg_overall || null,
+            xg_home: homeTeamStats.xg_for_avg_home || null,
+            xg_away: homeTeamStats.xg_for_avg_away || null,
+
+            // xGA (Expected Goals Against)
+            xga_overall: homeTeamStats.xg_against_avg_overall || null,
+            xga_home: homeTeamStats.xg_against_avg_home || null,
+            xga_away: homeTeamStats.xg_against_avg_away || null,
           } : null,
           away: awayTeamStats ? {
-            ppg: awayTeamStats.seasonPPG_overall || null,
-            btts_pct: awayTeamStats.seasonBTTSPercentage_overall || null,
-            over25_pct: awayTeamStats.seasonOver25Percentage_overall || null,
-            overall: awayTeamStats.formRun_overall || null,           // Form string (e.g. "LWDWW")
-            away_only: awayTeamStats.formRun_away || null,           // Away-only form
+            // Form strings for badges (e.g. "LWDWW")
+            formRun_overall: awayTeamStats.formRun_overall || null,
+            formRun_home: awayTeamStats.formRun_home || null,
+            formRun_away: awayTeamStats.formRun_away || null,
+
+            // PPG (Points Per Game) for each context
+            ppg_overall: awayTeamStats.seasonPPG_overall || null,
+            ppg_home: awayTeamStats.seasonPPG_home || null,
+            ppg_away: awayTeamStats.seasonPPG_away || null,
+
+            // Win Percentage
+            win_pct_overall: awayTeamStats.seasonWinPercentage_overall || null,
+            win_pct_home: awayTeamStats.seasonWinPercentage_home || null,
+            win_pct_away: awayTeamStats.seasonWinPercentage_away || null,
+
+            // Average Goals (total goals per match)
+            avg_goals_overall: awayTeamStats.goalsAVG_overall || null,
+            avg_goals_home: awayTeamStats.goalsAVG_home || null,
+            avg_goals_away: awayTeamStats.goalsAVG_away || null,
+
+            // Goals Scored (goals for per match)
+            scored_overall: awayTeamStats.goalsFor_overall || awayTeamStats.scoredAVG_overall || null,
+            scored_home: awayTeamStats.goalsFor_home || awayTeamStats.scoredAVG_home || null,
+            scored_away: awayTeamStats.goalsFor_away || awayTeamStats.scoredAVG_away || null,
+
+            // Goals Conceded (goals against per match)
+            conceded_overall: awayTeamStats.goalsAgainst_overall || awayTeamStats.concededAVG_overall || null,
+            conceded_home: awayTeamStats.goalsAgainst_home || awayTeamStats.concededAVG_home || null,
+            conceded_away: awayTeamStats.goalsAgainst_away || awayTeamStats.concededAVG_away || null,
+
+            // BTTS (Both Teams To Score) Percentage
+            btts_pct_overall: awayTeamStats.seasonBTTSPercentage_overall || null,
+            btts_pct_home: awayTeamStats.seasonBTTSPercentage_home || null,
+            btts_pct_away: awayTeamStats.seasonBTTSPercentage_away || null,
+
+            // Clean Sheet Percentage
+            cs_pct_overall: awayTeamStats.cleanSheetPercentage_overall || null,
+            cs_pct_home: awayTeamStats.cleanSheetPercentage_home || null,
+            cs_pct_away: awayTeamStats.cleanSheetPercentage_away || null,
+
+            // Failed To Score Percentage
+            fts_pct_overall: awayTeamStats.failToScorePercentage_overall || null,
+            fts_pct_home: awayTeamStats.failToScorePercentage_home || null,
+            fts_pct_away: awayTeamStats.failToScorePercentage_away || null,
+
+            // Over 2.5 Goals Percentage
+            over25_pct_overall: awayTeamStats.seasonOver25Percentage_overall || null,
+            over25_pct_home: awayTeamStats.seasonOver25Percentage_home || null,
+            over25_pct_away: awayTeamStats.seasonOver25Percentage_away || null,
+
+            // xG (Expected Goals)
+            xg_overall: awayTeamStats.xg_for_avg_overall || null,
+            xg_home: awayTeamStats.xg_for_avg_home || null,
+            xg_away: awayTeamStats.xg_for_avg_away || null,
+
+            // xGA (Expected Goals Against)
+            xga_overall: awayTeamStats.xg_against_avg_overall || null,
+            xga_home: awayTeamStats.xg_against_avg_home || null,
+            xga_away: awayTeamStats.xg_against_avg_away || null,
           } : null,
         },
         h2h: fsMatch.h2h ? (() => {
