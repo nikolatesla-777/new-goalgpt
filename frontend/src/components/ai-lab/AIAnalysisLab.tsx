@@ -188,7 +188,7 @@ function ProgressBar({ value, max = 100, color = 'blue' }: { value: number; max?
     );
 }
 
-// Form Display Component
+// Form Display Component (for WWLDW badges)
 function FormDisplay({ form, label }: { form: string | null; label: string }) {
     if (!form) return (
         <div>
@@ -218,6 +218,220 @@ function FormDisplay({ form, label }: { form: string | null; label: string }) {
                         {char.toUpperCase()}
                     </span>
                 ))}
+            </div>
+        </div>
+    );
+}
+
+// Comprehensive Form Stats Component
+function ComprehensiveFormStats({
+    teamName,
+    formData,
+    color
+}: {
+    teamName: string;
+    formData: any;
+    color: 'cyan' | 'orange';
+}) {
+    if (!formData) {
+        return (
+            <div className="bg-gray-700/50 rounded-lg p-6">
+                <h3 className={`font-semibold mb-4 text-${color}-400`}>{teamName}</h3>
+                <NoDataPlaceholder message="Form verisi mevcut değil" />
+            </div>
+        );
+    }
+
+    const colorClasses = {
+        cyan: 'text-cyan-400',
+        orange: 'text-orange-400'
+    };
+
+    return (
+        <div className="bg-gray-700/50 rounded-lg p-6">
+            <h3 className={`font-semibold mb-6 ${colorClasses[color]} text-lg`}>{teamName}</h3>
+
+            {/* PPG Section with Overall/Home/Away */}
+            <div className="mb-6">
+                <h4 className="text-sm font-semibold text-gray-300 mb-3">PPG (Points Per Game)</h4>
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-gray-800 rounded-lg p-3 text-center">
+                        <div className="text-xs text-gray-400 mb-1">Overall</div>
+                        <div className="text-2xl font-bold text-green-400">
+                            {formData.ppg_overall?.toFixed(2) || '-'}
+                        </div>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3 text-center">
+                        <div className="text-xs text-gray-400 mb-1">Home</div>
+                        <div className="text-xl font-semibold text-green-300">
+                            {formData.ppg_home?.toFixed(2) || '-'}
+                        </div>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3 text-center">
+                        <div className="text-xs text-gray-400 mb-1">Away</div>
+                        <div className="text-xl font-semibold text-green-300">
+                            {formData.ppg_away?.toFixed(2) || '-'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Detailed Statistics Table */}
+            <div className="bg-gray-800/50 rounded-lg p-4 mb-4">
+                <h4 className="text-sm font-semibold text-gray-300 mb-3">Detailed Statistics</h4>
+                <div className="space-y-2 text-sm">
+                    {/* Header */}
+                    <div className="grid grid-cols-4 gap-2 pb-2 border-b border-gray-600 font-semibold text-gray-400">
+                        <div className="text-left">Metric</div>
+                        <div className="text-center">Overall</div>
+                        <div className="text-center">Home</div>
+                        <div className="text-center">Away</div>
+                    </div>
+
+                    {/* Win % */}
+                    {formData.win_pct_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1">
+                            <div className="text-gray-300">Win %</div>
+                            <div className="text-center text-green-400 font-semibold">
+                                {formData.win_pct_overall}%
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.win_pct_home !== null ? `${formData.win_pct_home}%` : '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.win_pct_away !== null ? `${formData.win_pct_away}%` : '-'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* AVG (Total Goals) */}
+                    {formData.avg_goals_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1 bg-gray-700/30">
+                            <div className="text-gray-300">AVG</div>
+                            <div className="text-center text-blue-400 font-semibold">
+                                {formData.avg_goals_overall?.toFixed(2)}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.avg_goals_home?.toFixed(2) || '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.avg_goals_away?.toFixed(2) || '-'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scored */}
+                    {formData.scored_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1">
+                            <div className="text-gray-300">Scored</div>
+                            <div className="text-center text-green-400 font-semibold">
+                                {formData.scored_overall?.toFixed(2)}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.scored_home?.toFixed(2) || '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.scored_away?.toFixed(2) || '-'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Conceded */}
+                    {formData.conceded_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1 bg-gray-700/30">
+                            <div className="text-gray-300">Conceded</div>
+                            <div className="text-center text-red-400 font-semibold">
+                                {formData.conceded_overall?.toFixed(2)}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.conceded_home?.toFixed(2) || '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.conceded_away?.toFixed(2) || '-'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* BTTS % */}
+                    {formData.btts_pct_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1">
+                            <div className="text-gray-300">BTTS %</div>
+                            <div className="text-center text-yellow-400 font-semibold">
+                                {formData.btts_pct_overall}%
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.btts_pct_home !== null ? `${formData.btts_pct_home}%` : '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.btts_pct_away !== null ? `${formData.btts_pct_away}%` : '-'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CS % (Clean Sheets) */}
+                    {formData.cs_pct_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1 bg-gray-700/30">
+                            <div className="text-gray-300">CS %</div>
+                            <div className="text-center text-cyan-400 font-semibold">
+                                {formData.cs_pct_overall}%
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.cs_pct_home !== null ? `${formData.cs_pct_home}%` : '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.cs_pct_away !== null ? `${formData.cs_pct_away}%` : '-'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Over 2.5 % */}
+                    {formData.over25_pct_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1">
+                            <div className="text-gray-300">Over 2.5 %</div>
+                            <div className="text-center text-purple-400 font-semibold">
+                                {formData.over25_pct_overall}%
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.over25_pct_home !== null ? `${formData.over25_pct_home}%` : '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.over25_pct_away !== null ? `${formData.over25_pct_away}%` : '-'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* xG (Expected Goals) */}
+                    {formData.xg_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1 bg-gray-700/30">
+                            <div className="text-gray-300">xG</div>
+                            <div className="text-center text-blue-300 font-semibold">
+                                {formData.xg_overall?.toFixed(2)}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.xg_home?.toFixed(2) || '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.xg_away?.toFixed(2) || '-'}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* xGA (Expected Goals Against) */}
+                    {formData.xga_overall !== null && (
+                        <div className="grid grid-cols-4 gap-2 py-1">
+                            <div className="text-gray-300">xGA</div>
+                            <div className="text-center text-red-300 font-semibold">
+                                {formData.xga_overall?.toFixed(2)}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.xga_home?.toFixed(2) || '-'}
+                            </div>
+                            <div className="text-center text-gray-300">
+                                {formData.xga_away?.toFixed(2) || '-'}
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -969,90 +1183,76 @@ export function AIAnalysisLab() {
                             </div>
                         )}
 
-                        {/* Form Tab */}
+                        {/* Form Tab - Comprehensive Stats */}
                         {fsDetailTab === 'form' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="bg-gray-700/50 rounded-lg p-4">
-                                    <h3 className="font-semibold mb-4 text-cyan-400">{selectedFsMatch.home_name}</h3>
-                                    {selectedFsMatch.form?.home ? (
-                                        <>
-                                            {selectedFsMatch.form.home.overall && (
-                                                <div className="mb-4">
-                                                    <div className="text-xs text-gray-400 mb-1">Son 5 Maç</div>
-                                                    <FormDisplay form={selectedFsMatch.form.home.overall} label="" />
-                                                </div>
-                                            )}
-                                            {selectedFsMatch.form.home.home_only && (
-                                                <div className="mb-4">
-                                                    <div className="text-xs text-gray-400 mb-1">Ev Sahibi Form</div>
-                                                    <FormDisplay form={selectedFsMatch.form.home.home_only} label="" />
-                                                </div>
-                                            )}
-                                            <div className="grid grid-cols-3 gap-3 mt-4">
-                                                <div className="bg-gray-800 rounded-lg p-3 text-center">
-                                                    <div className="text-xs text-gray-400 mb-1">PPG</div>
-                                                    <div className="text-xl font-bold text-green-400">
-                                                        {selectedFsMatch.form.home.ppg?.toFixed(1) || '-'}
-                                                    </div>
-                                                </div>
-                                                <div className="bg-gray-800 rounded-lg p-3 text-center">
-                                                    <div className="text-xs text-gray-400 mb-1">BTTS %</div>
-                                                    <div className="text-xl font-bold text-yellow-400">
-                                                        {selectedFsMatch.form.home.btts_pct ? `${selectedFsMatch.form.home.btts_pct}%` : '-'}
-                                                    </div>
-                                                </div>
-                                                <div className="bg-gray-800 rounded-lg p-3 text-center">
-                                                    <div className="text-xs text-gray-400 mb-1">O2.5 %</div>
-                                                    <div className="text-xl font-bold text-blue-400">
-                                                        {selectedFsMatch.form.home.over25_pct ? `${selectedFsMatch.form.home.over25_pct}%` : '-'}
-                                                    </div>
-                                                </div>
+                            <div className="space-y-6">
+                                {/* PPG Comparison Bar */}
+                                {selectedFsMatch.form?.home && selectedFsMatch.form?.away && (
+                                    <div className="bg-gray-700/50 rounded-lg p-4">
+                                        <h4 className="text-sm font-semibold text-gray-300 mb-3 text-center">
+                                            PPG Comparison
+                                        </h4>
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-sm text-gray-300 w-32 text-right">
+                                                {selectedFsMatch.home_name}
                                             </div>
-                                        </>
-                                    ) : (
-                                        <NoDataPlaceholder message="Form verisi mevcut değil" />
-                                    )}
-                                </div>
-                                <div className="bg-gray-700/50 rounded-lg p-4">
-                                    <h3 className="font-semibold mb-4 text-orange-400">{selectedFsMatch.away_name}</h3>
-                                    {selectedFsMatch.form?.away ? (
-                                        <>
-                                            {selectedFsMatch.form.away.overall && (
-                                                <div className="mb-4">
-                                                    <div className="text-xs text-gray-400 mb-1">Son 5 Maç</div>
-                                                    <FormDisplay form={selectedFsMatch.form.away.overall} label="" />
-                                                </div>
-                                            )}
-                                            {selectedFsMatch.form.away.away_only && (
-                                                <div className="mb-4">
-                                                    <div className="text-xs text-gray-400 mb-1">Deplasman Form</div>
-                                                    <FormDisplay form={selectedFsMatch.form.away.away_only} label="" />
-                                                </div>
-                                            )}
-                                            <div className="grid grid-cols-3 gap-3 mt-4">
-                                                <div className="bg-gray-800 rounded-lg p-3 text-center">
-                                                    <div className="text-xs text-gray-400 mb-1">PPG</div>
-                                                    <div className="text-xl font-bold text-green-400">
-                                                        {selectedFsMatch.form.away.ppg?.toFixed(1) || '-'}
-                                                    </div>
-                                                </div>
-                                                <div className="bg-gray-800 rounded-lg p-3 text-center">
-                                                    <div className="text-xs text-gray-400 mb-1">BTTS %</div>
-                                                    <div className="text-xl font-bold text-yellow-400">
-                                                        {selectedFsMatch.form.away.btts_pct ? `${selectedFsMatch.form.away.btts_pct}%` : '-'}
-                                                    </div>
-                                                </div>
-                                                <div className="bg-gray-800 rounded-lg p-3 text-center">
-                                                    <div className="text-xs text-gray-400 mb-1">O2.5 %</div>
-                                                    <div className="text-xl font-bold text-blue-400">
-                                                        {selectedFsMatch.form.away.over25_pct ? `${selectedFsMatch.form.away.over25_pct}%` : '-'}
-                                                    </div>
-                                                </div>
+                                            <div className="flex-1 relative h-8 bg-gray-800 rounded-full overflow-hidden">
+                                                {(() => {
+                                                    const homePPG = (selectedFsMatch.form.home as any).ppg_overall || 0;
+                                                    const awayPPG = (selectedFsMatch.form.away as any).ppg_overall || 0;
+                                                    const total = homePPG + awayPPG;
+                                                    const homePercent = total > 0 ? (homePPG / total) * 100 : 50;
+                                                    const diff = homePPG - awayPPG;
+                                                    const diffPercent = Math.abs(Math.round((diff / ((homePPG + awayPPG) / 2)) * 100));
+
+                                                    return (
+                                                        <>
+                                                            <div
+                                                                className="absolute left-0 top-0 h-full bg-gradient-to-r from-cyan-500 to-cyan-400 flex items-center justify-start px-2"
+                                                                style={{ width: `${homePercent}%` }}
+                                                            >
+                                                                <span className="text-xs font-bold text-white">
+                                                                    {homePPG.toFixed(2)}
+                                                                </span>
+                                                            </div>
+                                                            <div
+                                                                className="absolute right-0 top-0 h-full bg-gradient-to-l from-orange-500 to-orange-400 flex items-center justify-end px-2"
+                                                                style={{ width: `${100 - homePercent}%` }}
+                                                            >
+                                                                <span className="text-xs font-bold text-white">
+                                                                    {awayPPG.toFixed(2)}
+                                                                </span>
+                                                            </div>
+                                                            {diff !== 0 && (
+                                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                                    <span className="text-xs font-bold text-white bg-gray-900/80 px-2 py-1 rounded">
+                                                                        {diff > 0 ? '←' : '→'} {diffPercent}% better
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
                                             </div>
-                                        </>
-                                    ) : (
-                                        <NoDataPlaceholder message="Form verisi mevcut değil" />
-                                    )}
+                                            <div className="text-sm text-gray-300 w-32 text-left">
+                                                {selectedFsMatch.away_name}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Team Stats Grid */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <ComprehensiveFormStats
+                                        teamName={selectedFsMatch.home_name}
+                                        formData={selectedFsMatch.form?.home}
+                                        color="cyan"
+                                    />
+                                    <ComprehensiveFormStats
+                                        teamName={selectedFsMatch.away_name}
+                                        formData={selectedFsMatch.form?.away}
+                                        color="orange"
+                                    />
                                 </div>
                             </div>
                         )}
