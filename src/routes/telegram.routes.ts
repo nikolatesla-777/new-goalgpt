@@ -784,6 +784,97 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * Get live scores for multiple matches (bulk query)
+   */
+  async function getLiveScoresForMatches(matches: any[]): Promise<Map<number, any>> {
+    const liveScores = new Map<number, any>();
+
+    if (matches.length === 0) return liveScores;
+
+    try {
+      // Build conditions for each match (team names + time window)
+      const conditions: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      matches.forEach(match => {
+        const homeFirstWord = match.home_name.split(' ')[0].toLowerCase();
+        const awayFirstWord = match.away_name.split(' ')[0].toLowerCase();
+        const timeWindow = 3600; // +/- 1 hour
+
+        conditions.push(`(
+          (LOWER(t1.name) LIKE $${paramIndex} OR LOWER(t1.name) LIKE $${paramIndex + 1})
+          AND (LOWER(t2.name) LIKE $${paramIndex + 2} OR LOWER(t2.name) LIKE $${paramIndex + 3})
+          AND m.match_time >= $${paramIndex + 4}
+          AND m.match_time <= $${paramIndex + 5}
+        )`);
+
+        params.push(
+          `%${homeFirstWord}%`,
+          `${homeFirstWord}%`,
+          `%${awayFirstWord}%`,
+          `${awayFirstWord}%`,
+          match.date_unix - timeWindow,
+          match.date_unix + timeWindow
+        );
+
+        paramIndex += 6;
+      });
+
+      const query = `
+        SELECT
+          m.home_score_display, m.away_score_display, m.status_id,
+          m.current_time, m.match_time,
+          t1.name as home_team_name, t2.name as away_team_name
+        FROM ts_matches m
+        INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
+        INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+        WHERE m.status_id IN (2, 3, 4, 5, 7, 8)
+          AND (${conditions.join(' OR ')})
+      `;
+
+      const results = await safeQuery(query, params);
+
+      // Match results back to FootyStats matches
+      results.forEach((row: any) => {
+        const matchingFsMatch = matches.find(m => {
+          const homeFirstWord = m.home_name.split(' ')[0].toLowerCase();
+          const awayFirstWord = m.away_name.split(' ')[0].toLowerCase();
+          return (
+            row.home_team_name.toLowerCase().includes(homeFirstWord) &&
+            row.away_team_name.toLowerCase().includes(awayFirstWord) &&
+            Math.abs(row.match_time - m.date_unix) <= 3600
+          );
+        });
+
+        if (matchingFsMatch) {
+          const statusMap: Record<number, string> = {
+            2: 'İlk Yarı',
+            3: 'Devre Arası',
+            4: 'İkinci Yarı',
+            5: 'Uzatma',
+            7: 'Penaltılar',
+            8: 'Bitti',
+          };
+
+          liveScores.set(matchingFsMatch.fs_id, {
+            home: parseInt(row.home_score_display) || 0,
+            away: parseInt(row.away_score_display) || 0,
+            minute: row.current_time || '',
+            status: statusMap[row.status_id] || 'Canlı',
+          });
+        }
+      });
+
+      logger.info(`[TelegramDailyLists] 📺 Found live scores for ${liveScores.size}/${matches.length} matches`);
+    } catch (err) {
+      logger.error('[TelegramDailyLists] Error fetching live scores:', err);
+    }
+
+    return liveScores;
+  }
+
+  /**
    * Calculate performance for a daily list (check finished matches)
    */
   async function calculateListPerformance(list: any): Promise<{
@@ -930,6 +1021,17 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         };
       }
 
+      // Collect all unique matches for bulk live score query
+      const allMatches = new Map<number, any>();
+      lists.forEach(list => {
+        list.matches.forEach(m => {
+          allMatches.set(m.match.fs_id, m.match);
+        });
+      });
+
+      // Bulk query: Get live scores for all matches
+      const liveScoresMap = await getLiveScoresForMatches(Array.from(allMatches.values()));
+
       // Format response with match details + performance calculation
       const formattedLists = await Promise.all(
         lists.map(async (list) => {
@@ -955,6 +1057,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
               potentials: m.match.potentials,
               xg: m.match.xg,
               odds: m.match.odds,
+              live_score: liveScoresMap.get(m.match.fs_id) || null,
             })),
             preview: formatDailyListMessage(list),
             generated_at: list.generated_at,

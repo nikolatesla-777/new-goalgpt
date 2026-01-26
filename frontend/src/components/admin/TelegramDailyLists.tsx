@@ -28,6 +28,12 @@ interface Match {
     draw?: number;
     away?: number;
   };
+  live_score?: {
+    home: number;
+    away: number;
+    minute: string;
+    status: string;
+  };
 }
 
 interface DailyList {
@@ -416,13 +422,20 @@ export function TelegramDailyLists() {
                                     {match.home_name} vs {match.away_name}
                                   </span>
                                   {matchStarted && (
-                                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                      matchFinished
-                                        ? 'bg-gray-200 text-gray-600'
-                                        : 'bg-red-100 text-red-600 animate-pulse'
-                                    }`}>
-                                      {matchFinished ? 'BİTTİ' : 'CANLI'}
-                                    </span>
+                                    <>
+                                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                        matchFinished
+                                          ? 'bg-gray-200 text-gray-600'
+                                          : 'bg-red-100 text-red-600 animate-pulse'
+                                      }`}>
+                                        {matchFinished ? 'BİTTİ' : 'CANLI'}
+                                      </span>
+                                      {match.live_score && (
+                                        <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
+                                          {match.live_score.home}-{match.live_score.away} {match.live_score.minute}
+                                        </span>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-4 text-xs text-gray-500">
