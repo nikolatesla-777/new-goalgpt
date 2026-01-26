@@ -526,6 +526,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           logger.info(`[FootyStats] Fetching lastX for home team ${fsMatch.homeID}`);
           const homeResponse = await footyStatsAPI.getTeamLastX(fsMatch.homeID);
           logger.info(`[FootyStats] Home response - data exists: ${!!homeResponse.data}, length: ${homeResponse.data?.length || 0}`);
+          if (homeResponse.data && homeResponse.data.length > 0) {
+            logger.info(`[FootyStats] First element keys: ${Object.keys(homeResponse.data[0]).join(', ')}`);
+          }
           // Get last 5 matches data (first entry)
           const homeData = homeResponse.data?.find((d: any) => d.last_x_match_num === 5) || homeResponse.data?.[0];
           homeTeamStats = homeData;  // FIX: stats are directly in homeData, not in .stats property
@@ -535,6 +538,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           logger.info(`[FootyStats] Fetching lastX for away team ${fsMatch.awayID}`);
           const awayResponse = await footyStatsAPI.getTeamLastX(fsMatch.awayID);
           logger.info(`[FootyStats] Away response - data exists: ${!!awayResponse.data}, length: ${awayResponse.data?.length || 0}`);
+          if (awayResponse.data && awayResponse.data.length > 0) {
+            logger.info(`[FootyStats] First element keys: ${Object.keys(awayResponse.data[0]).join(', ')}`);
+          }
           const awayData = awayResponse.data?.find((d: any) => d.last_x_match_num === 5) || awayResponse.data?.[0];
           awayTeamStats = awayData;  // FIX: stats are directly in awayData, not in .stats property
           logger.info(`[FootyStats] Away stats - PPG: ${awayTeamStats?.seasonPPG_overall}, BTTS: ${awayTeamStats?.seasonBTTSPercentage_overall}%`);
