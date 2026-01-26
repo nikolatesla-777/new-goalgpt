@@ -396,6 +396,22 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         return { count: 0, matches: [] };
       }
 
+      // 🔍 DEBUG: Log first match to see available fields
+      if (response.data.length > 0) {
+        const sampleMatch = response.data[0];
+        logger.info('[FootyStats] Sample match available fields:', Object.keys(sampleMatch));
+        logger.info('[FootyStats] Sample match data:', {
+          id: sampleMatch.id,
+          home_name: sampleMatch.home_name,
+          away_name: sampleMatch.away_name,
+          competition_name: (sampleMatch as any).competition_name,
+          league_name: (sampleMatch as any).league_name,
+          country: (sampleMatch as any).country,
+          league: (sampleMatch as any).league,
+          competition: (sampleMatch as any).competition,
+        });
+      }
+
       // Helper: Get team logo from TheSports DB
       const getTeamLogo = async (teamName: string): Promise<string | null> => {
         try {
