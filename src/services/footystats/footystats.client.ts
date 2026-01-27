@@ -211,14 +211,8 @@ class FootyStatsAPIClient {
   private errorCount = 0;
 
   private constructor() {
-    this.apiKey = process.env.FOOTYSTATS_API_KEY || '';
-
-    // Log API key status for debugging
-    if (!this.apiKey) {
-      logger.error('[FootyStatsAPI] ⚠️ API KEY IS EMPTY! Check .env file');
-    } else {
-      logger.info(`[FootyStatsAPI] ✅ API key loaded (${this.apiKey.substring(0, 10)}...)`);
-    }
+    // IMPORTANT: Don't load API key here - it will be loaded lazily in getApiKey()
+    this.apiKey = '';
 
     this.axiosInstance = axios.create({
       baseURL: 'https://api.football-data-api.com',
@@ -233,7 +227,22 @@ class FootyStatsAPIClient {
     this.setupInterceptors();
     this.isInitialized = true;
 
-    logger.info('[FootyStatsAPI] Client initialized');
+    logger.info('[FootyStatsAPI] Client initialized (API key will be loaded on first use)');
+  }
+
+  /**
+   * Lazy load API key from environment
+   */
+  private getApiKey(): string {
+    if (!this.apiKey) {
+      this.apiKey = process.env.FOOTYSTATS_API_KEY || '';
+      if (!this.apiKey) {
+        logger.error('[FootyStatsAPI] ⚠️ API KEY IS EMPTY! Check .env file');
+      } else {
+        logger.info(`[FootyStatsAPI] ✅ API key loaded (${this.apiKey.substring(0, 10)}...)`);
+      }
+    }
+    return this.apiKey;
   }
 
   static getInstance(): FootyStatsAPIClient {
@@ -285,7 +294,7 @@ class FootyStatsAPIClient {
    * Check if API key is configured
    */
   isConfigured(): boolean {
-    return this.apiKey.length > 0;
+    return this.getApiKey().length > 0;
   }
 
   /**
@@ -296,7 +305,7 @@ class FootyStatsAPIClient {
     this.requestCount++;
 
     const queryParams = new URLSearchParams({
-      key: this.apiKey,
+      key: this.getApiKey(), // Lazy load API key on first request
       ...params,
     });
 
