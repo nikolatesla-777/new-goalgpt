@@ -195,6 +195,21 @@ export function TelegramDailyLists() {
     ? Math.round(lists.reduce((sum, list) => sum + list.avg_confidence, 0) / lists.length)
     : 0;
 
+  // Calculate total performance across all lists
+  const totalPerformance = lists.reduce((acc, list) => {
+    if (list.performance) {
+      acc.total += list.performance.total;
+      acc.won += list.performance.won;
+      acc.lost += list.performance.lost;
+      acc.pending += list.performance.pending;
+    }
+    return acc;
+  }, { total: 0, won: 0, lost: 0, pending: 0 });
+
+  const overallWinRate = totalPerformance.total > 0
+    ? Math.round((totalPerformance.won / totalPerformance.total) * 100)
+    : 0;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
@@ -246,7 +261,7 @@ export function TelegramDailyLists() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-white rounded-2xl p-6 border-2 border-gray-100 hover:border-blue-200 hover:shadow-xl transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
@@ -279,6 +294,44 @@ export function TelegramDailyLists() {
                 </div>
                 <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
                   <span className="text-2xl">🎯</span>
+                </div>
+              </div>
+            </div>
+
+            {/* NEW: Daily Performance Card */}
+            <div className="bg-white rounded-2xl p-6 border-2 border-gray-100 hover:border-emerald-200 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <div className="w-full">
+                  <p className="text-sm font-medium text-gray-500 mb-2">Günlük Performans</p>
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="text-2xl font-bold text-emerald-600">{totalPerformance.won}</span>
+                    <span className="text-gray-400">/</span>
+                    <span className="text-2xl font-bold text-gray-900">{totalPerformance.total}</span>
+                  </div>
+                  {totalPerformance.total > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            overallWinRate >= 70 ? 'bg-emerald-500' :
+                            overallWinRate >= 50 ? 'bg-yellow-500' :
+                            'bg-red-500'
+                          }`}
+                          style={{ width: `${overallWinRate}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-bold ${
+                        overallWinRate >= 70 ? 'text-emerald-600' :
+                        overallWinRate >= 50 ? 'text-yellow-600' :
+                        'text-red-600'
+                      }`}>
+                        {overallWinRate}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center ml-3">
+                  <span className="text-2xl">✅</span>
                 </div>
               </div>
             </div>
