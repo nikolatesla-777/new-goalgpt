@@ -777,13 +777,19 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       );
 
       if (missingTeams.length > 0) {
-        const fuzzyConditions = missingTeams.map(name => {
-          const firstWord = name.split(' ')[0];
-          return `LOWER(name) LIKE '%${firstWord.toLowerCase()}%'`;
+        // Build parameterized query to avoid SQL injection
+        const fuzzyConditions = missingTeams.map((name, index) => {
+          return `LOWER(name) LIKE $${index + 2}`;
         }).join(' OR ');
 
+        const fuzzyParams = missingTeams.map(name => {
+          const firstWord = name.split(' ')[0];
+          return `%${firstWord.toLowerCase()}%`;
+        });
+
         const fuzzyResult = await pool.query(
-          `SELECT name, logo_url FROM ts_teams WHERE ${fuzzyConditions} LIMIT ${missingTeams.length}`
+          `SELECT name, logo_url FROM ts_teams WHERE ${fuzzyConditions} LIMIT $1`,
+          [missingTeams.length, ...fuzzyParams]
         );
 
         fuzzyResult.rows.forEach((row: any) => {
