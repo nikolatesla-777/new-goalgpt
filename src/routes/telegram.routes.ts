@@ -245,6 +245,28 @@ async function sendWithRetry(
 
 export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
   /**
+   * GET /telegram/test-uuid
+   * Test route to diagnose UUID error
+   */
+  fastify.get('/telegram/test-uuid', async (request, reply) => {
+    try {
+      console.error('[TEST-UUID] Starting test query');
+      const result = await safeQuery(
+        `SELECT c.id, c.name, co.name as country_name
+         FROM ts_competitions c
+         LEFT JOIN ts_countries co ON c.country_id = co.id
+         LIMIT 5`
+      );
+      console.error('[TEST-UUID] Query succeeded, rows:', result.length);
+      return { success: true, rows: result.length };
+    } catch (err: any) {
+      console.error('[TEST-UUID] Query failed:', err.message);
+      console.error('[TEST-UUID] Stack:', err.stack);
+      return reply.status(500).send({ error: err.message, stack: err.stack });
+    }
+  });
+
+  /**
    * GET /telegram/health
    * Health check for Telegram bot
    */
