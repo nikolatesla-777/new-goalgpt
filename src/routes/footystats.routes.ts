@@ -21,6 +21,16 @@ import {
 } from '../repositories/footystats.repository';
 // Import Turkish trends converter
 import { generateTurkishTrends } from '../services/telegram/trends.generator';
+// Import caching service
+import {
+  getCachedMatchStats,
+  setCachedMatchStats,
+  getCachedTodayMatches,
+  setCachedTodayMatches,
+  invalidateMatchCache,
+  cleanupExpiredCache,
+  getCacheStats
+} from '../services/footystats/cache.service';
 
 export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> {
   // NOTE: Debug endpoint /footystats/debug-db DELETED for security (exposed DB schema)
@@ -387,13 +397,360 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
     }
   });
 
+  // Get daily tips (high confidence BTTS and Over 2.5 predictions)
+  fastify.get('/footystats/daily-tips', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      logger.info('[FootyStats] Fetching daily tips...');
+
+      // Fetch BTTS and Over25 stats in parallel
+      const [bttsData, over25Data] = await Promise.all([
+        footyStatsAPI.getBTTSStats(),
+        footyStatsAPI.getOver25Stats()
+      ]);
+
+      const today = new Date();
+      const todayUnix = Math.floor(today.getTime() / 1000);
+
+      // Filter for high confidence picks (>70%) and today's matches
+      const bttsPicks = (bttsData.data || [])
+        .filter((match: any) =>
+          match.btts_percentage >= 70 &&
+          match.date_unix >= todayUnix &&
+          match.date_unix < todayUnix + (24 * 60 * 60)
+        )
+        .slice(0, 10)
+        .map((m: any) => ({
+          fs_id: m.id,
+          home_name: m.home_name,
+          away_name: m.away_name,
+          league: m.competition_name,
+          date_unix: m.date_unix,
+          confidence: m.btts_percentage,
+          tip_type: 'btts'
+        }));
+
+      const over25Picks = (over25Data.data || [])
+        .filter((match: any) =>
+          match.over25_percentage >= 70 &&
+          match.date_unix >= todayUnix &&
+          match.date_unix < todayUnix + (24 * 60 * 60)
+        )
+        .slice(0, 10)
+        .map((m: any) => ({
+          fs_id: m.id,
+          home_name: m.home_name,
+          away_name: m.away_name,
+          league: m.competition_name,
+          date_unix: m.date_unix,
+          confidence: m.over25_percentage,
+          tip_type: 'over25'
+        }));
+
+      logger.info(`[FootyStats] Daily tips found: ${bttsPicks.length} BTTS, ${over25Picks.length} Over2.5`);
+
+      return {
+        success: true,
+        date: today.toISOString().split('T')[0],
+        btts_picks: bttsPicks,
+        over25_picks: over25Picks
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] Daily tips error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch daily tips'
+      });
+    }
+  });
+
+  // Get referee analysis for a match
+  fastify.get('/footystats/referee/:matchId', async (request: FastifyRequest<{
+    Params: { matchId: string };
+  }>, reply: FastifyReply) => {
+    try {
+      const { matchId } = request.params;
+      logger.info(`[FootyStats] Fetching referee analysis for match ${matchId}...`);
+
+      // Get match details to find referee ID
+      const matchDetails = await footyStatsAPI.getMatchDetails(parseInt(matchId));
+
+      if (!matchDetails?.data?.[0]) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Match not found'
+        });
+      }
+
+      const match = matchDetails.data[0];
+      const refereeId = match.referee_id;
+
+      if (!refereeId) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Referee not found for this match'
+        });
+      }
+
+      // Get referee stats
+      const refereeData = await footyStatsAPI.getRefereeStats(refereeId);
+
+      if (!refereeData?.data?.[0]) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Referee stats not found'
+        });
+      }
+
+      const referee = refereeData.data[0];
+
+      // Calculate derived stats
+      const cardsPerMatch = referee.cards_per_match || 0;
+      const isSternReferee = cardsPerMatch > 4.5;
+      const isLenient = cardsPerMatch < 3.0;
+
+      return {
+        success: true,
+        referee: {
+          id: referee.id,
+          name: referee.full_name,
+          nationality: referee.nationality,
+          // Stats
+          cards_per_match: cardsPerMatch,
+          penalties_given_per_match: referee.penalties_given_per_match_overall || 0,
+          btts_percentage: Math.round(referee.btts_percentage || 0),
+          goals_per_match: referee.goals_per_match_overall || 0,
+          // Meta
+          matches_officiated: referee.appearances_overall || 0,
+          // Badges
+          is_stern: isSternReferee,
+          is_lenient: isLenient,
+        }
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] Referee analysis error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch referee data'
+      });
+    }
+  });
+
+  // Get league standings/tables for a season
+  fastify.get('/footystats/league-tables/:seasonId', async (request: FastifyRequest<{
+    Params: { seasonId: string };
+  }>, reply: FastifyReply) => {
+    try {
+      const { seasonId } = request.params;
+      logger.info(`[FootyStats] Fetching league tables for season ${seasonId}...`);
+
+      const tablesData = await footyStatsAPI.getLeagueTables(parseInt(seasonId));
+
+      if (!tablesData?.data) {
+        return reply.status(404).send({
+          success: false,
+          error: 'League tables not found'
+        });
+      }
+
+      const data = tablesData.data;
+
+      // Extract the main league table (or specific tables for cups)
+      const leagueTable = data.league_table || data.all_matches_table_overall || [];
+      const specificTables = data.specific_tables || [];
+
+      // Format team entries with zone indicators
+      const formatTable = (table: any[]) => {
+        return table.map((team: any) => ({
+          id: team.id,
+          name: team.name,
+          position: team.position,
+          points: team.points,
+          matches_played: team.matchesPlayed,
+          wins: team.seasonWins_overall,
+          draws: team.seasonDraws_overall,
+          losses: team.seasonLosses_overall,
+          goals_for: team.seasonGoals,
+          goals_against: team.seasonConceded,
+          goal_difference: team.seasonGoalDifference,
+          form: team.wdl_record || '',
+          zone: team.zone || null,
+          corrections: team.corrections || 0,
+        }));
+      };
+
+      return {
+        success: true,
+        season_id: parseInt(seasonId),
+        league_table: formatTable(leagueTable),
+        specific_tables: specificTables.map((round: any) => ({
+          round: round.round,
+          groups: (round.groups || []).map((group: any) => ({
+            name: group.name,
+            table: formatTable(group.table || [])
+          }))
+        })),
+        has_groups: specificTables.length > 0,
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] League tables error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch league tables'
+      });
+    }
+  });
+
+  // Get league players for a season
+  fastify.get('/footystats/league-players/:seasonId', async (request: FastifyRequest<{
+    Params: { seasonId: string };
+    Querystring: { page?: string; search?: string; position?: string };
+  }>, reply: FastifyReply) => {
+    try {
+      const { seasonId } = request.params;
+      const { page = '1', search = '', position = '' } = request.query;
+      logger.info(`[FootyStats] Fetching players for season ${seasonId}, page ${page}...`);
+
+      const playersData = await footyStatsAPI.getLeaguePlayers(parseInt(seasonId), parseInt(page));
+
+      if (!playersData?.data) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Players not found'
+        });
+      }
+
+      let players = playersData.data;
+
+      // Client-side filtering (since API doesn't support it)
+      if (search) {
+        const searchLower = search.toLowerCase();
+        players = players.filter((p: any) =>
+          p.full_name?.toLowerCase().includes(searchLower) ||
+          p.known_as?.toLowerCase().includes(searchLower)
+        );
+      }
+
+      if (position && position !== 'all') {
+        players = players.filter((p: any) =>
+          p.position?.toLowerCase() === position.toLowerCase()
+        );
+      }
+
+      // Format player data
+      const formattedPlayers = players.map((player: any) => ({
+        id: player.id,
+        full_name: player.full_name,
+        known_as: player.known_as || player.full_name,
+        age: player.age,
+        position: player.position,
+        nationality: player.nationality,
+        club_team_id: player.club_team_id,
+        appearances: player.appearances_overall || 0,
+        goals: player.goals_overall || 0,
+        assists: player.assists_overall || 0,
+        minutes_played: player.minutes_played_overall || 0,
+      }));
+
+      return {
+        success: true,
+        season_id: parseInt(seasonId),
+        page: parseInt(page),
+        total: formattedPlayers.length,
+        players: formattedPlayers,
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] League players error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch players'
+      });
+    }
+  });
+
+  // Get detailed stats for a specific player
+  fastify.get('/footystats/player-stats/:playerId', async (request: FastifyRequest<{
+    Params: { playerId: string };
+  }>, reply: FastifyReply) => {
+    try {
+      const { playerId } = request.params;
+      logger.info(`[FootyStats] Fetching stats for player ${playerId}...`);
+
+      const playerData = await footyStatsAPI.getPlayerStats(parseInt(playerId));
+
+      if (!playerData?.data || playerData.data.length === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Player stats not found'
+        });
+      }
+
+      // API returns array of seasons - get the most recent
+      const latestSeason = playerData.data[0];
+
+      return {
+        success: true,
+        player: {
+          id: latestSeason.id,
+          full_name: latestSeason.full_name,
+          known_as: latestSeason.known_as || latestSeason.full_name,
+          position: latestSeason.position,
+          nationality: latestSeason.nationality,
+          age: latestSeason.age,
+          club_team_id: latestSeason.club_team_id,
+
+          // Basic stats
+          appearances: latestSeason.appearances_overall || 0,
+          minutes_played: latestSeason.minutes_played_overall || 0,
+          goals: latestSeason.goals_overall || 0,
+          assists: latestSeason.assists_overall || 0,
+          goals_per_90: latestSeason.goals_per_90_overall || 0,
+          assists_per_90: latestSeason.assists_per_90_overall || 0,
+
+          // Advanced stats
+          xg_per_90: latestSeason.xg_per_90_overall || 0,
+          xa_per_90: latestSeason.xa_per_90_overall || 0,
+          shots_per_90: latestSeason.shots_per_90_overall || 0,
+          shot_accuracy: latestSeason.shot_accuraccy_percentage_overall || 0,
+          passes_per_90: latestSeason.passes_per_90_overall || 0,
+          pass_accuracy: latestSeason.pass_completion_rate_overall || 0,
+          key_passes_per_90: latestSeason.key_passes_per_90_overall || 0,
+
+          // Defensive stats
+          tackles_per_90: latestSeason.tackles_per_90_overall || 0,
+          interceptions_per_90: latestSeason.interceptions_per_90_overall || 0,
+
+          // Cards
+          yellow_cards: latestSeason.yellow_cards_overall || 0,
+          red_cards: latestSeason.red_cards_overall || 0,
+        },
+        all_seasons: playerData.data, // Include all seasons for history
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] Player stats error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch player stats'
+      });
+    }
+  });
+
   // Get today's matches with FootyStats data
   fastify.get('/footystats/today', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+      // Try to get cached data first
+      const cached = await getCachedTodayMatches(today);
+      if (cached) {
+        logger.info(`[FootyStats] Today matches - CACHE HIT (${cached.length} matches)`);
+        return { count: cached.length, matches: cached, cached: true };
+      }
+
+      logger.info('[FootyStats] Today matches - CACHE MISS, fetching from API');
       const response = await footyStatsAPI.getTodaysMatches();
 
       if (!response.data || response.data.length === 0) {
-        return { count: 0, matches: [] };
+        return { count: 0, matches: [], cached: false };
       }
 
       // Helper: Get match data from TheSports DB (league + logos) - SINGLE QUERY
@@ -529,7 +886,11 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         };
       });
 
-      return { count: matches.length, matches };
+      // Cache the processed matches
+      await setCachedTodayMatches(matches, today);
+      logger.info(`[FootyStats] Cached ${matches.length} today matches`);
+
+      return { count: matches.length, matches, cached: false };
     } catch (error: any) {
       logger.error('[FootyStats] Today matches error:', error);
       return reply.status(500).send({ error: error.message });
@@ -543,6 +904,15 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
     try {
       const { fsId } = request.params;
       const fsIdNum = parseInt(fsId);
+
+      // Try to get cached data first
+      const cached = await getCachedMatchStats(fsIdNum);
+      if (cached) {
+        logger.info(`[FootyStats] Match ${fsIdNum} - CACHE HIT`);
+        return { ...cached, cached: true };
+      }
+
+      logger.info(`[FootyStats] Match ${fsIdNum} - CACHE MISS, fetching from API`);
 
       // 1. Get detailed match data from FootyStats /match endpoint
       let fsMatch: any = null;
@@ -952,7 +1322,14 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         response.xg.total = response.xg.home + response.xg.away;
       }
 
-      return response;
+      // Cache the match data
+      await setCachedMatchStats(response, {
+        matchDateUnix: fsMatch.date_unix,
+        status: fsMatch.status
+      });
+      logger.info(`[FootyStats] Cached match ${fsIdNum} data`);
+
+      return { ...response, cached: false };
     } catch (error: any) {
       logger.error('[FootyStats] Match detail error:', error);
       return reply.status(500).send({ error: error.message });
@@ -980,6 +1357,70 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       return reply.status(500).send({
         success: false,
         error: error.message,
+      });
+    }
+  });
+
+  // ============================================================================
+  // CACHE MANAGEMENT ENDPOINTS - ADMIN ONLY
+  // ============================================================================
+
+  // Get cache statistics
+  fastify.get('/footystats/cache/stats', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const stats = await getCacheStats();
+      return {
+        success: true,
+        stats
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] Cache stats error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // Invalidate cache for a specific match
+  fastify.delete('/footystats/cache/invalidate/:matchId', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{
+    Params: { matchId: string };
+  }>, reply: FastifyReply) => {
+    try {
+      const { matchId } = request.params;
+      const fsIdNum = parseInt(matchId);
+
+      await invalidateMatchCache(fsIdNum);
+      logger.info(`[FootyStats] Cache invalidated for match ${fsIdNum}`);
+
+      return {
+        success: true,
+        message: `Cache invalidated for match ${fsIdNum}`
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] Cache invalidation error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // Cleanup expired cache entries
+  fastify.post('/footystats/cache/cleanup', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await cleanupExpiredCache();
+      logger.info('[FootyStats] Expired cache cleaned up');
+
+      return {
+        success: true,
+        message: 'Expired cache entries cleaned up'
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] Cache cleanup error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: error.message
       });
     }
   });

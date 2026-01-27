@@ -16,6 +16,7 @@ import {
     CircleNotch,
     CalendarBlank
 } from '@phosphor-icons/react';
+import RefereeAnalysisCard from './RefereeAnalysisCard';
 
 // Types
 interface MatchData {
@@ -515,7 +516,7 @@ export function AIAnalysisLab() {
     // FootyStats detail panel state
     const [selectedFsMatch, setSelectedFsMatch] = useState<FSMatchDetail | null>(null);
     const [fsLoading, setFsLoading] = useState(false);
-    const [fsDetailTab, setFsDetailTab] = useState<'overview' | 'potentials' | 'form' | 'h2h' | 'trends' | 'ai-prediction' | 'odds'>('overview');
+    const [fsDetailTab, setFsDetailTab] = useState<'overview' | 'potentials' | 'form' | 'h2h' | 'trends' | 'ai-prediction' | 'odds' | 'referee'>('overview');
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -865,6 +866,7 @@ export function AIAnalysisLab() {
                             { id: 'form', label: 'Form', icon: TrendUp },
                             { id: 'h2h', label: 'H2H', icon: Users },
                             { id: 'trends', label: 'Trendler', icon: Lightning },
+                            { id: 'referee', label: '👨‍⚖️ Hakem', icon: Flag },
                             { id: 'ai-prediction', label: '🎲 AI Tahmini', icon: Lightning },
                         ].map((tab) => (
                             <button
@@ -1922,6 +1924,13 @@ export function AIAnalysisLab() {
                                         Bu tahminler AI analizi ve istatistiklere dayanmaktadır. Bahis oynarken sorumlu olun ve kaybetmeyi göze alamayacağınız parayla bahis oynamayın.
                                     </p>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Referee Tab */}
+                        {fsDetailTab === 'referee' && (
+                            <div>
+                                <RefereeAnalysisCard matchId={selectedFsMatch.fs_id.toString()} />
                             </div>
                         )}
 

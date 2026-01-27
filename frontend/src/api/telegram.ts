@@ -44,6 +44,67 @@ export async function getTodaysMatches() {
 }
 
 /**
+ * Get daily tips (high confidence BTTS and Over 2.5 picks)
+ */
+export async function getDailyTips() {
+  const response = await fetch(`${API_BASE}/footystats/daily-tips`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch daily tips');
+  }
+  return response.json();
+}
+
+/**
+ * Get referee analysis for a match
+ */
+export async function getRefereeAnalysis(matchId: string) {
+  const response = await fetch(`${API_BASE}/footystats/referee/${matchId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch referee data');
+  }
+  return response.json();
+}
+
+/**
+ * Get league standings/tables for a season
+ */
+export async function getLeagueStandings(seasonId: string) {
+  const response = await fetch(`${API_BASE}/footystats/league-tables/${seasonId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch league standings');
+  }
+  return response.json();
+}
+
+/**
+ * Get players in a league season
+ */
+export async function getLeaguePlayers(seasonId: string, page: number = 1, filters?: { search?: string; position?: string }) {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    ...(filters?.search && { search: filters.search }),
+    ...(filters?.position && { position: filters.position }),
+  });
+
+  const response = await fetch(`${API_BASE}/footystats/league-players/${seasonId}?${params}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch players');
+  }
+  return response.json();
+}
+
+/**
+ * Get detailed stats for a specific player
+ */
+export async function getPlayerStats(playerId: string) {
+  const response = await fetch(`${API_BASE}/footystats/player-stats/${playerId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch player stats');
+  }
+  return response.json();
+}
+
+/**
  * Publish a match to Telegram channel
  */
 export async function publishToTelegram(

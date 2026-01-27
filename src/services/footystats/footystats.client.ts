@@ -120,12 +120,15 @@ export interface FootyStatsMatch {
   awayID: number;
   home_name: string;
   away_name: string;
+  competition_name?: string;  // ✅ ADD: League/competition name
+  league_name?: string;        // ✅ ADD: Alternative league name field
   status: string;
   date_unix: number;
   homeGoalCount: number;
   awayGoalCount: number;
   btts_potential?: number;
   o25_potential?: number;
+  o15_potential?: number;      // ✅ ADD: Over 1.5 potential
   avg_potential?: number;
   corners_potential?: number;
   cards_potential?: number;
@@ -334,6 +337,30 @@ class FootyStatsAPIClient {
    */
   async getLeagueSeason(seasonId: number): Promise<FootyStatsResponse<any>> {
     return this.get<FootyStatsResponse<any>>('/league-season', { season_id: seasonId.toString() });
+  }
+
+  /**
+   * Get league standings/tables for a season
+   */
+  async getLeagueTables(seasonId: number): Promise<FootyStatsResponse<any>> {
+    return this.get<FootyStatsResponse<any>>('/league-tables', { season_id: seasonId.toString() });
+  }
+
+  /**
+   * Get all players in a league season (max 200 per page)
+   */
+  async getLeaguePlayers(seasonId: number, page: number = 1): Promise<FootyStatsResponse<any>> {
+    return this.get<FootyStatsResponse<any>>('/league-players', {
+      season_id: seasonId.toString(),
+      page: page.toString()
+    });
+  }
+
+  /**
+   * Get detailed stats for a specific player
+   */
+  async getPlayerStats(playerId: number): Promise<FootyStatsResponse<any>> {
+    return this.get<FootyStatsResponse<any>>('/player-stats', { player_id: playerId.toString() });
   }
 
   /**
