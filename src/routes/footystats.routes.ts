@@ -485,9 +485,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
            t2.name as away_name,
            c.name as league_name
          FROM ts_matches m
-         INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
-         INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
-         INNER JOIN ts_competitions c ON m.competition_id = c.external_id
+         INNER JOIN ts_teams t1 ON m.home_team_id::text = t1.external_id::text
+         INNER JOIN ts_teams t2 ON m.away_team_id::text = t2.external_id::text
+         INNER JOIN ts_competitions c ON m.competition_id::text = c.external_id::text
          WHERE (t1.name = ANY($1) OR t2.name = ANY($1))
            AND m.match_time >= extract(epoch from NOW() - INTERVAL '7 days')::bigint
            AND m.match_time <= extract(epoch from NOW() + INTERVAL '7 days')::bigint`,
@@ -903,9 +903,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
            t2.name as away_name,
            c.name as league_name
          FROM ts_matches m
-         INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
-         INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
-         INNER JOIN ts_competitions c ON m.competition_id = c.external_id
+         INNER JOIN ts_teams t1 ON m.home_team_id::text = t1.external_id::text
+         INNER JOIN ts_teams t2 ON m.away_team_id::text = t2.external_id::text
+         INNER JOIN ts_competitions c ON m.competition_id::text = c.external_id::text
          WHERE (t1.name = ANY($1) OR t2.name = ANY($1))
            AND m.match_time >= extract(epoch from NOW() - INTERVAL '7 days')::bigint
            AND m.match_time <= extract(epoch from NOW() + INTERVAL '7 days')::bigint`,
