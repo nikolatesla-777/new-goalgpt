@@ -1006,9 +1006,10 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
    * Get today's generated daily lists (preview without publishing)
    */
   fastify.get('/telegram/daily-lists/today', async (request, reply) => {
-    console.log('='.repeat(80));
-    console.log('[ROUTE HANDLER] daily-lists/today called');
-    console.log('='.repeat(80));
+    const marker = '='.repeat(80) + '\n[ROUTE HANDLER] daily-lists/today CALLED\n' + '='.repeat(80) + '\n';
+    process.stdout.write(marker);
+    process.stderr.write(marker);
+    console.log(marker);
 
     try {
       logger.info('[TelegramDailyLists] 📊 Fetching today\'s lists...');
