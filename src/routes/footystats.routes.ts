@@ -399,7 +399,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
   // Get daily tips (all today's matches with predictions)
   fastify.get('/footystats/daily-tips', async (request: FastifyRequest, reply: FastifyReply) => {
+    console.log('[DEBUG] Daily tips endpoint called!');
     try {
+      console.log('[DEBUG] Inside try block');
       logger.info('[FootyStats] Fetching daily tips...');
 
       const today = new Date();
@@ -549,6 +551,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         date: today.toISOString().split('T')[0]
       };
     } catch (error: any) {
+      console.log('[DEBUG] Catch block - error:', error.message);
+      console.log('[DEBUG] Full error:', JSON.stringify(error, null, 2));
       logger.error('[FootyStats] Daily tips error:', error);
       return reply.status(500).send({
         success: false,
