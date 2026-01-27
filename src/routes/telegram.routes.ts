@@ -1012,12 +1012,13 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
     console.log(marker);
 
     try {
+      console.error('[TRACE-1] Starting daily-lists route handler');
       logger.info('[TelegramDailyLists] 📊 Fetching today\'s lists...');
 
       // Get lists from database (or generate if not exists)
-      console.log('[ROUTE] About to call getDailyLists()...');
+      console.error('[TRACE-2] About to call getDailyLists()');
       const lists = await getDailyLists();
-      console.log('[ROUTE] getDailyLists() returned:', lists.length, 'lists');
+      console.error('[TRACE-3] getDailyLists() returned:', lists.length, 'lists');
 
       if (lists.length === 0) {
         return {
@@ -1029,6 +1030,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // Collect all unique matches for bulk live score query
+      console.error('[TRACE-4] Collecting unique matches');
       const allMatches = new Map<number, any>();
       lists.forEach(list => {
         list.matches.forEach(m => {
@@ -1037,13 +1039,18 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       // Bulk query: Get live scores for all matches
+      console.error('[TRACE-5] About to call getLiveScoresForMatches with', allMatches.size, 'matches');
       const liveScoresMap = await getLiveScoresForMatches(Array.from(allMatches.values()));
+      console.error('[TRACE-6] getLiveScoresForMatches returned', liveScoresMap.size, 'scores');
 
       // Format response with match details + performance calculation
+      console.error('[TRACE-7] Formatting lists');
       const formattedLists = await Promise.all(
         lists.map(async (list) => {
           // Calculate performance for finished matches
+          console.error('[TRACE-8] Calculating performance for list:', list.market);
           const performance = await calculateListPerformance(list);
+          console.error('[TRACE-9] Performance calculated for list:', list.market);
 
           return {
             market: list.market,
