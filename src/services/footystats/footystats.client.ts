@@ -234,28 +234,36 @@ class FootyStatsAPIClient {
    * Lazy load API key from environment
    */
   private getApiKey(): string {
+    process.stderr.write('[getApiKey] CALLED\n');
+
     if (!this.apiKey) {
+      process.stderr.write('[getApiKey] this.apiKey is undefined, loading from .env\n');
+
       // Ensure .env is loaded before reading process.env
       // Use explicit path to handle different working directories
       const path = require('path');
       const envPath = path.resolve(process.cwd(), '.env');
       const result = dotenv.config({ path: envPath });
 
-      console.log('[FootyStats getApiKey] CWD:', process.cwd());
-      console.log('[FootyStats getApiKey] .env path:', envPath);
-      console.log('[FootyStats getApiKey] dotenv result:', result.error ? `ERROR: ${result.error.message}` : 'SUCCESS');
+      process.stderr.write(`[getApiKey] CWD: ${process.cwd()}\n`);
+      process.stderr.write(`[getApiKey] .env path: ${envPath}\n`);
+      process.stderr.write(`[getApiKey] dotenv result: ${result.error ? `ERROR: ${result.error.message}` : 'SUCCESS'}\n`);
 
       this.apiKey = process.env.FOOTYSTATS_API_KEY || '';
-      console.log('[FootyStats getApiKey] API key length:', this.apiKey.length);
-      console.log('[FootyStats getApiKey] API key preview:', this.apiKey ? this.apiKey.substring(0, 15) + '...' : 'EMPTY');
+      process.stderr.write(`[getApiKey] API key length: ${this.apiKey.length}\n`);
+      process.stderr.write(`[getApiKey] API key preview: ${this.apiKey ? this.apiKey.substring(0, 15) + '...' : 'EMPTY'}\n`);
 
       if (!this.apiKey) {
         logger.error('[FootyStatsAPI] ⚠️ API KEY IS EMPTY! Check .env file');
       } else {
         logger.info(`[FootyStatsAPI] ✅ API key loaded (${this.apiKey.substring(0, 10)}...)`);
       }
+    } else {
+      process.stderr.write(`[getApiKey] Using cached API key (length: ${this.apiKey.length})\n`);
     }
-    return this.apiKey;
+
+    process.stderr.write(`[getApiKey] RETURNING: ${this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'EMPTY'}\n`);
+    return this.apiKey || '';
   }
 
   static getInstance(): FootyStatsAPIClient {
