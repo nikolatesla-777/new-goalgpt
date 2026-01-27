@@ -177,7 +177,7 @@ class UnifiedPredictionService {
       LEFT JOIN ts_teams th ON m.home_team_id = th.external_id
       LEFT JOIN ts_teams ta ON m.away_team_id = ta.external_id
       LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-      LEFT JOIN ts_countries co ON c.country_id = co.external_id
+      LEFT JOIN ts_countries co ON c.country_id = co.id
       ${whereClause}
       ORDER BY p.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
