@@ -827,8 +827,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           m.current_time, m.match_time,
           t1.name as home_team_name, t2.name as away_team_name
         FROM ts_matches m
-        INNER JOIN ts_teams t1 ON m.home_team_id::text = t1.external_id::text
-        INNER JOIN ts_teams t2 ON m.away_team_id::text = t2.external_id::text
+        INNER JOIN ts_teams t1 ON m.home_team_id= t1.external_id
+        INNER JOIN ts_teams t2 ON m.away_team_id= t2.external_id
         WHERE m.status_id IN (2, 3, 4, 5, 7, 8)
           AND (${conditions.join(' OR ')})
       `;
@@ -913,8 +913,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
                   m.home_scores, m.away_scores,
                   t1.name as home_team_name, t2.name as away_team_name
            FROM ts_matches m
-           INNER JOIN ts_teams t1 ON m.home_team_id::text = t1.external_id::text
-           INNER JOIN ts_teams t2 ON m.away_team_id::text = t2.external_id::text
+           INNER JOIN ts_teams t1 ON m.home_team_id= t1.external_id
+           INNER JOIN ts_teams t2 ON m.away_team_id= t2.external_id
            WHERE (LOWER(t1.name) LIKE $1 OR LOWER(t1.name) LIKE $2)
              AND (LOWER(t2.name) LIKE $3 OR LOWER(t2.name) LIKE $4)
              AND m.match_time >= $5
