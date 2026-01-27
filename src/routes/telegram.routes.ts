@@ -472,7 +472,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           const leagueResult = await safeQuery<{ name: string }>(
             `SELECT c.name
              FROM ts_matches m
-             JOIN ts_competitions c ON m.competition_id::text = c.id::text
+             JOIN ts_competitions c ON m.competition_id = c.external_id
              WHERE m.external_id = $1
              LIMIT 1`,
             [match_id]
