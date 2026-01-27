@@ -1075,6 +1075,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
     } catch (error: any) {
       logger.error('[TelegramDailyLists] ❌ Error fetching today\'s lists:', error);
+      console.error('[DEBUG] Daily lists error:', error.message);
+      console.error('[DEBUG] Stack:', error.stack?.substring(0, 500));
       return reply.status(500).send({ error: error.message });
     }
   });
