@@ -13,6 +13,10 @@
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import dotenv from 'dotenv';
+
+// Load environment variables before accessing process.env
+dotenv.config();
 import { logger } from '../../utils/logger';
 
 // ============================================================================
