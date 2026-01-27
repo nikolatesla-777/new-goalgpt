@@ -51,7 +51,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       if (country) {
         query = `SELECT c.id, c.name, COALESCE(co.name, 'International') as country_name
                  FROM ts_competitions c
-                 LEFT JOIN ts_countries co ON c.country_id = co.external_id
+                 LEFT JOIN ts_countries co ON c.country_id = co.id
                  WHERE LOWER(COALESCE(co.name, 'International')) LIKE $1
                  ORDER BY c.name
                  LIMIT 50`;
@@ -59,7 +59,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       } else {
         query = `SELECT c.id, c.name, COALESCE(co.name, 'International') as country_name
                  FROM ts_competitions c
-                 LEFT JOIN ts_countries co ON c.country_id = co.external_id
+                 LEFT JOIN ts_countries co ON c.country_id = co.id
                  WHERE LOWER(c.name) LIKE $1
                  ORDER BY co.name, c.name
                  LIMIT 30`;

@@ -43,7 +43,7 @@ export async function getPlayerById(
         p.season_stats
       FROM ts_players p
       LEFT JOIN ts_teams t ON p.team_id = t.external_id
-      LEFT JOIN ts_countries c ON p.country_id = c.external_id
+      LEFT JOIN ts_countries c ON p.country_id = c.id
       WHERE p.external_id = $1
     `, [playerId]);
 
