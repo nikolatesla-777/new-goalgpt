@@ -68,7 +68,6 @@ interface NavItem {
     path: string;
     label: string;
     icon: React.ComponentType;
-    subItems?: NavItem[];
 }
 
 const navSections: { label: string; items: NavItem[] }[] = [
@@ -93,16 +92,10 @@ const navSections: { label: string; items: NavItem[] }[] = [
         label: 'Yonetim',
         items: [
             { path: '/admin/bots', label: 'Bot Kurallari', icon: BotsIcon },
-            {
-                path: '/admin/telegram',
-                label: 'Telegram Yayin',
-                icon: TelegramIcon,
-                subItems: [
-                    { path: '/admin/telegram/daily-lists', label: 'Gunluk Listeler', icon: TelegramIcon },
-                    { path: '/admin/daily-tips', label: 'Gunun Onerileri', icon: TelegramIcon },
-                    { path: '/admin/trends-analysis', label: 'Trend Analizi', icon: TelegramIcon },
-                ]
-            },
+            { path: '/admin/telegram', label: 'Telegram Yayin', icon: TelegramIcon },
+            { path: '/admin/telegram/daily-lists', label: 'Gunluk Listeler', icon: TelegramIcon },
+            { path: '/admin/daily-tips', label: 'Gunun Onerileri', icon: TelegramIcon },
+            { path: '/admin/trends-analysis', label: 'Trend Analizi', icon: TelegramIcon },
             { path: '/admin/league-standings', label: 'Puan Durumu', icon: TelegramIcon },
             { path: '/admin/player-stats', label: 'Oyuncu Istatistikleri', icon: TelegramIcon },
             { path: '/admin/settings', label: 'Ayarlar', icon: SettingsIcon },
@@ -112,37 +105,12 @@ const navSections: { label: string; items: NavItem[] }[] = [
 
 export function AdminLayout() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
-    const [expandedItems, setExpandedItems] = React.useState<string[]>([]);
     const location = useLocation();
 
     // Close mobile menu when route changes
     React.useEffect(() => {
         setIsMobileMenuOpen(false);
     }, [location.pathname]);
-
-    // Auto-expand parent if sub-item is active
-    React.useEffect(() => {
-        navSections.forEach(section => {
-            section.items.forEach(item => {
-                if (item.subItems) {
-                    const hasActiveSubItem = item.subItems.some(sub =>
-                        location.pathname === sub.path || location.pathname.startsWith(sub.path + '/')
-                    );
-                    if (hasActiveSubItem && !expandedItems.includes(item.path)) {
-                        setExpandedItems(prev => [...prev, item.path]);
-                    }
-                }
-            });
-        });
-    }, [location.pathname]);
-
-    const toggleExpand = (path: string) => {
-        setExpandedItems(prev =>
-            prev.includes(path)
-                ? prev.filter(p => p !== path)
-                : [...prev, path]
-        );
-    };
 
     return (
         <div className="admin-container">
@@ -190,66 +158,18 @@ export function AdminLayout() {
                         <div key={section.label} className="admin-nav-section">
                             <div className="admin-nav-label">{section.label}</div>
                             {section.items.map((item) => (
-                                <div key={item.path}>
-                                    {item.subItems ? (
-                                        // Parent item with sub-menu
-                                        <>
-                                            <button
-                                                onClick={() => toggleExpand(item.path)}
-                                                className="admin-nav-item admin-nav-parent"
-                                            >
-                                                <item.icon />
-                                                <span>{item.label}</span>
-                                                <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    strokeWidth={2}
-                                                    stroke="currentColor"
-                                                    style={{
-                                                        width: 16,
-                                                        height: 16,
-                                                        marginLeft: 'auto',
-                                                        transform: expandedItems.includes(item.path) ? 'rotate(180deg)' : 'rotate(0deg)',
-                                                        transition: 'transform 0.2s'
-                                                    }}
-                                                >
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                                                </svg>
-                                            </button>
-                                            {expandedItems.includes(item.path) && (
-                                                <div className="admin-nav-submenu">
-                                                    {item.subItems.map((subItem) => (
-                                                        <NavLink
-                                                            key={subItem.path}
-                                                            to={subItem.path}
-                                                            className={({ isActive }) =>
-                                                                `admin-nav-item admin-nav-subitem ${isActive ? 'active' : ''}`
-                                                            }
-                                                            onClick={() => setIsMobileMenuOpen(false)}
-                                                        >
-                                                            <subItem.icon />
-                                                            <span>{subItem.label}</span>
-                                                        </NavLink>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </>
-                                    ) : (
-                                        // Regular nav item
-                                        <NavLink
-                                            to={item.path}
-                                            end={item.path === '/'}
-                                            className={({ isActive }) =>
-                                                `admin-nav-item ${isActive ? 'active' : ''}`
-                                            }
-                                            onClick={() => setIsMobileMenuOpen(false)}
-                                        >
-                                            <item.icon />
-                                            <span>{item.label}</span>
-                                        </NavLink>
-                                    )}
-                                </div>
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    end={item.path === '/'}
+                                    className={({ isActive }) =>
+                                        `admin-nav-item ${isActive ? 'active' : ''}`
+                                    }
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                >
+                                    <item.icon />
+                                    <span>{item.label}</span>
+                                </NavLink>
                             ))}
                         </div>
                     ))}
