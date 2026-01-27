@@ -14,4 +14,7 @@ export { TelegramPublisher } from './TelegramPublisher';
 export { TelegramMatchCard } from './TelegramMatchCard';
 export { TelegramPreview } from './TelegramPreview';
 export { TelegramDailyLists } from './TelegramDailyLists';
+export { default as DailyTipsPage } from './DailyTipsPage';
+export { default as LeagueStandingsPage } from './LeagueStandingsPage';
+export { default as PlayerSearchPage } from './PlayerSearchPage';
 
