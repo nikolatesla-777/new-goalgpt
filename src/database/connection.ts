@@ -90,6 +90,15 @@ export async function safeQuery<T = any>(
     } catch (err: any) {
       lastError = err;
 
+      // Log query details on error
+      if (err.message?.includes('uuid')) {
+        logger.error('[DB] UUID Error - Query:', {
+          error: err.message,
+          query_preview: text.substring(0, 500),
+          params: params?.slice(0, 5)
+        });
+      }
+
       // Release client with error flag (destroys connection)
       if (client) {
         try {
