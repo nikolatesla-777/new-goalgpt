@@ -236,11 +236,16 @@ class FootyStatsAPIClient {
   private getApiKey(): string {
     if (!this.apiKey) {
       // Ensure .env is loaded before reading process.env
-      dotenv.config();
+      // Use explicit path to handle different working directories
+      const path = require('path');
+      const envPath = path.resolve(process.cwd(), '.env');
+      dotenv.config({ path: envPath });
 
       this.apiKey = process.env.FOOTYSTATS_API_KEY || '';
       if (!this.apiKey) {
         logger.error('[FootyStatsAPI] ⚠️ API KEY IS EMPTY! Check .env file');
+        logger.error('[FootyStatsAPI] CWD:', process.cwd());
+        logger.error('[FootyStatsAPI] .env path:', envPath);
         logger.error('[FootyStatsAPI] process.env.FOOTYSTATS_API_KEY =', process.env.FOOTYSTATS_API_KEY);
       } else {
         logger.info(`[FootyStatsAPI] ✅ API key loaded (${this.apiKey.substring(0, 10)}...)`);
