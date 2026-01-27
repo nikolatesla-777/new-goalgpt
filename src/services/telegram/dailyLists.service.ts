@@ -585,6 +585,8 @@ export async function generateDailyLists(): Promise<DailyList[]> {
 
   } catch (error: any) {
     logger.error('[TelegramDailyLists] ❌ Error generating lists:', error);
+    console.error('[DEBUG] generateDailyLists error:', error.message);
+    console.error('[DEBUG] Error stack:', error.stack?.substring(0, 1000));
     throw error;
   }
 }
