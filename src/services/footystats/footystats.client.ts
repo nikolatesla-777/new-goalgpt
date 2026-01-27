@@ -239,14 +239,18 @@ class FootyStatsAPIClient {
       // Use explicit path to handle different working directories
       const path = require('path');
       const envPath = path.resolve(process.cwd(), '.env');
-      dotenv.config({ path: envPath });
+      const result = dotenv.config({ path: envPath });
+
+      console.log('[FootyStats getApiKey] CWD:', process.cwd());
+      console.log('[FootyStats getApiKey] .env path:', envPath);
+      console.log('[FootyStats getApiKey] dotenv result:', result.error ? `ERROR: ${result.error.message}` : 'SUCCESS');
 
       this.apiKey = process.env.FOOTYSTATS_API_KEY || '';
+      console.log('[FootyStats getApiKey] API key length:', this.apiKey.length);
+      console.log('[FootyStats getApiKey] API key preview:', this.apiKey ? this.apiKey.substring(0, 15) + '...' : 'EMPTY');
+
       if (!this.apiKey) {
         logger.error('[FootyStatsAPI] ⚠️ API KEY IS EMPTY! Check .env file');
-        logger.error('[FootyStatsAPI] CWD:', process.cwd());
-        logger.error('[FootyStatsAPI] .env path:', envPath);
-        logger.error('[FootyStatsAPI] process.env.FOOTYSTATS_API_KEY =', process.env.FOOTYSTATS_API_KEY);
       } else {
         logger.info(`[FootyStatsAPI] ✅ API key loaded (${this.apiKey.substring(0, 10)}...)`);
       }
