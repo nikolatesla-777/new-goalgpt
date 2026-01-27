@@ -45,9 +45,10 @@ export async function getTodaysMatches() {
 
 /**
  * Get daily tips (high confidence BTTS and Over 2.5 picks)
+ * Note: Uses /today endpoint which returns the same data
  */
 export async function getDailyTips() {
-  const response = await fetch(`${API_BASE}/footystats/daily-tips`);
+  const response = await fetch(`${API_BASE}/footystats/today`);
   if (!response.ok) {
     throw new Error('Failed to fetch daily tips');
   }
