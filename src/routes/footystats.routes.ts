@@ -412,7 +412,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       const todayUnix = Math.floor(today.getTime() / 1000);
 
       // Filter for high confidence picks (>70%) and today's matches
-      const bttsPicks = (bttsData.data || [])
+      const bttsPicks = (bttsData.data?.top_fixtures?.data || [])
         .filter((match: any) =>
           match.btts_percentage >= 70 &&
           match.date_unix >= todayUnix &&
@@ -429,7 +429,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           tip_type: 'btts'
         }));
 
-      const over25Picks = (over25Data.data || [])
+      const over25Picks = (over25Data.data?.top_fixtures?.data || [])
         .filter((match: any) =>
           match.over25_percentage >= 70 &&
           match.date_unix >= todayUnix &&
