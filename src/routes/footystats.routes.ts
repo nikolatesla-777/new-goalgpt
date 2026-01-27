@@ -737,7 +737,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
   // Get today's matches with FootyStats data
   fastify.get('/footystats/today', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const today = new Date(); // Date object
 
       // Try to get cached data first
       const cached = await getCachedTodayMatches(today);
@@ -762,7 +762,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
       // Bulk fetch team logos
       const teamLogosResult = await pool.query(
-        `SELECT name, logo_url FROM ts_teams WHERE name = ANY($1::text[])`,
+        `SELECT name, logo_url FROM ts_teams WHERE name = ANY($1)`,
         [uniqueTeamNames]
       );
 
@@ -806,7 +806,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
          INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
          INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
          INNER JOIN ts_competitions c ON m.competition_id = c.external_id
-         WHERE (t1.name = ANY($1::text[]) OR t2.name = ANY($1::text[]))
+         WHERE (t1.name = ANY($1) OR t2.name = ANY($1))
            AND m.match_time >= extract(epoch from NOW() - INTERVAL '7 days')::bigint
            AND m.match_time <= extract(epoch from NOW() + INTERVAL '7 days')::bigint`,
         [uniqueTeamNames]
