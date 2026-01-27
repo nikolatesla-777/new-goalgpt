@@ -1075,8 +1075,20 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
     } catch (error: any) {
       logger.error('[TelegramDailyLists] ❌ Error fetching today\'s lists:', error);
+
+      // Force output to stderr for debugging
+      const errorDetails = `
+==================================
+[CRITICAL ERROR] Daily Lists API Failed
+Error: ${error.message}
+Stack: ${error.stack || 'No stack trace'}
+==================================
+`;
+      process.stderr.write(errorDetails);
+      console.log(errorDetails); // Also try stdout
       console.error('[DEBUG] Daily lists error:', error.message);
       console.error('[DEBUG] Stack:', error.stack?.substring(0, 500));
+
       return reply.status(500).send({ error: error.message });
     }
   });
