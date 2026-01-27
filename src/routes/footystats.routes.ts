@@ -398,27 +398,18 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
   });
 
   // Get daily tips (all today's matches with predictions)
+  // Note: This is essentially an alias for /today endpoint with same functionality
   fastify.get('/footystats/daily-tips', async (request: FastifyRequest, reply: FastifyReply) => {
-    console.log('[DEBUG] Daily tips endpoint called!');
     try {
-      console.log('[DEBUG] Inside try block');
-      logger.info('[FootyStats] Fetching daily tips...');
-
       const today = new Date();
 
-      // Get cached data first
+      // Try to get cached data first
       const cached = await getCachedTodayMatches(today);
       if (cached) {
         logger.info(`[FootyStats] Daily tips - CACHE HIT (${cached.length} matches)`);
-        return {
-          count: cached.length,
-          matches: cached,
-          cached: true,
-          date: today.toISOString().split('T')[0]
-        };
+        return { count: cached.length, matches: cached, cached: true };
       }
 
-      // Fetch from API if not cached
       logger.info('[FootyStats] Daily tips - CACHE MISS, fetching from API');
       const response = await footyStatsAPI.getTodaysMatches();
 
@@ -551,12 +542,11 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         date: today.toISOString().split('T')[0]
       };
     } catch (error: any) {
-      console.log('[DEBUG] Catch block - error:', error.message);
-      console.log('[DEBUG] Full error:', JSON.stringify(error, null, 2));
       logger.error('[FootyStats] Daily tips error:', error);
       return reply.status(500).send({
         success: false,
-        error: 'Failed to fetch daily tips'
+        error: 'Failed to fetch daily tips',
+        details: error.message
       });
     }
   });
