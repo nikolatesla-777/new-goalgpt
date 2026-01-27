@@ -127,10 +127,10 @@ export class MatchDatabaseService {
           p.created_at as ai_created_at,
           p.resulted_at` : ''}
         FROM ts_matches m
-        LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
-        LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
-        LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-        LEFT JOIN ts_countries co ON c.country_id = co.external_id${includeAI ? `
+        LEFT JOIN ts_teams ht ON m.home_team_id::text = ht.external_id::text
+        LEFT JOIN ts_teams at ON m.away_team_id::text = at.external_id::text
+        LEFT JOIN ts_competitions c ON m.competition_id::text = c.external_id::text
+        LEFT JOIN ts_countries co ON c.country_id::text = co.external_id::text${includeAI ? `
         -- PHASE 1: LEFT JOIN LATERAL for latest AI prediction per match
         LEFT JOIN LATERAL (
           SELECT id, canonical_bot_name, prediction, prediction_threshold, result,
@@ -362,10 +362,10 @@ export class MatchDatabaseService {
           p.created_at as ai_created_at,
           p.resulted_at` : ''}
         FROM ts_matches m
-        LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
-        LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
-        LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-        LEFT JOIN ts_countries co ON c.country_id = co.external_id${includeAI ? `
+        LEFT JOIN ts_teams ht ON m.home_team_id::text = ht.external_id::text
+        LEFT JOIN ts_teams at ON m.away_team_id::text = at.external_id::text
+        LEFT JOIN ts_competitions c ON m.competition_id::text = c.external_id::text
+        LEFT JOIN ts_countries co ON c.country_id::text = co.external_id::text${includeAI ? `
         -- PHASE 1: LEFT JOIN LATERAL for latest AI prediction per match
         LEFT JOIN LATERAL (
           SELECT id, canonical_bot_name, prediction, prediction_threshold, result,
@@ -588,10 +588,10 @@ export class MatchDatabaseService {
           c.country_id as competition_country_id,
           co.name as competition_country_name
         FROM ts_matches m
-        LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
-        LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
-        LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-        LEFT JOIN ts_countries co ON c.country_id = co.external_id
+        LEFT JOIN ts_teams ht ON m.home_team_id::text = ht.external_id::text
+        LEFT JOIN ts_teams at ON m.away_team_id::text = at.external_id::text
+        LEFT JOIN ts_competitions c ON m.competition_id::text = c.external_id::text
+        LEFT JOIN ts_countries co ON c.country_id::text = co.external_id::text
         WHERE m.status_id = 1  -- NOT_STARTED
           AND m.match_time <= $1  -- match_time has passed
           AND m.match_time >= $2  -- Today's matches (TSİ-based) or maxMinutesAgo window

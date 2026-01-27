@@ -150,9 +150,9 @@ export async function getMatchDetails(matchId: string): Promise<MatchDetailsRow[
                 at.name as away_team_name, at.logo_url as away_logo,
                 c.name as league_name
          FROM ts_matches m
-         LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id::varchar
-         LEFT JOIN ts_teams at ON m.away_team_id = at.external_id::varchar
-         LEFT JOIN ts_competitions c ON m.competition_id = c.id
+         LEFT JOIN ts_teams ht ON m.home_team_id::text = ht.external_id::text
+         LEFT JOIN ts_teams at ON m.away_team_id::text = at.external_id::text
+         LEFT JOIN ts_competitions c ON m.competition_id::text = c.id::text
          WHERE m.external_id = $1`,
         [matchId]
     );
