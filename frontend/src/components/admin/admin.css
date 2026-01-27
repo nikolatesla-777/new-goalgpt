@@ -147,6 +147,28 @@
   opacity: 1;
 }
 
+/* Sub-menu styles */
+.admin-nav-parent {
+  position: relative;
+}
+
+.admin-nav-submenu {
+  padding-left: 32px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.admin-nav-subitem {
+  font-size: 13px;
+  padding: 10px 12px;
+  margin-bottom: 2px;
+}
+
+.admin-nav-subitem svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Main content */
 .admin-main {
   flex: 1;
