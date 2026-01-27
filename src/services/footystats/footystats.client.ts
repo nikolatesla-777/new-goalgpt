@@ -203,7 +203,7 @@ class FootyStatsAPIClient {
 
   private axiosInstance: AxiosInstance;
   private rateLimiter: FootyStatsRateLimiter;
-  private apiKey: string;
+  private apiKey: string | undefined; // undefined until first API call
   private isInitialized = false;
 
   // Metrics
@@ -211,8 +211,8 @@ class FootyStatsAPIClient {
   private errorCount = 0;
 
   private constructor() {
-    // IMPORTANT: Don't load API key here - it will be loaded lazily in getApiKey()
-    this.apiKey = '';
+    // IMPORTANT: Don't set apiKey here - it will be loaded lazily in getApiKey()
+    // Leave it undefined so getApiKey() will load it on first use
 
     this.axiosInstance = axios.create({
       baseURL: 'https://api.football-data-api.com',
