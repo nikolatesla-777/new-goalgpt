@@ -18,6 +18,7 @@ interface Match {
     over25: number;
     avg: number;
     over15: number;
+    ht_over05: number;
     corners: number;
     cards: number;
   };
@@ -121,6 +122,8 @@ function MatchCard({ match }: { match: Match }) {
   // Highlight high confidence predictions
   const isHighBTTS = match.potentials.btts >= 70;
   const isHighOver25 = match.potentials.over25 >= 70;
+  const isHighOver15 = match.potentials.over15 >= 70;
+  const isHighHtOver05 = match.potentials.ht_over05 >= 70;
 
   return (
     <div className="bg-gray-800 rounded-xl p-5 hover:bg-gray-750 transition-colors border border-gray-700/50">
@@ -168,7 +171,7 @@ function MatchCard({ match }: { match: Match }) {
       </div>
 
       {/* Predictions Grid */}
-      <div className="grid grid-cols-4 gap-2 mb-3">
+      <div className="grid grid-cols-5 gap-2 mb-3">
         {/* BTTS */}
         <div className={`text-center p-2 rounded ${isHighBTTS ? 'bg-green-500/20 border border-green-500/30' : 'bg-gray-700/50'}`}>
           <div className="text-xs text-gray-400 mb-1">BTTS</div>
@@ -179,21 +182,31 @@ function MatchCard({ match }: { match: Match }) {
 
         {/* Over 2.5 */}
         <div className={`text-center p-2 rounded ${isHighOver25 ? 'bg-blue-500/20 border border-blue-500/30' : 'bg-gray-700/50'}`}>
-          <div className="text-xs text-gray-400 mb-1">O2.5</div>
+          <div className="text-xs text-gray-400 mb-1">2.5Ü</div>
           <div className={`text-lg font-bold ${isHighOver25 ? 'text-blue-400' : 'text-white'}`}>
             {match.potentials.over25}%
           </div>
         </div>
 
-        {/* AVG Goals */}
-        <div className="text-center p-2 rounded bg-gray-700/50">
-          <div className="text-xs text-gray-400 mb-1">AVG</div>
-          <div className="text-lg font-bold text-purple-400">{match.potentials.avg}</div>
+        {/* Over 1.5 */}
+        <div className={`text-center p-2 rounded ${isHighOver15 ? 'bg-purple-500/20 border border-purple-500/30' : 'bg-gray-700/50'}`}>
+          <div className="text-xs text-gray-400 mb-1">1.5Ü</div>
+          <div className={`text-lg font-bold ${isHighOver15 ? 'text-purple-400' : 'text-white'}`}>
+            {match.potentials.over15}%
+          </div>
+        </div>
+
+        {/* First Half Over 0.5 */}
+        <div className={`text-center p-2 rounded ${isHighHtOver05 ? 'bg-cyan-500/20 border border-cyan-500/30' : 'bg-gray-700/50'}`}>
+          <div className="text-xs text-gray-400 mb-1">İY 0.5Ü</div>
+          <div className={`text-lg font-bold ${isHighHtOver05 ? 'text-cyan-400' : 'text-white'}`}>
+            {match.potentials.ht_over05}%
+          </div>
         </div>
 
         {/* Corners */}
         <div className="text-center p-2 rounded bg-gray-700/50">
-          <div className="text-xs text-gray-400 mb-1">Corners</div>
+          <div className="text-xs text-gray-400 mb-1">Korner</div>
           <div className="text-lg font-bold text-orange-400">{match.potentials.corners.toFixed(1)}</div>
         </div>
       </div>
@@ -215,8 +228,8 @@ function MatchCard({ match }: { match: Match }) {
       )}
 
       {/* High confidence badge */}
-      {(isHighBTTS || isHighOver25) && (
-        <div className="mt-3 flex gap-2">
+      {(isHighBTTS || isHighOver25 || isHighOver15 || isHighHtOver05) && (
+        <div className="mt-3 flex gap-2 flex-wrap">
           {isHighBTTS && (
             <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full font-semibold">
               🔥 High BTTS
@@ -224,7 +237,17 @@ function MatchCard({ match }: { match: Match }) {
           )}
           {isHighOver25 && (
             <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full font-semibold">
-              🔥 High O2.5
+              🔥 High 2.5Ü
+            </span>
+          )}
+          {isHighOver15 && (
+            <span className="text-xs px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full font-semibold">
+              🔥 High 1.5Ü
+            </span>
+          )}
+          {isHighHtOver05 && (
+            <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-full font-semibold">
+              🔥 High İY 0.5Ü
             </span>
           )}
         </div>

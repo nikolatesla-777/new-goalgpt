@@ -519,6 +519,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             over25: m.over25_potential,
             avg: m.avg_potential,
             over15: m.o15_potential || (m.avg_potential > 1.5 ? Math.round(m.avg_potential * 40) : 60),
+            ht_over05: m.o05HT_potential || 0,
             corners: m.corners_potential,
             cards: m.cards_potential,
             shots: m.shots_potential,
