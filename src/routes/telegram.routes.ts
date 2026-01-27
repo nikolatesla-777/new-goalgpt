@@ -26,7 +26,7 @@ import { validateMatchStateForPublish } from '../services/telegram/validators/ma
 import { fetchMatchStateForPublish } from '../services/telegram/matchStateFetcher.service';
 import { validatePicks } from '../services/telegram/validators/pickValidator';
 import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
-import { getDailyLists, refreshDailyLists, formatDailyListMessage } from '../services/telegram/dailyLists.service';
+import { getDailyLists, getDailyListsByDateRange, refreshDailyLists, formatDailyListMessage } from '../services/telegram/dailyLists.service';
 
 interface PublishRequest {
   Body: {
@@ -827,8 +827,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           m.current_time, m.match_time,
           t1.name as home_team_name, t2.name as away_team_name
         FROM ts_matches m
-        INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
-        INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+        INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id::varchar
+        INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id::varchar
         WHERE m.status_id IN (2, 3, 4, 5, 7, 8)
           AND (${conditions.join(' OR ')})
       `;
@@ -913,8 +913,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
                   m.home_scores, m.away_scores,
                   t1.name as home_team_name, t2.name as away_team_name
            FROM ts_matches m
-           INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
-           INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+           INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id::varchar
+           INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id::varchar
            WHERE (LOWER(t1.name) LIKE $1 OR LOWER(t1.name) LIKE $2)
              AND (LOWER(t2.name) LIKE $3 OR LOWER(t2.name) LIKE $4)
              AND m.match_time >= $5
@@ -1075,6 +1075,106 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
     } catch (error: any) {
       logger.error('[TelegramDailyLists] ❌ Error fetching today\'s lists:', error);
+      return reply.status(500).send({ error: error.message });
+    }
+  });
+
+  /**
+   * GET /telegram/daily-lists/range?start=YYYY-MM-DD&end=YYYY-MM-DD
+   * Get daily lists for a date range (historical data)
+   *
+   * Query Parameters:
+   * - start: Start date (YYYY-MM-DD format, required)
+   * - end: End date (YYYY-MM-DD format, required)
+   *
+   * Returns lists grouped by date with performance data
+   */
+  fastify.get('/telegram/daily-lists/range', async (request, reply) => {
+    try {
+      const { start, end } = request.query as { start?: string; end?: string };
+
+      if (!start || !end) {
+        return reply.status(400).send({
+          error: 'Both start and end date parameters are required (YYYY-MM-DD format)'
+        });
+      }
+
+      logger.info(`[TelegramDailyLists] 📅 Fetching lists from ${start} to ${end}...`);
+
+      const listsByDate = await getDailyListsByDateRange(start, end);
+
+      if (Object.keys(listsByDate).length === 0) {
+        return {
+          success: true,
+          date_range: { start, end },
+          dates_count: 0,
+          data: [],
+          message: 'No lists found for this date range',
+        };
+      }
+
+      // Collect all unique matches for bulk live score query
+      const allMatches = new Map<number, any>();
+      Object.values(listsByDate).flat().forEach(list => {
+        list.matches.forEach(m => {
+          allMatches.set(m.match.fs_id, m.match);
+        });
+      });
+
+      // Bulk query: Get live scores for all matches
+      const liveScoresMap = await getLiveScoresForMatches(Array.from(allMatches.values()));
+
+      // Calculate performance for each date's lists
+      const formattedData = await Promise.all(
+        Object.entries(listsByDate).map(async ([date, lists]) => {
+          const listsWithPerformance = await Promise.all(
+            lists.map(async (list) => {
+              const performance = await calculateListPerformance(list);
+              return {
+                market: list.market,
+                title: list.title,
+                emoji: list.emoji,
+                matches_count: list.matches.length,
+                avg_confidence: Math.round(
+                  list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
+                ),
+                matches: list.matches.map(m => ({
+                  fs_id: m.match.fs_id,
+                  home_name: m.match.home_name,
+                  away_name: m.match.away_name,
+                  league_name: m.match.league_name,
+                  date_unix: m.match.date_unix,
+                  confidence: m.confidence,
+                  reason: m.reason,
+                  potentials: m.match.potentials,
+                  xg: m.match.xg,
+                  odds: m.match.odds,
+                  live_score: liveScoresMap.get(m.match.fs_id) || null,
+                })),
+                preview: formatDailyListMessage(list),
+                generated_at: list.generated_at,
+                performance,
+              };
+            })
+          );
+
+          return {
+            date,
+            lists: listsWithPerformance,
+            lists_count: lists.length,
+          };
+        })
+      );
+
+      return {
+        success: true,
+        date_range: { start, end },
+        dates_count: Object.keys(listsByDate).length,
+        data: formattedData,
+      };
+
+    } catch (error: any) {
+      logger.error('[TelegramDailyLists] ❌ Range query failed:', error);
       return reply.status(500).send({ error: error.message });
     }
   });

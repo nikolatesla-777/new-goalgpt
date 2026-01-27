@@ -427,12 +427,25 @@ export async function generateDailyLists(): Promise<DailyList[]> {
     const response = await footyStatsAPI.getTodaysMatches();
     const rawMatches = response.data || [];  // ✅ FIX: Use response.data, not response.matches
 
+    // ✅ DEBUG: Log available fields in FootyStats response
+    if (rawMatches.length > 0) {
+      const sample: any = rawMatches[0];
+      logger.info(`[TelegramDailyLists] 🔍 Available FootyStats fields:`, Object.keys(sample));
+      logger.info(`[TelegramDailyLists] 🔍 League-related fields:`, {
+        competition_name: sample.competition_name,
+        league_name: sample.league_name,
+        competition_id: sample.competition_id,
+        season_id: sample.season_id,
+        country: sample.country,
+      });
+    }
+
     // ✅ FIX: Transform FootyStats raw data to expected structure
     const allMatches: FootyStatsMatch[] = rawMatches.map((m: any) => ({
       fs_id: m.id,
       home_name: m.home_name,
       away_name: m.away_name,
-      league_name: m.competition_name || m.league_name || 'Unknown',
+      league_name: m.competition_name || m.league_name || m.country || 'Unknown',
       date_unix: m.date_unix,
       status: m.status,
       potentials: {

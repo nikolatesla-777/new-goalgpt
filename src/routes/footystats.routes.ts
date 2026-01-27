@@ -397,62 +397,155 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
     }
   });
 
-  // Get daily tips (high confidence BTTS and Over 2.5 predictions)
+  // Get daily tips (all today's matches with predictions)
   fastify.get('/footystats/daily-tips', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       logger.info('[FootyStats] Fetching daily tips...');
 
-      // Fetch BTTS and Over25 stats in parallel
-      const [bttsData, over25Data] = await Promise.all([
-        footyStatsAPI.getBTTSStats(),
-        footyStatsAPI.getOver25Stats()
-      ]);
-
       const today = new Date();
-      const todayUnix = Math.floor(today.getTime() / 1000);
 
-      // Filter for high confidence picks (>70%) and today's matches
-      const bttsPicks = (bttsData.data?.top_fixtures?.data || [])
-        .filter((match: any) =>
-          match.btts_percentage >= 70 &&
-          match.date_unix >= todayUnix &&
-          match.date_unix < todayUnix + (24 * 60 * 60)
-        )
-        .slice(0, 10)
-        .map((m: any) => ({
+      // Get cached data first
+      const cached = await getCachedTodayMatches(today);
+      if (cached) {
+        logger.info(`[FootyStats] Daily tips - CACHE HIT (${cached.length} matches)`);
+        return {
+          count: cached.length,
+          matches: cached,
+          cached: true,
+          date: today.toISOString().split('T')[0]
+        };
+      }
+
+      // Fetch from API if not cached
+      logger.info('[FootyStats] Daily tips - CACHE MISS, fetching from API');
+      const response = await footyStatsAPI.getTodaysMatches();
+
+      if (!response.data || response.data.length === 0) {
+        return {
+          count: 0,
+          matches: [],
+          cached: false,
+          date: today.toISOString().split('T')[0]
+        };
+      }
+
+      // Helper: Get match data from TheSports DB (league + logos) - SINGLE QUERY
+      const { pool } = await import('../database/connection');
+
+      // Build team names list for bulk query
+      const allTeamNames = response.data.flatMap((m: any) => [m.home_name, m.away_name]);
+      const uniqueTeamNames = [...new Set(allTeamNames)];
+
+      // Bulk fetch team logos
+      const teamLogosResult = await pool.query(
+        `SELECT name, logo_url FROM ts_teams WHERE name = ANY($1)`,
+        [uniqueTeamNames]
+      );
+
+      const teamLogosMap = new Map<string, string>();
+      teamLogosResult.rows.forEach((row: any) => {
+        teamLogosMap.set(row.name.toLowerCase(), row.logo_url);
+      });
+
+      // Fuzzy fallback for teams not found - build fuzzy queries
+      const missingTeams = uniqueTeamNames.filter(name =>
+        !teamLogosMap.has(name.toLowerCase())
+      );
+
+      if (missingTeams.length > 0) {
+        // Build parameterized query to avoid SQL injection
+        const fuzzyConditions = missingTeams.map((name, index) => {
+          return `LOWER(name) LIKE $${index + 2}`;
+        }).join(' OR ');
+
+        const fuzzyParams = missingTeams.map(name => {
+          const firstWord = name.split(' ')[0];
+          return `%${firstWord.toLowerCase()}%`;
+        });
+
+        const fuzzyResult = await pool.query(
+          `SELECT name, logo_url FROM ts_teams WHERE ${fuzzyConditions} LIMIT $1`,
+          [missingTeams.length, ...fuzzyParams]
+        );
+
+        fuzzyResult.rows.forEach((row: any) => {
+          const matchingTeam = missingTeams.find(t =>
+            row.name.toLowerCase().includes(t.split(' ')[0].toLowerCase())
+          );
+          if (matchingTeam && !teamLogosMap.has(matchingTeam.toLowerCase())) {
+            teamLogosMap.set(matchingTeam.toLowerCase(), row.logo_url);
+          }
+        });
+      }
+
+      // Bulk fetch league names from ts_matches by team names
+      const leagueNamesResult = await pool.query(
+        `SELECT DISTINCT
+           t1.name as home_name,
+           t2.name as away_name,
+           c.name as league_name
+         FROM ts_matches m
+         INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
+         INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+         INNER JOIN ts_competitions c ON m.competition_id = c.external_id
+         WHERE (t1.name = ANY($1) OR t2.name = ANY($1))
+           AND m.match_time >= extract(epoch from NOW() - INTERVAL '7 days')::bigint
+           AND m.match_time <= extract(epoch from NOW() + INTERVAL '7 days')::bigint`,
+        [uniqueTeamNames]
+      );
+
+      const matchLeagueMap = new Map<string, string>();
+      leagueNamesResult.rows.forEach((row: any) => {
+        const key = `${row.home_name}|${row.away_name}`.toLowerCase();
+        matchLeagueMap.set(key, row.league_name);
+      });
+
+      // Map matches with logos and league names
+      const matches = response.data.map((m: any) => {
+        const matchKey = `${m.home_name}|${m.away_name}`.toLowerCase();
+        return {
           fs_id: m.id,
           home_name: m.home_name,
           away_name: m.away_name,
-          league: m.competition_name,
+          home_logo: teamLogosMap.get(m.home_name.toLowerCase()) || null,
+          away_logo: teamLogosMap.get(m.away_name.toLowerCase()) || null,
+          league_name: matchLeagueMap.get(matchKey) || m.competition_name,
+          country: m.country,
           date_unix: m.date_unix,
-          confidence: m.btts_percentage,
-          tip_type: 'btts'
-        }));
+          status: m.status,
+          score: `${m.homeGoalCount || 0}-${m.awayGoalCount || 0}`,
+          potentials: {
+            btts: m.btts_potential,
+            over25: m.over25_potential,
+            avg: m.avg_potential,
+            over15: m.o15_potential || (m.avg_potential > 1.5 ? Math.round(m.avg_potential * 40) : 60),
+            corners: m.corners_potential,
+            cards: m.cards_potential,
+            shots: m.shots_potential,
+            fouls: m.fouls_potential
+          },
+          xg: {
+            home: m.pre_match_xg_home,
+            away: m.pre_match_xg_away
+          },
+          odds: {
+            home: m.odds_ft_1,
+            draw: m.odds_ft_x,
+            away: m.odds_ft_2
+          }
+        };
+      });
 
-      const over25Picks = (over25Data.data?.top_fixtures?.data || [])
-        .filter((match: any) =>
-          match.over25_percentage >= 70 &&
-          match.date_unix >= todayUnix &&
-          match.date_unix < todayUnix + (24 * 60 * 60)
-        )
-        .slice(0, 10)
-        .map((m: any) => ({
-          fs_id: m.id,
-          home_name: m.home_name,
-          away_name: m.away_name,
-          league: m.competition_name,
-          date_unix: m.date_unix,
-          confidence: m.over25_percentage,
-          tip_type: 'over25'
-        }));
+      // Cache the result
+      await setCachedTodayMatches(matches, today);
 
-      logger.info(`[FootyStats] Daily tips found: ${bttsPicks.length} BTTS, ${over25Picks.length} Over2.5`);
+      logger.info(`[FootyStats] Daily tips found: ${matches.length} matches`);
 
       return {
-        success: true,
-        date: today.toISOString().split('T')[0],
-        btts_picks: bttsPicks,
-        over25_picks: over25Picks
+        count: matches.length,
+        matches: matches,
+        cached: false,
+        date: today.toISOString().split('T')[0]
       };
     } catch (error: any) {
       logger.error('[FootyStats] Daily tips error:', error);

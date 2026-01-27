@@ -128,6 +128,15 @@ const MARKET_CONFIG: Record<string, {
 // COMPONENT
 // ============================================================================
 
+// Date filter types
+type DateRange = 'today' | 'yesterday' | 'last7days' | 'thismonth';
+
+interface DateData {
+  date: string;
+  lists: DailyList[];
+  lists_count: number;
+}
+
 export function TelegramDailyLists() {
   const [lists, setLists] = useState<DailyList[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,10 +144,52 @@ export function TelegramDailyLists() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [expandedList, setExpandedList] = useState<string | null>(null);
+  const [selectedRange, setSelectedRange] = useState<DateRange>('today');
+  const [historicalData, setHistoricalData] = useState<DateData[]>([]);
+  const [isHistoricalView, setIsHistoricalView] = useState(false);
+
+  // Calculate date ranges in Istanbul timezone
+  const getDateRange = (range: DateRange): { start: string; end: string } => {
+    const today = new Date();
+    const istanbulOffset = 3 * 60; // UTC+3
+    const localOffset = today.getTimezoneOffset();
+    const offsetDiff = istanbulOffset + localOffset;
+    const istanbulDate = new Date(today.getTime() + offsetDiff * 60 * 1000);
+
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const end = formatDate(istanbulDate);
+
+    switch (range) {
+      case 'today':
+        return { start: end, end };
+      case 'yesterday':
+        const yesterday = new Date(istanbulDate);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = formatDate(yesterday);
+        return { start: yesterdayStr, end: yesterdayStr };
+      case 'last7days':
+        const sevenDaysAgo = new Date(istanbulDate);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        return { start: formatDate(sevenDaysAgo), end };
+      case 'thismonth':
+        const firstDayOfMonth = new Date(istanbulDate);
+        firstDayOfMonth.setDate(1);
+        return { start: formatDate(firstDayOfMonth), end };
+      default:
+        return { start: end, end };
+    }
+  };
 
   const fetchLists = async () => {
     setLoading(true);
     setError(null);
+    setIsHistoricalView(false);
     try {
       const response = await fetch('/api/telegram/daily-lists/today');
       if (!response.ok) throw new Error('API hatası');
@@ -148,6 +199,45 @@ export function TelegramDailyLists() {
       console.log('Markets:', data.lists.map(l => l.market));
       setLists(data.lists || []);
       setLastUpdated(data.generated_at);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchListsByDateRange = async (range: DateRange) => {
+    setLoading(true);
+    setError(null);
+    setSelectedRange(range);
+
+    try {
+      // For "today", use the original endpoint which auto-generates if needed
+      if (range === 'today') {
+        console.log('📅 Fetching today\'s lists...');
+        const response = await fetch('/api/telegram/daily-lists/today');
+        if (!response.ok) throw new Error('API hatası');
+
+        const data: DailyListsResponse = await response.json();
+        console.log('📊 Today\'s lists:', data.lists_count, 'lists');
+
+        setIsHistoricalView(false);
+        setLists(data.lists || []);
+        setLastUpdated(data.generated_at);
+      } else {
+        // For other ranges, use the range endpoint for historical data
+        const { start, end } = getDateRange(range);
+        console.log(`📅 Fetching lists from ${start} to ${end}`);
+
+        const response = await fetch(`/api/telegram/daily-lists/range?start=${start}&end=${end}`);
+        if (!response.ok) throw new Error('API hatası');
+
+        const data = await response.json();
+        console.log('📅 Historical data:', data);
+
+        setIsHistoricalView(true);
+        setHistoricalData(data.data || []);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -186,17 +276,22 @@ export function TelegramDailyLists() {
   };
 
   useEffect(() => {
-    fetchLists();
+    // Load today's data by default
+    fetchListsByDateRange('today');
   }, []);
 
-  // Calculate stats
-  const totalMatches = lists.reduce((sum, list) => sum + list.matches_count, 0);
-  const avgConfidence = lists.length > 0
-    ? Math.round(lists.reduce((sum, list) => sum + list.avg_confidence, 0) / lists.length)
+  // Calculate stats based on view mode
+  const displayLists = isHistoricalView
+    ? historicalData.flatMap(d => d.lists)
+    : lists;
+
+  const totalMatches = displayLists.reduce((sum, list) => sum + list.matches_count, 0);
+  const avgConfidence = displayLists.length > 0
+    ? Math.round(displayLists.reduce((sum, list) => sum + list.avg_confidence, 0) / displayLists.length)
     : 0;
 
   // Calculate total performance across all lists
-  const totalPerformance = lists.reduce((acc, list) => {
+  const totalPerformance = displayLists.reduce((acc, list) => {
     if (list.performance) {
       acc.total += list.performance.total;
       acc.won += list.performance.won;
@@ -209,6 +304,9 @@ export function TelegramDailyLists() {
   const overallWinRate = totalPerformance.total > 0
     ? Math.round((totalPerformance.won / totalPerformance.total) * 100)
     : 0;
+
+  // For stats card display
+  const statsListsCount = isHistoricalView ? historicalData.length : displayLists.length;
 
   if (loading) {
     return (
@@ -235,29 +333,83 @@ export function TelegramDailyLists() {
             <div>
               <h1 className="text-4xl font-bold text-gray-900 mb-2 flex items-center gap-3">
                 <span className="text-5xl">📊</span>
-                Günlük Telegram Listeleri
+                Günlük Liste Tahminleri
               </h1>
               <p className="text-gray-600 text-lg">
-                AI destekli tahmin listeleri - Her pazar için özelleştirilmiş
+                {isHistoricalView
+                  ? `Tarih aralığı: ${selectedRange === 'yesterday' ? 'Dün' : selectedRange === 'last7days' ? 'Son 7 Gün' : 'Bu Ay'}`
+                  : 'AI Destekli Listeler, Özenle Seçilmiş Tahminler'
+                }
               </p>
             </div>
-            <button
-              onClick={fetchLists}
-              disabled={loading}
-              className="group relative px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-            >
-              <div className="flex items-center gap-2">
-                <svg
-                  className={`w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors ${loading ? 'animate-spin' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+            <div className="flex items-center gap-3">
+              {/* Date Filter Buttons */}
+              <div className="flex items-center gap-2 bg-white border-2 border-gray-200 rounded-xl p-1">
+                <button
+                  onClick={() => fetchListsByDateRange('today')}
+                  disabled={loading}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    selectedRange === 'today'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="font-medium text-gray-700 group-hover:text-blue-600">Yenile</span>
+                  Bugün
+                </button>
+                <button
+                  onClick={() => fetchListsByDateRange('yesterday')}
+                  disabled={loading}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    selectedRange === 'yesterday'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Dün
+                </button>
+                <button
+                  onClick={() => fetchListsByDateRange('last7days')}
+                  disabled={loading}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    selectedRange === 'last7days'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Son 7 Gün
+                </button>
+                <button
+                  onClick={() => fetchListsByDateRange('thismonth')}
+                  disabled={loading}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    selectedRange === 'thismonth'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Bu Ay
+                </button>
               </div>
-            </button>
+
+              {/* Refresh Button */}
+              <button
+                onClick={fetchLists}
+                disabled={loading}
+                className="group relative px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+              >
+                <div className="flex items-center gap-2">
+                  <svg
+                    className={`w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors ${loading ? 'animate-spin' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="font-medium text-gray-700 group-hover:text-blue-600">Yenile</span>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Stats Cards */}
@@ -265,11 +417,18 @@ export function TelegramDailyLists() {
             <div className="bg-white rounded-2xl p-6 border-2 border-gray-100 hover:border-blue-200 hover:shadow-xl transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Toplam Liste</p>
-                  <p className="text-3xl font-bold text-gray-900">{lists.length}</p>
+                  <p className="text-sm font-medium text-gray-500 mb-1">
+                    {isHistoricalView ? 'Toplam Gün' : 'Toplam Liste'}
+                  </p>
+                  <p className="text-3xl font-bold text-gray-900">{statsListsCount}</p>
+                  {isHistoricalView && displayLists.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {displayLists.length} liste
+                    </p>
+                  )}
                 </div>
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-                  <span className="text-2xl">📋</span>
+                  <span className="text-2xl">{isHistoricalView ? '📅' : '📋'}</span>
                 </div>
               </div>
             </div>
@@ -371,8 +530,170 @@ export function TelegramDailyLists() {
           </div>
         )}
 
-        {/* Lists Grid */}
-        {lists.length === 0 ? (
+        {/* Historical View (Multiple Dates) */}
+        {isHistoricalView ? (
+          <div className="space-y-8">
+            {historicalData.length === 0 ? (
+              <div className="bg-white rounded-2xl shadow-xl p-16 text-center border-2 border-gray-100">
+                <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mx-auto mb-6 flex items-center justify-center">
+                  <svg className="w-12 h-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-700 mb-3">
+                  Seçilen tarih aralığında veri bulunamadı
+                </h3>
+                <p className="text-gray-500 text-lg max-w-md mx-auto">
+                  Bu tarih aralığında oluşturulmuş liste bulunmuyor.
+                </p>
+              </div>
+            ) : (
+              historicalData.map((dateData) => {
+                // Calculate stats for this date
+                const dateTotalMatches = dateData.lists.reduce((sum, list) => sum + list.matches_count, 0);
+                const dateAvgConfidence = dateData.lists.length > 0
+                  ? Math.round(dateData.lists.reduce((sum, list) => sum + list.avg_confidence, 0) / dateData.lists.length)
+                  : 0;
+                const dateTotalPerformance = dateData.lists.reduce((acc, list) => {
+                  if (list.performance) {
+                    acc.total += list.performance.total;
+                    acc.won += list.performance.won;
+                    acc.lost += list.performance.lost;
+                    acc.pending += list.performance.pending;
+                  }
+                  return acc;
+                }, { total: 0, won: 0, lost: 0, pending: 0 });
+                const dateWinRate = dateTotalPerformance.total > 0
+                  ? Math.round((dateTotalPerformance.won / dateTotalPerformance.total) * 100)
+                  : 0;
+
+                return (
+                  <div key={dateData.date} className="space-y-4">
+                    {/* Date Header */}
+                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-3xl font-bold mb-2">
+                            📅 {new Date(dateData.date + 'T12:00:00').toLocaleDateString('tr-TR', {
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </h2>
+                          <p className="text-blue-100">
+                            {dateData.lists_count} liste • {dateTotalMatches} maç • Ortalama Güven: {dateAvgConfidence}%
+                          </p>
+                        </div>
+                        {dateTotalPerformance.total > 0 && (
+                          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-xl px-6 py-3">
+                            <p className="text-sm font-medium opacity-90 mb-1">Performans</p>
+                            <p className="text-3xl font-bold">
+                              {dateTotalPerformance.won}/{dateTotalPerformance.total}
+                            </p>
+                            <p className="text-sm mt-1">
+                              {dateWinRate}% {dateWinRate >= 70 ? '✅' : dateWinRate >= 50 ? '⚠️' : '❌'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lists Grid for this date */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {dateData.lists.map((list) => {
+                        const config = MARKET_CONFIG[list.market];
+
+                        return (
+                          <div
+                            key={`${dateData.date}-${list.market}`}
+                            className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border-2 border-gray-100 hover:border-gray-200"
+                          >
+                            {/* Card Header */}
+                            <div className={`bg-gradient-to-r ${config.gradient} p-6 text-white relative overflow-hidden`}>
+                              <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
+                              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white opacity-10 rounded-full -ml-12 -mb-12"></div>
+
+                              <div className="relative z-10">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-4xl">{config.icon}</span>
+                                    <div>
+                                      <h3 className="text-xl font-bold">{config.label}</h3>
+                                      <p className="text-sm opacity-90">{list.matches_count} Maç Seçildi</p>
+                                    </div>
+                                  </div>
+                                  <div className="bg-white bg-opacity-25 backdrop-blur-sm rounded-xl px-4 py-2">
+                                    <p className="text-xs font-medium opacity-90">Ortalama Güven</p>
+                                    <p className="text-2xl font-bold">{list.avg_confidence}%</p>
+                                  </div>
+                                </div>
+
+                                {/* Confidence Bar */}
+                                <div className="bg-white bg-opacity-20 rounded-full h-2 overflow-hidden">
+                                  <div
+                                    className="bg-white h-full rounded-full transition-all duration-1000"
+                                    style={{ width: `${list.avg_confidence}%` }}
+                                  ></div>
+                                </div>
+
+                                {/* Performance Stats (if available) */}
+                                {list.performance && list.performance.total > 0 && (
+                                  <div className="mt-3 flex items-center gap-3 text-sm">
+                                    <div className="bg-white bg-opacity-25 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-2">
+                                      <span className="font-medium opacity-90">Performans:</span>
+                                      <span className="font-bold">
+                                        {list.performance.won}/{list.performance.total}
+                                      </span>
+                                      {list.performance.pending === 0 && (
+                                        <span className="text-xs">
+                                          ({list.performance.win_rate}% {list.performance.win_rate >= 70 ? '✅' : list.performance.win_rate >= 50 ? '⚠️' : '❌'})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Summary View (no expand/collapse for historical) */}
+                            <div className="p-6">
+                              <div className="text-sm text-gray-600 mb-3">
+                                {list.matches.slice(0, 3).map((match) => (
+                                  <div key={match.fs_id} className="mb-2 pb-2 border-b border-gray-100 last:border-0">
+                                    <p className="font-medium text-gray-900">
+                                      {match.home_name} vs {match.away_name}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      {match.league_name} • Güven: {match.confidence}%
+                                      {match.live_score && (
+                                        <span className="ml-2 font-bold text-blue-600">
+                                          {match.live_score.home}-{match.live_score.away}
+                                        </span>
+                                      )}
+                                    </p>
+                                  </div>
+                                ))}
+                                {list.matches.length > 3 && (
+                                  <p className="text-xs text-gray-400 mt-2 text-center">
+                                    ... ve {list.matches.length - 3} maç daha
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : (
+          /* Normal Lists Grid (Today View) */
+          <>
+            {lists.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-xl p-16 text-center border-2 border-gray-100">
             <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mx-auto mb-6 flex items-center justify-center">
               <svg className="w-12 h-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -440,12 +761,6 @@ export function TelegramDailyLists() {
                               </span>
                             )}
                           </div>
-                          {list.performance.pending > 0 && (
-                            <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-1 text-xs">
-                              <span className="animate-pulse">⏳</span>
-                              <span>{list.performance.pending} bekliyor</span>
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
@@ -583,6 +898,8 @@ export function TelegramDailyLists() {
               );
             })}
           </div>
+        )}
+          </>
         )}
       </div>
     </div>
