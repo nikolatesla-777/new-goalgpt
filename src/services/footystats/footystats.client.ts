@@ -235,9 +235,13 @@ class FootyStatsAPIClient {
    */
   private getApiKey(): string {
     if (!this.apiKey) {
+      // Ensure .env is loaded before reading process.env
+      dotenv.config();
+
       this.apiKey = process.env.FOOTYSTATS_API_KEY || '';
       if (!this.apiKey) {
         logger.error('[FootyStatsAPI] ⚠️ API KEY IS EMPTY! Check .env file');
+        logger.error('[FootyStatsAPI] process.env.FOOTYSTATS_API_KEY =', process.env.FOOTYSTATS_API_KEY);
       } else {
         logger.info(`[FootyStatsAPI] ✅ API key loaded (${this.apiKey.substring(0, 10)}...)`);
       }
