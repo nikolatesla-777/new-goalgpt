@@ -42,7 +42,7 @@ export class CompetitionRepository extends BaseRepository<CompetitionEntity> {
     const query = `
       SELECT c.*, co.name as country_name 
       FROM ${this.tableName} c
-      LEFT JOIN ts_countries co ON c.country_id = co.external_id
+      LEFT JOIN ts_countries co ON c.country_id::text = co.external_id::text
       WHERE c.external_id = ANY($1)
     `;
     return this.executeQuery<CompetitionEntity>(query, [externalIds]);
@@ -55,7 +55,7 @@ export class CompetitionRepository extends BaseRepository<CompetitionEntity> {
     const query = `
       SELECT c.*, co.name as country_name 
       FROM ${this.tableName} c
-      LEFT JOIN ts_countries co ON c.country_id = co.external_id
+      LEFT JOIN ts_countries co ON c.country_id::text = co.external_id::text
       WHERE c.external_id = $1
     `;
     const results = await this.executeQuery<CompetitionEntity>(query, [externalId]);
