@@ -92,6 +92,14 @@ export async function safeQuery<T = any>(
 
       // Log query details on error
       if (err.message?.includes('uuid')) {
+        console.error('='.repeat(80));
+        console.error('[DB] UUID ERROR DETECTED:');
+        console.error('Error:', err.message);
+        console.error('Full Query:', text);
+        console.error('Params:', params);
+        console.error('Stack:', err.stack?.substring(0, 1000));
+        console.error('='.repeat(80));
+
         logger.error('[DB] UUID Error - Query:', {
           error: err.message,
           query_preview: text.substring(0, 500),
