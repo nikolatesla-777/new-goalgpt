@@ -213,6 +213,13 @@ class FootyStatsAPIClient {
   private constructor() {
     this.apiKey = process.env.FOOTYSTATS_API_KEY || '';
 
+    // Log API key status for debugging
+    if (!this.apiKey) {
+      logger.error('[FootyStatsAPI] ⚠️ API KEY IS EMPTY! Check .env file');
+    } else {
+      logger.info(`[FootyStatsAPI] ✅ API key loaded (${this.apiKey.substring(0, 10)}...)`);
+    }
+
     this.axiosInstance = axios.create({
       baseURL: 'https://api.football-data-api.com',
       timeout: 30000,
@@ -231,6 +238,8 @@ class FootyStatsAPIClient {
 
   static getInstance(): FootyStatsAPIClient {
     if (!FootyStatsAPIClient.instance) {
+      // CRITICAL: Load .env before creating instance
+      dotenv.config();
       FootyStatsAPIClient.instance = new FootyStatsAPIClient();
     }
     return FootyStatsAPIClient.instance;
