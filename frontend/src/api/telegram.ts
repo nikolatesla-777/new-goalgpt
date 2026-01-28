@@ -8,9 +8,13 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 /**
  * Get today's matches from FootyStats
+ * @param date Optional date in YYYY-MM-DD format. Defaults to today.
  */
-export async function getTodaysMatches() {
-  const response = await fetch(`${API_BASE}/footystats/today`);
+export async function getTodaysMatches(date?: string) {
+  const url = date
+    ? `${API_BASE}/footystats/today?date=${date}`
+    : `${API_BASE}/footystats/today`;
+  const response = await fetch(url);
   if (!response.ok) throw new Error('Failed to fetch matches');
   const json = await response.json();
 

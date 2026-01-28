@@ -1007,22 +1007,29 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
   });
 
   // Get today's matches with FootyStats data
-  fastify.get('/footystats/today', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/footystats/today', async (request: FastifyRequest<{
+    Querystring: { date?: string };
+  }>, reply: FastifyReply) => {
     try {
-      const today = new Date(); // Date object
+      // Support date parameter (format: YYYY-MM-DD)
+      const dateParam = request.query.date;
+      const targetDate = dateParam ? new Date(dateParam) : new Date();
+      const dateStr = dateParam || targetDate.toISOString().split('T')[0];
+
+      logger.info(`[FootyStats] Fetching matches for date: ${dateStr}`);
 
       // Try to get cached data first
-      const cached = await getCachedTodayMatches(today);
+      const cached = await getCachedTodayMatches(targetDate);
       if (cached) {
-        logger.info(`[FootyStats] Today matches - CACHE HIT (${cached.length} matches)`);
-        return { count: cached.length, matches: cached, cached: true };
+        logger.info(`[FootyStats] Today matches - CACHE HIT (${cached.length} matches) for ${dateStr}`);
+        return { count: cached.length, matches: cached, cached: true, date: dateStr };
       }
 
-      logger.info('[FootyStats] Today matches - CACHE MISS, fetching from API');
-      const response = await footyStatsAPI.getTodaysMatches();
+      logger.info(`[FootyStats] Today matches - CACHE MISS for ${dateStr}, fetching from API`);
+      const response = await footyStatsAPI.getTodaysMatches(dateStr);
 
       if (!response.data || response.data.length === 0) {
-        return { count: 0, matches: [], cached: false };
+        return { count: 0, matches: [], cached: false, date: dateStr };
       }
 
       // Helper: Get match data from TheSports DB (league + logos) - SINGLE QUERY
@@ -1165,10 +1172,10 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       });
 
       // Cache the processed matches
-      await setCachedTodayMatches(matches, today);
-      logger.info(`[FootyStats] Cached ${matches.length} today matches`);
+      await setCachedTodayMatches(matches, targetDate);
+      logger.info(`[FootyStats] Cached ${matches.length} matches for ${dateStr}`);
 
-      return { count: matches.length, matches, cached: false };
+      return { count: matches.length, matches, cached: false, date: dateStr };
     } catch (error: any) {
       logger.error('[FootyStats] Today matches error:', error);
       return reply.status(500).send({ error: error.message });

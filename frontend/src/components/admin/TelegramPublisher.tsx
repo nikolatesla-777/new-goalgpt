@@ -83,16 +83,22 @@ export function TelegramPublisher() {
   const [publishSuccess, setPublishSuccess] = useState<number | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
 
+  // Date filter state - default to today
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0]; // YYYY-MM-DD format
+  });
+
   useEffect(() => {
     loadMatches();
     loadBotHealth();
-  }, []);
+  }, [selectedDate]); // Reload when date changes
 
   const loadMatches = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await getTodaysMatches();
+      const response = await getTodaysMatches(selectedDate);
       setMatches(response.data || []);
     } catch (err: any) {
       setError(err.message || 'Maçlar yüklenemedi');
@@ -204,23 +210,38 @@ export function TelegramPublisher() {
                 )}
               </p>
             </div>
-            <button
-              onClick={loadMatches}
-              disabled={loading}
-              className="group relative px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-            >
-              <div className="flex items-center gap-2">
-                <svg
-                  className={`w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors ${loading ? 'animate-spin' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="font-medium text-gray-700 group-hover:text-blue-600">Yenile</span>
+
+            <div className="flex items-center gap-3">
+              {/* Date Picker */}
+              <div className="relative">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="px-4 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 focus:outline-none focus:border-blue-500 transition-all duration-300 text-gray-700 font-medium"
+                  style={{ minWidth: '160px' }}
+                />
               </div>
-            </button>
+
+              {/* Refresh Button */}
+              <button
+                onClick={loadMatches}
+                disabled={loading}
+                className="group relative px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+              >
+                <div className="flex items-center gap-2">
+                  <svg
+                    className={`w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors ${loading ? 'animate-spin' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="font-medium text-gray-700 group-hover:text-blue-600">Yenile</span>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Stats Cards */}

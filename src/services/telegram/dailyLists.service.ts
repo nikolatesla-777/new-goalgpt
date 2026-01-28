@@ -417,14 +417,17 @@ function selectTopMatches(
 /**
  * Generate all daily lists for Telegram
  *
+ * @param date - ISO date string (YYYY-MM-DD), defaults to today
  * @returns Array of DailyList objects (empty if no eligible matches)
  */
-export async function generateDailyLists(): Promise<DailyList[]> {
-  logger.info('[TelegramDailyLists] 🚀 Starting daily list generation...');
+export async function generateDailyLists(date?: string): Promise<DailyList[]> {
+  const targetDate = date || new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+
+  logger.info(`[TelegramDailyLists] 🚀 Starting daily list generation for ${targetDate}...`);
 
   try {
-    // 1. Fetch today's matches from FootyStats
-    const response = await footyStatsAPI.getTodaysMatches();
+    // 1. Fetch matches for target date from FootyStats
+    const response = await footyStatsAPI.getTodaysMatches(targetDate, 'Europe/Istanbul');
     const rawMatches = response.data || [];  // ✅ FIX: Use response.data, not response.matches
 
     // ✅ DEBUG: Log available fields in FootyStats response
