@@ -254,7 +254,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await safeQuery(
         `SELECT c.id, c.name, co.name as country_name
          FROM ts_competitions c
-         LEFT JOIN ts_countries co ON c.country_id = co.id
+         LEFT JOIN ts_countries co ON c.country_id = co.external_id
          LIMIT 5`
       );
       console.error('[TEST-UUID] Query succeeded, rows:', result.length);
