@@ -358,3 +358,4 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 });
 
 start();
+// Force rebuild
