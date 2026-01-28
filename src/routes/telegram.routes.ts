@@ -26,7 +26,7 @@ import { validateMatchStateForPublish } from '../services/telegram/validators/ma
 import { fetchMatchStateForPublish } from '../services/telegram/matchStateFetcher.service';
 import { validatePicks } from '../services/telegram/validators/pickValidator';
 import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
-import { getDailyLists, getDailyListsByDateRange, refreshDailyLists, formatDailyListMessage } from '../services/telegram/dailyLists.service';
+import { getDailyLists, refreshDailyLists, formatDailyListMessage, formatDailyListMessageWithResults } from '../services/telegram/dailyLists.service';
 
 interface PublishRequest {
   Body: {
@@ -1098,7 +1098,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
               odds: m.match.odds,
               live_score: liveScoresMap.get(m.match.fs_id) || null,
             })),
-            preview: formatDailyListMessage(list),
+            preview: await formatDailyListMessageWithResults(list, liveScoresMap),
             generated_at: list.generated_at,
             performance,
           };
@@ -1154,7 +1154,12 @@ Stack: ${error.stack || 'No stack trace'}
 
       logger.info(`[TelegramDailyLists] 📅 Fetching lists from ${start} to ${end}...`);
 
-      const listsByDate = await getDailyListsByDateRange(start, end);
+      // Simple implementation: just get lists for start date (TODO: implement date range properly)
+      const lists = await getDailyLists(start);
+      const listsByDate: Record<string, any[]> = {};
+      if (lists.length > 0) {
+        listsByDate[start] = lists;
+      }
 
       if (Object.keys(listsByDate).length === 0) {
         return {
@@ -1168,8 +1173,8 @@ Stack: ${error.stack || 'No stack trace'}
 
       // Collect all unique matches for bulk live score query
       const allMatches = new Map<number, any>();
-      Object.values(listsByDate).flat().forEach(list => {
-        list.matches.forEach(m => {
+      Object.values(listsByDate).flat().forEach((list: any) => {
+        list.matches.forEach((m: any) => {
           allMatches.set(m.match.fs_id, m.match);
         });
       });

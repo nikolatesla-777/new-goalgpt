@@ -478,15 +478,26 @@ export function formatSettlementMessage(
   const displayMatches = result.matches.slice(0, 10);
 
   for (const match of displayMatches) {
-    const icon = match.result === 'WIN' ? '✅' : match.result === 'VOID' ? '⚪' : '❌';
+    // Clear Won/Lost/Void badges with emojis
+    let badge = '';
+    if (match.result === 'WIN') {
+      badge = '✅ <b>Kazandı</b>';
+    } else if (match.result === 'VOID') {
+      badge = '⚪ <b>Geçersiz</b>';
+    } else {
+      badge = '❌ <b>Kaybetti</b>';
+    }
+
+    // Format score clearly
     const scoreStr = match.home_score !== undefined && match.away_score !== undefined
-      ? `${match.home_score}-${match.away_score}`
+      ? `<b>${match.home_score}-${match.away_score}</b>`
       : '-';
 
-    message += `${icon} ${match.home_team} vs ${match.away_team} (${scoreStr})`;
+    // Format: ✅ Kazandı | Man City 3-1 Chelsea
+    message += `${badge} | ${match.home_team} ${scoreStr} ${match.away_team}`;
 
     if (match.reason) {
-      message += ` - ${match.reason}`;
+      message += ` (${match.reason})`;
     }
     message += `\n`;
   }

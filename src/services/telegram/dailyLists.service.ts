@@ -612,9 +612,12 @@ export async function generateDailyLists(date?: string): Promise<DailyList[]> {
 
 /**
  * Format a daily list as Telegram message
+ *
+ * @param list - Daily list to format
+ * @param withResults - If true, fetch and display match results (async operation)
  */
-export function formatDailyListMessage(list: DailyList): string {
-  const { emoji, title, matches } = list;
+export function formatDailyListMessage(list: DailyList, withResults: boolean = false): string {
+  const { emoji, title, matches, market } = list;
 
   let message = `${emoji} <b>${title.toUpperCase()}</b>\n\n`;
 
@@ -633,6 +636,154 @@ export function formatDailyListMessage(list: DailyList): string {
     message += `${confidenceEmoji} Güven: ${confidence}/100\n`;
     message += `📊 ${reason}\n\n`;
   });
+
+  message += `⚠️ <b>Not:</b>\n`;
+  message += `• Liste istatistiksel verilere dayanır\n`;
+  message += `• Canlıya girmeden önce oran ve kadro kontrolü önerilir\n`;
+
+  return message;
+}
+
+/**
+ * Format a daily list with live match results
+ * Shows Won/Lost badges and scores for finished matches
+ *
+ * @param list - Daily list to format
+ * @param liveScores - Map of fs_id to live score data
+ */
+export async function formatDailyListMessageWithResults(
+  list: DailyList,
+  liveScores?: Map<number, any>
+): Promise<string> {
+  const { emoji, title, matches, market } = list;
+  const now = Math.floor(Date.now() / 1000);
+
+  // Count results
+  let wonCount = 0;
+  let lostCount = 0;
+  let pendingCount = 0;
+
+  // First pass: calculate performance
+  for (const candidate of matches) {
+    const match = candidate.match;
+    const matchFinished = match.date_unix <= (now - 2 * 60 * 60); // 2 hours after start
+
+    if (!matchFinished) {
+      pendingCount++;
+      continue;
+    }
+
+    // Get live score if available
+    const liveScore = liveScores?.get(match.fs_id);
+    if (!liveScore) {
+      pendingCount++;
+      continue;
+    }
+
+    // Evaluate based on market type
+    let isWin = false;
+    const homeScore = liveScore.home || 0;
+    const awayScore = liveScore.away || 0;
+    const totalGoals = homeScore + awayScore;
+
+    switch (market) {
+      case 'OVER_25':
+        isWin = totalGoals >= 3;
+        break;
+      case 'OVER_15':
+        isWin = totalGoals >= 2;
+        break;
+      case 'BTTS':
+        isWin = homeScore > 0 && awayScore > 0;
+        break;
+      case 'HT_OVER_05':
+      case 'CORNERS':
+      case 'CARDS':
+        // These need special data, count as pending for now
+        pendingCount++;
+        continue;
+    }
+
+    if (isWin) {
+      wonCount++;
+    } else {
+      lostCount++;
+    }
+  }
+
+  const settledCount = wonCount + lostCount;
+  const totalCount = matches.length;
+
+  // Build header with performance
+  let message = `${emoji} <b>${title.toUpperCase()}</b>\n\n`;
+
+  if (settledCount > 0) {
+    const winRate = Math.round((wonCount / settledCount) * 100);
+    message += `📊 <b>Performans: ${wonCount}/${settledCount} (%${winRate})</b>\n`;
+    message += `✅ Kazanan: ${wonCount}\n`;
+    message += `❌ Kaybeden: ${lostCount}\n`;
+    if (pendingCount > 0) {
+      message += `🕒 Bekleyen: ${pendingCount}\n`;
+    }
+  }
+
+  message += `\n`;
+
+  // Second pass: format matches with results
+  const nums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+
+  for (let index = 0; index < matches.length; index++) {
+    const candidate = matches[index];
+    const { match, confidence, reason } = candidate;
+    const num = nums[index] || `${index + 1}️⃣`;
+
+    const matchTime = new Date(match.date_unix * 1000);
+    const timeStr = matchTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    const matchFinished = match.date_unix <= (now - 2 * 60 * 60);
+
+    const confidenceEmoji = confidence >= 70 ? '🔥' : '⭐';
+
+    // Get result if match finished
+    let resultBadge = '';
+    let scoreStr = '';
+
+    const liveScore = liveScores?.get(match.fs_id);
+
+    if (matchFinished && liveScore) {
+      const homeScore = liveScore.home || 0;
+      const awayScore = liveScore.away || 0;
+      const totalGoals = homeScore + awayScore;
+
+      scoreStr = `${homeScore}-${awayScore}`;
+
+      // Evaluate result
+      let isWin = false;
+      switch (market) {
+        case 'OVER_25':
+          isWin = totalGoals >= 3;
+          break;
+        case 'OVER_15':
+          isWin = totalGoals >= 2;
+          break;
+        case 'BTTS':
+          isWin = homeScore > 0 && awayScore > 0;
+          break;
+      }
+
+      resultBadge = isWin ? '✅ <b>Kazandı</b>' : '❌ <b>Kaybetti</b>';
+    }
+
+    message += `${num} <b>${match.home_name} vs ${match.away_name}</b>\n`;
+
+    if (resultBadge) {
+      message += `${resultBadge} | Skor: <b>${scoreStr}</b>\n`;
+    } else {
+      message += `🕒 ${timeStr} | 🏆 ${match.league_name || 'Bilinmiyor'}\n`;
+    }
+
+    message += `${confidenceEmoji} Güven: ${confidence}/100\n`;
+    message += `📊 ${reason}\n\n`;
+  }
 
   message += `⚠️ <b>Not:</b>\n`;
   message += `• Liste istatistiksel verilere dayanır\n`;

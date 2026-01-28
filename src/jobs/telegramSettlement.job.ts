@@ -94,7 +94,6 @@ export async function runTelegramSettlement(): Promise<void> {
       } finally {
         // FIX: Release connection BEFORE processing loop
         client.release();
-        client = null;
       }
 
       let settledCount = 0;
@@ -245,7 +244,6 @@ export async function runTelegramSettlement(): Promise<void> {
         }
 
         logger.info(`[TelegramSettlement] Settled ${settledCount} posts`);
-      }
     }
   );
 }
