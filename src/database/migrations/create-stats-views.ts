@@ -96,7 +96,7 @@ async function createViews() {
                     ELSE 0
                 END as win_rate
             FROM ai_predictions p
-            LEFT JOIN ts_competitions c ON p.competition_id = c.id::text
+            LEFT JOIN ts_competitions c ON p.competition_id = c.external_id
             WHERE p.competition_id IS NOT NULL
             GROUP BY canonical_bot_name, p.competition_id, c.name, c.logo_url
         `);
