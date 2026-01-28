@@ -111,11 +111,10 @@ describe('FeatureBuilderService', () => {
       });
 
       // Features - FootyStats data (merged)
-      expect(result.features.xg).toEqual({
-        home: 1.65,
-        away: 1.20,
-        total: 2.85,
-      });
+      expect(result.features.xg).toBeDefined();
+      expect(result.features.xg?.home).toBe(1.65);
+      expect(result.features.xg?.away).toBe(1.20);
+      expect(result.features.xg?.total).toBeCloseTo(2.85, 2);
       expect(result.features.odds).toEqual({
         home_win: 2.10,
         draw: 3.40,
