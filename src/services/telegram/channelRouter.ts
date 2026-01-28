@@ -1,26 +1,25 @@
 /**
- * Telegram Channel Router - Week-2B
+ * Telegram Channel Router - Week-2B (Hardened)
  *
  * Routes scoring predictions to appropriate Telegram channels
  * Single bot token → 7 separate channels (one per market)
  *
  * Features:
  * - Market-to-channel mapping
- * - Boot-time configuration validation
+ * - Boot-time configuration validation (fail-fast if PUBLISH_ENABLED=true)
  * - DRY_RUN mode support
  * - Channel ID normalization (-100... format)
  *
  * @author GoalGPT Team
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 import { logger } from '../../utils/logger';
+import { MarketId } from '../../types/markets';
 
 // ============================================================================
 // TYPES
 // ============================================================================
-
-export type MarketId = 'O25' | 'BTTS' | 'HT_O05' | 'O35' | 'HOME_O15' | 'CORNERS_O85' | 'CARDS_O25';
 
 export interface ChannelConfig {
   marketId: MarketId;
@@ -29,6 +28,8 @@ export interface ChannelConfig {
 }
 
 export interface ChannelRouterConfig {
+  publishEnabled: boolean;
+  strictConfig: boolean;
   dryRun: boolean;
   channels: ChannelConfig[];
 }
@@ -57,51 +58,53 @@ class ChannelRouter {
    * Initialize router with environment variables
    * Called once during server boot
    *
-   * @throws Error if required channel IDs are missing
+   * @throws Error if required channel IDs are missing AND publish enabled
    */
   initialize(): void {
+    const publishEnabled = process.env.TELEGRAM_PUBLISH_ENABLED === 'true';
+    const strictConfig = process.env.TELEGRAM_STRICT_CONFIG !== 'false'; // Default true
     const dryRun = process.env.TELEGRAM_DRY_RUN === 'true';
 
     const channels: ChannelConfig[] = [
       {
-        marketId: 'O25',
+        marketId: MarketId.O25,
         chatId: process.env.TELEGRAM_CHANNEL_O25 || '',
         displayName: '2.5 Üst Gol',
       },
       {
-        marketId: 'BTTS',
+        marketId: MarketId.BTTS,
         chatId: process.env.TELEGRAM_CHANNEL_BTTS || '',
         displayName: 'Karşılıklı Gol',
       },
       {
-        marketId: 'HT_O05',
+        marketId: MarketId.HT_O05,
         chatId: process.env.TELEGRAM_CHANNEL_HT_O05 || '',
         displayName: 'İlk Yarı 0.5 Üst',
       },
       {
-        marketId: 'O35',
+        marketId: MarketId.O35,
         chatId: process.env.TELEGRAM_CHANNEL_O35 || '',
         displayName: '3.5 Üst Gol',
       },
       {
-        marketId: 'HOME_O15',
+        marketId: MarketId.HOME_O15,
         chatId: process.env.TELEGRAM_CHANNEL_HOME_O15 || '',
         displayName: 'Ev Sahibi 1.5 Üst',
       },
       {
-        marketId: 'CORNERS_O85',
+        marketId: MarketId.CORNERS_O85,
         chatId: process.env.TELEGRAM_CHANNEL_CORNERS_O85 || '',
         displayName: 'Korner 8.5 Üst',
       },
       {
-        marketId: 'CARDS_O25',
+        marketId: MarketId.CARDS_O25,
         chatId: process.env.TELEGRAM_CHANNEL_CARDS_O25 || '',
         displayName: 'Kart 2.5 Üst',
       },
     ];
 
-    // Validate configuration
-    this.validateConfig(channels, dryRun);
+    // Validate configuration (fail-fast if publish enabled)
+    this.validateConfig(channels, publishEnabled, strictConfig, dryRun);
 
     // Normalize channel IDs and build map
     channels.forEach((channel) => {
@@ -112,13 +115,19 @@ class ChannelRouter {
       });
     });
 
-    this.config = { dryRun, channels };
+    this.config = { publishEnabled, strictConfig, dryRun, channels };
 
     logger.info('[ChannelRouter] Initialized', {
+      publishEnabled,
+      strictConfig,
       dryRun,
       channelCount: channels.length,
       markets: channels.map((c) => c.marketId),
     });
+
+    if (!publishEnabled) {
+      logger.warn('[ChannelRouter] ⚠️  TELEGRAM_PUBLISH_ENABLED=false - Publish endpoints will return 503');
+    }
 
     if (dryRun) {
       logger.warn('[ChannelRouter] ⚠️  DRY_RUN mode enabled - messages will NOT be sent to Telegram');
@@ -127,13 +136,20 @@ class ChannelRouter {
 
   /**
    * Validate configuration at boot time
-   * Fails fast if required environment variables are missing
+   * HARDENED: Fail-fast behavior based on TELEGRAM_PUBLISH_ENABLED
    *
    * @param channels - Channel configurations
+   * @param publishEnabled - Whether Telegram publishing is enabled
+   * @param strictConfig - Whether to enforce strict validation
    * @param dryRun - Whether dry run mode is enabled
-   * @throws Error if validation fails
+   * @throws Error if validation fails AND publish enabled
    */
-  private validateConfig(channels: ChannelConfig[], dryRun: boolean): void {
+  private validateConfig(
+    channels: ChannelConfig[],
+    publishEnabled: boolean,
+    strictConfig: boolean,
+    dryRun: boolean
+  ): void {
     const missingChannels: string[] = [];
 
     for (const channel of channels) {
@@ -142,24 +158,53 @@ class ChannelRouter {
       }
     }
 
-    if (missingChannels.length > 0 && !dryRun) {
-      const errorMessage = `Missing Telegram channel IDs: ${missingChannels.join(', ')}. ` +
+    // CRITICAL: Fail-fast if publish enabled and strict config
+    if (missingChannels.length > 0 && publishEnabled && strictConfig && !dryRun) {
+      const errorMessage =
+        `[CRITICAL] Telegram publishing ENABLED but required channel IDs are missing: ${missingChannels.join(', ')}.\n` +
         `Please configure the following environment variables:\n` +
         missingChannels.map((m) => `  - TELEGRAM_CHANNEL_${m}`).join('\n') +
-        `\n\nOr set TELEGRAM_DRY_RUN=true to skip validation.`;
+        `\n\nOptions to fix:\n` +
+        `  1. Configure missing channel IDs in .env\n` +
+        `  2. Set TELEGRAM_PUBLISH_ENABLED=false to disable publishing\n` +
+        `  3. Set TELEGRAM_DRY_RUN=true for testing without real sends\n` +
+        `  4. Set TELEGRAM_STRICT_CONFIG=false to allow partial config (NOT recommended)`;
 
-      logger.error('[ChannelRouter] Configuration validation failed:', errorMessage);
+      logger.error('[ChannelRouter] FATAL: Configuration validation failed', {
+        publishEnabled,
+        strictConfig,
+        dryRun,
+        missingChannels,
+      });
+
+      // FAIL-FAST: Exit process
       throw new Error(errorMessage);
     }
 
-    if (missingChannels.length > 0 && dryRun) {
-      logger.warn('[ChannelRouter] Missing channel IDs (ignored in DRY_RUN mode):', missingChannels);
+    // WARNING: Missing channels but publish disabled
+    if (missingChannels.length > 0 && !publishEnabled) {
+      logger.warn('[ChannelRouter] ⚠️  Missing channel IDs (ignored - TELEGRAM_PUBLISH_ENABLED=false)', {
+        missingChannels,
+        note: 'Publish endpoints will return 503 Service Unavailable',
+      });
     }
 
-    // Validate bot token
+    // WARNING: Missing channels in dry-run mode
+    if (missingChannels.length > 0 && dryRun) {
+      logger.warn('[ChannelRouter] ⚠️  Missing channel IDs (ignored - DRY_RUN mode)', {
+        missingChannels,
+      });
+    }
+
+    // Validate bot token (only if publish enabled)
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken && !dryRun) {
-      throw new Error('TELEGRAM_BOT_TOKEN is required. Please configure it in .env file.');
+    if (!botToken && publishEnabled && strictConfig && !dryRun) {
+      const errorMessage =
+        `[CRITICAL] TELEGRAM_BOT_TOKEN is required when TELEGRAM_PUBLISH_ENABLED=true.\n` +
+        `Please configure it in .env file or set TELEGRAM_PUBLISH_ENABLED=false.`;
+
+      logger.error('[ChannelRouter] FATAL: Bot token missing', { publishEnabled });
+      throw new Error(errorMessage);
     }
   }
 
@@ -238,6 +283,15 @@ class ChannelRouter {
   }
 
   /**
+   * Check if Telegram publishing is enabled
+   *
+   * @returns True if TELEGRAM_PUBLISH_ENABLED=true
+   */
+  isPublishEnabled(): boolean {
+    return this.config?.publishEnabled ?? false;
+  }
+
+  /**
    * Check if dry run mode is enabled
    *
    * @returns True if DRY_RUN mode is enabled
@@ -263,13 +317,15 @@ class ChannelRouter {
   getStatus() {
     return {
       initialized: this.isInitialized(),
+      publishEnabled: this.isPublishEnabled(),
+      strictConfig: this.config?.strictConfig ?? true,
       dryRun: this.isDryRun(),
       channelCount: this.channelMap.size,
       channels: Array.from(this.channelMap.entries()).map(([marketId, config]) => ({
         market: marketId,
         displayName: config.displayName,
         configured: config.chatId.length > 0,
-        chatId: this.isDryRun() ? config.chatId : '***', // Hide in production
+        chatId: this.isDryRun() || !this.isPublishEnabled() ? config.chatId : '***', // Hide in production
       })),
     };
   }
