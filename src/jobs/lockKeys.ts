@@ -110,6 +110,9 @@ export const LOCK_KEYS = {
   /** Daily lists generation - generates and stores daily prediction lists */
   DAILY_LISTS_GENERATION: 910000000029n,
 
+  /** Daily lists settlement - settles published daily lists with match results */
+  DAILY_LISTS_SETTLEMENT: 910000000030n,
+
   // ============================================================
   // MATCH-LEVEL LOCKS (920_000_000_xxx + match_id)
   // These prevent concurrent updates to the same match

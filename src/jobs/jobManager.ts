@@ -324,6 +324,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Generate and store daily prediction lists to database (runs once per day at noon)',
   },
+  {
+    name: 'Daily Lists Settlement',
+    schedule: '*/15 * * * *', // Every 15 minutes
+    handler: async () => {
+      const { runDailyListsSettlement } = await import('./dailyListsSettlement.job');
+      await runDailyListsSettlement();
+    },
+    enabled: true,
+    description: 'Settle Telegram daily lists by evaluating match results from TheSports API',
+  },
 ];
 
 /**

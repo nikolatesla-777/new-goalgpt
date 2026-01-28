@@ -16,7 +16,8 @@ import {
     CircleNotch,
     CalendarBlank
 } from '@phosphor-icons/react';
-import RefereeAnalysisCard from './RefereeAnalysisCard';
+// RefereeAnalysisCard removed - FootyStats API doesn't provide referee data
+// import RefereeAnalysisCard from './RefereeAnalysisCard';
 import { formatUnixToLongTurkish } from '../../utils/dateUtils';
 
 // Types
@@ -517,7 +518,7 @@ export function AIAnalysisLab() {
     // FootyStats detail panel state
     const [selectedFsMatch, setSelectedFsMatch] = useState<FSMatchDetail | null>(null);
     const [fsLoading, setFsLoading] = useState(false);
-    const [fsDetailTab, setFsDetailTab] = useState<'overview' | 'potentials' | 'form' | 'h2h' | 'trends' | 'ai-prediction' | 'odds' | 'referee'>('overview');
+    const [fsDetailTab, setFsDetailTab] = useState<'overview' | 'potentials' | 'form' | 'h2h' | 'trends' | 'ai-prediction' | 'odds'>('overview');
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -867,7 +868,8 @@ export function AIAnalysisLab() {
                             { id: 'form', label: 'Form', icon: TrendUp },
                             { id: 'h2h', label: 'H2H', icon: Users },
                             { id: 'trends', label: 'Trendler', icon: Lightning },
-                            { id: 'referee', label: '👨‍⚖️ Hakem', icon: Flag },
+                            // Referee tab removed - FootyStats API doesn't provide referee data
+                            // { id: 'referee', label: '👨‍⚖️ Hakem', icon: Flag },
                             { id: 'ai-prediction', label: '🎲 AI Tahmini', icon: Lightning },
                         ].map((tab) => (
                             <button
@@ -1927,12 +1929,13 @@ export function AIAnalysisLab() {
                             </div>
                         )}
 
-                        {/* Referee Tab */}
+                        {/* Referee Tab - REMOVED: FootyStats API doesn't provide referee data
                         {fsDetailTab === 'referee' && (
                             <div>
                                 <RefereeAnalysisCard matchId={selectedFsMatch.fs_id.toString()} />
                             </div>
                         )}
+                        */}
 
                         {/* Odds Tab */}
                         {fsDetailTab === 'odds' && (

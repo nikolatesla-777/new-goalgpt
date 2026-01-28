@@ -743,7 +743,17 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       const { matchId } = request.params;
       logger.info(`[FootyStats] Fetching referee analysis for match ${matchId}...`);
 
-      // Get match details to find referee ID
+      // IMPORTANT: FootyStats API doesn't have a direct referee endpoint for individual matches
+      // We need to return mock/default data since referee data is not available in their API
+
+      // Return default referee data (no referee info available)
+      return reply.status(404).send({
+        success: false,
+        error: 'Referee information not available for this match'
+      });
+
+      /*
+      // Original implementation (commented out - API doesn't support this)
       const matchDetails = await footyStatsAPI.getMatchDetails(parseInt(matchId));
 
       if (!matchDetails?.data?.[0]) {
@@ -798,6 +808,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           is_lenient: isLenient,
         }
       };
+      */
     } catch (error: any) {
       logger.error('[FootyStats] Referee analysis error:', error);
       return reply.status(500).send({

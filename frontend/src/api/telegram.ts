@@ -61,8 +61,9 @@ export async function getDailyTips() {
 
 /**
  * Get referee analysis for a match
+ * @param matchId FootyStats match ID (fs_id)
  */
-export async function getRefereeAnalysis(matchId: string) {
+export async function getRefereeAnalysis(matchId: string | number) {
   const response = await fetch(`${API_BASE}/footystats/referee/${matchId}`);
   if (!response.ok) {
     throw new Error('Failed to fetch referee data');

@@ -1303,11 +1303,13 @@ Stack: ${error.stack || 'No stack trace'}
         telegram_message_id: telegramMessageId,
       });
 
-      // 5. Save to database
+      // 5. Save to database (both telegram_posts and telegram_daily_lists)
       const client = await pool.connect();
       try {
         const matchIds = targetList.matches.map(m => m.match.fs_id).join(',');
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
 
+        // Save to telegram_posts for tracking
         await client.query(
           `INSERT INTO telegram_posts (match_id, channel_id, telegram_message_id, content, status, metadata)
            VALUES ($1, $2, $3, $4, 'published', $5)`,
@@ -1325,6 +1327,16 @@ Stack: ${error.stack || 'No stack trace'}
               generated_at: targetList.generated_at,
             }),
           ]
+        );
+
+        // Update telegram_daily_lists with Telegram message ID for settlement
+        await client.query(
+          `UPDATE telegram_daily_lists
+           SET telegram_message_id = $1,
+               channel_id = $2,
+               status = 'active'
+           WHERE market = $3 AND list_date = $4`,
+          [telegramMessageId, channelId, market, today]
         );
 
         logger.info(`[TelegramDailyLists] 💾 Saved to database`, logContext);
@@ -1436,7 +1448,9 @@ Stack: ${error.stack || 'No stack trace'}
           const client = await pool.connect();
           try {
             const matchIds = list.matches.map(m => m.match.fs_id).join(',');
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
 
+            // Save to telegram_posts for tracking
             await client.query(
               `INSERT INTO telegram_posts (match_id, channel_id, telegram_message_id, content, status, metadata)
                VALUES ($1, $2, $3, $4, 'published', $5)`,
@@ -1454,6 +1468,16 @@ Stack: ${error.stack || 'No stack trace'}
                   generated_at: list.generated_at,
                 }),
               ]
+            );
+
+            // Update telegram_daily_lists with Telegram message ID for settlement
+            await client.query(
+              `UPDATE telegram_daily_lists
+               SET telegram_message_id = $1,
+                   channel_id = $2,
+                   status = 'active'
+               WHERE market = $3 AND list_date = $4`,
+              [telegramMessageId, channelId, list.market, today]
             );
           } finally {
             client.release();
