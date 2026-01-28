@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getTodayInTurkey, getYesterdayInTurkey, formatTimestampToTSI, formatMillisecondsToTSI, formatDateStringToLongTurkish, TSI_OFFSET_MS } from '../../utils/dateUtils';
 
 // ============================================================================
 // INTERFACES
@@ -148,41 +149,30 @@ export function TelegramDailyLists() {
   const [historicalData, setHistoricalData] = useState<DateData[]>([]);
   const [isHistoricalView, setIsHistoricalView] = useState(false);
 
-  // Calculate date ranges in Istanbul timezone
+  // Calculate date ranges in Istanbul timezone (UTC+3)
   const getDateRange = (range: DateRange): { start: string; end: string } => {
-    const today = new Date();
-    const istanbulOffset = 3 * 60; // UTC+3
-    const localOffset = today.getTimezoneOffset();
-    const offsetDiff = istanbulOffset + localOffset;
-    const istanbulDate = new Date(today.getTime() + offsetDiff * 60 * 1000);
-
-    const formatDate = (date: Date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const end = formatDate(istanbulDate);
+    // Get today's date in Istanbul timezone (YYYY-MM-DD)
+    const today = getTodayInTurkey();
 
     switch (range) {
       case 'today':
-        return { start: end, end };
+        return { start: today, end: today };
       case 'yesterday':
-        const yesterday = new Date(istanbulDate);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = formatDate(yesterday);
-        return { start: yesterdayStr, end: yesterdayStr };
+        const yesterday = getYesterdayInTurkey();
+        return { start: yesterday, end: yesterday };
       case 'last7days':
-        const sevenDaysAgo = new Date(istanbulDate);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-        return { start: formatDate(sevenDaysAgo), end };
+        // Calculate 7 days ago in Istanbul timezone
+        const tsiMs = Date.now() + TSI_OFFSET_MS;
+        const sevenDaysAgoMs = tsiMs - (6 * 24 * 60 * 60 * 1000);
+        const sevenDaysAgoDate = new Date(sevenDaysAgoMs);
+        const start = `${sevenDaysAgoDate.getUTCFullYear()}-${String(sevenDaysAgoDate.getUTCMonth() + 1).padStart(2, '0')}-${String(sevenDaysAgoDate.getUTCDate()).padStart(2, '0')}`;
+        return { start, end: today };
       case 'thismonth':
-        const firstDayOfMonth = new Date(istanbulDate);
-        firstDayOfMonth.setDate(1);
-        return { start: formatDate(firstDayOfMonth), end };
+        // First day of current month in Istanbul timezone
+        const [year, month] = today.split('-');
+        return { start: `${year}-${month}-01`, end: today };
       default:
-        return { start: end, end };
+        return { start: today, end: today };
     }
   };
 
@@ -500,7 +490,7 @@ export function TelegramDailyLists() {
                 <div>
                   <p className="text-sm font-medium text-gray-500 mb-1">Son Güncelleme</p>
                   <p className="text-sm font-bold text-gray-900">
-                    {lastUpdated ? new Date(lastUpdated).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                    {lastUpdated ? formatTimestampToTSI(Math.floor(lastUpdated / 1000)) : '--:--'}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
@@ -512,7 +502,7 @@ export function TelegramDailyLists() {
 
           {lastUpdated && (
             <p className="text-sm text-gray-500 text-center">
-              Son güncelleme: {new Date(lastUpdated).toLocaleString('tr-TR')}
+              Son güncelleme: {formatMillisecondsToTSI(lastUpdated)}
             </p>
           )}
         </div>
@@ -574,12 +564,7 @@ export function TelegramDailyLists() {
                       <div className="flex items-center justify-between">
                         <div>
                           <h2 className="text-3xl font-bold mb-2">
-                            📅 {new Date(dateData.date + 'T12:00:00').toLocaleDateString('tr-TR', {
-                              weekday: 'long',
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            })}
+                            📅 {formatDateStringToLongTurkish(dateData.date)}
                           </h2>
                           <p className="text-blue-100">
                             {dateData.lists_count} liste • {dateTotalMatches} maç • Ortalama Güven: {dateAvgConfidence}%

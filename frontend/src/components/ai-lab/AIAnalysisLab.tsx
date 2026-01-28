@@ -17,6 +17,7 @@ import {
     CalendarBlank
 } from '@phosphor-icons/react';
 import RefereeAnalysisCard from './RefereeAnalysisCard';
+import { formatUnixToLongTurkish } from '../../utils/dateUtils';
 
 // Types
 interface MatchData {
@@ -1618,7 +1619,6 @@ export function AIAnalysisLab() {
                                                         </div>
                                                 <div className="space-y-2 max-h-96 overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
                                                     {selectedFsMatch.h2h.matches.slice(0, 10).map((match, idx) => {
-                                                        const matchDate = new Date(match.date_unix * 1000);
                                                         const homeTeamName = match.home_team_id === parseInt(selectedFsMatch.fs_id.toString().slice(0, 4))
                                                             ? selectedFsMatch.home_name
                                                             : selectedFsMatch.away_name;
@@ -1653,7 +1653,7 @@ export function AIAnalysisLab() {
                                                                     </div>
                                                                 </div>
                                                                 <div className="text-center text-xs text-gray-500">
-                                                                    {matchDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                                                    {formatUnixToLongTurkish(match.date_unix)}
                                                                 </div>
                                                             </div>
                                                         );

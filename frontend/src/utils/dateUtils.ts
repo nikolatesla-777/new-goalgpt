@@ -209,3 +209,63 @@ export function isDateOnOrAfterTSI(isoTimestamp: string, tsiDate: string): boole
   return timestamp >= dayStartUTC;
 }
 
+/**
+ * Format millisecond timestamp to full date and time in TSI timezone
+ * Example: "28/01/2026 14:30:45"
+ */
+export function formatMillisecondsToTSI(timestampMs: number): string {
+  if (!timestampMs || timestampMs <= 0) return 'Tarih yok';
+
+  const tsiMs = timestampMs + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
+
+  const day = tsiDate.getUTCDate().toString().padStart(2, '0');
+  const month = (tsiDate.getUTCMonth() + 1).toString().padStart(2, '0');
+  const year = tsiDate.getUTCFullYear();
+  const hours = tsiDate.getUTCHours().toString().padStart(2, '0');
+  const minutes = tsiDate.getUTCMinutes().toString().padStart(2, '0');
+  const seconds = tsiDate.getUTCSeconds().toString().padStart(2, '0');
+
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+}
+
+/**
+ * Format date string (YYYY-MM-DD) to long Turkish format
+ * Example: "28 Ocak 2026 Salı"
+ */
+export function formatDateStringToLongTurkish(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+
+  const monthNames = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+                      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  const dayNames = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+
+  // Create date at noon UTC to avoid timezone issues
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const weekday = dayNames[date.getUTCDay()];
+  const monthName = monthNames[month - 1];
+
+  return `${day} ${monthName} ${year} ${weekday}`;
+}
+
+/**
+ * Format Unix timestamp to long Turkish date format (without weekday)
+ * Example: "28 Ocak 2026"
+ */
+export function formatUnixToLongTurkish(timestamp: number): string {
+  if (!timestamp || timestamp <= 0) return 'Tarih yok';
+
+  const monthNames = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+                      'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+  // Convert to TSI timezone
+  const tsiMs = (timestamp * 1000) + TSI_OFFSET_MS;
+  const tsiDate = new Date(tsiMs);
+
+  const day = tsiDate.getUTCDate();
+  const month = tsiDate.getUTCMonth();
+  const year = tsiDate.getUTCFullYear();
+
+  return `${day} ${monthNames[month]} ${year}`;
+}
+
