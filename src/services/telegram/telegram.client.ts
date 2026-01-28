@@ -41,6 +41,28 @@ interface MessageResult {
 }
 
 // ============================================================================
+// PHASE-0: RATE LIMITER
+// ============================================================================
+
+/**
+ * Simple rate limiter to prevent hitting Telegram API limits
+ * Telegram allows 30 messages/second to different chats
+ */
+class TelegramRateLimiter {
+  private lastRequestTime = 0;
+  private minIntervalMs = 50; // 50ms = 20 req/sec (under Telegram's 30/sec limit)
+
+  async throttle(): Promise<void> {
+    const now = Date.now();
+    const elapsed = now - this.lastRequestTime;
+    if (elapsed < this.minIntervalMs) {
+      await new Promise(resolve => setTimeout(resolve, this.minIntervalMs - elapsed));
+    }
+    this.lastRequestTime = Date.now();
+  }
+}
+
+// ============================================================================
 // SINGLETON CLIENT
 // ============================================================================
 
@@ -50,6 +72,7 @@ class TelegramBotClient {
   private botToken: string;
   private requestCount = 0;
   private errorCount = 0;
+  private rateLimiter = new TelegramRateLimiter();
 
   private constructor() {
     this.botToken = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -89,8 +112,43 @@ class TelegramBotClient {
         logger.debug(`[Telegram] ${response.config.url} ${duration}ms`);
         return response;
       },
-      (error) => {
+      async (error) => {
         this.errorCount++;
+
+        // PHASE-0: Handle 403 Forbidden (user blocked the bot)
+        const errorCode = error.response?.data?.error_code;
+        if (errorCode === 403) {
+          let chatId: string | null = null;
+          try {
+            if (error.config?.data) {
+              const requestData = JSON.parse(error.config.data);
+              chatId = requestData.chat_id?.toString() || null;
+            }
+          } catch (e) {
+            // Ignore parse error
+          }
+
+          logger.warn('[Telegram] ⚠️ 403 Forbidden - User blocked bot', {
+            chat_id: chatId,
+            description: error.response?.data?.description,
+          });
+
+          // Mark chat as blocked in database (fire and forget)
+          if (chatId) {
+            this.markChatAsBlocked(chatId, errorCode, error.response?.data?.description);
+          }
+
+          // Return soft fail response instead of throwing
+          return {
+            data: {
+              ok: false,
+              blocked: true,
+              error_code: 403,
+              description: error.response?.data?.description || 'Forbidden: bot was blocked by the user',
+            }
+          };
+        }
+
         logger.error('[Telegram] Error:', error.response?.data || error.message);
         return Promise.reject(error);
       }
@@ -98,9 +156,34 @@ class TelegramBotClient {
   }
 
   /**
+   * PHASE-0: Mark a chat as blocked in the database
+   * Fire and forget - does not throw on error
+   */
+  private async markChatAsBlocked(chatId: string, errorCode: number, description: string): Promise<void> {
+    try {
+      const { pool } = await import('../../database/connection');
+      await pool.query(`
+        INSERT INTO telegram_blocked_chats (chat_id, error_code, error_description)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (chat_id) DO UPDATE SET
+          blocked_at = NOW(),
+          error_code = $2,
+          error_description = $3,
+          retry_count = telegram_blocked_chats.retry_count + 1,
+          last_retry_at = NOW()
+      `, [chatId, errorCode, description || 'Blocked by user']);
+      logger.info('[Telegram] 📝 Chat marked as blocked', { chat_id: chatId });
+    } catch (err) {
+      logger.error('[Telegram] Failed to mark chat as blocked:', err);
+    }
+  }
+
+  /**
    * Send a message to a chat
+   * PHASE-0: Added rate limiting
    */
   async sendMessage(message: TelegramMessage): Promise<TelegramResponse<MessageResult>> {
+    await this.rateLimiter.throttle();
     this.requestCount++;
     const response = await this.axiosInstance.post<TelegramResponse<MessageResult>>('/sendMessage', message);
     return response.data;
