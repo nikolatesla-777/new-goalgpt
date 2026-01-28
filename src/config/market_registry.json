@@ -1,0 +1,954 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-01-28",
+  "description": "Market definitions for 7 Telegram bot scoring systems - GoalGPT",
+  "markets": {
+    "O25": {
+      "id": "O25",
+      "display_name": "Over 2.5 Goals",
+      "display_name_tr": "2.5 Üst Gol",
+      "emoji": "📈",
+      "target": {
+        "type": "goals",
+        "threshold": 2.5,
+        "operator": ">=",
+        "description": "Total goals must be 3 or more"
+      },
+      "probability_formula": {
+        "method": "weighted_ensemble",
+        "components": [
+          {
+            "name": "prior_probability",
+            "weight": 0.25,
+            "data_source": "footystats.potentials.over25",
+            "transform": "percentage_to_decimal",
+            "description": "FootyStats pre-calculated Over 2.5 potential"
+          },
+          {
+            "name": "poisson_distribution",
+            "weight": 0.40,
+            "data_source": "footystats.xg",
+            "method": "poisson_lambda_sum",
+            "params": {
+              "lambda_home": "xg.home",
+              "lambda_away": "xg.away",
+              "threshold": 2.5
+            },
+            "description": "Poisson probability based on xG"
+          },
+          {
+            "name": "form_adjustment",
+            "weight": 0.20,
+            "data_source": "footystats.trends",
+            "method": "recent_over25_rate",
+            "lookback_matches": 5,
+            "description": "Recent Over 2.5 rate from last 5 matches"
+          },
+          {
+            "name": "btts_correlation",
+            "weight": 0.15,
+            "data_source": "footystats.potentials.btts",
+            "method": "correlation_bonus",
+            "correlation_threshold": 65,
+            "description": "Bonus if BTTS probability is high (correlates with goals)"
+          }
+        ],
+        "adjustments": [
+          {
+            "name": "low_scoring_league",
+            "condition": "league.avg_goals < 2.3",
+            "modifier": -0.08,
+            "description": "Penalize in defensive leagues"
+          },
+          {
+            "name": "high_scoring_league",
+            "condition": "league.avg_goals > 3.0",
+            "modifier": 0.05,
+            "description": "Bonus in attacking leagues"
+          }
+        ]
+      },
+      "confidence_rules": {
+        "min_confidence": 55,
+        "factors": [
+          {
+            "name": "data_completeness",
+            "weight": 0.30,
+            "conditions": {
+              "xg_available": 15,
+              "potentials_available": 15,
+              "h2h_available": 5,
+              "trends_available": 5
+            },
+            "description": "Quality and availability of input data"
+          },
+          {
+            "name": "prediction_consensus",
+            "weight": 0.30,
+            "method": "component_variance",
+            "threshold": 0.15,
+            "description": "Agreement between probability components (low variance = high confidence)"
+          },
+          {
+            "name": "value_edge",
+            "weight": 0.25,
+            "method": "prob_vs_odds",
+            "min_edge": 0.05,
+            "description": "Expected value edge vs betting odds"
+          },
+          {
+            "name": "penalty_flags",
+            "weight": 0.15,
+            "penalties": {
+              "missing_xg": -20,
+              "missing_potentials": -15,
+              "odds_extreme": -10
+            },
+            "description": "Penalties for missing critical data"
+          }
+        ]
+      },
+      "list_policy": {
+        "strategy": "top_n_with_threshold",
+        "top_n": 5,
+        "min_confidence": 70,
+        "min_probability": 0.60,
+        "min_edge": 0.00,
+        "min_lambda_total": 2.4,
+        "diversity": {
+          "max_per_league": 2,
+          "max_per_competition": 3,
+          "min_time_spread_hours": 2,
+          "blocked_low_tier_leagues": true
+        },
+        "description": "HIGH-ACCURACY: conf>=70, lambda>=2.4, edge>0"
+      },
+      "settlement": {
+        "evaluation_period": "fulltime",
+        "rule": "total_goals >= 3",
+        "data_source": "ts_matches.home_score_display + away_score_display",
+        "void_conditions": ["status_id != 8", "score_missing"]
+      },
+      "data_requirements": {
+        "required": ["xg_prematch", "potentials.over25"],
+        "optional": ["odds", "h2h.over25_pct", "trends.home", "trends.away"],
+        "minimum_data_score": 60
+      },
+      "backtest": {
+        "min_matches": 100,
+        "min_hit_rate": 0.58,
+        "min_roi": 0.05,
+        "calibration_tolerance": 0.08
+      }
+    },
+    "BTTS": {
+      "id": "BTTS",
+      "display_name": "Both Teams To Score",
+      "display_name_tr": "Karşılıklı Gol",
+      "emoji": "⚽",
+      "target": {
+        "type": "btts",
+        "threshold": 0,
+        "operator": ">",
+        "description": "Both home and away teams must score at least 1 goal"
+      },
+      "probability_formula": {
+        "method": "weighted_ensemble",
+        "components": [
+          {
+            "name": "prior_probability",
+            "weight": 0.30,
+            "data_source": "footystats.potentials.btts",
+            "transform": "percentage_to_decimal",
+            "description": "FootyStats pre-calculated BTTS potential"
+          },
+          {
+            "name": "independent_poisson",
+            "weight": 0.40,
+            "data_source": "footystats.xg",
+            "method": "btts_independent_probability",
+            "params": {
+              "lambda_home": "xg.home",
+              "lambda_away": "xg.away"
+            },
+            "description": "P(home scores) × P(away scores) using Poisson"
+          },
+          {
+            "name": "form_adjustment",
+            "weight": 0.20,
+            "data_source": "footystats.trends",
+            "method": "recent_btts_rate",
+            "lookback_matches": 5,
+            "description": "Recent BTTS rate from last 5 matches"
+          },
+          {
+            "name": "h2h_btts",
+            "weight": 0.10,
+            "data_source": "footystats.h2h.betting_stats.bttsPercentage",
+            "transform": "percentage_to_decimal",
+            "description": "Historical BTTS rate in H2H matches"
+          }
+        ],
+        "adjustments": [
+          {
+            "name": "defensive_matchup",
+            "condition": "both_teams_conceded_avg < 0.8",
+            "modifier": -0.10,
+            "description": "Penalize if both teams are defensively strong"
+          },
+          {
+            "name": "attacking_matchup",
+            "condition": "both_teams_goals_avg > 1.5",
+            "modifier": 0.08,
+            "description": "Bonus if both teams are attacking"
+          }
+        ]
+      },
+      "confidence_rules": {
+        "min_confidence": 55,
+        "factors": [
+          {
+            "name": "data_completeness",
+            "weight": 0.30,
+            "conditions": {
+              "xg_available": 15,
+              "potentials_available": 15,
+              "h2h_available": 5,
+              "trends_available": 5
+            }
+          },
+          {
+            "name": "prediction_consensus",
+            "weight": 0.30,
+            "method": "component_variance",
+            "threshold": 0.15
+          },
+          {
+            "name": "value_edge",
+            "weight": 0.25,
+            "method": "prob_vs_odds",
+            "min_edge": 0.05
+          },
+          {
+            "name": "penalty_flags",
+            "weight": 0.15,
+            "penalties": {
+              "missing_xg": -20,
+              "missing_potentials": -15,
+              "odds_extreme": -10
+            }
+          }
+        ]
+      },
+      "list_policy": {
+        "strategy": "top_n_with_threshold",
+        "top_n": 5,
+        "min_confidence": 70,
+        "min_probability": 0.58,
+        "min_edge": 0.00,
+        "min_home_scoring_prob": 0.55,
+        "min_away_scoring_prob": 0.55,
+        "diversity": {
+          "max_per_league": 2,
+          "max_per_competition": 3,
+          "min_time_spread_hours": 2,
+          "blocked_low_tier_leagues": true
+        },
+        "description": "HIGH-ACCURACY: conf>=70, edge>0, both teams scoring prob>=55%"
+      },
+      "settlement": {
+        "evaluation_period": "fulltime",
+        "rule": "home_score > 0 AND away_score > 0",
+        "data_source": "ts_matches.home_score_display, away_score_display",
+        "void_conditions": ["status_id != 8", "score_missing"]
+      },
+      "data_requirements": {
+        "required": ["xg_prematch", "potentials.btts"],
+        "optional": ["odds", "h2h.btts_pct", "trends.home", "trends.away"],
+        "minimum_data_score": 60
+      },
+      "backtest": {
+        "min_matches": 100,
+        "min_hit_rate": 0.58,
+        "min_roi": 0.05,
+        "calibration_tolerance": 0.08
+      }
+    },
+    "HT_O05": {
+      "id": "HT_O05",
+      "display_name": "Half-Time Over 0.5",
+      "display_name_tr": "İlk Yarı 0.5 Üst",
+      "emoji": "⏱️",
+      "target": {
+        "type": "goals_halftime",
+        "threshold": 0.5,
+        "operator": ">=",
+        "description": "At least 1 goal in first half"
+      },
+      "probability_formula": {
+        "method": "weighted_ensemble",
+        "components": [
+          {
+            "name": "prior_probability",
+            "weight": 0.35,
+            "data_source": "footystats.potentials.o05HT",
+            "transform": "percentage_to_decimal",
+            "description": "FootyStats pre-calculated HT Over 0.5 potential"
+          },
+          {
+            "name": "poisson_halftime",
+            "weight": 0.40,
+            "data_source": "footystats.xg",
+            "method": "poisson_lambda_sum_halftime",
+            "params": {
+              "lambda_home": "xg.home * 0.45",
+              "lambda_away": "xg.away * 0.45",
+              "threshold": 0.5
+            },
+            "description": "Poisson probability for HT (45% of FT xG)"
+          },
+          {
+            "name": "form_adjustment",
+            "weight": 0.15,
+            "data_source": "footystats.trends",
+            "method": "recent_ht_goals_rate",
+            "lookback_matches": 5,
+            "description": "Recent first-half scoring rate"
+          },
+          {
+            "name": "attacking_tempo",
+            "weight": 0.10,
+            "data_source": "footystats.avg_potential",
+            "method": "tempo_indicator",
+            "description": "Overall attacking tempo indicator"
+          }
+        ],
+        "adjustments": [
+          {
+            "name": "slow_start_teams",
+            "condition": "both_teams_ht_avg < 0.4",
+            "modifier": -0.12,
+            "description": "Penalize if both teams score late"
+          },
+          {
+            "name": "fast_start_teams",
+            "condition": "any_team_ht_avg > 0.7",
+            "modifier": 0.08,
+            "description": "Bonus if either team starts fast"
+          }
+        ]
+      },
+      "confidence_rules": {
+        "min_confidence": 55,
+        "factors": [
+          {
+            "name": "data_completeness",
+            "weight": 0.30,
+            "conditions": {
+              "xg_available": 15,
+              "potentials_available": 15,
+              "trends_available": 5
+            }
+          },
+          {
+            "name": "prediction_consensus",
+            "weight": 0.30,
+            "method": "component_variance",
+            "threshold": 0.15
+          },
+          {
+            "name": "value_edge",
+            "weight": 0.25,
+            "method": "prob_vs_odds",
+            "min_edge": 0.05
+          },
+          {
+            "name": "penalty_flags",
+            "weight": 0.15,
+            "penalties": {
+              "missing_xg": -20,
+              "missing_potentials": -15,
+              "missing_ht_odds": -5
+            }
+          }
+        ]
+      },
+      "list_policy": {
+        "strategy": "top_n_with_threshold",
+        "top_n": 5,
+        "min_confidence": 72,
+        "min_probability": 0.65,
+        "min_edge": 0.00,
+        "require_early_goal_proxy": true,
+        "diversity": {
+          "max_per_league": 2,
+          "max_per_competition": 3,
+          "min_time_spread_hours": 2,
+          "blocked_low_tier_leagues": true
+        },
+        "description": "HIGH-ACCURACY: conf>=72, early_goal_proxy REQUIRED or blocked"
+      },
+      "settlement": {
+        "evaluation_period": "halftime",
+        "rule": "ht_total_goals >= 1",
+        "data_source": "ts_matches.home_scores[0] + away_scores[0]",
+        "void_conditions": ["status_id != 8", "ht_score_missing"]
+      },
+      "data_requirements": {
+        "required": ["xg_prematch", "potentials.o05HT"],
+        "optional": ["trends.home", "trends.away", "avg_potential"],
+        "minimum_data_score": 60
+      },
+      "backtest": {
+        "min_matches": 100,
+        "min_hit_rate": 0.62,
+        "min_roi": 0.05,
+        "calibration_tolerance": 0.08
+      }
+    },
+    "O35": {
+      "id": "O35",
+      "display_name": "Over 3.5 Goals",
+      "display_name_tr": "3.5 Üst Gol",
+      "emoji": "🎯",
+      "target": {
+        "type": "goals",
+        "threshold": 3.5,
+        "operator": ">=",
+        "description": "Total goals must be 4 or more"
+      },
+      "probability_formula": {
+        "method": "weighted_ensemble",
+        "components": [
+          {
+            "name": "prior_probability",
+            "weight": 0.20,
+            "data_source": "footystats.potentials.over25",
+            "transform": "percentage_to_decimal",
+            "adjustment": -0.20,
+            "description": "Derived from Over 2.5 potential with penalty"
+          },
+          {
+            "name": "poisson_distribution",
+            "weight": 0.50,
+            "data_source": "footystats.xg",
+            "method": "poisson_lambda_sum",
+            "params": {
+              "lambda_home": "xg.home",
+              "lambda_away": "xg.away",
+              "threshold": 3.5
+            },
+            "description": "Poisson probability for 4+ goals"
+          },
+          {
+            "name": "high_scoring_form",
+            "weight": 0.20,
+            "data_source": "footystats.trends",
+            "method": "recent_over35_rate",
+            "lookback_matches": 5,
+            "description": "Recent Over 3.5 rate"
+          },
+          {
+            "name": "avg_goals",
+            "weight": 0.10,
+            "data_source": "footystats.h2h.avg_goals",
+            "method": "h2h_avg_goals_proxy",
+            "threshold": 3.5,
+            "description": "H2H average goals indicator"
+          }
+        ],
+        "adjustments": [
+          {
+            "name": "very_low_xg",
+            "condition": "total_xg < 2.3",
+            "modifier": -0.15,
+            "description": "Strong penalty if xG is low"
+          },
+          {
+            "name": "very_high_xg",
+            "condition": "total_xg > 3.5",
+            "modifier": 0.10,
+            "description": "Bonus if xG is very high"
+          }
+        ]
+      },
+      "confidence_rules": {
+        "min_confidence": 50,
+        "factors": [
+          {
+            "name": "data_completeness",
+            "weight": 0.30,
+            "conditions": {
+              "xg_available": 15,
+              "potentials_available": 10,
+              "h2h_available": 5,
+              "trends_available": 5
+            }
+          },
+          {
+            "name": "prediction_consensus",
+            "weight": 0.30,
+            "method": "component_variance",
+            "threshold": 0.20
+          },
+          {
+            "name": "value_edge",
+            "weight": 0.25,
+            "method": "prob_vs_odds",
+            "min_edge": 0.08
+          },
+          {
+            "name": "penalty_flags",
+            "weight": 0.15,
+            "penalties": {
+              "missing_xg": -25,
+              "missing_potentials": -15
+            }
+          }
+        ]
+      },
+      "list_policy": {
+        "strategy": "top_n_with_threshold",
+        "top_n": 3,
+        "min_confidence": 78,
+        "min_probability": 0.50,
+        "min_edge": 0.00,
+        "min_lambda_total": 3.1,
+        "diversity": {
+          "max_per_league": 2,
+          "max_per_competition": 2,
+          "min_time_spread_hours": 3,
+          "blocked_low_tier_leagues": true
+        },
+        "description": "HIGH-ACCURACY: conf>=78, lambda>=3.1, edge>0"
+      },
+      "settlement": {
+        "evaluation_period": "fulltime",
+        "rule": "total_goals >= 4",
+        "data_source": "ts_matches.home_score_display + away_score_display",
+        "void_conditions": ["status_id != 8", "score_missing"]
+      },
+      "data_requirements": {
+        "required": ["xg_prematch", "potentials.over25"],
+        "optional": ["h2h.avg_goals", "trends.home", "trends.away"],
+        "minimum_data_score": 55
+      },
+      "backtest": {
+        "min_matches": 100,
+        "min_hit_rate": 0.55,
+        "min_roi": 0.05,
+        "calibration_tolerance": 0.10
+      }
+    },
+    "HOME_O15": {
+      "id": "HOME_O15",
+      "display_name": "Home Over 1.5",
+      "display_name_tr": "Ev Sahibi 1.5 Üst",
+      "emoji": "🏠",
+      "target": {
+        "type": "team_goals",
+        "team": "home",
+        "threshold": 1.5,
+        "operator": ">=",
+        "description": "Home team must score 2 or more goals"
+      },
+      "probability_formula": {
+        "method": "weighted_ensemble",
+        "components": [
+          {
+            "name": "prior_probability",
+            "weight": 0.25,
+            "data_source": "footystats.potentials.o15",
+            "transform": "percentage_to_decimal",
+            "description": "FootyStats pre-calculated Over 1.5 potential"
+          },
+          {
+            "name": "poisson_home_goals",
+            "weight": 0.40,
+            "data_source": "footystats.xg.home",
+            "method": "poisson_single_team",
+            "params": {
+              "lambda": "xg.home",
+              "threshold": 1.5
+            },
+            "description": "Poisson probability for home team 2+ goals"
+          },
+          {
+            "name": "home_form",
+            "weight": 0.20,
+            "data_source": "footystats.home_team.seasonGoals_home",
+            "method": "home_scoring_rate",
+            "lookback_matches": 5,
+            "description": "Home team's home scoring form"
+          },
+          {
+            "name": "home_win_odds",
+            "weight": 0.15,
+            "data_source": "footystats.odds_ft_1",
+            "method": "odds_to_probability_correlation",
+            "description": "Correlation with home win odds"
+          }
+        ],
+        "adjustments": [
+          {
+            "name": "weak_defense_opponent",
+            "condition": "away_team_conceded_avg > 1.5",
+            "modifier": 0.08,
+            "description": "Bonus if opponent has weak defense"
+          },
+          {
+            "name": "strong_defense_opponent",
+            "condition": "away_team_conceded_avg < 0.8",
+            "modifier": -0.10,
+            "description": "Penalty if opponent has strong defense"
+          }
+        ]
+      },
+      "confidence_rules": {
+        "min_confidence": 55,
+        "factors": [
+          {
+            "name": "data_completeness",
+            "weight": 0.30,
+            "conditions": {
+              "xg_available": 15,
+              "potentials_available": 15,
+              "form_available": 5,
+              "odds_available": 5
+            }
+          },
+          {
+            "name": "prediction_consensus",
+            "weight": 0.30,
+            "method": "component_variance",
+            "threshold": 0.15
+          },
+          {
+            "name": "value_edge",
+            "weight": 0.25,
+            "method": "prob_vs_odds",
+            "min_edge": 0.05
+          },
+          {
+            "name": "penalty_flags",
+            "weight": 0.15,
+            "penalties": {
+              "missing_xg": -20,
+              "missing_potentials": -15
+            }
+          }
+        ]
+      },
+      "list_policy": {
+        "strategy": "top_n_with_threshold",
+        "top_n": 5,
+        "min_confidence": 75,
+        "min_probability": 0.58,
+        "min_edge": 0.00,
+        "min_lambda_home": 1.45,
+        "diversity": {
+          "max_per_league": 2,
+          "max_per_competition": 3,
+          "min_time_spread_hours": 2,
+          "blocked_low_tier_leagues": true
+        },
+        "description": "HIGH-ACCURACY: conf>=75, lambda_home>=1.45, edge>0"
+      },
+      "settlement": {
+        "evaluation_period": "fulltime",
+        "rule": "home_score >= 2",
+        "data_source": "ts_matches.home_score_display",
+        "void_conditions": ["status_id != 8", "score_missing"]
+      },
+      "data_requirements": {
+        "required": ["xg_prematch.home", "potentials.o15"],
+        "optional": ["odds_ft_1", "home_team.seasonGoals_home"],
+        "minimum_data_score": 60
+      },
+      "backtest": {
+        "min_matches": 100,
+        "min_hit_rate": 0.58,
+        "min_roi": 0.05,
+        "calibration_tolerance": 0.08
+      }
+    },
+    "CORNERS_O85": {
+      "id": "CORNERS_O85",
+      "display_name": "Corners Over 8.5",
+      "display_name_tr": "Korner 8.5 Üst",
+      "emoji": "🚩",
+      "target": {
+        "type": "corners",
+        "threshold": 8.5,
+        "operator": ">=",
+        "description": "Total corners must be 9 or more"
+      },
+      "probability_formula": {
+        "method": "weighted_ensemble",
+        "components": [
+          {
+            "name": "prior_probability",
+            "weight": 0.40,
+            "data_source": "footystats.potentials.corners",
+            "transform": "percentage_to_decimal",
+            "description": "FootyStats pre-calculated corners potential"
+          },
+          {
+            "name": "poisson_corners",
+            "weight": 0.35,
+            "data_source": "footystats.corners_avg",
+            "method": "poisson_lambda_sum",
+            "params": {
+              "lambda_home": "corners_avg.home",
+              "lambda_away": "corners_avg.away",
+              "threshold": 8.5
+            },
+            "description": "Poisson probability based on corners average"
+          },
+          {
+            "name": "form_adjustment",
+            "weight": 0.15,
+            "data_source": "footystats.trends",
+            "method": "recent_corners_rate",
+            "lookback_matches": 5,
+            "description": "Recent corners rate"
+          },
+          {
+            "name": "attacking_style",
+            "weight": 0.10,
+            "data_source": "footystats.avg_potential",
+            "method": "attacking_correlation",
+            "description": "Correlation with attacking play style"
+          }
+        ],
+        "adjustments": [
+          {
+            "name": "defensive_matchup",
+            "condition": "both_teams_corners_avg < 4.0",
+            "modifier": -0.10,
+            "description": "Penalty if both teams have low corners"
+          },
+          {
+            "name": "attacking_matchup",
+            "condition": "total_corners_avg > 10.0",
+            "modifier": 0.08,
+            "description": "Bonus if both teams have high corners"
+          }
+        ]
+      },
+      "confidence_rules": {
+        "min_confidence": 50,
+        "factors": [
+          {
+            "name": "data_completeness",
+            "weight": 0.35,
+            "conditions": {
+              "potentials_available": 20,
+              "corners_avg_available": 15,
+              "trends_available": 5
+            }
+          },
+          {
+            "name": "prediction_consensus",
+            "weight": 0.30,
+            "method": "component_variance",
+            "threshold": 0.18
+          },
+          {
+            "name": "value_edge",
+            "weight": 0.20,
+            "method": "prob_vs_odds",
+            "min_edge": 0.03
+          },
+          {
+            "name": "penalty_flags",
+            "weight": 0.15,
+            "penalties": {
+              "missing_potentials": -20,
+              "missing_corners_avg": -15,
+              "no_odds": -5
+            }
+          }
+        ]
+      },
+      "list_policy": {
+        "strategy": "top_n_with_threshold",
+        "top_n": 4,
+        "min_confidence": 72,
+        "min_probability": 0.55,
+        "min_edge": 0.00,
+        "require_corners_potential": true,
+        "diversity": {
+          "max_per_league": 2,
+          "max_per_competition": 2,
+          "min_time_spread_hours": 3,
+          "blocked_low_tier_leagues": true
+        },
+        "description": "HIGH-ACCURACY: conf>=72, corners_potential REQUIRED or blocked"
+      },
+      "settlement": {
+        "evaluation_period": "fulltime",
+        "rule": "total_corners >= 9",
+        "data_source": "ts_matches.home_scores[4] + away_scores[4]",
+        "void_conditions": ["status_id != 8", "corners_missing"]
+      },
+      "data_requirements": {
+        "required": ["potentials.corners"],
+        "optional": ["corners_avg.home", "corners_avg.away", "trends"],
+        "minimum_data_score": 50
+      },
+      "backtest": {
+        "min_matches": 100,
+        "min_hit_rate": 0.55,
+        "min_roi": 0.03,
+        "calibration_tolerance": 0.12
+      }
+    },
+    "CARDS_O25": {
+      "id": "CARDS_O25",
+      "display_name": "Cards Over 2.5",
+      "display_name_tr": "Kart 2.5 Üst",
+      "emoji": "🟨",
+      "target": {
+        "type": "cards",
+        "threshold": 2.5,
+        "operator": ">=",
+        "description": "Total yellow cards must be 3 or more"
+      },
+      "probability_formula": {
+        "method": "weighted_ensemble",
+        "components": [
+          {
+            "name": "prior_probability",
+            "weight": 0.40,
+            "data_source": "footystats.potentials.cards",
+            "transform": "percentage_to_decimal",
+            "description": "FootyStats pre-calculated cards potential"
+          },
+          {
+            "name": "poisson_cards",
+            "weight": 0.35,
+            "data_source": "footystats.cards_avg",
+            "method": "poisson_lambda_sum",
+            "params": {
+              "lambda_home": "cards_avg.home",
+              "lambda_away": "cards_avg.away",
+              "threshold": 2.5
+            },
+            "description": "Poisson probability based on cards average"
+          },
+          {
+            "name": "form_adjustment",
+            "weight": 0.15,
+            "data_source": "footystats.trends",
+            "method": "recent_cards_rate",
+            "lookback_matches": 5,
+            "description": "Recent cards rate"
+          },
+          {
+            "name": "rivalry_intensity",
+            "weight": 0.10,
+            "data_source": "footystats.xg",
+            "method": "intensity_proxy",
+            "description": "Match intensity proxy from xG differential"
+          }
+        ],
+        "adjustments": [
+          {
+            "name": "fair_play_teams",
+            "condition": "both_teams_cards_avg < 1.5",
+            "modifier": -0.12,
+            "description": "Penalty if both teams have low cards"
+          },
+          {
+            "name": "aggressive_teams",
+            "condition": "both_teams_cards_avg > 2.5",
+            "modifier": 0.10,
+            "description": "Bonus if both teams are aggressive"
+          }
+        ]
+      },
+      "confidence_rules": {
+        "min_confidence": 45,
+        "factors": [
+          {
+            "name": "data_completeness",
+            "weight": 0.35,
+            "conditions": {
+              "potentials_available": 20,
+              "cards_avg_available": 15,
+              "trends_available": 5
+            }
+          },
+          {
+            "name": "prediction_consensus",
+            "weight": 0.30,
+            "method": "component_variance",
+            "threshold": 0.20
+          },
+          {
+            "name": "value_edge",
+            "weight": 0.20,
+            "method": "prob_vs_odds",
+            "min_edge": 0.03
+          },
+          {
+            "name": "penalty_flags",
+            "weight": 0.15,
+            "penalties": {
+              "missing_potentials": -20,
+              "missing_cards_avg": -15,
+              "no_referee_data": -10
+            }
+          }
+        ]
+      },
+      "list_policy": {
+        "strategy": "top_n_with_threshold",
+        "top_n": 3,
+        "min_confidence": 75,
+        "min_probability": 0.52,
+        "min_edge": 0.00,
+        "require_cards_potential": true,
+        "require_referee_data": false,
+        "diversity": {
+          "max_per_league": 1,
+          "max_per_competition": 2,
+          "min_time_spread_hours": 3,
+          "blocked_low_tier_leagues": true
+        },
+        "description": "HIGH-ACCURACY: conf>=75, cards_potential REQUIRED (referee optional)"
+      },
+      "settlement": {
+        "evaluation_period": "fulltime",
+        "rule": "total_cards >= 3",
+        "data_source": "ts_matches.home_scores[2] + away_scores[3]",
+        "void_conditions": ["status_id != 8", "cards_missing"]
+      },
+      "data_requirements": {
+        "required": ["potentials.cards"],
+        "optional": ["cards_avg.home", "cards_avg.away", "trends"],
+        "minimum_data_score": 45
+      },
+      "backtest": {
+        "min_matches": 100,
+        "min_hit_rate": 0.52,
+        "min_roi": 0.03,
+        "calibration_tolerance": 0.15
+      }
+    }
+  },
+  "common_thresholds": {
+    "min_data_score": 50,
+    "min_confidence_to_pick": 55,
+    "min_probability_to_pick": 0.50,
+    "min_edge_to_pick": 0.03,
+    "max_component_variance": 0.20
+  },
+  "settlement_rules": {
+    "match_status_required": 8,
+    "void_on_missing_data": true,
+    "void_on_abandoned": true,
+    "void_on_postponed": true
+  }
+}

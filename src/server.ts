@@ -31,6 +31,8 @@ import { theSportsAPI } from './core/TheSportsAPIManager'; // Phase 3A: Singleto
 import { unifiedPredictionService } from './services/ai/unifiedPrediction.service';
 import { PredictionOrchestrator } from './services/orchestration/PredictionOrchestrator';
 import type { PredictionCreatedEvent, PredictionUpdatedEvent, PredictionDeletedEvent } from './services/orchestration/predictionEvents';
+// Week-2B: Telegram channel router
+import { channelRouter } from './services/telegram/channelRouter';
 
 // Workers - TeamData and TeamLogo use unique service patterns
 import { TeamDataSyncWorker } from './jobs/teamDataSync.job';
@@ -113,6 +115,17 @@ const start = async () => {
       await coldStartKickoffBackfill();
     } catch (coldStartErr: any) {
       logger.warn('⚠️  Cold Start kickoff backfill failed:', coldStartErr.message);
+    }
+
+    // Week-2B: Initialize Telegram channel router
+    // Validates all required channel IDs and fails fast if missing
+    try {
+      channelRouter.initialize();
+      logger.info('✅ Telegram channel router initialized');
+    } catch (channelRouterErr: any) {
+      logger.error('❌ Telegram channel router initialization failed:', channelRouterErr.message);
+      logger.error('   Channel publishing will not work. Please check .env configuration.');
+      // Continue server startup even if channel router fails (fail gracefully)
     }
 
     await fastify.listen({ port: PORT, host: HOST });

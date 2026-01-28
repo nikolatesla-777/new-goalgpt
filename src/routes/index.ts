@@ -64,6 +64,9 @@ import { footyStatsRoutes } from './footystats.routes';
 import { partnersRoutes } from './partners.routes';
 import { telegramRoutes } from './telegram.routes';
 
+// Scoring & Predictions
+import { registerScoringRoutes } from './scoring.routes';
+
 // ============================================================================
 // CENTRAL REGISTRATION FUNCTION
 // ============================================================================
@@ -97,6 +100,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // Prediction viewing (read-only)
     publicAPI.register(predictionRoutes);
+
+    // Scoring API (composite TheSports + FootyStats features)
+    await registerScoringRoutes(publicAPI);
   });
 
   // ============================================================================
