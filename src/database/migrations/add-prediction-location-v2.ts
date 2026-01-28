@@ -93,7 +93,7 @@ async function migrate() {
         country_id = cnt.id::text
       FROM ts_matches m
       JOIN ts_competitions c ON m.competition_id = c.external_id
-      LEFT JOIN ts_countries cnt ON c.country_id = cnt.id
+      LEFT JOIN ts_countries cnt ON c.country_id = cnt.external_id
       WHERE p.match_id = m.external_id
         AND p.match_id IS NOT NULL
         AND (p.competition_id IS NULL OR p.country_id IS NULL)
@@ -121,8 +121,8 @@ async function migrate() {
         c.name as competition_name,
         cnt.name as country_name
       FROM ai_predictions p
-      LEFT JOIN ts_competitions c ON p.competition_id = c.id::text
-      LEFT JOIN ts_countries cnt ON p.country_id = cnt.id::text
+      LEFT JOIN ts_competitions c ON p.competition_id = c.external_id
+      LEFT JOIN ts_countries cnt ON p.country_id = cnt.external_id
       WHERE p.competition_id IS NOT NULL
       LIMIT 5
     `);

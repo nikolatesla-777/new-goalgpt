@@ -58,7 +58,7 @@ async function migrate() {
         country_id = cnt.id::varchar
       FROM ts_matches m
       JOIN ts_competitions c ON m.competition_id::varchar = c.external_id::varchar
-      LEFT JOIN ts_countries cnt ON c.country_id = cnt.id
+      LEFT JOIN ts_countries cnt ON c.country_id = cnt.external_id
       WHERE p.match_id::varchar = m.external_id::varchar
         AND (p.competition_id IS NULL OR p.country_id IS NULL)
     `);
