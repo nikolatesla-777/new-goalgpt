@@ -33,20 +33,6 @@ import {
 } from '../services/footystats/cache.service';
 
 export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> {
-  // DEBUG ROUTES - Added to test route registration
-  fastify.get('/footystats/test-simple', async () => {
-    return { success: true, message: 'Simple test works!' };
-  });
-
-  fastify.get('/footystats/test-trends-simple', async () => {
-    return { success: true, message: 'Trends test works!', data: [] };
-  });
-
-  // TEMP DEBUG: Test if routes are loading
-  fastify.get('/footystats/test-loading', async () => {
-    return { success: true, message: 'FootyStats routes are loaded!' };
-  });
-
   // NOTE: Debug endpoint /footystats/debug-db DELETED for security (exposed DB schema)
 
   // Search competitions by name or country
