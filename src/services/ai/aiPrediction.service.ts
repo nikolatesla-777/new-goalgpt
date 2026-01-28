@@ -884,7 +884,7 @@ export class AIPredictionService {
             LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id
             LEFT JOIN ts_teams at ON m.away_team_id = at.external_id
             LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
-            LEFT JOIN ts_countries ctry ON c.country_id = ctry.id
+            LEFT JOIN ts_countries ctry ON c.country_id = ctry.external_id
             WHERE p.match_id IS NOT NULL
             ORDER BY p.created_at DESC
             LIMIT $1

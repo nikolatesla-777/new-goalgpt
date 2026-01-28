@@ -189,7 +189,7 @@ class FootyStatsMappingService {
       const tsLeagues = await safeQuery<{ id: string; name: string; country_name: string }>(
         `SELECT c.id, c.name, COALESCE(co.name, 'International') as country_name
          FROM ts_competitions c
-         LEFT JOIN ts_countries co ON c.country_id = co.id
+         LEFT JOIN ts_countries co ON c.country_id = co.external_id
          ORDER BY co.name NULLS LAST, c.name
          LIMIT 3000`
       );

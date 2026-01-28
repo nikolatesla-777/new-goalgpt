@@ -32,7 +32,7 @@ export async function getLeagueById(
         cn.name as country_name,
         c.category_id
       FROM ts_competitions c
-      LEFT JOIN ts_countries cn ON c.country_id = cn.id
+      LEFT JOIN ts_countries cn ON c.country_id = cn.external_id
       WHERE c.external_id = $1
     `, [league_id]);
 
