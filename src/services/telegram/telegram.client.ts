@@ -45,20 +45,44 @@ interface MessageResult {
 // ============================================================================
 
 /**
- * Simple rate limiter to prevent hitting Telegram API limits
+ * PHASE-0.1: Enhanced rate limiter with 429 backoff support
  * Telegram allows 30 messages/second to different chats
  */
 class TelegramRateLimiter {
   private lastRequestTime = 0;
   private minIntervalMs = 50; // 50ms = 20 req/sec (under Telegram's 30/sec limit)
+  private backoffMs = 0; // Dynamic backoff for 429 responses
 
   async throttle(): Promise<void> {
     const now = Date.now();
+
+    // If in backoff period (429 received), wait extra time
+    if (this.backoffMs > 0) {
+      logger.debug(`[Telegram] ⏳ Backoff active, waiting ${this.backoffMs}ms`);
+      await new Promise(resolve => setTimeout(resolve, this.backoffMs));
+      this.backoffMs = 0; // Reset after waiting
+    }
+
     const elapsed = now - this.lastRequestTime;
     if (elapsed < this.minIntervalMs) {
       await new Promise(resolve => setTimeout(resolve, this.minIntervalMs - elapsed));
     }
     this.lastRequestTime = Date.now();
+  }
+
+  /**
+   * Set backoff time after receiving 429 response
+   */
+  setBackoff(ms: number): void {
+    this.backoffMs = Math.min(ms, 30000); // Max 30 seconds
+    logger.info(`[Telegram] 🕐 Backoff set to ${this.backoffMs}ms`);
+  }
+
+  /**
+   * Get current backoff state
+   */
+  isInBackoff(): boolean {
+    return this.backoffMs > 0;
   }
 }
 
@@ -115,8 +139,35 @@ class TelegramBotClient {
       async (error) => {
         this.errorCount++;
 
-        // PHASE-0: Handle 403 Forbidden (user blocked the bot)
         const errorCode = error.response?.data?.error_code;
+
+        // PHASE-0.1: Handle 429 Too Many Requests (rate limited)
+        if (errorCode === 429) {
+          const retryAfter = error.response?.data?.parameters?.retry_after || 1;
+          const backoffMs = retryAfter * 1000;
+
+          logger.warn('[Telegram] ⚠️ 429 Rate Limited - backing off', {
+            retry_after: retryAfter,
+            backoff_ms: backoffMs,
+            description: error.response?.data?.description,
+          });
+
+          // Set backoff for next request
+          this.rateLimiter.setBackoff(backoffMs);
+
+          // Return soft fail with retry_after info (caller can retry)
+          return {
+            data: {
+              ok: false,
+              rate_limited: true,
+              error_code: 429,
+              retry_after: retryAfter,
+              description: error.response?.data?.description || 'Too Many Requests',
+            }
+          };
+        }
+
+        // PHASE-0: Handle 403 Forbidden (user blocked the bot)
         if (errorCode === 403) {
           let chatId: string | null = null;
           try {
@@ -191,12 +242,14 @@ class TelegramBotClient {
 
   /**
    * Edit an existing message
+   * PHASE-0.1: Added rate limiting
    */
   async editMessageText(
     chatId: string | number,
     messageId: number,
     text: string
   ): Promise<TelegramResponse<MessageResult>> {
+    await this.rateLimiter.throttle();
     this.requestCount++;
     const response = await this.axiosInstance.post<TelegramResponse<MessageResult>>('/editMessageText', {
       chat_id: chatId,
@@ -209,12 +262,14 @@ class TelegramBotClient {
 
   /**
    * Reply to a message
+   * PHASE-0.1: Added rate limiting
    */
   async replyToMessage(
     chatId: string | number,
     replyToMessageId: number,
     text: string
   ): Promise<TelegramResponse<MessageResult>> {
+    await this.rateLimiter.throttle();
     this.requestCount++;
     const response = await this.axiosInstance.post<TelegramResponse<MessageResult>>('/sendMessage', {
       chat_id: chatId,

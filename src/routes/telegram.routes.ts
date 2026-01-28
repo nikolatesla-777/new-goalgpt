@@ -139,13 +139,25 @@ async function createDraftPost(
   try {
     await client.query('BEGIN');
 
-    // PHASE-0: Insert with dedupe_key for idempotency tracking
+    // PHASE-0.1: Insert with ON CONFLICT for race condition protection
+    // If dedupe_key already exists, DO NOTHING and return null
     const result = await client.query(
       `INSERT INTO telegram_posts (match_id, fs_match_id, channel_id, content, status, dedupe_key, content_type, template_version)
        VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7)
+       ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
        RETURNING id`,
       [matchId, fsMatchId, channelId, content, dedupeKey, contentType, TEMPLATE_VERSION]
     );
+
+    // If no id returned, conflict occurred - duplicate was skipped at DB level
+    if (dedupeKey && !result.rows[0]?.id) {
+      logger.info('[Telegram] ⏭️ DB CONFLICT: Duplicate dedupe_key, skipping insert', {
+        dedupe_key: dedupeKey,
+        match_id: matchId,
+      });
+      await client.query('ROLLBACK');
+      return null;
+    }
 
     await client.query('COMMIT');
     return result.rows[0]?.id || null;
@@ -217,6 +229,7 @@ async function markFailed(postId: string, error: string, retryCount: number, cli
 /**
  * PHASE-1: Retry logic with exponential backoff
  * Attempts Telegram send up to MAX_RETRY_ATTEMPTS times
+ * PHASE-0.1: Added 429 rate limit handling with separate retry counter
  *
  * FIX: Accepts optional client parameter, NO connection held during Telegram API call
  */
@@ -227,6 +240,8 @@ async function sendWithRetry(
   client?: any
 ): Promise<number> {
   let lastError: Error | null = null;
+  let rateLimitRetries = 0;
+  const MAX_RATE_LIMIT_RETRIES = 3; // Max 429 retries to prevent infinite loop
 
   for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
     try {
@@ -250,6 +265,29 @@ async function sendWithRetry(
           // Return -1 to signal blocked (no retry needed)
           return -1;
         }
+
+        // PHASE-0.1: Handle 429 rate limited - wait and retry (don't count as normal attempt)
+        if ((result as any).rate_limited) {
+          rateLimitRetries++;
+          const retryAfter = (result as any).retry_after || 1;
+
+          if (rateLimitRetries > MAX_RATE_LIMIT_RETRIES) {
+            logger.error(`[Telegram] ❌ Max 429 retries (${MAX_RATE_LIMIT_RETRIES}) exceeded for post ${postId}`);
+            throw new Error(`Rate limited too many times (${rateLimitRetries} retries)`);
+          }
+
+          logger.warn(`[Telegram] ⚠️ Rate limited (429) - waiting ${retryAfter}s before retry (${rateLimitRetries}/${MAX_RATE_LIMIT_RETRIES})`, {
+            post_id: postId,
+            attempt: attempt + 1,
+            retry_after: retryAfter,
+            rate_limit_retry: rateLimitRetries,
+          });
+          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+          // Don't increment attempt, just continue to retry
+          attempt--; // Will be incremented by loop, so net effect is same attempt
+          continue;
+        }
+
         throw new Error(`Telegram API returned ok=false: ${JSON.stringify(result)}`);
       }
 
