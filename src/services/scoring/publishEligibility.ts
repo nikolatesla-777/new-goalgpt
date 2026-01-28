@@ -111,7 +111,10 @@ export function canPublish(
     passedChecks.push('No blocking risk flags');
   }
 
-  // === CHECK 6: Market-specific thresholds ===
+  // === CHECK 6: Data requirements (required fields) ===
+  checkDataRequirements(marketId, scoreResult, marketDef, failedChecks, passedChecks);
+
+  // === CHECK 7: Market-specific thresholds ===
   checkMarketSpecificThresholds(marketId, scoreResult, policy, failedChecks, passedChecks);
 
   // === FINAL VERDICT ===
@@ -138,6 +141,106 @@ export function canPublish(
     failedChecks,
     passedChecks,
   };
+}
+
+/**
+ * Check data requirements from market registry
+ *
+ * Validates that all required fields from market_registry.data_requirements
+ * are present (not in completeness.missing list)
+ */
+function checkDataRequirements(
+  marketId: MarketId,
+  scoreResult: ScoringResult,
+  marketDef: any,
+  failedChecks: string[],
+  passedChecks: string[]
+): void {
+  const dataReqs = marketDef.data_requirements;
+  if (!dataReqs || !dataReqs.required) {
+    passedChecks.push('No explicit data requirements defined');
+    return;
+  }
+
+  const requiredFields: string[] = dataReqs.required;
+
+  // Check metadata for required fields
+  // Map registry field names to metadata/risk flag checks
+  const fieldChecks: Record<string, () => boolean> = {
+    'xg_prematch': () => {
+      if (scoreResult.metadata.lambda_total === undefined) {
+        failedChecks.push('Required field "xg_prematch" is missing (xG data unavailable)');
+        return false;
+      }
+      return true;
+    },
+    'potentials.over25': () => {
+      if (scoreResult.risk_flags.includes('MISSING_POTENTIALS')) {
+        failedChecks.push('Required field "potentials.over25" is missing');
+        return false;
+      }
+      return true;
+    },
+    'potentials.btts': () => {
+      if (scoreResult.risk_flags.includes('MISSING_POTENTIALS')) {
+        failedChecks.push('Required field "potentials.btts" is missing');
+        return false;
+      }
+      return true;
+    },
+    'potentials.o05HT': () => {
+      if (scoreResult.risk_flags.includes('MISSING_POTENTIALS')) {
+        failedChecks.push('Required field "potentials.o05HT" is missing');
+        return false;
+      }
+      return true;
+    },
+    'potentials.o15': () => {
+      if (scoreResult.risk_flags.includes('MISSING_POTENTIALS')) {
+        failedChecks.push('Required field "potentials.o15" is missing');
+        return false;
+      }
+      return true;
+    },
+    'potentials.corners': () => {
+      if (scoreResult.metadata.corners_avg_total === undefined) {
+        failedChecks.push('Required field "potentials.corners" is missing');
+        return false;
+      }
+      return true;
+    },
+    'potentials.cards': () => {
+      if (scoreResult.metadata.cards_avg_total === undefined) {
+        failedChecks.push('Required field "potentials.cards" is missing');
+        return false;
+      }
+      return true;
+    },
+    'odds': () => {
+      if (scoreResult.risk_flags.includes('MISSING_ODDS')) {
+        failedChecks.push('Required field "odds" is missing');
+        return false;
+      }
+      return true;
+    },
+  };
+
+  // Check each required field
+  let allRequiredPresent = true;
+  for (const field of requiredFields) {
+    const checkFn = fieldChecks[field];
+    if (checkFn) {
+      if (!checkFn()) {
+        allRequiredPresent = false;
+      }
+    } else {
+      logger.warn(`[PublishEligibility] Unknown required field: ${field}`);
+    }
+  }
+
+  if (allRequiredPresent) {
+    passedChecks.push(`All required fields present: ${requiredFields.join(', ')}`);
+  }
 }
 
 /**

@@ -328,6 +328,291 @@ const result = await marketScorer.scoreMarket('O25', thesportsFeatures.features)
 
 ---
 
-**Document Version**: 1.0.0
+## Composite Pipeline (TheSports + FootyStats)
+
+### Overview
+
+**CRITICAL**: TheSports alone cannot provide xG, odds, or potentials data. The scoring system uses a **COMPOSITE PIPELINE** that merges:
+
+- **TheSports**: Identity, settlement data (scores, corners, cards)
+- **FootyStats**: Predictive features (xG, odds, potentials, trends)
+
+### Pipeline Flow
+
+```
+Match ID (TheSports external_id)
+         ↓
+┌────────────────────────────────────────────┐
+│ featureBuilderService.buildScoringFeatures │
+└────────────────────────────────────────────┘
+         ↓
+   STEP 1: Fetch TheSports Match
+         ↓
+   ┌─────────────────┐
+   │ ts_matches      │ ← SELECT WHERE external_id = $1
+   └─────────────────┘
+         ↓
+   ┌─────────────────────────┐
+   │ TheSportsMatchAdapter   │ → Base ScoringFeatures
+   └─────────────────────────┘
+         ↓
+   STEP 2: Try to Link FootyStats Data
+         ↓
+   ┌──────────────────────────┐
+   │ METHOD 1: Stored Mapping │
+   └──────────────────────────┘
+   Query: fs_match_stats WHERE ts_match_id = <internal_id>
+         ↓
+   Found? ──Yes→ Use FootyStats data
+         │
+        No
+         ↓
+   ┌────────────────────────────┐
+   │ METHOD 2: Deterministic    │
+   │ Date ±2h + EXACT team names│
+   └────────────────────────────┘
+   Query: fs_match_stats + ts_matches JOIN
+          WHERE match_time ±2h AND LOWER(home_team) = LOWER($3)
+         ↓
+   Found? ──Yes→ Use FootyStats data
+         │
+        No
+         ↓
+   ┌────────────────┐
+   │ METHOD 3: None │ → FootyStats data = null
+   └────────────────┘
+         ↓
+   STEP 3: Merge Features
+         ↓
+   ┌──────────────────────────┐
+   │ Composite ScoringFeatures│
+   │ source: 'hybrid'         │ (if FootyStats found)
+   │ source: 'thesports'      │ (if FootyStats NOT found)
+   └──────────────────────────┘
+         ↓
+   STEP 4: Completeness + Risk Flags
+         ↓
+   Return: {
+     features: ScoringFeatures,
+     source_refs: SourceReferences,
+     risk_flags: ScoringRiskFlag[]
+   }
+```
+
+### Linking Strategy (NO FUZZY MATCHING)
+
+**RULE**: Only deterministic links are allowed.
+
+#### Method 1: Stored Mapping (Fastest)
+```sql
+SELECT *
+FROM fs_match_stats
+WHERE ts_match_id = '<ts_internal_uuid>'
+LIMIT 1
+```
+
+**Pros**: Instant, reliable (pre-established mapping)
+**Cons**: Only works for historical matches already mapped
+
+#### Method 2: Deterministic Match (Fallback)
+```sql
+SELECT *
+FROM fs_match_stats fs
+JOIN ts_matches m ON fs.ts_match_id = m.id
+WHERE m.match_time >= $1  -- matchTime - 7200 (2 hours before)
+  AND m.match_time <= $2  -- matchTime + 7200 (2 hours after)
+  AND LOWER(m.home_team) = LOWER($3)  -- EXACT normalized team name
+  AND LOWER(m.away_team) = LOWER($4)  -- EXACT normalized team name
+LIMIT 1
+```
+
+**Pros**: Catches recent matches not yet in mapping table
+**Cons**: Requires exact team name match (no fuzzy logic)
+
+#### Method 3: Not Found
+If neither method finds a match:
+- `footystats_linked: false`
+- `link_method: 'not_found'`
+- All FootyStats fields → `undefined`
+- Risk flags: `MISSING_XG`, `MISSING_ODDS`, `MISSING_POTENTIALS`
+
+### Source References Tracking
+
+Every scoring result includes `source_refs` for full traceability:
+
+```typescript
+{
+  thesports_match_id: "ts-match-123",     // TheSports external_id
+  thesports_internal_id: "uuid-456",      // ts_matches.id (internal UUID)
+  footystats_match_id: 789,               // fs_match_stats.fs_match_id (if found)
+  footystats_linked: true,                // Whether FootyStats data was found
+  link_method: "stored_mapping"           // How FootyStats was linked
+}
+```
+
+### Data Responsibilities
+
+| Data Type | Source | Fields |
+|-----------|--------|--------|
+| **Identity** | TheSports | match_id, home_team, away_team, kickoff_ts |
+| **Settlement** | TheSports | ft_scores, ht_scores, corners, cards |
+| **Predictive** | FootyStats | xg, odds, potentials, trends, h2h |
+| **Hybrid** | Both | completeness, risk_flags |
+
+### Composite Feature Example
+
+**Scenario**: Barcelona vs Real Madrid (FootyStats data FOUND)
+
+```typescript
+{
+  features: {
+    source: "hybrid",  // ✅ Both sources
+    match_id: "ts-match-123",
+    kickoff_ts: 1706553600,
+
+    // TheSports identity
+    home_team: { id: "team-1", name: "Barcelona" },
+    away_team: { id: "team-2", name: "Real Madrid" },
+
+    // TheSports settlement
+    ft_scores: { home: 3, away: 1, total: 4 },
+    ht_scores: { home: 2, away: 0, total: 2 },
+    corners: { home: 7, away: 4, total: 11 },
+    cards: { home: 2, away: 1, total: 3 },
+
+    // FootyStats predictive
+    xg: { home: 1.65, away: 1.20, total: 2.85 },
+    odds: { home_win: 2.10, draw: 3.40, away_win: 3.50 },
+    potentials: { over25: 68, btts: 72, ... },
+
+    completeness: {
+      present: ["ft_scores", "ht_scores", "corners", "cards", "xg", "odds", "potentials"],
+      missing: []
+    }
+  },
+
+  source_refs: {
+    thesports_match_id: "ts-match-123",
+    thesports_internal_id: "ts-internal-uuid",
+    footystats_match_id: 789,
+    footystats_linked: true,
+    link_method: "stored_mapping"
+  },
+
+  risk_flags: []  // All data present
+}
+```
+
+**Scenario**: Barcelona vs Real Madrid (FootyStats data NOT FOUND)
+
+```typescript
+{
+  features: {
+    source: "thesports",  // ❌ Only TheSports
+    match_id: "ts-match-123",
+
+    // TheSports data only
+    home_team: { id: "team-1", name: "Barcelona" },
+    away_team: { id: "team-2", name: "Real Madrid" },
+    ft_scores: { home: 3, away: 1, total: 4 },
+    ht_scores: { home: 2, away: 0, total: 2 },
+
+    // FootyStats data missing
+    xg: undefined,
+    odds: undefined,
+    potentials: undefined,
+
+    completeness: {
+      present: ["ft_scores", "ht_scores"],
+      missing: ["xg", "odds", "potentials", "trends", "h2h"]
+    }
+  },
+
+  source_refs: {
+    thesports_match_id: "ts-match-123",
+    thesports_internal_id: "ts-internal-uuid",
+    footystats_match_id: undefined,
+    footystats_linked: false,
+    link_method: "not_found"
+  },
+
+  risk_flags: ["MISSING_XG", "MISSING_ODDS", "MISSING_POTENTIALS"]
+}
+```
+
+### API Endpoint Usage
+
+```bash
+# Get composite scoring for a match (all markets)
+curl http://localhost:3000/api/matches/ts-match-123/scoring
+
+# Filter markets
+curl "http://localhost:3000/api/matches/ts-match-123/scoring?markets=O25,BTTS"
+
+# Specify locale (tr|en)
+curl "http://localhost:3000/api/matches/ts-match-123/scoring?locale=tr"
+```
+
+**Response**:
+```json
+{
+  "match_id": "ts-match-123",
+  "source_refs": {
+    "thesports_match_id": "ts-match-123",
+    "thesports_internal_id": "ts-internal-uuid",
+    "footystats_match_id": 789,
+    "footystats_linked": true,
+    "link_method": "stored_mapping"
+  },
+  "features": { ... },
+  "risk_flags": [],
+  "results": [
+    {
+      "market_id": "O25",
+      "probability": 0.685,
+      "confidence": 72,
+      "pick": "YES",
+      "edge": 0.15,
+      "can_publish": true,
+      "publish_reason": "✅ All checks passed - eligible for publish",
+      "failed_checks": [],
+      "passed_checks": [
+        "Pick is YES",
+        "Confidence 72 >= 60",
+        "Probability 0.69 >= 0.60",
+        "All required fields present: xg_prematch, potentials.over25"
+      ],
+      "metadata": {
+        "lambda_total": 2.85,
+        "lambda_home": 1.65,
+        "lambda_away": 1.20
+      }
+    }
+  ],
+  "generated_at": 1706553700
+}
+```
+
+### Safety Rules
+
+1. **NO Fuzzy Matching** - Only exact deterministic links allowed
+2. **NO Inference** - Missing FootyStats data stays `undefined`
+3. **NO Fallbacks** - Don't estimate xG from goals scored
+4. **Source Tracking** - Always include `source_refs` for transparency
+5. **Risk Flags** - Flag missing data explicitly (`MISSING_XG`, etc.)
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `src/services/scoring/featureBuilder.service.ts` | Composite feature builder |
+| `src/adapters/thesportsMatch.adapter.ts` | TheSports → ScoringFeatures |
+| `src/types/scoringFeatures.ts` | Canonical contract |
+| `src/routes/scoring.routes.ts` | API endpoint |
+| `src/services/scoring/publishEligibility.ts` | Strict canPublish checks |
+
+---
+
+**Document Version**: 2.0.0
 **Last Updated**: 2026-01-29
 **Maintainer**: GoalGPT Team

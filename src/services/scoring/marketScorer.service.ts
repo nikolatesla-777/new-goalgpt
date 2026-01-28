@@ -20,7 +20,7 @@ import {
 /**
  * Market definitions from registry
  */
-type MarketId = 'O25' | 'BTTS' | 'HT_O05' | 'O35' | 'HOME_O15' | 'CORNERS_O85' | 'CARDS_O25';
+export type MarketId = 'O25' | 'BTTS' | 'HT_O05' | 'O35' | 'HOME_O15' | 'CORNERS_O85' | 'CARDS_O25';
 
 /**
  * FootyStats match data structure (subset)
@@ -206,6 +206,69 @@ function calculateMetadata(
   }
 
   return metadata;
+}
+
+/**
+ * Adapter: Convert ScoringFeatures to FootyStatsMatch format
+ *
+ * This allows the marketScorer to work with the canonical ScoringFeatures
+ * contract from featureBuilder.service.ts
+ */
+import { ScoringFeatures } from '../../types/scoringFeatures';
+
+export function adaptScoringFeaturesToFootyStats(features: ScoringFeatures): FootyStatsMatch {
+  return {
+    id: 0, // Not used in scoring calculations
+    externalId: features.match_id,
+    homeTeamId: parseInt(features.home_team.id) || 0,
+    awayTeamId: parseInt(features.away_team.id) || 0,
+    homeTeamName: features.home_team.name,
+    awayTeamName: features.away_team.name,
+    matchTime: features.kickoff_ts,
+
+    // xG data
+    xg: features.xg,
+
+    // Potentials
+    potentials: features.potentials ? {
+      over25: features.potentials.over25,
+      btts: features.potentials.btts,
+      o05HT: features.potentials.over05_ht,
+      o15: features.potentials.over15,
+      corners: features.potentials.corners_over85,
+      cards: features.potentials.cards_over25,
+    } : undefined,
+
+    // Odds
+    odds: features.odds ? {
+      ft_1: features.odds.home_win,
+      ft_x: features.odds.draw,
+      ft_2: features.odds.away_win,
+    } : undefined,
+
+    // Trends (pass through form data if available)
+    trends: features.form ? {
+      home: features.form.home || [],
+      away: features.form.away || [],
+    } : undefined,
+
+    // H2H stats
+    h2h: features.h2h,
+
+    // Team form stats (extract from form if available)
+    homeTeam: features.form?.home ? {
+      cornersAVG_home: features.corners?.home,
+      cardsAVG_home: features.cards?.home,
+    } : undefined,
+
+    awayTeam: features.form?.away ? {
+      cornersAVG_away: features.corners?.away,
+      cardsAVG_away: features.cards?.away,
+    } : undefined,
+
+    // League norms
+    league: features.league_stats,
+  };
 }
 
 /**
@@ -662,4 +725,5 @@ function determinePick(
 export const marketScorerService = {
   scoreMarket,
   scoreAllMarkets,
+  adaptScoringFeaturesToFootyStats,
 };
