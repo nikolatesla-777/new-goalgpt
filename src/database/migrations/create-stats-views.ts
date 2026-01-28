@@ -67,7 +67,7 @@ async function createViews() {
                     ELSE 0
                 END as win_rate
             FROM ai_predictions p
-            LEFT JOIN ts_countries cnt ON p.country_id = cnt.id::text
+            LEFT JOIN ts_countries cnt ON p.country_id = cnt.external_id
             WHERE p.country_id IS NOT NULL
             GROUP BY canonical_bot_name, p.country_id, cnt.name, cnt.logo
         `);
