@@ -369,6 +369,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Generate and store daily prediction lists to database (runs once per day at noon)',
   },
+  {
+    name: 'Job Logs Cleanup',
+    schedule: '0 5 * * *', // Daily at 05:00 UTC
+    handler: async () => {
+      const { runJobLogsCleanup } = await import('./jobLogsCleanup.job');
+      await runJobLogsCleanup();
+    },
+    enabled: true,
+    description: 'PHASE-0.1: Delete job execution logs older than 30 days',
+  },
 ];
 
 /**
