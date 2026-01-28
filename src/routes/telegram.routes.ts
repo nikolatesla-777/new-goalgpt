@@ -1027,19 +1027,22 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
    * GET /telegram/daily-lists/today
    * Get today's generated daily lists (preview without publishing)
    */
-  fastify.get('/telegram/daily-lists/today', async (request, reply) => {
+  fastify.get<{ Querystring: { date?: string } }>('/telegram/daily-lists/today', async (request, reply) => {
     const marker = '='.repeat(80) + '\n[ROUTE HANDLER] daily-lists/today CALLED\n' + '='.repeat(80) + '\n';
     process.stdout.write(marker);
     process.stderr.write(marker);
     console.log(marker);
 
     try {
-      console.error('[TRACE-1] Starting daily-lists route handler');
-      logger.info('[TelegramDailyLists] 📊 Fetching today\'s lists...');
+      // Extract date query parameter (optional)
+      const targetDate = request.query.date;
+
+      console.error('[TRACE-1] Starting daily-lists route handler', targetDate ? `for date: ${targetDate}` : '');
+      logger.info(`[TelegramDailyLists] 📊 Fetching lists for ${targetDate || 'today'}...`);
 
       // Get lists from database (or generate if not exists)
-      console.error('[TRACE-2] About to call getDailyLists()');
-      const lists = await getDailyLists();
+      console.error('[TRACE-2] About to call getDailyLists()', targetDate ? `with date: ${targetDate}` : '');
+      const lists = await getDailyLists(targetDate);
       console.error('[TRACE-3] getDailyLists() returned:', lists.length, 'lists');
 
       if (lists.length === 0) {
