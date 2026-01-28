@@ -732,6 +732,11 @@ async function getDailyListsFromDatabase(date: string): Promise<DailyList[] | nu
 /**
  * Get daily lists (database-first, generate if missing)
  *
+ * CRITICAL: Lists are auto-refreshed and filtered:
+ * - Cache refreshes every 1 hour
+ * - Started/finished matches are filtered out in real-time
+ * - If no valid matches remain, regenerates lists
+ *
  * @param date - ISO date string (YYYY-MM-DD), defaults to today
  * @returns Array of DailyList objects
  */
@@ -744,15 +749,49 @@ export async function getDailyLists(date?: string): Promise<DailyList[]> {
   // 1. Try to get from database first (CACHE)
   const cachedLists = await getDailyListsFromDatabase(targetDate);
   if (cachedLists && cachedLists.length > 0) {
-    logger.info(`[TelegramDailyLists] ✅ Using cached lists from database`);
-    return cachedLists;
+    const cacheAge = Date.now() - cachedLists[0].generated_at;
+    const cacheAgeMinutes = Math.floor(cacheAge / 60000);
+
+    logger.info(`[TelegramDailyLists] 📦 Found cached lists (${cacheAgeMinutes} minutes old)`);
+
+    // 2. Filter out started/finished matches (real-time filtering)
+    const now = Math.floor(Date.now() / 1000);
+    const filteredLists = cachedLists.map(list => ({
+      ...list,
+      matches: list.matches.filter(m => m.match.date_unix > now),
+      matches_count: list.matches.filter(m => m.match.date_unix > now).length,
+    })).filter(list => list.matches_count >= 3); // Keep only lists with 3+ valid matches
+
+    const totalValidMatches = filteredLists.reduce((sum, l) => sum + l.matches_count, 0);
+
+    logger.info(`[TelegramDailyLists] ⏰ After filtering: ${filteredLists.length} lists, ${totalValidMatches} valid matches`);
+
+    // 3. Cache refresh logic
+    const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+    const shouldRefresh = cacheAge > CACHE_TTL || filteredLists.length === 0 || totalValidMatches < 10;
+
+    if (shouldRefresh) {
+      logger.info(`[TelegramDailyLists] 🔄 Cache refresh needed (age: ${cacheAgeMinutes}m, valid lists: ${filteredLists.length}, matches: ${totalValidMatches})`);
+      const newLists = await generateDailyLists();
+
+      if (newLists.length > 0) {
+        await saveDailyListsToDatabase(targetDate, newLists);
+        return newLists;
+      }
+    }
+
+    // 4. Return filtered cache if still valid
+    if (filteredLists.length > 0) {
+      logger.info(`[TelegramDailyLists] ✅ Using filtered cached lists`);
+      return filteredLists;
+    }
   }
 
-  // 2. Cache miss - generate new lists
+  // 5. Cache miss or empty - generate new lists
   logger.info(`[TelegramDailyLists] 🔄 Cache miss - generating new lists...`);
   const newLists = await generateDailyLists();
 
-  // 3. Save to database
+  // 6. Save to database
   if (newLists.length > 0) {
     await saveDailyListsToDatabase(targetDate, newLists);
   }
