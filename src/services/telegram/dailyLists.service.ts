@@ -775,7 +775,7 @@ export async function getDailyLists(date?: string): Promise<DailyList[]> {
 
     if (shouldRefresh) {
       logger.info(`[TelegramDailyLists] 🔄 Cache refresh needed (age: ${cacheAgeMinutes}m, valid lists: ${filteredLists.length}, matches: ${totalValidMatches})`);
-      const newLists = await generateDailyLists();
+      const newLists = await generateDailyLists(targetDate);
 
       if (newLists.length > 0) {
         await saveDailyListsToDatabase(targetDate, newLists);
@@ -792,7 +792,7 @@ export async function getDailyLists(date?: string): Promise<DailyList[]> {
 
   // 5. Cache miss or empty - generate new lists
   logger.info(`[TelegramDailyLists] 🔄 Cache miss - generating new lists...`);
-  const newLists = await generateDailyLists();
+  const newLists = await generateDailyLists(targetDate);
 
   // 6. Save to database
   if (newLists.length > 0) {
@@ -813,8 +813,8 @@ export async function refreshDailyLists(date?: string): Promise<DailyList[]> {
 
   logger.info(`[TelegramDailyLists] 🔄 FORCE REFRESH for ${targetDate}...`);
 
-  // Generate new lists
-  const newLists = await generateDailyLists();
+  // Generate new lists for target date
+  const newLists = await generateDailyLists(targetDate);
 
   // Save to database (will overwrite existing)
   if (newLists.length > 0) {
