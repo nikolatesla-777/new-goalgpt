@@ -7,6 +7,7 @@ import { getTodayInTurkey, getYesterdayInTurkey, formatTimestampToTSI, formatMil
 
 interface Match {
   fs_id: number;
+  match_id?: string | null;
   home_name: string;
   away_name: string;
   league_name: string;
@@ -35,6 +36,13 @@ interface Match {
     minute: string;
     status: string;
   };
+  // Settlement fields
+  match_finished?: boolean | null;
+  final_score?: {
+    home: number;
+    away: number;
+  } | null;
+  result?: 'won' | 'lost' | 'void' | 'pending';
 }
 
 interface DailyList {
@@ -624,17 +632,59 @@ export function TelegramDailyLists() {
 
                                 {/* Performance Stats (if available) */}
                                 {list.performance && list.performance.total > 0 && (
-                                  <div className="mt-3 flex items-center gap-3 text-sm">
-                                    <div className="bg-white bg-opacity-25 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-2">
-                                      <span className="font-medium opacity-90">Performans:</span>
-                                      <span className="font-bold">
-                                        {list.performance.won}/{list.performance.total}
-                                      </span>
-                                      {list.performance.pending === 0 && (
-                                        <span className="text-xs">
-                                          ({list.performance.win_rate}% {list.performance.win_rate >= 70 ? '✅' : list.performance.win_rate >= 50 ? '⚠️' : '❌'})
+                                  <div className="mt-4 space-y-2">
+                                    {/* Performance Bar */}
+                                    <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-3">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-semibold opacity-90">Performans</span>
+                                        <span className="text-lg font-bold">
+                                          {list.performance.won}/{list.performance.total - list.performance.pending}
+                                          {list.performance.pending === 0 && (
+                                            <span className="text-xs ml-1 opacity-80">
+                                              ({list.performance.win_rate}%)
+                                            </span>
+                                          )}
                                         </span>
-                                      )}
+                                      </div>
+
+                                      {/* Progress Bar */}
+                                      <div className="w-full h-2.5 bg-white bg-opacity-30 rounded-full overflow-hidden">
+                                        <div className="h-full flex">
+                                          {/* Won segment */}
+                                          <div
+                                            className="bg-green-500"
+                                            style={{ width: `${(list.performance.won / list.performance.total) * 100}%` }}
+                                          />
+                                          {/* Lost segment */}
+                                          <div
+                                            className="bg-red-500"
+                                            style={{ width: `${(list.performance.lost / list.performance.total) * 100}%` }}
+                                          />
+                                          {/* Pending segment */}
+                                          <div
+                                            className="bg-gray-400"
+                                            style={{ width: `${(list.performance.pending / list.performance.total) * 100}%` }}
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {/* Stats breakdown */}
+                                      <div className="flex items-center gap-3 mt-2 text-xs">
+                                        <div className="flex items-center gap-1">
+                                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                                          <span className="opacity-90">✅ {list.performance.won} Kazandı</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                                          <span className="opacity-90">❌ {list.performance.lost} Kaybetti</span>
+                                        </div>
+                                        {list.performance.pending > 0 && (
+                                          <div className="flex items-center gap-1">
+                                            <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                                            <span className="opacity-90">🕒 {list.performance.pending} Bekliyor</span>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                 )}
@@ -734,17 +784,59 @@ export function TelegramDailyLists() {
 
                       {/* Performance Stats (if available) */}
                       {list.performance && list.performance.total > 0 && (
-                        <div className="mt-3 flex items-center gap-3 text-sm">
-                          <div className="bg-white bg-opacity-25 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-2">
-                            <span className="font-medium opacity-90">Performans:</span>
-                            <span className="font-bold">
-                              {list.performance.won}/{list.performance.total}
-                            </span>
-                            {list.performance.pending === 0 && (
-                              <span className="text-xs">
-                                ({list.performance.win_rate}% {list.performance.win_rate >= 70 ? '✅' : list.performance.win_rate >= 50 ? '⚠️' : '❌'})
+                        <div className="mt-4 space-y-2">
+                          {/* Performance Bar */}
+                          <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-semibold opacity-90">Performans</span>
+                              <span className="text-lg font-bold">
+                                {list.performance.won}/{list.performance.total - list.performance.pending}
+                                {list.performance.pending === 0 && (
+                                  <span className="text-xs ml-1 opacity-80">
+                                    ({list.performance.win_rate}%)
+                                  </span>
+                                )}
                               </span>
-                            )}
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="w-full h-2.5 bg-white bg-opacity-30 rounded-full overflow-hidden">
+                              <div className="h-full flex">
+                                {/* Won segment */}
+                                <div
+                                  className="bg-green-500"
+                                  style={{ width: `${(list.performance.won / list.performance.total) * 100}%` }}
+                                />
+                                {/* Lost segment */}
+                                <div
+                                  className="bg-red-500"
+                                  style={{ width: `${(list.performance.lost / list.performance.total) * 100}%` }}
+                                />
+                                {/* Pending segment */}
+                                <div
+                                  className="bg-gray-400"
+                                  style={{ width: `${(list.performance.pending / list.performance.total) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Stats breakdown */}
+                            <div className="flex items-center gap-3 mt-2 text-xs">
+                              <div className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span className="opacity-90">✅ {list.performance.won}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                                <span className="opacity-90">❌ {list.performance.lost}</span>
+                              </div>
+                              {list.performance.pending > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                                  <span className="opacity-90">🕒 {list.performance.pending}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -774,7 +866,36 @@ export function TelegramDailyLists() {
                                   <span className={`text-sm font-bold truncate ${matchStarted ? 'text-gray-500' : 'text-gray-900'}`}>
                                     {match.home_name} vs {match.away_name}
                                   </span>
-                                  {matchStarted && (
+
+                                  {/* Match Status & Score */}
+                                  {match.match_finished && match.final_score && (
+                                    <>
+                                      {/* Score Badge */}
+                                      <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-gray-200 text-gray-700">
+                                        {match.final_score.home}-{match.final_score.away}
+                                      </span>
+
+                                      {/* Won/Lost Badge */}
+                                      {match.result === 'won' && (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-green-100 text-green-700">
+                                          ✅ Kazandı
+                                        </span>
+                                      )}
+                                      {match.result === 'lost' && (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-700">
+                                          ❌ Kaybetti
+                                        </span>
+                                      )}
+                                      {match.result === 'void' && (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
+                                          ⚪ Geçersiz
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+
+                                  {/* Live/Started matches (old logic for matches without final_score) */}
+                                  {matchStarted && !match.match_finished && (
                                     <>
                                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                                         matchFinished
