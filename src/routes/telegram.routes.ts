@@ -27,6 +27,7 @@ import { fetchMatchStateForPublish } from '../services/telegram/matchStateFetche
 import { validatePicks } from '../services/telegram/validators/pickValidator';
 import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
 import { getDailyLists, refreshDailyLists, formatDailyListMessage, formatDailyListMessageWithResults } from '../services/telegram/dailyLists.service';
+import { evaluateMatch } from '../services/telegram/dailyListsSettlement.service';
 
 interface PublishRequest {
   Body: {
@@ -1054,19 +1055,48 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         };
       }
 
-      // Collect all unique matches for bulk live score query
+      // Collect all unique matches for bulk score query
       console.error('[TRACE-4] Collecting unique matches');
       const allMatches = new Map<number, any>();
+      const allMatchIds = new Set<string>(); // TheSports match IDs
+
       lists.forEach(list => {
         list.matches.forEach(m => {
           allMatches.set(m.match.fs_id, m.match);
+          if (m.match.match_id) {
+            allMatchIds.add(m.match.match_id);
+          }
         });
       });
 
-      // Bulk query: Get live scores for all matches
-      console.error('[TRACE-5] About to call getLiveScoresForMatches with', allMatches.size, 'matches');
+      // Bulk query: Get match results from TheSports database
+      console.error('[TRACE-5] Fetching match results from TheSports for', allMatchIds.size, 'matches');
+      const matchResultsMap = new Map<string, any>();
+
+      if (allMatchIds.size > 0) {
+        const client = await pool.connect();
+        try {
+          const result = await client.query(
+            `SELECT external_id, status_id, home_score_display, away_score_display,
+                    home_scores, away_scores
+             FROM ts_matches
+             WHERE external_id = ANY($1)`,
+            [Array.from(allMatchIds)]
+          );
+
+          result.rows.forEach(row => {
+            matchResultsMap.set(row.external_id, row);
+          });
+
+          console.error('[TRACE-6] Fetched results for', matchResultsMap.size, 'matches from TheSports');
+        } finally {
+          client.release();
+        }
+      }
+
+      // Also get live scores for FootyStats (for pending matches)
       const liveScoresMap = await getLiveScoresForMatches(Array.from(allMatches.values()));
-      console.error('[TRACE-6] getLiveScoresForMatches returned', liveScoresMap.size, 'scores');
+      console.error('[TRACE-6b] FootyStats live scores:', liveScoresMap.size);
 
       // Format response with match details + performance calculation
       console.error('[TRACE-7] Formatting lists');
@@ -1085,19 +1115,52 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             avg_confidence: Math.round(
               list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
             ),
-            matches: list.matches.map(m => ({
-              fs_id: m.match.fs_id,
-              home_name: m.match.home_name,
-              away_name: m.match.away_name,
-              league_name: m.match.league_name,
-              date_unix: m.match.date_unix,
-              confidence: m.confidence,
-              reason: m.reason,
-              potentials: m.match.potentials,
-              xg: m.match.xg,
-              odds: m.match.odds,
-              live_score: liveScoresMap.get(m.match.fs_id) || null,
-            })),
+            matches: list.matches.map(m => {
+              const matchId = m.match.match_id;
+              const tsMatch = matchId ? matchResultsMap.get(matchId) : null;
+
+              // Check if match finished
+              const matchFinished = tsMatch && tsMatch.status_id === 8;
+
+              let finalScore = null;
+              let result = 'pending';
+
+              if (matchFinished && tsMatch) {
+                finalScore = {
+                  home: tsMatch.home_score_display || 0,
+                  away: tsMatch.away_score_display || 0,
+                };
+
+                // Evaluate result using settlement service
+                try {
+                  const settlement = evaluateMatch(list.market, tsMatch);
+                  result = settlement.result === 'WIN' ? 'won' :
+                           settlement.result === 'VOID' ? 'void' : 'lost';
+                } catch (err) {
+                  console.error('[DailyLists] Error evaluating match:', err);
+                  result = 'void';
+                }
+              }
+
+              return {
+                fs_id: m.match.fs_id,
+                match_id: matchId,
+                home_name: m.match.home_name,
+                away_name: m.match.away_name,
+                league_name: m.match.league_name,
+                date_unix: m.match.date_unix,
+                confidence: m.confidence,
+                reason: m.reason,
+                potentials: m.match.potentials,
+                xg: m.match.xg,
+                odds: m.match.odds,
+                live_score: liveScoresMap.get(m.match.fs_id) || null,
+                // NEW: Match result data for mobile app
+                match_finished: matchFinished,
+                final_score: finalScore,
+                result: result, // 'won' | 'lost' | 'void' | 'pending'
+              };
+            }),
             preview: await formatDailyListMessageWithResults(list, liveScoresMap),
             generated_at: list.generated_at,
             performance,
