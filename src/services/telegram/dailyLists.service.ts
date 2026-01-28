@@ -28,6 +28,7 @@ import { safeQuery } from '../../database/connection';
 
 interface FootyStatsMatch {
   fs_id: number;
+  match_id?: string | null;  // ✅ ADD: TheSports external_id for settlement
   home_name: string;
   away_name: string;
   league_name: string;
@@ -477,13 +478,28 @@ export async function generateDailyLists(date?: string): Promise<DailyList[]> {
       return [];
     }
 
-    // 2. Generate lists for each market
+    // 2. Map FootyStats matches to TheSports matches (for settlement)
+    const matchIdMap = await mapFootyStatsToTheSports(allMatches);
+    logger.info(`[TelegramDailyLists] 🔗 Mapped ${matchIdMap.size}/${allMatches.length} matches to TheSports`);
+
+    // 3. Enrich matches with TheSports match_id for settlement
+    const enrichMatches = (candidates: MatchCandidate[]): MatchCandidate[] => {
+      return candidates.map(c => ({
+        ...c,
+        match: {
+          ...c.match,
+          match_id: matchIdMap.get(c.match.fs_id) || null,
+        },
+      }));
+    };
+
+    // 4. Generate lists for each market
     const lists: DailyList[] = [];
     const timestamp = Date.now();
 
     // A) Over 2.5 Goals
     const over25Candidates = filterMatchesByMarket(allMatches, 'OVER_25', 55);
-    const over25Selected = selectTopMatches(over25Candidates, 5);
+    const over25Selected = enrichMatches(selectTopMatches(over25Candidates, 5));
     if (over25Selected.length >= 3) {
       lists.push({
         market: 'OVER_25',
@@ -499,7 +515,7 @@ export async function generateDailyLists(date?: string): Promise<DailyList[]> {
 
     // B) Over 1.5 Goals (10 matches)
     const over15Candidates = filterMatchesByMarket(allMatches, 'OVER_15', 55);
-    const over15Selected = selectTopMatches(over15Candidates, 10);
+    const over15Selected = enrichMatches(selectTopMatches(over15Candidates, 10));
     if (over15Selected.length >= 5) {
       lists.push({
         market: 'OVER_15',
@@ -515,7 +531,7 @@ export async function generateDailyLists(date?: string): Promise<DailyList[]> {
 
     // C) BTTS
     const bttsCandiates = filterMatchesByMarket(allMatches, 'BTTS', 55);
-    const bttsSelected = selectTopMatches(bttsCandiates, 5);
+    const bttsSelected = enrichMatches(selectTopMatches(bttsCandiates, 5));
     if (bttsSelected.length >= 3) {
       lists.push({
         market: 'BTTS',
@@ -531,7 +547,7 @@ export async function generateDailyLists(date?: string): Promise<DailyList[]> {
 
     // D) First Half Over 0.5
     const htOver05Candidates = filterMatchesByMarket(allMatches, 'HT_OVER_05', 50);
-    const htOver05Selected = selectTopMatches(htOver05Candidates, 5);
+    const htOver05Selected = enrichMatches(selectTopMatches(htOver05Candidates, 5));
     if (htOver05Selected.length >= 3) {
       lists.push({
         market: 'HT_OVER_05',
@@ -547,7 +563,7 @@ export async function generateDailyLists(date?: string): Promise<DailyList[]> {
 
     // E) Corners
     const cornersCandidates = filterMatchesByMarket(allMatches, 'CORNERS', 50);
-    const cornersSelected = selectTopMatches(cornersCandidates, 5);
+    const cornersSelected = enrichMatches(selectTopMatches(cornersCandidates, 5));
     if (cornersSelected.length >= 3) {
       lists.push({
         market: 'CORNERS',
@@ -563,7 +579,7 @@ export async function generateDailyLists(date?: string): Promise<DailyList[]> {
 
     // F) Cards
     const cardsCandidates = filterMatchesByMarket(allMatches, 'CARDS', 50);
-    const cardsSelected = selectTopMatches(cardsCandidates, 5);
+    const cardsSelected = enrichMatches(selectTopMatches(cardsCandidates, 5));
     if (cardsSelected.length >= 3) {
       lists.push({
         market: 'CARDS',
@@ -623,6 +639,89 @@ export function formatDailyListMessage(list: DailyList): string {
   message += `• Canlıya girmeden önce oran ve kadro kontrolü önerilir\n`;
 
   return message;
+}
+
+// ============================================================================
+// MAPPING FUNCTIONS
+// ============================================================================
+
+/**
+ * Map FootyStats matches to TheSports matches using team names and time window
+ * Returns a map of fs_id -> TheSports external_id
+ */
+async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Promise<Map<number, string>> {
+  const matchMap = new Map<number, string>();
+
+  if (matches.length === 0) return matchMap;
+
+  try {
+    // Build conditions for each match (team names + time window)
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    matches.forEach(match => {
+      const homeFirstWord = match.home_name.split(' ')[0].toLowerCase();
+      const awayFirstWord = match.away_name.split(' ')[0].toLowerCase();
+      const timeWindow = 3600; // +/- 1 hour
+
+      conditions.push(`(
+        (LOWER(t1.name) LIKE $${paramIndex} OR LOWER(t1.name) LIKE $${paramIndex + 1})
+        AND (LOWER(t2.name) LIKE $${paramIndex + 2} OR LOWER(t2.name) LIKE $${paramIndex + 3})
+        AND m.match_time >= $${paramIndex + 4}
+        AND m.match_time <= $${paramIndex + 5}
+      )`);
+
+      params.push(
+        `%${homeFirstWord}%`,
+        `${homeFirstWord}%`,
+        `%${awayFirstWord}%`,
+        `${awayFirstWord}%`,
+        match.date_unix - timeWindow,
+        match.date_unix + timeWindow
+      );
+
+      paramIndex += 6;
+    });
+
+    const query = `
+      SELECT
+        m.external_id,
+        t1.name as home_team_name,
+        t2.name as away_team_name,
+        m.match_time
+      FROM ts_matches m
+      INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
+      INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+      WHERE ${conditions.join(' OR ')}
+    `;
+
+    const results = await safeQuery(query, params);
+
+    // Match results back to FootyStats matches
+    results.forEach((row: any) => {
+      const matchingFsMatch = matches.find(m => {
+        const homeFirstWord = m.home_name.split(' ')[0].toLowerCase();
+        const awayFirstWord = m.away_name.split(' ')[0].toLowerCase();
+        return (
+          row.home_team_name.toLowerCase().includes(homeFirstWord) &&
+          row.away_team_name.toLowerCase().includes(awayFirstWord) &&
+          Math.abs(row.match_time - m.date_unix) <= 3600
+        );
+      });
+
+      if (matchingFsMatch) {
+        matchMap.set(matchingFsMatch.fs_id, row.external_id);
+        logger.debug(`[TelegramDailyLists] Mapped FS match ${matchingFsMatch.fs_id} to TS match ${row.external_id}`);
+      }
+    });
+
+    logger.info(`[TelegramDailyLists] 🔗 Mapped ${matchMap.size}/${matches.length} matches to TheSports`);
+  } catch (err) {
+    logger.error('[TelegramDailyLists] Error mapping matches to TheSports:', err);
+  }
+
+  return matchMap;
 }
 
 // ============================================================================
