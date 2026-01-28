@@ -28,6 +28,8 @@ import { validatePicks } from '../services/telegram/validators/pickValidator';
 import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
 import { getDailyLists, refreshDailyLists, formatDailyListMessage, formatDailyListMessageWithResults } from '../services/telegram/dailyLists.service';
 import { evaluateMatch } from '../services/telegram/dailyListsSettlement.service';
+// Week-2B: Telegram channel router
+import { channelRouter } from '../services/telegram/channelRouter';
 
 interface PublishRequest {
   Body: {
@@ -1319,10 +1321,19 @@ Stack: ${error.stack || 'No stack trace'}
         return reply.status(503).send({ error: 'Telegram bot not configured' });
       }
 
-      const channelId = process.env.TELEGRAM_CHANNEL_ID || '';
-      if (!channelId) {
-        return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
-      }
+      // Week-2B: Market name mapping
+      const marketMapping: Record<string, string> = {
+        'OVER_25': 'O25',
+        'BTTS': 'BTTS',
+        'HT_OVER_05': 'HT_O05',
+        'OVER_35': 'O35',
+        'HOME_OVER_15': 'HOME_O15',
+        'CORNERS': 'CORNERS_O85',
+        'CARDS': 'CARDS_O25',
+      };
+
+      const marketId = marketMapping[market] || market;
+      const targetChannelId = channelRouter.getTargetChatId(marketId as any);
 
       // 2. Get daily lists from database (or generate if not exists)
       logger.info('[TelegramDailyLists] 📊 Getting lists...', logContext);
@@ -1348,13 +1359,38 @@ Stack: ${error.stack || 'No stack trace'}
         ),
       });
 
-      // 4. Format and publish to Telegram
+      // 4. Format and publish to Telegram (Week-2B: Market-specific channel)
       const messageText = formatDailyListMessage(targetList);
 
-      logger.info(`[TelegramDailyLists] 📡 Sending to Telegram...`, logContext);
+      logger.info(`[TelegramDailyLists] 📡 Sending to Telegram...`, {
+        ...logContext,
+        target_channel: targetChannelId,
+      });
+
+      // Week-2B: DRY_RUN mode check
+      if (channelRouter.isDryRun()) {
+        logger.warn(`[TelegramDailyLists] ⚠️ DRY_RUN: Skipping actual Telegram send for ${market}`, {
+          ...logContext,
+          target_channel: targetChannelId,
+          message_preview: messageText.substring(0, 100),
+        });
+
+        return {
+          success: true,
+          market: targetList.market,
+          title: targetList.title,
+          telegram_message_id: null,
+          match_count: targetList.matches.length,
+          avg_confidence: Math.round(
+            targetList.matches.reduce((sum, m) => sum + m.confidence, 0) / targetList.matches.length
+          ),
+          dry_run: true,
+          duration_ms: Date.now() - startTime,
+        };
+      }
 
       const result = await telegramBot.sendMessage({
-        chat_id: channelId,
+        chat_id: targetChannelId, // Week-2B: Use market-specific channel
         text: messageText,
         parse_mode: 'HTML',
         disable_web_page_preview: true,
@@ -1383,7 +1419,7 @@ Stack: ${error.stack || 'No stack trace'}
            VALUES ($1, $2, $3, $4, 'published', $5)`,
           [
             `daily_list_${market}_${Date.now()}`,
-            channelId,
+            targetChannelId, // Week-2B: Use market-specific channel
             telegramMessageId,
             messageText,
             JSON.stringify({
@@ -1404,7 +1440,7 @@ Stack: ${error.stack || 'No stack trace'}
                channel_id = $2,
                status = 'active'
            WHERE market = $3 AND list_date = $4`,
-          [telegramMessageId, channelId, market, today]
+          [telegramMessageId, targetChannelId, market, today] // Week-2B: Use market-specific channel
         );
 
         logger.info(`[TelegramDailyLists] 💾 Saved to database`, logContext);
@@ -1485,8 +1521,19 @@ Stack: ${error.stack || 'No stack trace'}
         markets: lists.map(l => l.market),
       });
 
-      // 3. Publish each list to Telegram
+      // 3. Publish each list to Telegram (Week-2B: Market-specific channels)
       const publishedLists: any[] = [];
+
+      // Week-2B: Market name mapping (DailyList format → MarketId format)
+      const marketMapping: Record<string, string> = {
+        'OVER_25': 'O25',
+        'BTTS': 'BTTS',
+        'HT_OVER_05': 'HT_O05',
+        'OVER_35': 'O35',
+        'HOME_OVER_15': 'HOME_O15',
+        'CORNERS': 'CORNERS_O85',
+        'CARDS': 'CARDS_O25',
+      };
 
       for (const list of lists) {
         logger.info(`[TelegramDailyLists] 📡 Publishing ${list.market} list...`, {
@@ -1498,9 +1545,37 @@ Stack: ${error.stack || 'No stack trace'}
         const messageText = formatDailyListMessage(list);
 
         try {
+          // Week-2B: Get target channel for this market
+          const marketId = marketMapping[list.market] || list.market;
+          const targetChannelId = channelRouter.getTargetChatId(marketId as any);
+
+          // Week-2B: DRY_RUN mode check
+          if (channelRouter.isDryRun()) {
+            logger.warn(`[TelegramDailyLists] ⚠️ DRY_RUN: Skipping actual Telegram send for ${list.market}`, {
+              ...logContext,
+              market: list.market,
+              target_channel: targetChannelId,
+              message_preview: messageText.substring(0, 100),
+            });
+
+            // Simulate success for dry run
+            publishedLists.push({
+              market: list.market,
+              title: list.title,
+              match_count: list.matches.length,
+              telegram_message_id: null,
+              avg_confidence: Math.round(
+                list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
+              ),
+              dry_run: true,
+            });
+
+            continue; // Skip actual send
+          }
+
           // FIX: NO connection held during Telegram API call
           const result = await telegramBot.sendMessage({
-            chat_id: channelId,
+            chat_id: targetChannelId,
             text: messageText,
             parse_mode: 'HTML',
             disable_web_page_preview: true,
@@ -1524,7 +1599,7 @@ Stack: ${error.stack || 'No stack trace'}
                VALUES ($1, $2, $3, $4, 'published', $5)`,
               [
                 `daily_list_${list.market}_${Date.now()}`, // Unique ID for list
-                channelId,
+                targetChannelId, // Week-2B: Use market-specific channel
                 telegramMessageId,
                 messageText,
                 JSON.stringify({
@@ -1545,7 +1620,7 @@ Stack: ${error.stack || 'No stack trace'}
                    channel_id = $2,
                    status = 'active'
                WHERE market = $3 AND list_date = $4`,
-              [telegramMessageId, channelId, list.market, today]
+              [telegramMessageId, targetChannelId, list.market, today] // Week-2B: Use market-specific channel
             );
           } finally {
             client.release();
