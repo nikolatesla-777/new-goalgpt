@@ -85,6 +85,190 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
     };
   });
 
+  // Get trends analysis for today's matches (MOVED TO TOP TO AVOID LOADING ISSUES)
+  fastify.get('/footystats/trends-analysis', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      logger.info('[FootyStats] Fetching trends analysis...');
+
+      const today = new Date();
+
+      // Get cached today's matches
+      const cached = await getCachedTodayMatches(today);
+      let matches = cached;
+
+      // If not cached, fetch from API
+      if (!matches) {
+        const response = await footyStatsAPI.getTodaysMatches();
+        matches = response.data || [];
+      }
+
+      if (!matches || matches.length === 0) {
+        return {
+          success: true,
+          trends: {
+            goalTrends: [],
+            cornerTrends: [],
+            cardsTrends: [],
+            formTrends: [],
+            valueBets: []
+          },
+          totalMatches: 0
+        };
+      }
+
+      // GOAL TRENDS - High scoring matches
+      const goalTrends = matches
+        .filter((m: any) => m.potentials?.btts >= 65 || m.potentials?.over25 >= 65)
+        .map((m: any) => ({
+          fs_id: m.fs_id,
+          home_name: m.home_name,
+          away_name: m.away_name,
+          home_logo: m.home_logo,
+          away_logo: m.away_logo,
+          league_name: m.league_name,
+          date_unix: m.date_unix,
+          btts: m.potentials?.btts || 0,
+          over25: m.potentials?.over25 || 0,
+          avg_goals: m.potentials?.avg || 0,
+          xg_total: (m.xg?.home || 0) + (m.xg?.away || 0),
+          trend_type: m.potentials?.btts >= 70 ? 'High BTTS' : 'High Goals',
+          confidence: Math.max(m.potentials?.btts || 0, m.potentials?.over25 || 0)
+        }))
+        .sort((a: any, b: any) => b.confidence - a.confidence)
+        .slice(0, 20);
+
+      // CORNER TRENDS - High corner potential
+      const cornerTrends = matches
+        .filter((m: any) => m.potentials?.corners >= 10)
+        .map((m: any) => ({
+          fs_id: m.fs_id,
+          home_name: m.home_name,
+          away_name: m.away_name,
+          home_logo: m.home_logo,
+          away_logo: m.away_logo,
+          league_name: m.league_name,
+          date_unix: m.date_unix,
+          corners: m.potentials?.corners || 0,
+          over9_5: m.potentials?.corners >= 9.5 ? 75 : 50,
+          over10_5: m.potentials?.corners >= 10.5 ? 70 : 45,
+          trend_type: 'High Corners',
+          confidence: Math.min(95, Math.round(m.potentials?.corners * 7))
+        }))
+        .sort((a: any, b: any) => b.corners - a.corners)
+        .slice(0, 15);
+
+      // CARDS TRENDS - High cards potential
+      const cardsTrends = matches
+        .filter((m: any) => m.potentials?.cards >= 4)
+        .map((m: any) => ({
+          fs_id: m.fs_id,
+          home_name: m.home_name,
+          away_name: m.away_name,
+          home_logo: m.home_logo,
+          away_logo: m.away_logo,
+          league_name: m.league_name,
+          date_unix: m.date_unix,
+          cards: m.potentials?.cards || 0,
+          over3_5: m.potentials?.cards >= 3.5 ? 70 : 50,
+          over4_5: m.potentials?.cards >= 4.5 ? 65 : 45,
+          trend_type: 'High Cards',
+          confidence: Math.min(85, Math.round(m.potentials?.cards * 15))
+        }))
+        .sort((a: any, b: any) => b.cards - a.cards)
+        .slice(0, 15);
+
+      // FORM TRENDS - Teams with strong recent form (based on xG difference)
+      const formTrends = matches
+        .filter((m: any) => {
+          const xgDiff = Math.abs((m.xg?.home || 0) - (m.xg?.away || 0));
+          return xgDiff >= 0.5; // Significant xG difference indicates form advantage
+        })
+        .map((m: any) => {
+          const homeXg = m.xg?.home || 0;
+          const awayXg = m.xg?.away || 0;
+          const favorite = homeXg > awayXg ? 'home' : 'away';
+          const xgDiff = Math.abs(homeXg - awayXg);
+
+          return {
+            fs_id: m.fs_id,
+            home_name: m.home_name,
+            away_name: m.away_name,
+            home_logo: m.home_logo,
+            away_logo: m.away_logo,
+            league_name: m.league_name,
+            date_unix: m.date_unix,
+            home_xg: homeXg,
+            away_xg: awayXg,
+            xg_diff: xgDiff,
+            favorite: favorite,
+            favorite_name: favorite === 'home' ? m.home_name : m.away_name,
+            trend_type: 'Form Advantage',
+            confidence: Math.min(85, Math.round(50 + (xgDiff * 20)))
+          };
+        })
+        .sort((a: any, b: any) => b.xg_diff - a.xg_diff)
+        .slice(0, 15);
+
+      // VALUE BETS - Mismatched odds vs predictions
+      const valueBets = matches
+        .filter((m: any) => {
+          if (!m.odds?.home || !m.odds?.away) return false;
+          const totalXg = (m.xg?.home || 0) + (m.xg?.away || 0);
+          const bttsPot = m.potentials?.btts || 0;
+          const over25Pot = m.potentials?.over25 || 0;
+
+          // Value if high prediction but good odds
+          return (bttsPot >= 60 && totalXg >= 2.5) || (over25Pot >= 65 && totalXg >= 2.8);
+        })
+        .map((m: any) => {
+          const bttsPot = m.potentials?.btts || 0;
+          const over25Pot = m.potentials?.over25 || 0;
+          const totalXg = (m.xg?.home || 0) + (m.xg?.away || 0);
+
+          return {
+            fs_id: m.fs_id,
+            home_name: m.home_name,
+            away_name: m.away_name,
+            home_logo: m.home_logo,
+            away_logo: m.away_logo,
+            league_name: m.league_name,
+            date_unix: m.date_unix,
+            btts: bttsPot,
+            over25: over25Pot,
+            xg_total: totalXg,
+            odds_home: m.odds?.home,
+            odds_draw: m.odds?.draw,
+            odds_away: m.odds?.away,
+            trend_type: 'Value Bet',
+            confidence: Math.round((bttsPot + over25Pot + (totalXg * 10)) / 3)
+          };
+        })
+        .sort((a: any, b: any) => b.confidence - a.confidence)
+        .slice(0, 12);
+
+      logger.info(`[FootyStats] Trends analysis completed: ${goalTrends.length} goal trends, ${cornerTrends.length} corner trends`);
+
+      return {
+        success: true,
+        trends: {
+          goalTrends,
+          cornerTrends,
+          cardsTrends,
+          formTrends,
+          valueBets
+        },
+        totalMatches: matches.length,
+        generated_at: new Date().toISOString()
+      };
+    } catch (error: any) {
+      logger.error('[FootyStats] Trends analysis error:', error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch trends analysis'
+      });
+    }
+  });
+
   // Test FootyStats API - ADMIN ONLY
   fastify.get<{ Querystring: { q?: string } }>('/footystats/test', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
     try {
@@ -1515,190 +1699,6 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       return reply.status(500).send({
         success: false,
         error: error.message
-      });
-    }
-  });
-
-  // Get trends analysis for today's matches
-  fastify.get('/footystats/trends-analysis', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      logger.info('[FootyStats] Fetching trends analysis...');
-
-      const today = new Date();
-
-      // Get cached today's matches
-      const cached = await getCachedTodayMatches(today);
-      let matches = cached;
-
-      // If not cached, fetch from API
-      if (!matches) {
-        const response = await footyStatsAPI.getTodaysMatches();
-        matches = response.data || [];
-      }
-
-      if (!matches || matches.length === 0) {
-        return {
-          success: true,
-          trends: {
-            goalTrends: [],
-            cornerTrends: [],
-            cardsTrends: [],
-            formTrends: [],
-            valueBets: []
-          },
-          totalMatches: 0
-        };
-      }
-
-      // GOAL TRENDS - High scoring matches
-      const goalTrends = matches
-        .filter((m: any) => m.potentials?.btts >= 65 || m.potentials?.over25 >= 65)
-        .map((m: any) => ({
-          fs_id: m.fs_id,
-          home_name: m.home_name,
-          away_name: m.away_name,
-          home_logo: m.home_logo,
-          away_logo: m.away_logo,
-          league_name: m.league_name,
-          date_unix: m.date_unix,
-          btts: m.potentials?.btts || 0,
-          over25: m.potentials?.over25 || 0,
-          avg_goals: m.potentials?.avg || 0,
-          xg_total: (m.xg?.home || 0) + (m.xg?.away || 0),
-          trend_type: m.potentials?.btts >= 70 ? 'High BTTS' : 'High Goals',
-          confidence: Math.max(m.potentials?.btts || 0, m.potentials?.over25 || 0)
-        }))
-        .sort((a: any, b: any) => b.confidence - a.confidence)
-        .slice(0, 20);
-
-      // CORNER TRENDS - High corner potential
-      const cornerTrends = matches
-        .filter((m: any) => m.potentials?.corners >= 10)
-        .map((m: any) => ({
-          fs_id: m.fs_id,
-          home_name: m.home_name,
-          away_name: m.away_name,
-          home_logo: m.home_logo,
-          away_logo: m.away_logo,
-          league_name: m.league_name,
-          date_unix: m.date_unix,
-          corners: m.potentials?.corners || 0,
-          over9_5: m.potentials?.corners >= 9.5 ? 75 : 50,
-          over10_5: m.potentials?.corners >= 10.5 ? 70 : 45,
-          trend_type: 'High Corners',
-          confidence: Math.min(95, Math.round(m.potentials?.corners * 7))
-        }))
-        .sort((a: any, b: any) => b.corners - a.corners)
-        .slice(0, 15);
-
-      // CARDS TRENDS - High cards potential
-      const cardsTrends = matches
-        .filter((m: any) => m.potentials?.cards >= 4)
-        .map((m: any) => ({
-          fs_id: m.fs_id,
-          home_name: m.home_name,
-          away_name: m.away_name,
-          home_logo: m.home_logo,
-          away_logo: m.away_logo,
-          league_name: m.league_name,
-          date_unix: m.date_unix,
-          cards: m.potentials?.cards || 0,
-          over3_5: m.potentials?.cards >= 3.5 ? 70 : 50,
-          over4_5: m.potentials?.cards >= 4.5 ? 65 : 45,
-          trend_type: 'High Cards',
-          confidence: Math.min(85, Math.round(m.potentials?.cards * 15))
-        }))
-        .sort((a: any, b: any) => b.cards - a.cards)
-        .slice(0, 15);
-
-      // FORM TRENDS - Teams with strong recent form (based on xG difference)
-      const formTrends = matches
-        .filter((m: any) => {
-          const xgDiff = Math.abs((m.xg?.home || 0) - (m.xg?.away || 0));
-          return xgDiff >= 0.5; // Significant xG difference indicates form advantage
-        })
-        .map((m: any) => {
-          const homeXg = m.xg?.home || 0;
-          const awayXg = m.xg?.away || 0;
-          const favorite = homeXg > awayXg ? 'home' : 'away';
-          const xgDiff = Math.abs(homeXg - awayXg);
-
-          return {
-            fs_id: m.fs_id,
-            home_name: m.home_name,
-            away_name: m.away_name,
-            home_logo: m.home_logo,
-            away_logo: m.away_logo,
-            league_name: m.league_name,
-            date_unix: m.date_unix,
-            home_xg: homeXg,
-            away_xg: awayXg,
-            xg_diff: xgDiff,
-            favorite: favorite,
-            favorite_name: favorite === 'home' ? m.home_name : m.away_name,
-            trend_type: 'Form Advantage',
-            confidence: Math.min(85, Math.round(50 + (xgDiff * 20)))
-          };
-        })
-        .sort((a: any, b: any) => b.xg_diff - a.xg_diff)
-        .slice(0, 15);
-
-      // VALUE BETS - Mismatched odds vs predictions
-      const valueBets = matches
-        .filter((m: any) => {
-          if (!m.odds?.home || !m.odds?.away) return false;
-          const totalXg = (m.xg?.home || 0) + (m.xg?.away || 0);
-          const bttsPot = m.potentials?.btts || 0;
-          const over25Pot = m.potentials?.over25 || 0;
-
-          // Value if high prediction but good odds
-          return (bttsPot >= 60 && totalXg >= 2.5) || (over25Pot >= 65 && totalXg >= 2.8);
-        })
-        .map((m: any) => {
-          const bttsPot = m.potentials?.btts || 0;
-          const over25Pot = m.potentials?.over25 || 0;
-          const totalXg = (m.xg?.home || 0) + (m.xg?.away || 0);
-
-          return {
-            fs_id: m.fs_id,
-            home_name: m.home_name,
-            away_name: m.away_name,
-            home_logo: m.home_logo,
-            away_logo: m.away_logo,
-            league_name: m.league_name,
-            date_unix: m.date_unix,
-            btts: bttsPot,
-            over25: over25Pot,
-            xg_total: totalXg,
-            odds_home: m.odds?.home,
-            odds_draw: m.odds?.draw,
-            odds_away: m.odds?.away,
-            trend_type: 'Value Bet',
-            confidence: Math.round((bttsPot + over25Pot + (totalXg * 10)) / 3)
-          };
-        })
-        .sort((a: any, b: any) => b.confidence - a.confidence)
-        .slice(0, 12);
-
-      logger.info(`[FootyStats] Trends analysis completed: ${goalTrends.length} goal trends, ${cornerTrends.length} corner trends`);
-
-      return {
-        success: true,
-        trends: {
-          goalTrends,
-          cornerTrends,
-          cardsTrends,
-          formTrends,
-          valueBets
-        },
-        totalMatches: matches.length,
-        generated_at: new Date().toISOString()
-      };
-    } catch (error: any) {
-      logger.error('[FootyStats] Trends analysis error:', error);
-      return reply.status(500).send({
-        success: false,
-        error: 'Failed to fetch trends analysis'
       });
     }
   });
