@@ -103,6 +103,9 @@ function App() {
               <Route path="/admin/league-standings" element={<Suspense fallback={<LoadingFallback />}><LeagueStandingsPage /></Suspense>} />
               <Route path="/admin/player-stats" element={<Suspense fallback={<LoadingFallback />}><PlayerSearchPage /></Suspense>} />
 
+              {/* Phase-3A: Match Scoring Analysis */}
+              <Route path="/admin/scoring-analysis" element={<Suspense fallback={<LoadingFallback />}><MatchScoringAnalysis /></Suspense>} />
+
               {/* Livescore with Nested Routes for Tabs (NEW) */}
               <Route path="/livescore" element={
                 <ErrorBoundary>

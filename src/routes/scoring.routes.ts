@@ -1,16 +1,18 @@
 /**
- * Scoring Routes - Week-2A Phase 2
+ * Scoring Routes - Consolidated (Week-2A + Phase-3A)
  *
- * Provides match scoring API endpoints
+ * Week-2A: GET /matches/:id/scoring - Full scoring pipeline
+ * Phase-3A: GET /matches/:fsMatchId/scoring-preview - Admin panel preview
  *
  * @author GoalGPT Team
- * @version 1.0.0
+ * @version 2.0.0 (merged)
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { featureBuilderService } from '../services/scoring/featureBuilder.service';
 import { marketScorerService, type MarketId, type ScoringResult } from '../services/scoring/marketScorer.service';
 import { publishEligibilityUtils } from '../services/scoring/publishEligibility';
+import { getMatchScoringPreview } from '../services/admin/scoringPreview.service';
 import { logger } from '../utils/logger';
 
 /**
@@ -73,6 +75,10 @@ interface ScoringResponse {
  * Register scoring routes
  */
 export async function registerScoringRoutes(fastify: FastifyInstance) {
+  // ============================================================================
+  // WEEK-2A: Full Scoring Pipeline
+  // ============================================================================
+
   /**
    * GET /api/matches/:id/scoring
    *
@@ -97,270 +103,156 @@ export async function registerScoringRoutes(fastify: FastifyInstance) {
    * - 200: Success
    * - 400: Invalid market ID or bad request
    * - 404: Match not found
-   * - 500: Server error
+   * - 503: FootyStats data unavailable (degraded mode)
    */
   fastify.get<{
     Params: MatchParams;
     Querystring: ScoringQuery;
   }>(
     '/matches/:id/scoring',
-    {
-      schema: {
-        description: 'Get match scoring results for all markets',
-        tags: ['Scoring'],
-        params: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', description: 'TheSports external match ID' },
-          },
-          required: ['id'],
-        },
-        querystring: {
-          type: 'object',
-          properties: {
-            markets: {
-              type: 'string',
-              description: 'Comma-separated market IDs (O25,BTTS,etc.)',
-            },
-            locale: {
-              type: 'string',
-              enum: ['tr', 'en'],
-              default: 'en',
-              description: 'Display locale',
-            },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              match_id: { type: 'string' },
-              source_refs: { type: 'object' },
-              features: { type: 'object' },
-              risk_flags: { type: 'array', items: { type: 'string' } },
-              results: { type: 'array' },
-              generated_at: { type: 'number' },
-            },
-          },
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              details: { type: 'object' },
-            },
-          },
-          404: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Params: MatchParams; Querystring: ScoringQuery }>, reply: FastifyReply) => {
-      const { id: matchId } = request.params;
-      const { markets: marketsQuery, locale = 'en' } = request.query;
+    async (request, reply) => {
+      const matchId = request.params.id;
+      const marketsParam = request.query.markets;
+      const locale = (request.query.locale || 'en') as 'tr' | 'en';
 
-      const startTime = Date.now();
-
-      logger.info('[ScoringAPI] Scoring request', {
-        matchId,
-        markets: marketsQuery || 'all',
+      logger.info(`[Scoring] GET /matches/${matchId}/scoring`, {
+        markets: marketsParam,
         locale,
       });
 
       try {
-        // ========================================================================
-        // STEP 1: Parse and validate markets
-        // ========================================================================
-
+        // Parse requested markets
         let requestedMarkets: MarketId[] = VALID_MARKETS;
+        if (marketsParam) {
+          const parsed = marketsParam
+            .split(',')
+            .map((m) => m.trim())
+            .filter((m) => VALID_MARKETS.includes(m as MarketId)) as MarketId[];
 
-        if (marketsQuery) {
-          const marketIds = marketsQuery.split(',').map(m => m.trim().toUpperCase());
-
-          // Validate each market ID
-          const invalidMarkets = marketIds.filter(m => !VALID_MARKETS.includes(m as MarketId));
-
-          if (invalidMarkets.length > 0) {
+          if (parsed.length === 0) {
             return reply.status(400).send({
-              error: 'Invalid market IDs',
-              details: {
-                invalid: invalidMarkets,
-                allowed: VALID_MARKETS,
-              },
+              error: 'Bad Request',
+              message: `Invalid market IDs. Valid markets: ${VALID_MARKETS.join(', ')}`,
             });
           }
 
-          requestedMarkets = marketIds as MarketId[];
+          requestedMarkets = parsed;
         }
 
-        // ========================================================================
-        // STEP 2: Build composite scoring features
-        // ========================================================================
+        // Build features
+        const featureResult = await featureBuilderService.buildFeatures(matchId);
 
-        let compositeFeatures;
-
-        try {
-          compositeFeatures = await featureBuilderService.buildScoringFeatures(matchId);
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('not found')) {
+        if (!featureResult.success) {
+          if (featureResult.error_code === 'MATCH_NOT_FOUND') {
             return reply.status(404).send({
-              error: `Match not found: ${matchId}`,
+              error: 'Not Found',
+              message: featureResult.error || 'Match not found',
             });
           }
-          throw error;
+
+          return reply.status(503).send({
+            error: 'Service Unavailable',
+            message: featureResult.error || 'Failed to fetch match data',
+            error_code: featureResult.error_code,
+          });
         }
 
-        const { features, source_refs, risk_flags } = compositeFeatures;
-
-        // ========================================================================
-        // STEP 3: Score all requested markets
-        // ========================================================================
-
-        // Adapt ScoringFeatures to FootyStatsMatch format for marketScorer
-        const footyStatsFormat = marketScorerService.adaptScoringFeaturesToFootyStats(features);
-
-        const results: ScoringResultWithEligibility[] = [];
-
+        // Score markets
+        const scoringResults: ScoringResultWithEligibility[] = [];
         for (const marketId of requestedMarkets) {
-          try {
-            const result = await marketScorerService.scoreMarket(marketId, footyStatsFormat);
+          const result = await marketScorerService.scoreMarket(
+            marketId,
+            featureResult.features!,
+            locale
+          );
 
-            // Attach publish eligibility
-            const eligibility = publishEligibilityUtils.canPublish(marketId, result);
+          // Check publish eligibility
+          const eligibility = publishEligibilityUtils.checkEligibility(
+            result,
+            featureResult.features!
+          );
 
-            results.push({
-              ...result,
-              can_publish: eligibility.canPublish,
-              publish_reason: eligibility.reason,
-              failed_checks: eligibility.failedChecks,
-              passed_checks: eligibility.passedChecks,
-            });
-          } catch (error) {
-            logger.error('[ScoringAPI] Error scoring market', {
-              matchId,
-              marketId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-
-            // Add error result for this market
-            results.push({
-              match_id: matchId,
-              fs_match_id: 0,
-              market_id: marketId,
-              market_name: marketId,
-              probability: 0,
-              confidence: 0,
-              pick: 'NO',
-              edge: null,
-              components: [],
-              risk_flags: ['SCORING_ERROR'],
-              data_score: 0,
-              metadata: {},
-              scored_at: Date.now(),
-              can_publish: false,
-              publish_reason: 'Scoring error occurred',
-              failed_checks: ['SCORING_ERROR'],
-              passed_checks: [],
-            } as any);
-          }
+          scoringResults.push({
+            ...result,
+            can_publish: eligibility.can_publish,
+            publish_reason: eligibility.reason,
+            failed_checks: eligibility.failed_checks,
+            passed_checks: eligibility.passed_checks,
+          });
         }
 
-        // ========================================================================
-        // STEP 4: Build response
-        // ========================================================================
-
+        // Response
         const response: ScoringResponse = {
           match_id: matchId,
-          source_refs,
-          features,
-          risk_flags,
-          results,
+          source_refs: {
+            thesports_match_id: matchId,
+            thesports_internal_id: featureResult.features!.match.ts_internal_id,
+            footystats_match_id: featureResult.features!.footystats?.match?.id,
+            footystats_linked: featureResult.features!.footystats?.linked || false,
+            link_method: featureResult.features!.footystats?.link_method,
+          },
+          features: featureResult.features,
+          risk_flags: featureResult.features!.risk_flags || [],
+          results: scoringResults,
           generated_at: Date.now(),
         };
 
-        const duration = Date.now() - startTime;
-
-        logger.info('[ScoringAPI] Scoring complete', {
-          matchId,
-          markets_scored: results.length,
-          footystats_linked: source_refs.footystats_linked,
-          risk_flags: risk_flags.length,
-          duration_ms: duration,
-        });
-
-        return reply.send(response);
-      } catch (error) {
-        logger.error('[ScoringAPI] Fatal error', {
-          matchId,
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-
+        return reply.status(200).send(response);
+      } catch (error: any) {
+        logger.error('[Scoring] Unexpected error:', error);
         return reply.status(500).send({
-          error: 'Internal server error',
-          details: {
-            message: error instanceof Error ? error.message : 'Unknown error',
-          },
+          error: 'Internal Server Error',
+          message: error.message || 'Unexpected error during scoring',
         });
       }
     }
   );
 
+  // ============================================================================
+  // PHASE-3A: Admin Panel Scoring Preview (Simplified)
+  // ============================================================================
+
   /**
-   * GET /api/scoring/markets
+   * GET /api/matches/:fsMatchId/scoring-preview
    *
-   * Get list of available markets
-   *
-   * Response:
-   * {
-   *   markets: [
-   *     { id: 'O25', display_name: 'Over 2.5 Goals', display_name_tr: '2.5 Üst Gol' },
-   *     ...
-   *   ]
-   * }
+   * Returns simplified scoring preview for a match (Phase-3A MVP)
+   * This is a lightweight endpoint for the admin panel.
    */
   fastify.get(
-    '/scoring/markets',
-    {
-      schema: {
-        description: 'Get list of available markets',
-        tags: ['Scoring'],
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              markets: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string' },
-                    display_name: { type: 'string' },
-                    display_name_tr: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    async (request, reply) => {
-      // Load market definitions from registry
-      const marketRegistry = require('../config/market_registry.json');
+    '/matches/:fsMatchId/scoring-preview',
+    async (
+      request: FastifyRequest<{
+        Params: { fsMatchId: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const fsMatchId = parseInt(request.params.fsMatchId, 10);
 
-      const markets = VALID_MARKETS.map(id => ({
-        id,
-        display_name: marketRegistry.markets[id]?.display_name || id,
-        display_name_tr: marketRegistry.markets[id]?.display_name_tr || id,
-      }));
+        if (isNaN(fsMatchId)) {
+          return reply.status(400).send({
+            error: 'Invalid fs_match_id',
+          });
+        }
 
-      return reply.send({ markets });
+        logger.info(`[Scoring Preview] GET /matches/${fsMatchId}/scoring-preview`);
+
+        const preview = await getMatchScoringPreview(fsMatchId);
+
+        return reply.status(200).send({
+          success: true,
+          data: preview,
+        });
+      } catch (error: any) {
+        logger.error('[Scoring Preview] Error:', error);
+        return reply.status(500).send({
+          success: false,
+          error: error.message || 'Failed to fetch scoring preview',
+        });
+      }
     }
   );
-
-  logger.info('[ScoringAPI] Scoring routes registered');
 }
+
+// Export for backward compatibility
+export default registerScoringRoutes;
