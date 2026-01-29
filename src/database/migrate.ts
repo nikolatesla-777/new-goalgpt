@@ -719,6 +719,109 @@ async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_support_tickets_user ON support_tickets(customer_user_id);
       CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
       CREATE INDEX IF NOT EXISTS idx_support_ticket_messages_ticket ON support_ticket_messages(ticket_id);
+
+      -- ========================================================================
+      -- PHASE-0: Critical Fixes (Idempotency, Telegram Blocked, Job Logging)
+      -- ========================================================================
+
+      -- 1. Add dedupe_key to telegram_posts for idempotency
+      ALTER TABLE telegram_posts
+      ADD COLUMN IF NOT EXISTS dedupe_key VARCHAR(64);
+
+      ALTER TABLE telegram_posts
+      ADD COLUMN IF NOT EXISTS content_type VARCHAR(20) DEFAULT 'match';
+
+      ALTER TABLE telegram_posts
+      ADD COLUMN IF NOT EXISTS template_version VARCHAR(10) DEFAULT 'v2';
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_posts_dedupe_key
+      ON telegram_posts (dedupe_key)
+      WHERE dedupe_key IS NOT NULL;
+
+      -- 2. Create telegram_blocked_chats table
+      CREATE TABLE IF NOT EXISTS telegram_blocked_chats (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        chat_id VARCHAR(100) NOT NULL UNIQUE,
+        blocked_at TIMESTAMPTZ DEFAULT NOW(),
+        error_code INTEGER,
+        error_description TEXT,
+        retry_count INTEGER DEFAULT 0,
+        last_retry_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_telegram_blocked_chats_blocked_at
+      ON telegram_blocked_chats (blocked_at DESC);
+
+      -- 3. Create job_execution_logs table
+      CREATE TABLE IF NOT EXISTS job_execution_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        job_name VARCHAR(100) NOT NULL,
+        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        finished_at TIMESTAMPTZ,
+        status VARCHAR(20) NOT NULL,
+        duration_ms INTEGER,
+        rows_affected INTEGER,
+        error_message TEXT,
+        metadata JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_job_logs_name_started
+      ON job_execution_logs (job_name, started_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_job_logs_status
+      ON job_execution_logs (status);
+
+      -- 3b. Add missing columns to job_execution_logs (if table exists with old schema)
+      DO $body$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'job_execution_logs') THEN
+          -- Add finished_at if missing (old schema used completed_at)
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'job_execution_logs' AND column_name = 'finished_at') THEN
+            ALTER TABLE job_execution_logs ADD COLUMN finished_at TIMESTAMPTZ;
+          END IF;
+
+          -- Add metadata if missing
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'job_execution_logs' AND column_name = 'metadata') THEN
+            ALTER TABLE job_execution_logs ADD COLUMN metadata JSONB;
+          END IF;
+
+          -- Add rows_affected if missing (old schema used items_processed)
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'job_execution_logs' AND column_name = 'rows_affected') THEN
+            ALTER TABLE job_execution_logs ADD COLUMN rows_affected INTEGER;
+          END IF;
+        END IF;
+      END
+      $body$;
+      -- 4. Add missing columns to admin_publish_logs (if table exists)
+      -- This ensures compatibility if admin_publish_logs was created by alternate migration
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'admin_publish_logs') THEN
+          -- Add fs_match_id if missing
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'admin_publish_logs' AND column_name = 'fs_match_id') THEN
+            ALTER TABLE admin_publish_logs ADD COLUMN fs_match_id INTEGER;
+          END IF;
+
+          -- Add channel_id if missing
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'admin_publish_logs' AND column_name = 'channel_id') THEN
+            ALTER TABLE admin_publish_logs ADD COLUMN channel_id VARCHAR(100);
+          END IF;
+
+          -- Add completed_at if missing
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'admin_publish_logs' AND column_name = 'completed_at') THEN
+            ALTER TABLE admin_publish_logs ADD COLUMN completed_at TIMESTAMPTZ;
+          END IF;
+        END IF;
+      END
+      $$;
     `;
 
     await pool.query(migrationSQL);
