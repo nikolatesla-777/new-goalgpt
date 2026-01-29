@@ -1529,7 +1529,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
               potentials: {
                 btts: fsMatch.btts_potential,
                 over25: fsMatch.o25_potential,
-                over15: fsMatch.avg_potential ? Math.min(Math.round(fsMatch.avg_potential * 30), 95) : null,
+                over15: fsMatch.avg_potential ? Math.min(Math.round(fsMatch.avg_potential * 30), 95) : undefined,
               },
               form: {
                 home: homeTeamStats ? {
@@ -1538,14 +1538,14 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
                   over25_pct: homeTeamStats.seasonOver25Percentage_overall,
                   overall: homeTeamStats.formRun_overall || null,       // NEW: Form string
                   home_only: homeTeamStats.formRun_home || null,         // NEW: Home form
-                } : null,
+                } : undefined,
                 away: awayTeamStats ? {
                   ppg: awayTeamStats.seasonPPG_overall,
                   btts_pct: awayTeamStats.seasonBTTSPercentage_overall,
                   over25_pct: awayTeamStats.seasonOver25Percentage_overall,
                   overall: awayTeamStats.formRun_overall || null,        // NEW: Form string
                   away_only: awayTeamStats.formRun_away || null,         // NEW: Away form
-                } : null,
+                } : undefined,
               },
               h2h: fsMatch.h2h ? {
                 total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
@@ -1558,7 +1558,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
               xg: {
                 home: fsMatch.team_a_xg_prematch || homeTeamStats?.xg_for_avg_overall,
                 away: fsMatch.team_b_xg_prematch || awayTeamStats?.xg_for_avg_overall,
-                total: null,
+                total: undefined,
               },
               trends: {
                 home: fsMatch.trends?.home || [],
@@ -1618,10 +1618,29 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         response.xg.total = response.xg.home + response.xg.away;
       }
 
-      // Cache the match data
-      await setCachedMatchStats(response, {
-        matchDateUnix: fsMatch.date_unix,
-        status: fsMatch.status
+      // Cache the match data - map response fields to MatchCacheData
+      await setCachedMatchStats({
+        fs_match_id: response.fs_id,
+        home_name: response.home_name,
+        away_name: response.away_name,
+        match_date_unix: response.date_unix,
+        status: response.status,
+        btts_potential: response.potentials.btts ?? undefined,
+        over25_potential: response.potentials.over25 ?? undefined,
+        over15_potential: response.potentials.over15 ?? undefined,
+        corners_potential: response.potentials.corners ?? undefined,
+        cards_potential: response.potentials.cards ?? undefined,
+        shots_potential: response.potentials.shots ?? undefined,
+        fouls_potential: response.potentials.fouls ?? undefined,
+        xg_home_prematch: response.xg.home ?? undefined,
+        xg_away_prematch: response.xg.away ?? undefined,
+        xg_total: response.xg.total ?? undefined,
+        odds_home: response.odds.home ?? undefined,
+        odds_draw: response.odds.draw ?? undefined,
+        odds_away: response.odds.away ?? undefined,
+        trends: response.trends,
+        h2h_data: response.h2h,
+        form_data: response.form,
       });
       logger.info(`[FootyStats] Cached match ${fsIdNum} data`);
 
@@ -1679,9 +1698,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
   });
 
   // Invalidate cache for a specific match
-  fastify.delete('/footystats/cache/invalidate/:matchId', { preHandler: [requireAuth, requireAdmin] }, async (request: FastifyRequest<{
-    Params: { matchId: string };
-  }>, reply: FastifyReply) => {
+  fastify.delete<{ Params: { matchId: string } }>('/footystats/cache/invalidate/:matchId', { preHandler: [requireAuth, requireAdmin] }, async (request, reply) => {
     try {
       const { matchId } = request.params;
       const fsIdNum = parseInt(matchId);
