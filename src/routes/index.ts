@@ -62,7 +62,7 @@ import { announcementsRoutes } from './announcements.routes';
 // External Integrations
 import { footyStatsRoutes } from './footystats.routes';
 import { partnersRoutes } from './partners.routes';
-import { telegramRoutes } from './telegram';
+import { telegramRoutes } from './telegram.routes';
 
 // Scoring & Predictions
 import { registerScoringRoutes } from './scoring.routes';
