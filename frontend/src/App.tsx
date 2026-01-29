@@ -21,6 +21,7 @@ const DailyTipsPage = lazy(() => import('./components/admin').then(m => ({ defau
 const LeagueStandingsPage = lazy(() => import('./components/admin').then(m => ({ default: m.LeagueStandingsPage })));
 const PlayerSearchPage = lazy(() => import('./components/admin').then(m => ({ default: m.PlayerSearchPage })));
 const TrendsAnalysisPage = lazy(() => import('./components/admin').then(m => ({ default: m.TrendsAnalysisPage })));
+const MatchScoringAnalysis = lazy(() => import('./components/admin').then(m => ({ default: m.MatchScoringAnalysis })));
 const AIPredictionsPage = lazy(() => import('./components/ai/AIPredictionsPage').then(m => ({ default: m.AIPredictionsPage })));
 const AIAnalysisLab = lazy(() => import('./components/ai-lab').then(m => ({ default: m.AIAnalysisLab })));
 

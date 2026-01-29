@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { TrendUp, Target, Flag, Fire, TrendDown, Trophy, Coins } from '@phosphor-icons/react';
+import { useTrendsAnalysis } from '../../api/hooks';
 
 interface TrendMatch {
   fs_id: number;
@@ -58,44 +59,21 @@ interface TrendsData {
 }
 
 export default function TrendsAnalysisPage() {
-  const [trends, setTrends] = useState<TrendsData>({
+  const [activeTab, setActiveTab] = useState<'goals' | 'corners' | 'cards' | 'form' | 'value'>('goals');
+
+  // React Query hook replaces manual state management
+  const { data, isLoading, isError, error, refetch } = useTrendsAnalysis();
+
+  const trends: TrendsData = (data?.trends as any) || {
     goalTrends: [],
     cornerTrends: [],
     cardsTrends: [],
     formTrends: [],
     valueBets: []
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'goals' | 'corners' | 'cards' | 'form' | 'value'>('goals');
-  const [totalMatches, setTotalMatches] = useState(0);
+  };
+  const totalMatches = data?.totalMatches || 0;
 
-  useEffect(() => {
-    loadTrends();
-  }, []);
-
-  async function loadTrends() {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await fetch('/api/footystats/trends-analysis');
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to load trends');
-      }
-
-      setTrends(data.trends);
-      setTotalMatches(data.totalMatches);
-    } catch (err: any) {
-      console.error('Failed to load trends:', err);
-      setError(err.message || 'Failed to load trends');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
         <div className="text-white">Yükleniyor...</div>
@@ -103,14 +81,14 @@ export default function TrendsAnalysisPage() {
     );
   }
 
-  if (error) {
+  if (isError) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
         <div className="text-center">
           <div className="text-red-400 mb-4">❌ Hata</div>
-          <div className="text-gray-400">{error}</div>
+          <div className="text-gray-400">{error instanceof Error ? error.message : 'Failed to load trends'}</div>
           <button
-            onClick={loadTrends}
+            onClick={() => refetch()}
             className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
             Tekrar Dene
@@ -137,7 +115,7 @@ export default function TrendsAnalysisPage() {
             </div>
           </div>
           <button
-            onClick={loadTrends}
+            onClick={() => refetch()}
             className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
           >
             <TrendUp className="w-4 h-4" />

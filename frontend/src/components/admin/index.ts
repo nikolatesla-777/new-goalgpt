@@ -18,4 +18,5 @@ export { default as DailyTipsPage } from './DailyTipsPage';
 export { default as LeagueStandingsPage } from './LeagueStandingsPage';
 export { default as PlayerSearchPage } from './PlayerSearchPage';
 export { default as TrendsAnalysisPage } from './TrendsAnalysisPage';
+export { MatchScoringAnalysis } from './MatchScoringAnalysis';
 

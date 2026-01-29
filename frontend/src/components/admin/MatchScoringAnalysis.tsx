@@ -10,7 +10,7 @@
  * - Backward compatible with Phase-3A response format
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 // ============================================================================
 // INTERFACES
