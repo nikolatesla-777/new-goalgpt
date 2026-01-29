@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react';
-import { getTodaysMatches, publishToTelegram, getTelegramHealth } from '../../api/telegram';
+import { useState } from 'react';
+import {
+  useTodaysMatches,
+  useTelegramHealth,
+  usePublishToTelegram,
+} from '../../api/hooks';
 
 // ============================================================================
 // INTERFACES
@@ -50,14 +54,6 @@ interface Pick {
   odds?: number;
 }
 
-interface BotHealth {
-  configured: boolean;
-  metrics?: {
-    requests: number;
-    errors: number;
-  };
-}
-
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -74,14 +70,10 @@ const AVAILABLE_PICKS: Pick[] = [
 // ============================================================================
 
 export function TelegramPublisher() {
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [matchPicks, setMatchPicks] = useState<Record<number, string[]>>({});
-  const [botHealth, setBotHealth] = useState<BotHealth | null>(null);
-  const [publishing, setPublishing] = useState<number | null>(null);
   const [publishSuccess, setPublishSuccess] = useState<number | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
+  const [publishingMatchId, setPublishingMatchId] = useState<number | null>(null);
 
   // Date filter state - default to today
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -89,32 +81,24 @@ export function TelegramPublisher() {
     return today.toISOString().split('T')[0]; // YYYY-MM-DD format
   });
 
-  useEffect(() => {
-    loadMatches();
-    loadBotHealth();
-  }, [selectedDate]); // Reload when date changes
+  // React Query hooks replace manual state management
+  const {
+    data: matchesResponse,
+    isLoading: loading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useTodaysMatches(selectedDate);
 
-  const loadMatches = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await getTodaysMatches(selectedDate);
-      setMatches(response.data || []);
-    } catch (err: any) {
-      setError(err.message || 'Maçlar yüklenemedi');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    data: botHealth,
+  } = useTelegramHealth();
 
-  const loadBotHealth = async () => {
-    try {
-      const health = await getTelegramHealth();
-      setBotHealth(health);
-    } catch (err) {
-      console.error('Bot health check failed:', err);
-    }
-  };
+  const publishMutation = usePublishToTelegram();
+
+  // Extract matches from response
+  const matches = matchesResponse?.data || [];
+  const error = isError ? (queryError instanceof Error ? queryError.message : 'Maçlar yüklenemedi') : null;
 
   const handlePickToggle = (matchId: number, marketType: string) => {
     const currentPicks = matchPicks[matchId] || [];
@@ -143,35 +127,38 @@ export function TelegramPublisher() {
       return;
     }
 
-    setPublishing(match.id);
-    setError(null);
+    setPublishingMatchId(match.id);
     try {
       const pickObjects = picks.map(marketType => ({
         market_type: marketType,
         odds: undefined
       }));
 
-      await publishToTelegram(match.id, match.external_id, pickObjects);
-      setPublishSuccess(match.id);
+      await publishMutation.mutateAsync({
+        fsMatchId: match.id,
+        matchId: match.external_id,
+        picks: pickObjects,
+      });
 
+      setPublishSuccess(match.id);
       setTimeout(() => {
         setPublishSuccess(null);
       }, 3000);
     } catch (err: any) {
-      setError(err.message || 'Yayınlama hatası');
+      alert(`❌ Yayınlama hatası: ${err.message || 'Bilinmeyen hata'}`);
     } finally {
-      setPublishing(null);
+      setPublishingMatchId(null);
     }
   };
 
   // Calculate stats
-  const highConfidenceCount = matches.filter(m =>
+  const highConfidenceCount = matches.filter((m: Match) =>
     (m.btts_potential && m.btts_potential >= 70) ||
     (m.o25_potential && m.o25_potential >= 70)
   ).length;
 
   const avgBtts = matches.length > 0
-    ? Math.round(matches.reduce((sum, m) => sum + (m.btts_potential || 0), 0) / matches.length)
+    ? Math.round(matches.reduce((sum: number, m: Match) => sum + (m.btts_potential || 0), 0) / matches.length)
     : 0;
 
   if (loading) {
@@ -225,7 +212,7 @@ export function TelegramPublisher() {
 
               {/* Refresh Button */}
               <button
-                onClick={loadMatches}
+                onClick={() => refetch()}
                 disabled={loading}
                 className="group relative px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all duration-300 disabled:opacity-50"
               >
@@ -346,12 +333,12 @@ export function TelegramPublisher() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {matches.map((match) => {
+                  {matches.map((match: Match) => {
                     const isExpanded = expandedMatch === match.id;
                     const matchDate = new Date(match.date_unix * 1000);
                     const timeStr = matchDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
                     const currentPicks = matchPicks[match.id] || [];
-                    const isPublishing = publishing === match.id;
+                    const isPublishing = publishingMatchId === match.id;
                     const isPublishSuccess = publishSuccess === match.id;
 
                     return (
@@ -561,7 +548,7 @@ export function TelegramPublisher() {
                                       {match.home_name}
                                     </div>
                                     <div className="space-y-1.5">
-                                      {match.trends.home.slice(0, 4).map((trend, idx) => (
+                                      {match.trends.home.slice(0, 4).map((trend: any, idx: number) => (
                                         <div key={idx} className="flex items-start gap-2 text-xs">
                                           <span className={`
                                             ${trend.sentiment === 'great' ? 'text-green-600' : ''}
@@ -585,7 +572,7 @@ export function TelegramPublisher() {
                                       {match.away_name}
                                     </div>
                                     <div className="space-y-1.5">
-                                      {match.trends.away.slice(0, 4).map((trend, idx) => (
+                                      {match.trends.away.slice(0, 4).map((trend: any, idx: number) => (
                                         <div key={idx} className="flex items-start gap-2 text-xs">
                                           <span className={`
                                             ${trend.sentiment === 'great' ? 'text-green-600' : ''}

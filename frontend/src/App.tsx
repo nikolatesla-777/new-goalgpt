@@ -1,9 +1,22 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AIPredictionsProvider } from './context/AIPredictionsContext';
 import { FavoritesProvider } from './context/FavoritesContext';
 import { PredictionToast } from './components/ui/PredictionToast';
+
+// React Query client configuration
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 30, // 30 minutes (formerly cacheTime)
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 // EAGER LOAD: Main layout (needed immediately)
 import { AdminLayout } from './components/admin';
@@ -75,9 +88,10 @@ function LoadingFallback() {
 
 function App() {
   return (
-    <FavoritesProvider>
-      <AIPredictionsProvider>
-        <BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <FavoritesProvider>
+        <AIPredictionsProvider>
+          <BrowserRouter>
           <Routes>
             {/* All routes now use AdminLayout with sidebar */}
             <Route element={<AdminLayout />}>
@@ -191,6 +205,7 @@ function App() {
         </BrowserRouter>
       </AIPredictionsProvider>
     </FavoritesProvider>
+    </QueryClientProvider>
   );
 }
 
