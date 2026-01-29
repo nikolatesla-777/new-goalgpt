@@ -189,6 +189,14 @@ class TheSportsAPIManager implements ITheSportsAPI {
   }
 
   /**
+   * Get rate limiter for manual rate limiting
+   * Use sparingly - most API calls are already rate-limited internally
+   */
+  get rateLimit(): GlobalRateLimiter {
+    return this.rateLimiter;
+  }
+
+  /**
    * Async initialization with validation
    * Use this at application startup
    */
