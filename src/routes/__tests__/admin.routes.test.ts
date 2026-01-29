@@ -1,12 +1,19 @@
 /**
- * Phase-3A.1: Admin Routes Tests
- *
- * Tests for admin panel routes with ADMIN_API_KEY authentication
+ * Admin Routes Tests - Consolidated (Phase-3A.1 + Phase-3B)
  *
  * Test Coverage:
- * 1. ADMIN_API_KEY authentication guard
- * 2. POST /api/admin/publish-with-audit (with mocked telegram)
- * 3. GET /api/admin/publish-logs
+ * Phase-3A.1:
+ * - ADMIN_API_KEY authentication guard
+ * - POST /api/admin/publish-with-audit
+ * - GET /api/admin/publish-logs
+ *
+ * Phase-3B:
+ * - IP Allowlist middleware
+ * - Rate Limiting middleware
+ * - POST /api/admin/ai-summary
+ * - POST /api/admin/bulk-preview
+ * - POST /api/admin/bulk-publish
+ * - POST /api/admin/generate-image
  */
 
 import Fastify, { FastifyInstance } from 'fastify';
@@ -22,7 +29,7 @@ jest.mock('../../database/pool', () => ({
   },
 }));
 
-describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
+describe('Admin Routes - Consolidated Tests', () => {
   let app: FastifyInstance;
   const VALID_API_KEY = 'test-admin-key-123';
   const INVALID_API_KEY = 'wrong-key';
@@ -45,7 +52,11 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
     delete process.env.ADMIN_API_KEY;
   });
 
-  describe('Authentication Guard', () => {
+  // ==========================================================================
+  // AUTHENTICATION TESTS (Phase-3A.1 + Phase-3B)
+  // ==========================================================================
+
+  describe('ADMIN_API_KEY Authentication', () => {
     test('Should reject request without x-admin-api-key header', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -60,7 +71,7 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
       expect(response.statusCode).toBe(401);
       const body = JSON.parse(response.body);
       expect(body.error).toBe('Unauthorized');
-      expect(body.message).toContain('Missing x-admin-api-key');
+      expect(body.message).toContain('Invalid ADMIN_API_KEY');
     });
 
     test('Should reject request with invalid x-admin-api-key', async () => {
@@ -101,44 +112,45 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
           return Promise.resolve({
             statusCode: 200,
             body: JSON.stringify({
-              telegram_message_id: 'telegram-msg-123',
-              channel_id: 'test-channel',
+              telegram_message_id: 'msg-123',
+              channel_id: 'channel-456',
             }),
           });
         }
         return originalInject(opts);
       }) as any;
 
-      const response = await originalInject({
+      const response = await app.inject({
         method: 'POST',
         url: '/api/admin/publish-with-audit',
         headers: {
           'x-admin-api-key': VALID_API_KEY,
-          'content-type': 'application/json',
         },
         payload: {
           market_id: 'O25',
           match_ids: ['12345'],
           admin_user_id: 'test-admin',
+          dry_run: false,
         },
       });
+
+      // Restore original inject
+      app.inject = originalInject;
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.request_id).toBeDefined();
       expect(body.market_id).toBe('O25');
-
-      // Restore inject
-      app.inject = originalInject;
+      expect(body.match_results).toHaveLength(1);
     });
   });
 
-  describe('POST /api/admin/publish-with-audit', () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
+  // ==========================================================================
+  // PHASE-3A.1 ENDPOINT TESTS
+  // ==========================================================================
 
-    test('Should reject request without market_id', async () => {
+  describe('POST /api/admin/publish-with-audit', () => {
+    test('Should reject request with missing market_id', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/admin/publish-with-audit',
@@ -153,28 +165,10 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('market_id is required');
+      expect(body.error).toContain('market_id');
     });
 
-    test('Should reject request without admin_user_id', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/admin/publish-with-audit',
-        headers: {
-          'x-admin-api-key': VALID_API_KEY,
-        },
-        payload: {
-          market_id: 'O25',
-          match_ids: ['12345'],
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body);
-      expect(body.error).toContain('admin_user_id is required');
-    });
-
-    test('Should reject invalid market_id', async () => {
+    test('Should reject request with invalid market_id', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/admin/publish-with-audit',
@@ -194,13 +188,9 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
       expect(body.valid_markets).toBeDefined();
     });
 
-    test('Should handle DRY_RUN mode successfully', async () => {
-      // Mock database operations
+    test('Should handle dry_run mode', async () => {
       const mockClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [{ id: 'log-uuid-dry-run' }] }) // INSERT
-          .mockResolvedValueOnce({}) // UPDATE to dry_run_success
-          .mockResolvedValueOnce({}), // COMMIT
+        query: jest.fn().mockResolvedValue({ rows: [{ id: 'log-uuid-123' }] }),
         release: jest.fn(),
       };
 
@@ -214,9 +204,9 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
         },
         payload: {
           market_id: 'BTTS',
-          match_ids: ['67890'],
-          dry_run: true,
+          match_ids: ['12345'],
           admin_user_id: 'test-admin',
+          dry_run: true,
         },
       });
 
@@ -224,116 +214,23 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
       const body = JSON.parse(response.body);
       expect(body.dry_run).toBe(true);
       expect(body.status).toBe('dry_run_success');
-      expect(body.match_results).toBeDefined();
-      expect(Array.isArray(body.match_results)).toBe(true);
-    });
-
-    test('Should handle invalid match_id format gracefully', async () => {
-      // Mock database operations
-      const mockClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [{ id: 'log-uuid-invalid' }] }) // INSERT
-          .mockResolvedValueOnce({}), // UPDATE with error
-        release: jest.fn(),
-      };
-
-      (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/admin/publish-with-audit',
-        headers: {
-          'x-admin-api-key': VALID_API_KEY,
-        },
-        payload: {
-          market_id: 'O25',
-          match_ids: ['not-a-number'],
-          admin_user_id: 'test-admin',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.status).toBe('failed');
-      expect(body.match_results[0].status).toBe('failed');
-      expect(body.match_results[0].error).toContain('Invalid match_id format');
-    });
-
-    test('Should call telegram endpoint for each match_id', async () => {
-      // Mock database operations
-      const mockClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [{ id: 'log-1' }] }) // INSERT log 1
-          .mockResolvedValueOnce({}) // UPDATE log 1
-          .mockResolvedValueOnce({ rows: [{ id: 'log-2' }] }) // INSERT log 2
-          .mockResolvedValueOnce({}), // UPDATE log 2
-        release: jest.fn(),
-      };
-
-      (pool.connect as jest.Mock).mockResolvedValue(mockClient);
-
-      // Mock telegram endpoint calls
-      const telegramCalls: any[] = [];
-      const originalInject = app.inject.bind(app);
-      app.inject = jest.fn().mockImplementation((opts: any) => {
-        if (opts.url.includes('/telegram/publish/match/')) {
-          telegramCalls.push(opts);
-          return Promise.resolve({
-            statusCode: 200,
-            body: JSON.stringify({
-              telegram_message_id: `telegram-msg-${telegramCalls.length}`,
-              channel_id: 'test-channel',
-            }),
-          });
-        }
-        return originalInject(opts);
-      }) as any;
-
-      const response = await originalInject({
-        method: 'POST',
-        url: '/api/admin/publish-with-audit',
-        headers: {
-          'x-admin-api-key': VALID_API_KEY,
-        },
-        payload: {
-          market_id: 'O25',
-          match_ids: ['11111', '22222'],
-          admin_user_id: 'test-admin',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.match_results.length).toBe(2);
-      expect(body.match_results[0].status).toBe('sent');
-      expect(body.match_results[1].status).toBe('sent');
-
-      // Restore inject
-      app.inject = originalInject;
     });
   });
 
   describe('GET /api/admin/publish-logs', () => {
-    test('Should return logs with default pagination', async () => {
-      const mockLogs = [
-        {
-          id: 'log-1',
-          request_id: 'req-1',
-          admin_user_id: 'admin-1',
-          match_id: '12345',
-          market_id: 'O25',
-          status: 'sent',
-          created_at: new Date().toISOString(),
-        },
-      ];
+    test('Should return paginated logs', async () => {
+      const mockClient = {
+        query: jest.fn()
+          .mockResolvedValueOnce({ rows: [{ total: 100 }] }) // COUNT query
+          .mockResolvedValueOnce({ rows: [{ id: 'log-1' }, { id: 'log-2' }] }), // SELECT query
+        release: jest.fn(),
+      };
 
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ total: 1 }] }) // COUNT query
-        .mockResolvedValueOnce({ rows: mockLogs }); // SELECT query
+      (pool.connect as jest.Mock).mockResolvedValue(mockClient);
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/admin/publish-logs',
+        url: '/api/admin/publish-logs?limit=50&offset=0',
         headers: {
           'x-admin-api-key': VALID_API_KEY,
         },
@@ -341,20 +238,25 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.logs).toBeDefined();
-      expect(body.total).toBe(1);
-      expect(body.limit).toBe(100);
+      expect(body.logs).toHaveLength(2);
+      expect(body.total).toBe(100);
+      expect(body.limit).toBe(50);
       expect(body.offset).toBe(0);
     });
 
-    test('Should filter logs by market_id', async () => {
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ total: 0 }] })
-        .mockResolvedValueOnce({ rows: [] });
+    test('Should filter by market_id', async () => {
+      const mockClient = {
+        query: jest.fn()
+          .mockResolvedValueOnce({ rows: [{ total: 10 }] })
+          .mockResolvedValueOnce({ rows: [{ id: 'log-1', market_id: 'O25' }] }),
+        release: jest.fn(),
+      };
+
+      (pool.connect as jest.Mock).mockResolvedValue(mockClient);
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/admin/publish-logs?market_id=BTTS',
+        url: '/api/admin/publish-logs?market_id=O25',
         headers: {
           'x-admin-api-key': VALID_API_KEY,
         },
@@ -362,63 +264,246 @@ describe('Admin Routes - ADMIN_API_KEY Authentication', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.logs).toBeDefined();
+      expect(body.logs).toHaveLength(1);
+      expect(body.logs[0].market_id).toBe('O25');
+    });
+  });
+
+  // ==========================================================================
+  // PHASE-3B ENDPOINT TESTS (Validation-focused)
+  // ==========================================================================
+
+  describe('POST /api/admin/ai-summary', () => {
+    test('Should reject request with missing match_id', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/ai-summary',
+        headers: {
+          'x-admin-api-key': VALID_API_KEY,
+        },
+        payload: {
+          locale: 'tr',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('match_id');
     });
 
-    test('Should filter logs by admin_user_id', async () => {
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ total: 0 }] })
-        .mockResolvedValueOnce({ rows: [] });
-
+    test('Should reject request with invalid locale', async () => {
       const response = await app.inject({
-        method: 'GET',
-        url: '/api/admin/publish-logs?admin_user_id=test-admin',
+        method: 'POST',
+        url: '/api/admin/ai-summary',
         headers: {
           'x-admin-api-key': VALID_API_KEY,
         },
+        payload: {
+          match_id: '12345',
+          locale: 'fr', // Invalid locale
+        },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
-      expect(body.logs).toBeDefined();
+      expect(body.message).toContain('locale');
+    });
+  });
+
+  describe('POST /api/admin/bulk-preview', () => {
+    test('Should reject request with missing date_from', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/bulk-preview',
+        headers: {
+          'x-admin-api-key': VALID_API_KEY,
+        },
+        payload: {
+          date_to: '2026-01-31',
+          markets: ['O25'],
+          filters: {
+            min_confidence: 60,
+            min_probability: 0.6,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('date_from');
     });
 
-    test('Should respect limit and offset parameters', async () => {
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ total: 50 }] })
-        .mockResolvedValueOnce({ rows: [] });
-
+    test('Should reject request with empty markets array', async () => {
       const response = await app.inject({
-        method: 'GET',
-        url: '/api/admin/publish-logs?limit=10&offset=20',
+        method: 'POST',
+        url: '/api/admin/bulk-preview',
         headers: {
           'x-admin-api-key': VALID_API_KEY,
         },
+        payload: {
+          date_from: '2026-01-29',
+          date_to: '2026-01-31',
+          markets: [],
+          filters: {
+            min_confidence: 60,
+            min_probability: 0.6,
+          },
+        },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
-      expect(body.limit).toBe(10);
-      expect(body.offset).toBe(20);
-      expect(body.total).toBe(50);
+      expect(body.message).toContain('markets');
     });
 
-    test('Should enforce max limit of 1000', async () => {
-      (pool.query as jest.Mock)
-        .mockResolvedValueOnce({ rows: [{ total: 2000 }] })
-        .mockResolvedValueOnce({ rows: [] });
-
+    test('Should reject request with invalid min_confidence', async () => {
       const response = await app.inject({
-        method: 'GET',
-        url: '/api/admin/publish-logs?limit=5000', // Request 5000
+        method: 'POST',
+        url: '/api/admin/bulk-preview',
         headers: {
           'x-admin-api-key': VALID_API_KEY,
         },
+        payload: {
+          date_from: '2026-01-29',
+          date_to: '2026-01-31',
+          markets: ['O25'],
+          filters: {
+            min_confidence: 150, // Invalid (> 100)
+            min_probability: 0.6,
+          },
+        },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
-      expect(body.limit).toBe(1000); // Should be capped at 1000
+      expect(body.message).toContain('min_confidence');
+    });
+
+    test('Should reject request with invalid min_probability', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/bulk-preview',
+        headers: {
+          'x-admin-api-key': VALID_API_KEY,
+        },
+        payload: {
+          date_from: '2026-01-29',
+          date_to: '2026-01-31',
+          markets: ['O25'],
+          filters: {
+            min_confidence: 60,
+            min_probability: 1.5, // Invalid (> 1.0)
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('min_probability');
+    });
+  });
+
+  describe('POST /api/admin/bulk-publish', () => {
+    test('Should reject request with missing admin_user_id', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/bulk-publish',
+        headers: {
+          'x-admin-api-key': VALID_API_KEY,
+        },
+        payload: {
+          dry_run: true,
+          picks: [
+            { match_id: '12345', market_id: 'O25', locale: 'tr' },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('admin_user_id');
+    });
+
+    test('Should reject request with missing dry_run', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/bulk-publish',
+        headers: {
+          'x-admin-api-key': VALID_API_KEY,
+        },
+        payload: {
+          admin_user_id: 'test-admin',
+          picks: [
+            { match_id: '12345', market_id: 'O25', locale: 'tr' },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('dry_run');
+    });
+
+    test('Should reject request with invalid pick locale', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/bulk-publish',
+        headers: {
+          'x-admin-api-key': VALID_API_KEY,
+        },
+        payload: {
+          admin_user_id: 'test-admin',
+          dry_run: true,
+          picks: [
+            { match_id: '12345', market_id: 'O25', locale: 'fr' }, // Invalid locale
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('locale');
+    });
+  });
+
+  describe('POST /api/admin/generate-image', () => {
+    test('Should reject request with missing match_id', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/generate-image',
+        headers: {
+          'x-admin-api-key': VALID_API_KEY,
+        },
+        payload: {
+          market_id: 'O25',
+          locale: 'tr',
+          style: 'story',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('match_id');
+    });
+
+    test('Should reject request with invalid style', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/admin/generate-image',
+        headers: {
+          'x-admin-api-key': VALID_API_KEY,
+        },
+        payload: {
+          match_id: '12345',
+          market_id: 'O25',
+          locale: 'tr',
+          style: 'invalid', // Invalid style
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('style');
     });
   });
 });

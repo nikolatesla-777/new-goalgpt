@@ -199,4 +199,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // Telegram publishing (TEMPORARY: PUBLIC for development, will add auth later)
   app.register(telegramRoutes, { prefix: '/api' });
+
+  // ============================================================================
+  // ADMIN OPS API GROUP (Phase-3B)
+  // Admin operations endpoints requiring ADMIN_API_KEY header
+  // Prefix: /api/admin
+  // ============================================================================
+  // These routes use x-admin-api-key header authentication (NOT JWT)
+  const adminOpsRoutes = await import('./admin.routes');
+  app.register(adminOpsRoutes.default, { prefix: '/api/admin' });
 }
