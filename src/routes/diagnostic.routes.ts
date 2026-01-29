@@ -8,6 +8,7 @@
 import { FastifyInstance } from 'fastify';
 import { safeQuery } from '../database/connection';
 import { logger } from '../utils/logger';
+import { requireAuth, requireAdmin } from '../middleware/auth.middleware';
 
 export async function diagnosticRoutes(fastify: FastifyInstance) {
   /**
@@ -20,7 +21,10 @@ export async function diagnosticRoutes(fastify: FastifyInstance) {
    * - Matches missing match_id (mapping failed)
    * - Potential duplicates
    */
-  fastify.get('/admin/diagnostics/match-mapping', async (request, reply) => {
+  fastify.get(
+    '/admin/diagnostics/match-mapping',
+    { preHandler: [requireAuth, requireAdmin] },
+    async (request, reply) => {
     const { date } = request.query as { date?: string };
     const targetDate = date || new Date().toISOString().split('T')[0];
 
@@ -115,7 +119,10 @@ export async function diagnosticRoutes(fastify: FastifyInstance) {
    * GET /admin/diagnostics/duplicate-matches?date=YYYY-MM-DD
    * Find potential duplicate matches in daily lists
    */
-  fastify.get('/admin/diagnostics/duplicate-matches', async (request, reply) => {
+  fastify.get(
+    '/admin/diagnostics/duplicate-matches',
+    { preHandler: [requireAuth, requireAdmin] },
+    async (request, reply) => {
     const { date } = request.query as { date?: string };
     const targetDate = date || new Date().toISOString().split('T')[0];
 
@@ -162,5 +169,5 @@ export async function diagnosticRoutes(fastify: FastifyInstance) {
     }
   });
 
-  logger.info('[Diagnostic Routes] Registered diagnostic endpoints');
+  logger.info('[Diagnostic Routes] Registered admin-protected diagnostic endpoints');
 }
