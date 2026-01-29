@@ -5,7 +5,7 @@
  * Shows all 7 markets with probability, confidence, and publishability
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 // ============================================================================
 // INTERFACES

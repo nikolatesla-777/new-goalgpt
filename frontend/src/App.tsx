@@ -5,24 +5,12 @@ import { AIPredictionsProvider } from './context/AIPredictionsContext';
 import { FavoritesProvider } from './context/FavoritesContext';
 import { PredictionToast } from './components/ui/PredictionToast';
 
-// EAGER LOAD: Main layout (needed immediately)
+// EAGER LOAD: Main layout and registry (needed immediately)
 import { AdminLayout } from './components/admin';
+import { ALL_MENU_ITEMS } from './config/admin.registry';
 
-// LAZY LOAD: Heavy components (load on demand)
-const AdminKomutaMerkezi = lazy(() => import('./components/admin').then(m => ({ default: m.AdminKomutaMerkezi })));
-const AdminPredictions = lazy(() => import('./components/admin').then(m => ({ default: m.AdminPredictions })));
-const AdminLogs = lazy(() => import('./components/admin').then(m => ({ default: m.AdminLogs })));
-const AdminBots = lazy(() => import('./components/admin').then(m => ({ default: m.AdminBots })));
+// LAZY LOAD: Special components not in registry
 const AdminBotDetail = lazy(() => import('./components/admin').then(m => ({ default: m.AdminBotDetail })));
-const AdminManualPredictions = lazy(() => import('./components/admin').then(m => ({ default: m.AdminManualPredictions })));
-const TelegramPublisher = lazy(() => import('./components/admin').then(m => ({ default: m.TelegramPublisher })));
-const TelegramDailyLists = lazy(() => import('./components/admin').then(m => ({ default: m.TelegramDailyLists })));
-const DailyTipsPage = lazy(() => import('./components/admin').then(m => ({ default: m.DailyTipsPage })));
-const LeagueStandingsPage = lazy(() => import('./components/admin').then(m => ({ default: m.LeagueStandingsPage })));
-const PlayerSearchPage = lazy(() => import('./components/admin').then(m => ({ default: m.PlayerSearchPage })));
-const TrendsAnalysisPage = lazy(() => import('./components/admin').then(m => ({ default: m.TrendsAnalysisPage })));
-const AIPredictionsPage = lazy(() => import('./components/ai/AIPredictionsPage').then(m => ({ default: m.AIPredictionsPage })));
-const AIAnalysisLab = lazy(() => import('./components/ai-lab').then(m => ({ default: m.AIAnalysisLab })));
 
 // Team Detail
 const TeamDetailLayout = lazy(() => import('./components/team-detail/TeamDetailLayout').then(m => ({ default: m.TeamDetailLayout })));
@@ -81,27 +69,24 @@ function App() {
           <Routes>
             {/* All routes now use AdminLayout with sidebar */}
             <Route element={<AdminLayout />}>
-              {/* Komuta Merkezi (Dashboard) is now the homepage */}
-              <Route path="/" element={<Suspense fallback={<LoadingFallback />}><AdminKomutaMerkezi /></Suspense>} />
+              {/* Auto-generated routes from registry */}
+              {ALL_MENU_ITEMS.filter(item => item.id !== 'livescore').map((item) => {
+                const Component = item.component;
+                return (
+                  <Route
+                    key={item.id}
+                    path={item.routePath}
+                    element={
+                      <Suspense fallback={<LoadingFallback />}>
+                        <Component />
+                      </Suspense>
+                    }
+                  />
+                );
+              })}
 
-              {/* New Premium AI Page */}
-              <Route path="/ai-predictions" element={<Suspense fallback={<LoadingFallback />}><AIPredictionsPage /></Suspense>} />
-
-              {/* AI Analysis Lab (FootyStats Integration Testing) */}
-              <Route path="/ai-lab" element={<Suspense fallback={<LoadingFallback />}><AIAnalysisLab /></Suspense>} />
-
-              {/* Admin Panel Routes */}
-              <Route path="/admin/predictions" element={<Suspense fallback={<LoadingFallback />}><AdminPredictions /></Suspense>} />
-              <Route path="/admin/logs" element={<Suspense fallback={<LoadingFallback />}><AdminLogs /></Suspense>} />
-              <Route path="/admin/bots" element={<Suspense fallback={<LoadingFallback />}><AdminBots /></Suspense>} />
+              {/* Special: Dynamic bot detail route (not in registry) */}
               <Route path="/admin/bots/:botName" element={<Suspense fallback={<LoadingFallback />}><AdminBotDetail /></Suspense>} />
-              <Route path="/admin/manual-predictions" element={<Suspense fallback={<LoadingFallback />}><AdminManualPredictions /></Suspense>} />
-              <Route path="/admin/telegram" element={<Suspense fallback={<LoadingFallback />}><TelegramPublisher /></Suspense>} />
-              <Route path="/admin/telegram/daily-lists" element={<Suspense fallback={<LoadingFallback />}><TelegramDailyLists /></Suspense>} />
-              <Route path="/admin/daily-tips" element={<Suspense fallback={<LoadingFallback />}><DailyTipsPage /></Suspense>} />
-              <Route path="/admin/trends-analysis" element={<Suspense fallback={<LoadingFallback />}><TrendsAnalysisPage /></Suspense>} />
-              <Route path="/admin/league-standings" element={<Suspense fallback={<LoadingFallback />}><LeagueStandingsPage /></Suspense>} />
-              <Route path="/admin/player-stats" element={<Suspense fallback={<LoadingFallback />}><PlayerSearchPage /></Suspense>} />
 
               {/* Livescore with Nested Routes for Tabs (NEW) */}
               <Route path="/livescore" element={
