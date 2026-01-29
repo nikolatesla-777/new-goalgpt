@@ -63,7 +63,7 @@ import { diagnosticRoutes } from './diagnostic.routes';
 // External Integrations
 import { footyStatsRoutes } from './footystats.routes';
 import { partnersRoutes } from './partners.routes';
-import { telegramRoutes } from './telegram.routes';
+import { telegramRoutes } from './telegram';
 
 // ============================================================================
 // CENTRAL REGISTRATION FUNCTION
