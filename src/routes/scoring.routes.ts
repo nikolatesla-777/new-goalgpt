@@ -112,7 +112,7 @@ export async function registerScoringRoutes(fastify: FastifyInstance) {
     Params: MatchParams;
     Querystring: ScoringQuery;
   }>(
-    '/matches/:id/scoring',
+    '/api/matches/:id/scoring',
     async (request, reply) => {
       const matchId = request.params.id;
       const marketsParam = request.query.markets;
@@ -224,7 +224,7 @@ export async function registerScoringRoutes(fastify: FastifyInstance) {
    * This proxy exists only for Phase-3A compatibility during transition.
    */
   fastify.get(
-    '/matches/:fsMatchId/scoring-preview',
+    '/api/matches/:fsMatchId/scoring-preview',
     async (
       request: FastifyRequest<{
         Params: { fsMatchId: string };
@@ -299,6 +299,25 @@ export async function registerScoringRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  // ============================================================================
+  // GET /scoring/markets - Return list of valid market IDs
+  // ============================================================================
+
+  /**
+   * GET /api/scoring/markets
+   *
+   * Returns the list of all valid market IDs supported by the scoring system.
+   *
+   * @returns {object} Response with success flag and markets array
+   */
+  fastify.get('/api/scoring/markets', async (request, reply) => {
+    return reply.status(200).send({
+      success: true,
+      markets: VALID_MARKETS,
+      count: VALID_MARKETS.length,
+    });
+  });
 }
 
 // Export for backward compatibility
