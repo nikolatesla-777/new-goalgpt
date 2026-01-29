@@ -14,6 +14,7 @@
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import dotenv from 'dotenv';
+import { retry, ExponentialBackoff, handleType } from 'cockatiel';
 
 // Load environment variables before accessing process.env
 dotenv.config();
@@ -210,6 +211,16 @@ class FootyStatsAPIClient {
   private requestCount = 0;
   private errorCount = 0;
 
+  // Retry policy with exponential backoff
+  private retryPolicy = retry(handleType(Error), {
+    maxAttempts: 3,
+    backoff: new ExponentialBackoff({
+      initialDelay: 500,    // 500ms first retry
+      maxDelay: 10000,      // 10s max delay
+      exponent: 2           // Double each time
+    })
+  });
+
   private constructor() {
     // IMPORTANT: Don't set apiKey here - it will be loaded lazily in getApiKey()
     // Leave it undefined so getApiKey() will load it on first use
@@ -322,22 +333,38 @@ class FootyStatsAPIClient {
    * Generic GET request
    */
   private async get<T>(endpoint: string, params: Record<string, any> = {}): Promise<T> {
-    await this.rateLimiter.acquire(endpoint);
-    this.requestCount++;
+    return this.retryPolicy.execute(async (context) => {
+      await this.rateLimiter.acquire(endpoint);
+      this.requestCount++;
 
-    const queryParams = new URLSearchParams({
-      key: this.getApiKey(), // Lazy load API key on first request
-      ...params,
+      logger.debug(`[FootyStats] Fetching ${endpoint} (attempt ${context.attempt}/${context.maxAttempts})`, {
+        endpoint,
+        params,
+        attempt: context.attempt
+      });
+
+      const queryParams = new URLSearchParams({
+        key: this.getApiKey(), // Lazy load API key on first request
+        ...params,
+      });
+
+      const url = `${endpoint}?${queryParams.toString()}`;
+      const response: AxiosResponse<T> = await this.axiosInstance.get(url);
+
+      if (response.status >= 400) {
+        const error = new Error(`FootyStats API Error: ${response.status}`);
+        logger.warn(`[FootyStats] Request failed, will retry...`, {
+          endpoint,
+          status: response.status,
+          attempt: context.attempt,
+          willRetry: context.attempt < context.maxAttempts
+        });
+        throw error;
+      }
+
+      logger.debug(`[FootyStats] Successfully fetched ${endpoint}`);
+      return response.data;
     });
-
-    const url = `${endpoint}?${queryParams.toString()}`;
-    const response: AxiosResponse<T> = await this.axiosInstance.get(url);
-
-    if (response.status >= 400) {
-      throw new Error(`FootyStats API Error: ${response.status}`);
-    }
-
-    return response.data;
   }
 
   // ============================================================================

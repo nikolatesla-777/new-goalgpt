@@ -229,7 +229,7 @@ export default async function websocketRoutes(
       // v8 API: SocketStream has .socket property containing the actual WebSocket
       const socket = connection.socket;
 
-      console.log(`[WS-DIAGNOSTIC] Socket type: ${typeof socket}, has send: ${typeof socket?.send}`);
+      logger.debug('[WS-DIAGNOSTIC] Socket diagnostic', { socket_type: typeof socket, has_send: typeof socket?.send });
       logger.info(`[WebSocket Route] New client connected: ${clientId}`);
 
       // Verify socket has required WebSocket methods

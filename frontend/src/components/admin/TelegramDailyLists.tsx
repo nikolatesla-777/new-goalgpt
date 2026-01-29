@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getTodayInTurkey, getYesterdayInTurkey, formatTimestampToTSI, formatMillisecondsToTSI, formatDateStringToLongTurkish, TSI_OFFSET_MS } from '../../utils/dateUtils';
 
 // ============================================================================
@@ -157,6 +157,9 @@ export function TelegramDailyLists() {
   const [historicalData, setHistoricalData] = useState<DateData[]>([]);
   const [isHistoricalView, setIsHistoricalView] = useState(false);
 
+  // PR-2C: AbortController for cancelling in-flight requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Calculate date ranges in Istanbul timezone (UTC+3)
   const getDateRange = (range: DateRange): { start: string; end: string } => {
     // Get today's date in Istanbul timezone (YYYY-MM-DD)
@@ -205,6 +208,15 @@ export function TelegramDailyLists() {
   };
 
   const fetchListsByDateRange = async (range: DateRange) => {
+    // PR-2C: Cancel previous request if still in flight
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      console.log('🚫 Cancelled previous date range request');
+    }
+
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+
     setLoading(true);
     setError(null);
     setSelectedRange(range);
@@ -213,7 +225,9 @@ export function TelegramDailyLists() {
       // For "today", use the original endpoint which auto-generates if needed
       if (range === 'today') {
         console.log('📅 Fetching today\'s lists...');
-        const response = await fetch('/api/telegram/daily-lists/today');
+        const response = await fetch('/api/telegram/daily-lists/today', {
+          signal: abortControllerRef.current.signal,
+        });
         if (!response.ok) throw new Error('API hatası');
 
         const data: DailyListsResponse = await response.json();
@@ -227,7 +241,9 @@ export function TelegramDailyLists() {
         const { start, end } = getDateRange(range);
         console.log(`📅 Fetching lists from ${start} to ${end}`);
 
-        const response = await fetch(`/api/telegram/daily-lists/range?start=${start}&end=${end}`);
+        const response = await fetch(`/api/telegram/daily-lists/range?start=${start}&end=${end}`, {
+          signal: abortControllerRef.current.signal,
+        });
         if (!response.ok) throw new Error('API hatası');
 
         const data = await response.json();
@@ -237,9 +253,15 @@ export function TelegramDailyLists() {
         setHistoricalData(data.data || []);
       }
     } catch (err: any) {
+      // Ignore abort errors (expected when user changes selection quickly)
+      if (err.name === 'AbortError') {
+        console.log('🚫 Request aborted (user changed selection)');
+        return;
+      }
       setError(err.message);
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -276,6 +298,13 @@ export function TelegramDailyLists() {
   useEffect(() => {
     // Load today's data by default
     fetchListsByDateRange('today');
+
+    // PR-2C: Cleanup - abort any in-flight requests on unmount
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
   // Calculate stats based on view mode

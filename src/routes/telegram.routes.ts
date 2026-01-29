@@ -251,18 +251,18 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/telegram/test-uuid', async (request, reply) => {
     try {
-      console.error('[TEST-UUID] Starting test query');
+      logger.debug('[TEST-UUID] Starting test query');
       const result = await safeQuery(
         `SELECT c.id, c.name, co.name as country_name
          FROM ts_competitions c
          LEFT JOIN ts_countries co ON c.country_id = co.external_id
          LIMIT 5`
       );
-      console.error('[TEST-UUID] Query succeeded, rows:', result.length);
+      logger.debug('[TEST-UUID] Query succeeded, rows:', result.length);
       return { success: true, rows: result.length };
     } catch (err: any) {
-      console.error('[TEST-UUID] Query failed:', err.message);
-      console.error('[TEST-UUID] Stack:', err.stack);
+      logger.debug('[TEST-UUID] Query failed:', err.message);
+      logger.debug('[TEST-UUID] Stack:', err.stack);
       return reply.status(500).send({ error: err.message, stack: err.stack });
     }
   });
@@ -534,12 +534,12 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         });
 
         // 🔍 DEBUG: Log fsMatch corners and cards
-        console.error('\n🔍🔍🔍 [Telegram Publish] fsMatch data check:');
-        console.error('  fsMatch.corners_potential:', fsMatch.corners_potential);
-        console.error('  fsMatch.cards_potential:', fsMatch.cards_potential);
-        console.error('  fsMatch.btts_potential:', fsMatch.btts_potential);
-        console.error('  typeof corners:', typeof fsMatch.corners_potential);
-        console.error('  typeof cards:', typeof fsMatch.cards_potential);
+        logger.debug('[Telegram Publish] fsMatch data check');
+        logger.debug('  fsMatch.corners_potential:', fsMatch.corners_potential);
+        logger.debug('  fsMatch.cards_potential:', fsMatch.cards_potential);
+        logger.debug('  fsMatch.btts_potential:', fsMatch.btts_potential);
+        logger.debug('  typeof corners:', typeof fsMatch.corners_potential);
+        logger.debug('  typeof cards:', typeof fsMatch.cards_potential);
 
         const matchData = {
           home_name: fsMatch.home_name,
@@ -590,11 +590,11 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         };
 
         // 🔍 DEBUG: Verify matchData.potentials has corners and cards
-        console.error('\n🔍🔍🔍 [Telegram Publish] matchData.potentials check:');
-        console.error('  matchData.potentials.corners:', matchData.potentials.corners);
-        console.error('  matchData.potentials.cards:', matchData.potentials.cards);
-        console.error('  matchData.potentials.btts:', matchData.potentials.btts);
-        console.error('  Full potentials:', JSON.stringify(matchData.potentials, null, 2));
+        logger.debug('[Telegram Publish] matchData.potentials check');
+        logger.debug('  matchData.potentials.corners:', matchData.potentials.corners);
+        logger.debug('  matchData.potentials.cards:', matchData.potentials.cards);
+        logger.debug('  matchData.potentials.btts:', matchData.potentials.btts);
+        logger.debug('  Full potentials:', JSON.stringify(matchData.potentials, null, 2));
 
         // PHASE-2B: Calculate confidence score
         logger.info('[Telegram] 🎯 Calculating confidence score...', logContext);
@@ -611,7 +611,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         });
 
         // 🔍 DEBUG: Log matchData.potentials before formatting
-        console.error('\n🔍🔍🔍 [TELEGRAM DEBUG] matchData.potentials:', JSON.stringify(matchData.potentials, null, 2));
+        logger.debug('[TELEGRAM DEBUG] matchData.potentials', { potentials: matchData.potentials });
         logger.info('[Telegram] 🔍 matchData.potentials:', {
           ...logContext,
           potentials: matchData.potentials,
@@ -632,20 +632,20 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         });
 
         // 🔍 DEBUG: Check if KART/KORNER sections are in message
-        console.error('🔍🔍🔍 [TELEGRAM DEBUG] Message has KART:', messageText.includes('KART'));
-        console.error('🔍🔍🔍 [TELEGRAM DEBUG] Message has KORNER:', messageText.includes('KORNER'));
+        logger.debug('🔍🔍🔍 [TELEGRAM DEBUG] Message has KART:', messageText.includes('KART'));
+        logger.debug('🔍🔍🔍 [TELEGRAM DEBUG] Message has KORNER:', messageText.includes('KORNER'));
 
         // 🔍 DEBUG: Check formatted message
-        console.log('\n' + '='.repeat(80));
-        console.log('[TELEGRAM DEBUG] formatTelegramMessage RESULT:');
-        console.log('Match:', matchData.home_name, 'vs', matchData.away_name);
-        console.log('Message Length:', messageText.length, 'chars');
-        console.log('Has Trends:', messageText.includes('Trendler'));
-        console.log('Has Ev:', messageText.includes('Trendler (Ev)'));
-        console.log('Has Dep:', messageText.includes('Trendler (Dep)'));
-        console.log('\nFULL MESSAGE:');
-        console.log(messageText);
-        console.log('='.repeat(80) + '\n');
+        logger.debug('='.repeat(80));
+        logger.debug('[TELEGRAM DEBUG] formatTelegramMessage RESULT:');
+        logger.debug('Match:', matchData.home_name, 'vs', matchData.away_name);
+        logger.debug('Message Length:', messageText.length, 'chars');
+        logger.debug('Has Trends:', messageText.includes('Trendler'));
+        logger.debug('Has Ev:', messageText.includes('Trendler (Ev)'));
+        logger.debug('Has Dep:', messageText.includes('Trendler (Dep)'));
+        logger.debug('\nFULL MESSAGE:');
+        logger.debug('[Message Text]', { messageText });
+        logger.debug('='.repeat(80) + '\n');
 
         // 9. PHASE-1: TRANSACTION SAFETY - Create DRAFT post first
         // FIX: Acquire connection for draft post, release BEFORE Telegram API call
@@ -899,6 +899,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * Calculate performance for a daily list (check finished matches)
+   * PR-2A: Optimized with bulk query to eliminate N+1 pattern
    */
   async function calculateListPerformance(list: any): Promise<{
     total: number;
@@ -911,10 +912,51 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
     let won = 0;
     let lost = 0;
     let pending = 0;
+    const marketType = list.market;
 
+    // Extract all match_ids (filter out null/undefined)
+    const matchIds = list.matches
+      .map((c: any) => c.match?.match_id)
+      .filter((id: string | null | undefined) => id != null);
+
+    if (matchIds.length === 0) {
+      // No match_ids available (mapping failed), count all as pending
+      return {
+        total: list.matches.length,
+        won: 0,
+        lost: 0,
+        pending: list.matches.length,
+        win_rate: 0,
+      };
+    }
+
+    // BULK QUERY: Fetch all finished matches in one call
+    const finishedMatches = await safeQuery(
+      `SELECT
+        m.external_id,
+        m.status_id,
+        m.home_score_display,
+        m.away_score_display,
+        m.home_scores,
+        m.away_scores,
+        t1.name as home_name,
+        t2.name as away_name
+       FROM ts_matches m
+       INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
+       INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+       WHERE m.external_id = ANY($1) AND m.status_id = 8`,
+      [matchIds]
+    );
+
+    // Build lookup map for O(1) access
+    const matchResultsMap = new Map<string, any>();
+    finishedMatches.forEach((row: any) => {
+      matchResultsMap.set(row.external_id, row);
+    });
+
+    // Evaluate each match
     for (const candidate of list.matches) {
       const match = candidate.match;
-      const marketType = list.market;
 
       // Check if match is finished (>2 hours after start)
       const matchFinished = match.date_unix <= (now - 2 * 60 * 60);
@@ -924,102 +966,90 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         continue;
       }
 
-      // Get match result from TheSports database (match by team names + time window)
-      try {
-        // Extract first word of team names for fuzzy matching
-        const homeFirstWord = match.home_name.split(' ')[0].toLowerCase();
-        const awayFirstWord = match.away_name.split(' ')[0].toLowerCase();
-        const timeWindow = 3600; // +/- 1 hour
+      // Skip if no match_id (mapping failed)
+      if (!match.match_id) {
+        pending++; // Count as pending (can't evaluate)
+        continue;
+      }
 
-        const result = await safeQuery(
-          `SELECT m.home_score_display, m.away_score_display, m.status_id,
-                  m.home_scores, m.away_scores,
-                  t1.name as home_team_name, t2.name as away_team_name
-           FROM ts_matches m
-           INNER JOIN ts_teams t1 ON m.home_team_id= t1.external_id
-           INNER JOIN ts_teams t2 ON m.away_team_id= t2.external_id
-           WHERE (LOWER(t1.name) LIKE $1 OR LOWER(t1.name) LIKE $2)
-             AND (LOWER(t2.name) LIKE $3 OR LOWER(t2.name) LIKE $4)
-             AND m.match_time >= $5
-             AND m.match_time <= $6
-             AND m.status_id = 8
-           LIMIT 1`,
-          [
-            `%${homeFirstWord}%`,
-            `${homeFirstWord}%`,
-            `%${awayFirstWord}%`,
-            `${awayFirstWord}%`,
-            match.date_unix - timeWindow,
-            match.date_unix + timeWindow
-          ]
-        );
+      // Lookup match result from bulk query
+      const result = matchResultsMap.get(match.match_id);
 
-        if (result.length === 0) {
-          pending++; // No result yet or not finished
-          continue;
-        }
+      if (!result) {
+        pending++; // Match not found or not finished
+        continue;
+      }
 
-        const homeScore = parseInt(result[0].home_score_display) || 0;
-        const awayScore = parseInt(result[0].away_score_display) || 0;
-        const totalGoals = homeScore + awayScore;
+      // Settlement logic
+      const homeScore = parseInt(result.home_score_display || '0');
+      const awayScore = parseInt(result.away_score_display || '0');
+      const totalGoals = homeScore + awayScore;
 
-        logger.info(`[TelegramDailyLists] Match found: ${result[0].home_team_name} ${homeScore}-${awayScore} ${result[0].away_team_name}`, {
-          fs_id: match.fs_id,
-          footystats_teams: `${match.home_name} vs ${match.away_name}`,
-          thesports_teams: `${result[0].home_team_name} vs ${result[0].away_team_name}`,
-        });
+      let matchWon = false;
 
-        // Check market result
-        let isWin = false;
-        switch (marketType) {
-          case 'OVER_25':
-            isWin = totalGoals >= 3;
-            break;
-          case 'OVER_15':
-            isWin = totalGoals >= 2;
-            break;
-          case 'BTTS':
-            isWin = homeScore > 0 && awayScore > 0;
-            break;
-          case 'HT_OVER_05':
-            // Extract HT score from JSON arrays
-            try {
-              const homeScores = JSON.parse(result[0].home_scores || '[]');
-              const awayScores = JSON.parse(result[0].away_scores || '[]');
-              const htHomeScore = homeScores[0]?.score || 0;
-              const htAwayScore = awayScores[0]?.score || 0;
-              const htTotalGoals = htHomeScore + htAwayScore;
-              isWin = htTotalGoals >= 1;
-              logger.info(`[TelegramDailyLists] HT Score: ${htHomeScore}-${htAwayScore}, Result: ${isWin ? 'WON' : 'LOST'}`, {
-                fs_id: match.fs_id,
-              });
-            } catch (err) {
-              logger.warn('[TelegramDailyLists] Failed to parse HT scores, marking as pending', { fs_id: match.fs_id });
-              pending++;
-              continue;
-            }
-            break;
-          case 'CORNERS':
-          case 'CARDS':
-            // Would need detailed stats, skip for now
+      switch (marketType) {
+        case 'OVER_25':
+          matchWon = totalGoals >= 3;
+          break;
+        case 'OVER_15':
+          matchWon = totalGoals >= 2;
+          break;
+        case 'BTTS':
+          matchWon = homeScore > 0 && awayScore > 0;
+          break;
+        case 'HT_OVER_05':
+          try {
+            const homeScores = JSON.parse(result.home_scores || '[]');
+            const awayScores = JSON.parse(result.away_scores || '[]');
+            const htHome = homeScores[0]?.score || 0;
+            const htAway = awayScores[0]?.score || 0;
+            matchWon = (htHome + htAway) >= 1;
+          } catch (err) {
+            logger.warn('[TelegramDailyLists] Failed to parse HT scores', { match_id: match.match_id });
             pending++;
             continue;
-        }
+          }
+          break;
+        case 'CORNERS':
+          try {
+            const homeScores = JSON.parse(result.home_scores || '[]');
+            const awayScores = JSON.parse(result.away_scores || '[]');
+            const homeCorners = homeScores[4]?.score || 0; // Corner stats at index 4
+            const awayCorners = awayScores[4]?.score || 0;
+            matchWon = (homeCorners + awayCorners) >= 10;
+          } catch (err) {
+            logger.warn('[TelegramDailyLists] Failed to parse corner stats', { match_id: match.match_id });
+            pending++;
+            continue;
+          }
+          break;
+        case 'CARDS':
+          try {
+            const homeScores = JSON.parse(result.home_scores || '[]');
+            const awayScores = JSON.parse(result.away_scores || '[]');
+            const homeYellow = homeScores[2]?.score || 0; // Yellow cards at index 2
+            const awayYellow = awayScores[2]?.score || 0;
+            matchWon = (homeYellow + awayYellow) >= 5;
+          } catch (err) {
+            logger.warn('[TelegramDailyLists] Failed to parse card stats', { match_id: match.match_id });
+            pending++;
+            continue;
+          }
+          break;
+        default:
+          pending++;
+          continue;
+      }
 
-        if (isWin) {
-          won++;
-        } else {
-          lost++;
-        }
-      } catch (err) {
-        logger.error('[TelegramDailyLists] Error checking match result:', err);
-        pending++;
+      if (matchWon) {
+        won++;
+      } else {
+        lost++;
       }
     }
 
-    const total = list.matches.length;
-    const settled = won + lost;
-    const win_rate = settled > 0 ? Math.round((won / settled) * 100) : 0;
+    const total = won + lost + pending;
+    const win_rate = total > 0 ? Math.round((won / (won + lost)) * 100) : 0;
 
     return { total, won, lost, pending, win_rate };
   }
@@ -1030,21 +1060,19 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get<{ Querystring: { date?: string } }>('/telegram/daily-lists/today', async (request, reply) => {
     const marker = '='.repeat(80) + '\n[ROUTE HANDLER] daily-lists/today CALLED\n' + '='.repeat(80) + '\n';
-    process.stdout.write(marker);
-    process.stderr.write(marker);
-    console.log(marker);
+    logger.debug('[ROUTE HANDLER] daily-lists/today CALLED');
 
     try {
       // Extract date query parameter (optional)
       const targetDate = request.query.date;
 
-      console.error('[TRACE-1] Starting daily-lists route handler', targetDate ? `for date: ${targetDate}` : '');
+      logger.debug('[TRACE]-1] Starting daily-lists route handler', targetDate ? `for date: ${targetDate}` : '');
       logger.info(`[TelegramDailyLists] 📊 Fetching lists for ${targetDate || 'today'}...`);
 
       // Get lists from database (or generate if not exists)
-      console.error('[TRACE-2] About to call getDailyLists()', targetDate ? `with date: ${targetDate}` : '');
+      logger.debug('[TRACE]-2] About to call getDailyLists()', targetDate ? `with date: ${targetDate}` : '');
       const lists = await getDailyLists(targetDate);
-      console.error('[TRACE-3] getDailyLists() returned:', lists.length, 'lists');
+      logger.debug('[TRACE]-3] getDailyLists() returned:', lists.length, 'lists');
 
       if (lists.length === 0) {
         return {
@@ -1056,7 +1084,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // Collect all unique matches for bulk score query
-      console.error('[TRACE-4] Collecting unique matches');
+      logger.debug('[TRACE]-4] Collecting unique matches');
       const allMatches = new Map<number, any>();
       const allMatchIds = new Set<string>(); // TheSports match IDs
 
@@ -1070,7 +1098,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       // Bulk query: Get match results from TheSports database
-      console.error('[TRACE-5] Fetching match results from TheSports for', allMatchIds.size, 'matches');
+      logger.debug('[TRACE]-5] Fetching match results from TheSports for', allMatchIds.size, 'matches');
       const matchResultsMap = new Map<string, any>();
 
       if (allMatchIds.size > 0) {
@@ -1088,7 +1116,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             matchResultsMap.set(row.external_id, row);
           });
 
-          console.error('[TRACE-6] Fetched results for', matchResultsMap.size, 'matches from TheSports');
+          logger.debug('[TRACE]-6] Fetched results for', matchResultsMap.size, 'matches from TheSports');
         } finally {
           client.release();
         }
@@ -1096,16 +1124,16 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
       // Also get live scores for FootyStats (for pending matches)
       const liveScoresMap = await getLiveScoresForMatches(Array.from(allMatches.values()));
-      console.error('[TRACE-6b] FootyStats live scores:', liveScoresMap.size);
+      logger.debug('[TRACE]-6b] FootyStats live scores:', liveScoresMap.size);
 
       // Format response with match details + performance calculation
-      console.error('[TRACE-7] Formatting lists');
+      logger.debug('[TRACE]-7] Formatting lists');
       const formattedLists = await Promise.all(
         lists.map(async (list) => {
           // Calculate performance for finished matches
-          console.error('[TRACE-8] Calculating performance for list:', list.market);
+          logger.debug('[TRACE]-8] Calculating performance for list:', list.market);
           const performance = await calculateListPerformance(list);
-          console.error('[TRACE-9] Performance calculated for list:', list.market);
+          logger.debug('[TRACE]-9] Performance calculated for list:', list.market);
 
           return {
             market: list.market,
@@ -1137,7 +1165,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
                   result = settlement.result === 'WIN' ? 'won' :
                            settlement.result === 'VOID' ? 'void' : 'lost';
                 } catch (err) {
-                  console.error('[DailyLists] Error evaluating match:', err);
+                  logger.debug('[DailyLists] Error evaluating match', { error: err });
                   result = 'void';
                 }
               }
@@ -1187,9 +1215,9 @@ Stack: ${error.stack || 'No stack trace'}
 ==================================
 `;
       process.stderr.write(errorDetails);
-      console.log(errorDetails); // Also try stdout
-      console.error('[DEBUG] Daily lists error:', error.message);
-      console.error('[DEBUG] Stack:', error.stack?.substring(0, 500));
+      logger.error('[Error Details]', { errorDetails }); // Also try stdout
+      logger.debug('[DEBUG] Daily lists error:', error.message);
+      logger.debug('[DEBUG] Stack:', error.stack?.substring(0, 500));
 
       return reply.status(500).send({ error: error.message });
     }
@@ -1217,12 +1245,49 @@ Stack: ${error.stack || 'No stack trace'}
 
       logger.info(`[TelegramDailyLists] 📅 Fetching lists from ${start} to ${end}...`);
 
-      // Simple implementation: just get lists for start date (TODO: implement date range properly)
-      const lists = await getDailyLists(start);
-      const listsByDate: Record<string, any[]> = {};
-      if (lists.length > 0) {
-        listsByDate[start] = lists;
+      // PR-2B: Generate all dates in range
+      const dates: string[] = [];
+      const currentDate = new Date(start + 'T00:00:00Z');
+      const endDate = new Date(end + 'T00:00:00Z');
+
+      // Guard: max 31 days range (prevent abuse)
+      const daysDiff = Math.floor((endDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysDiff > 31 || daysDiff < 0) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Invalid date range',
+          message: 'Date range must be between 1 and 31 days',
+          requested_days: daysDiff,
+        });
       }
+
+      // Generate date array
+      while (currentDate <= endDate) {
+        dates.push(currentDate.toISOString().split('T')[0]);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      logger.info(`[TelegramDailyLists] 📅 Fetching ${dates.length} days: ${dates[0]} to ${dates[dates.length - 1]}`);
+
+      // Parallel fetch for better performance
+      const dateListsPromises = dates.map(async (date) => {
+        const lists = await getDailyLists(date);
+        return {
+          date,
+          lists: lists || [],
+          lists_count: lists?.length || 0,
+        };
+      });
+
+      const dateListsResults = await Promise.all(dateListsPromises);
+
+      // Build listsByDate map (filter out empty dates for performance calculation)
+      const listsByDate: Record<string, any[]> = {};
+      dateListsResults.forEach(({ date, lists }) => {
+        if (lists.length > 0) {
+          listsByDate[date] = lists;
+        }
+      });
 
       if (Object.keys(listsByDate).length === 0) {
         return {
