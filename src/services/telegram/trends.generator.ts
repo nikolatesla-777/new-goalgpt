@@ -124,7 +124,7 @@ function calculateAdditionalTrends(
   }
 
   // Trend 4: Home/Away specific form (if available)
-  const specificForm = isHome ? form.home_only : form.away_only;
+  const specificForm = isHome ? data.form?.home?.home_only : data.form?.away?.away_only;
   if (specificForm) {
     const specificStats = parseFormString(specificForm);
     const venue = isHome ? 'ev sahibi' : 'deplasman';
