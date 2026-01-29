@@ -1245,12 +1245,49 @@ Stack: ${error.stack || 'No stack trace'}
 
       logger.info(`[TelegramDailyLists] 📅 Fetching lists from ${start} to ${end}...`);
 
-      // Simple implementation: just get lists for start date (TODO: implement date range properly)
-      const lists = await getDailyLists(start);
-      const listsByDate: Record<string, any[]> = {};
-      if (lists.length > 0) {
-        listsByDate[start] = lists;
+      // PR-2B: Generate all dates in range
+      const dates: string[] = [];
+      const currentDate = new Date(start + 'T00:00:00Z');
+      const endDate = new Date(end + 'T00:00:00Z');
+
+      // Guard: max 31 days range (prevent abuse)
+      const daysDiff = Math.floor((endDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysDiff > 31 || daysDiff < 0) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Invalid date range',
+          message: 'Date range must be between 1 and 31 days',
+          requested_days: daysDiff,
+        });
       }
+
+      // Generate date array
+      while (currentDate <= endDate) {
+        dates.push(currentDate.toISOString().split('T')[0]);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      logger.info(`[TelegramDailyLists] 📅 Fetching ${dates.length} days: ${dates[0]} to ${dates[dates.length - 1]}`);
+
+      // Parallel fetch for better performance
+      const dateListsPromises = dates.map(async (date) => {
+        const lists = await getDailyLists(date);
+        return {
+          date,
+          lists: lists || [],
+          lists_count: lists?.length || 0,
+        };
+      });
+
+      const dateListsResults = await Promise.all(dateListsPromises);
+
+      // Build listsByDate map (filter out empty dates for performance calculation)
+      const listsByDate: Record<string, any[]> = {};
+      dateListsResults.forEach(({ date, lists }) => {
+        if (lists.length > 0) {
+          listsByDate[date] = lists;
+        }
+      });
 
       if (Object.keys(listsByDate).length === 0) {
         return {
