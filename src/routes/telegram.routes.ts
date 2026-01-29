@@ -17,6 +17,7 @@
 
 import crypto from 'crypto';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { randomUUID } from 'crypto'; // Week-2B Hardening: request_id generation
 import { telegramBot } from '../services/telegram/telegram.client';
 import { formatTelegramMessage } from '../services/telegram/turkish.formatter';
 import { formatTelegramMessageV2 } from '../services/telegram/turkish.formatter.v2';
@@ -29,6 +30,10 @@ import { validatePicks } from '../services/telegram/validators/pickValidator';
 import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
 import { getDailyLists, refreshDailyLists, formatDailyListMessage, formatDailyListMessageWithResults } from '../services/telegram/dailyLists.service';
 import { evaluateMatch } from '../services/telegram/dailyListsSettlement.service';
+// Week-2B: Telegram channel router
+import { channelRouter } from '../services/telegram/channelRouter';
+// Week-2B Hardening: Market type utilities
+import { parseMarketParam, getAllowedMarketParams, DAILY_LIST_MARKET_TO_ID } from '../types/markets';
 
 interface PublishRequest {
   Body: {
@@ -1440,25 +1445,60 @@ Stack: ${error.stack || 'No stack trace'}
    * POST /telegram/publish/daily-list/:market
    * Publish a single daily list by market type
    *
-   * Markets: OVER_25, BTTS, HT_OVER_05, CORNERS, CARDS
+   * HARDENING: Accepts both canonical (O25) and legacy (OVER_25) formats
+   * Supported markets: O25, BTTS, HT_O05, O35, HOME_O15, CORNERS_O85, CARDS_O25
    */
   fastify.post('/telegram/publish/daily-list/:market', async (request, reply) => {
     const startTime = Date.now();
-    const { market } = request.params as { market: string };
-    const logContext = { operation: 'single_list_publish', market };
+    const { market: marketParam } = request.params as { market: string };
+
+    // HARDENING: Generate request_id for observability
+    const requestId = randomUUID();
+    const logContext = {
+      operation: 'single_list_publish',
+      request_id: requestId,
+      market_param: marketParam,
+      dry_run: channelRouter.isDryRun(),
+    };
 
     try {
-      logger.info(`[TelegramDailyLists] 🚀 Publishing single list: ${market}`, logContext);
+      logger.info(`[TelegramDailyLists] 🚀 Publishing single list: ${marketParam}`, logContext);
+
+      // HARDENING: Validate and parse market parameter
+      const marketId = parseMarketParam(marketParam);
+      if (!marketId) {
+        logger.warn('[TelegramDailyLists] ❌ Invalid market parameter', {
+          ...logContext,
+          allowed_markets: getAllowedMarketParams(),
+        });
+        return reply.status(400).send({
+          error: 'Invalid market parameter',
+          details: `Market '${marketParam}' is not recognized`,
+          allowed_markets: getAllowedMarketParams(),
+          canonical_format: ['O25', 'BTTS', 'HT_O05', 'O35', 'HOME_O15', 'CORNERS_O85', 'CARDS_O25'],
+        });
+      }
+
+      // 0. HARDENING: Check if publishing is enabled
+      if (!channelRouter.isPublishEnabled() && !channelRouter.isDryRun()) {
+        logger.warn('[TelegramDailyLists] ⚠️  Publishing disabled', {
+          ...logContext,
+          market_id: marketId,
+          note: 'Set TELEGRAM_PUBLISH_ENABLED=true or TELEGRAM_DRY_RUN=true to enable',
+        });
+        return reply.status(503).send({
+          error: 'Telegram publishing is disabled',
+          details: 'Set TELEGRAM_PUBLISH_ENABLED=true in .env to enable publishing',
+        });
+      }
 
       // 1. Check bot configuration
       if (!telegramBot.isConfigured()) {
         return reply.status(503).send({ error: 'Telegram bot not configured' });
       }
 
-      const channelId = process.env.TELEGRAM_CHANNEL_ID || '';
-      if (!channelId) {
-        return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
-      }
+      // Get target channel for this market
+      const targetChannelId = channelRouter.getTargetChatId(marketId);
 
       // 2. Get daily lists from database (or generate if not exists)
       logger.info('[TelegramDailyLists] 📊 Getting lists...', logContext);
@@ -1476,21 +1516,65 @@ Stack: ${error.stack || 'No stack trace'}
         });
       }
 
+      // HARDENING: Standardized logging with all required fields
+      const matchCount = targetList.matches.length;
+      const picksCount = targetList.matches.length;
+      const avgConfidence = Math.round(
+        targetList.matches.reduce((sum, m) => sum + m.confidence, 0) / targetList.matches.length
+      );
+
       logger.info(`[TelegramDailyLists] ✅ Found list for ${market}`, {
         ...logContext,
-        match_count: targetList.matches.length,
-        avg_confidence: Math.round(
-          targetList.matches.reduce((sum, m) => sum + m.confidence, 0) / targetList.matches.length
-        ),
+        market_id: marketId,
+        match_count: matchCount,
+        picks_count: picksCount,
+        avg_confidence: avgConfidence,
+        target_chat_id: targetChannelId,
       });
 
-      // 4. Format and publish to Telegram
+      // 4. Format and publish to Telegram (Week-2B: Market-specific channel)
       const messageText = formatDailyListMessage(targetList);
 
-      logger.info(`[TelegramDailyLists] 📡 Sending to Telegram...`, logContext);
+      logger.info(`[TelegramDailyLists] 📡 Sending to Telegram...`, {
+        ...logContext,
+        market_id: marketId,
+        target_channel: targetChannelId,
+      });
+
+      // HARDENING: DRY_RUN mode with enhanced response contract
+      if (channelRouter.isDryRun()) {
+        logger.warn(`[TelegramDailyLists] ⚠️ DRY_RUN: Skipping actual Telegram send for ${marketParam}`, {
+          ...logContext,
+          market_id: marketId,
+          target_channel: targetChannelId,
+          message_preview: messageText.substring(0, 100),
+        });
+
+        return {
+          success: true,
+          market: targetList.market,
+          market_id: marketId,
+          title: targetList.title,
+          telegram_message_id: null,
+          match_count: targetList.matches.length,
+          avg_confidence: Math.round(
+            targetList.matches.reduce((sum, m) => sum + m.confidence, 0) / targetList.matches.length
+          ),
+          dry_run: true,
+          // HARDENING: Additional metadata for QA verification
+          targeted_channel: {
+            market: marketId,
+            chat_id: targetChannelId,
+            display_name: channelRouter.getChannelConfig(marketId)?.displayName,
+          },
+          message_preview: messageText.substring(0, 300),
+          picks_count: targetList.matches.length,
+          duration_ms: Date.now() - startTime,
+        };
+      }
 
       const result = await telegramBot.sendMessage({
-        chat_id: channelId,
+        chat_id: targetChannelId, // Week-2B: Use market-specific channel
         text: messageText,
         parse_mode: 'HTML',
         disable_web_page_preview: true,
@@ -1519,7 +1603,7 @@ Stack: ${error.stack || 'No stack trace'}
            VALUES ($1, $2, $3, $4, 'published', $5)`,
           [
             `daily_list_${market}_${Date.now()}`,
-            channelId,
+            targetChannelId, // Week-2B: Use market-specific channel
             telegramMessageId,
             messageText,
             JSON.stringify({
@@ -1540,7 +1624,7 @@ Stack: ${error.stack || 'No stack trace'}
                channel_id = $2,
                status = 'active'
            WHERE market = $3 AND list_date = $4`,
-          [telegramMessageId, channelId, market, today]
+          [telegramMessageId, targetChannelId, market, today] // Week-2B: Use market-specific channel
         );
 
         logger.info(`[TelegramDailyLists] 💾 Saved to database`, logContext);
@@ -1586,10 +1670,29 @@ Stack: ${error.stack || 'No stack trace'}
    */
   fastify.post('/telegram/publish/daily-lists', async (request, reply) => {
     const startTime = Date.now();
-    const logContext = { operation: 'daily_lists_publish' };
+
+    // HARDENING: Generate request_id for observability
+    const requestId = randomUUID();
+    const logContext = {
+      operation: 'daily_lists_publish',
+      request_id: requestId,
+      dry_run: channelRouter.isDryRun(),
+    };
 
     try {
       logger.info('[TelegramDailyLists] 🚀 Starting daily lists publication...', logContext);
+
+      // 0. HARDENING: Check if publishing is enabled
+      if (!channelRouter.isPublishEnabled() && !channelRouter.isDryRun()) {
+        logger.warn('[TelegramDailyLists] ⚠️  Publishing disabled', {
+          ...logContext,
+          note: 'Set TELEGRAM_PUBLISH_ENABLED=true or TELEGRAM_DRY_RUN=true to enable',
+        });
+        return reply.status(503).send({
+          error: 'Telegram publishing is disabled',
+          details: 'Set TELEGRAM_PUBLISH_ENABLED=true in .env to enable publishing',
+        });
+      }
 
       // 1. Check bot configuration
       if (!telegramBot.isConfigured()) {
@@ -1621,22 +1724,85 @@ Stack: ${error.stack || 'No stack trace'}
         markets: lists.map(l => l.market),
       });
 
-      // 3. Publish each list to Telegram
+      // 3. Publish each list to Telegram (Week-2B: Market-specific channels)
+      // HARDENING: Market-based error isolation - track failed lists separately
       const publishedLists: any[] = [];
+      const failedLists: any[] = [];
 
       for (const list of lists) {
-        logger.info(`[TelegramDailyLists] 📡 Publishing ${list.market} list...`, {
-          ...logContext,
-          market: list.market,
-          match_count: list.matches.length,
-        });
-
         const messageText = formatDailyListMessage(list);
 
         try {
+          // HARDENING: Use canonical market ID mapping
+          const marketId = DAILY_LIST_MARKET_TO_ID[list.market];
+          if (!marketId) {
+            logger.error('[TelegramDailyLists] ❌ Unknown market type from daily list', {
+              ...logContext,
+              market: list.market,
+              error: 'UNKNOWN_MARKET_TYPE',
+            });
+            failedLists.push({
+              market: list.market,
+              error: 'Unknown market type',
+              match_count: list.matches.length,
+            });
+            continue; // Skip this market
+          }
+
+          const targetChannelId = channelRouter.getTargetChatId(marketId);
+          const matchCount = list.matches.length;
+          const picksCount = list.matches.length;
+          const avgConfidence = Math.round(
+            list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
+          );
+
+          // HARDENING: Standardized logging with all required fields
+          logger.info(`[TelegramDailyLists] 📡 Publishing ${list.market} list...`, {
+            ...logContext,
+            market_id: marketId,
+            market: list.market,
+            match_count: matchCount,
+            picks_count: picksCount,
+            avg_confidence: avgConfidence,
+            target_chat_id: targetChannelId,
+          });
+
+          // HARDENING: DRY_RUN mode with enhanced response contract
+          if (channelRouter.isDryRun()) {
+            logger.warn(`[TelegramDailyLists] ⚠️ DRY_RUN: Skipping actual Telegram send for ${list.market}`, {
+              ...logContext,
+              market: list.market,
+              target_channel: targetChannelId,
+              message_preview: messageText.substring(0, 100),
+            });
+
+            // HARDENING: Enhanced DRY_RUN response contract
+            publishedLists.push({
+              market: list.market,
+              market_id: marketId,
+              title: list.title,
+              match_count: list.matches.length,
+              telegram_message_id: null,
+              avg_confidence: Math.round(
+                list.matches.reduce((sum, m) => sum + m.confidence, 0) / list.matches.length
+              ),
+              dry_run: true,
+              // HARDENING: Additional metadata for QA verification
+              targeted_channel: {
+                market: marketId,
+                chat_id: targetChannelId,
+                display_name: channelRouter.getChannelConfig(marketId)?.displayName,
+              },
+              message_preview: messageText.substring(0, 300),
+              picks_count: list.matches.length,
+            });
+
+            continue; // Skip actual send
+          }
+
           // FIX: NO connection held during Telegram API call
           const result = await telegramBot.sendMessage({
-            chat_id: channelId,
+            chat_id: targetChannelId,
             text: messageText,
             parse_mode: 'HTML',
             disable_web_page_preview: true,
@@ -1660,7 +1826,7 @@ Stack: ${error.stack || 'No stack trace'}
                VALUES ($1, $2, $3, $4, 'published', $5)`,
               [
                 `daily_list_${list.market}_${Date.now()}`, // Unique ID for list
-                channelId,
+                targetChannelId, // Week-2B: Use market-specific channel
                 telegramMessageId,
                 messageText,
                 JSON.stringify({
@@ -1681,7 +1847,7 @@ Stack: ${error.stack || 'No stack trace'}
                    channel_id = $2,
                    status = 'active'
                WHERE market = $3 AND list_date = $4`,
-              [telegramMessageId, channelId, list.market, today]
+              [telegramMessageId, targetChannelId, list.market, today] // Week-2B: Use market-specific channel
             );
           } finally {
             client.release();
@@ -1711,28 +1877,55 @@ Stack: ${error.stack || 'No stack trace'}
           }
 
         } catch (err: any) {
+          // HARDENING: Market-based error isolation - one market failure doesn't stop others
+          const marketId = DAILY_LIST_MARKET_TO_ID[list.market];
+          const targetChannelId = marketId ? channelRouter.getTargetChatId(marketId) : 'N/A';
+
           logger.error(`[TelegramDailyLists] ❌ Failed to publish ${list.market} list`, {
             ...logContext,
+            market_id: marketId,
             market: list.market,
+            match_count: list.matches.length,
+            picks_count: list.matches.length,
+            target_chat_id: targetChannelId,
             error: err.message,
+            error_stack: err.stack,
+          });
+
+          failedLists.push({
+            market: list.market,
+            market_id: marketId,
+            error: err.message,
+            match_count: list.matches.length,
+            target_chat_id: targetChannelId,
           });
         }
       }
 
       const elapsedMs = Date.now() - startTime;
+
+      // HARDENING: Comprehensive final logging with all metadata
       logger.info('[TelegramDailyLists] ✅ Daily lists publication complete', {
         ...logContext,
         lists_generated: lists.length,
         lists_published: publishedLists.length,
+        lists_failed: failedLists.length,
+        success_rate: lists.length > 0 ? ((publishedLists.length / lists.length) * 100).toFixed(1) + '%' : '0%',
+        markets_published: publishedLists.map(l => l.market),
+        markets_failed: failedLists.map(l => l.market),
         elapsed_ms: elapsedMs,
       });
 
+      // HARDENING: Include failedLists in response for market-based error isolation
       return {
         success: true,
         lists_generated: lists.length,
         lists_published: publishedLists.length,
+        lists_failed: failedLists.length,
         published_lists: publishedLists,
+        failed_lists: failedLists, // NEW: Track failed markets separately
         elapsed_ms: elapsedMs,
+        success_rate: lists.length > 0 ? ((publishedLists.length / lists.length) * 100).toFixed(1) + '%' : '0%',
       };
 
     } catch (error: any) {
