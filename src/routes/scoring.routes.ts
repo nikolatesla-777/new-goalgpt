@@ -1,18 +1,21 @@
 /**
- * Scoring Routes - Consolidated (Week-2A + Phase-3A)
+ * Scoring Routes - Consolidated (Week-2A + Phase-3A.1 Deprecation)
  *
- * Week-2A: GET /matches/:id/scoring - Full scoring pipeline
- * Phase-3A: GET /matches/:fsMatchId/scoring-preview - Admin panel preview
+ * Week-2A: GET /matches/:id/scoring - Full scoring pipeline (PRIMARY)
+ * Phase-3A.1: GET /matches/:fsMatchId/scoring-preview - DEPRECATED proxy endpoint
+ *
+ * MIGRATION NOTE:
+ * - scoring-preview is DEPRECATED and proxies to Week-2A endpoint
+ * - Frontend should migrate to /api/matches/:id/scoring directly
  *
  * @author GoalGPT Team
- * @version 2.0.0 (merged)
+ * @version 2.1.0 (Phase-3A.1 alignment)
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { featureBuilderService } from '../services/scoring/featureBuilder.service';
 import { marketScorerService, type MarketId, type ScoringResult } from '../services/scoring/marketScorer.service';
 import { publishEligibilityUtils } from '../services/scoring/publishEligibility';
-import { getMatchScoringPreview } from '../services/admin/scoringPreview.service';
 import { logger } from '../utils/logger';
 
 /**
@@ -76,7 +79,7 @@ interface ScoringResponse {
  */
 export async function registerScoringRoutes(fastify: FastifyInstance) {
   // ============================================================================
-  // WEEK-2A: Full Scoring Pipeline
+  // WEEK-2A: Full Scoring Pipeline (PRIMARY ENDPOINT)
   // ============================================================================
 
   /**
@@ -209,14 +212,16 @@ export async function registerScoringRoutes(fastify: FastifyInstance) {
   );
 
   // ============================================================================
-  // PHASE-3A: Admin Panel Scoring Preview (Simplified)
+  // PHASE-3A.1: DEPRECATED Proxy Endpoint (Backward Compatibility)
   // ============================================================================
 
   /**
    * GET /api/matches/:fsMatchId/scoring-preview
    *
-   * Returns simplified scoring preview for a match (Phase-3A MVP)
-   * This is a lightweight endpoint for the admin panel.
+   * DEPRECATED: This endpoint proxies to Week-2A's GET /api/matches/:id/scoring
+   *
+   * Once Week-2A is merged, frontend should use /api/matches/:id/scoring directly.
+   * This proxy exists only for Phase-3A compatibility during transition.
    */
   fastify.get(
     '/matches/:fsMatchId/scoring-preview',
@@ -235,19 +240,61 @@ export async function registerScoringRoutes(fastify: FastifyInstance) {
           });
         }
 
-        logger.info(`[Scoring Preview] GET /matches/${fsMatchId}/scoring-preview`);
+        logger.warn(
+          `[Scoring Preview] DEPRECATED endpoint called: /matches/${fsMatchId}/scoring-preview`
+        );
 
-        const preview = await getMatchScoringPreview(fsMatchId);
+        // Proxy to Week-2A endpoint
+        try {
+          const response = await fastify.inject({
+            method: 'GET',
+            url: `/api/matches/${fsMatchId}/scoring?locale=tr`,
+          });
 
-        return reply.status(200).send({
-          success: true,
-          data: preview,
-        });
+          if (response.statusCode === 200) {
+            const week2AData = JSON.parse(response.body);
+
+            logger.info(
+              `[Scoring Preview] Successfully proxied to Week-2A endpoint for match ${fsMatchId}`
+            );
+
+            // Return in Phase-3A format for compatibility
+            return reply.status(200).send({
+              success: true,
+              data: week2AData,
+              _note: 'Data from Week-2A scoring pipeline. Update frontend to use /api/matches/:id/scoring directly.',
+            });
+          }
+
+          // Week-2A endpoint returned error
+          logger.warn(
+            `[Scoring Preview] Week-2A endpoint returned ${response.statusCode} for match ${fsMatchId}`
+          );
+
+          throw new Error(
+            `Week-2A scoring endpoint returned ${response.statusCode}`
+          );
+        } catch (proxyError: any) {
+          // Week-2A not available
+          logger.error(
+            `[Scoring Preview] Week-2A endpoint not available: ${proxyError.message}`
+          );
+
+          return reply.status(503).send({
+            error: 'Week-2A scoring pipeline not available',
+            message:
+              'The deterministic scoring system (Week-2A) has not been merged yet. This endpoint will become available after Week-2A deployment.',
+            week_2a_status: 'NOT_MERGED',
+            fallback_note:
+              'Phase-3A admin panel requires Week-2A scoring system to function.',
+          });
+        }
       } catch (error: any) {
         logger.error('[Scoring Preview] Error:', error);
+
         return reply.status(500).send({
-          success: false,
-          error: error.message || 'Failed to fetch scoring preview',
+          error: 'Failed to generate scoring preview',
+          message: error.message,
         });
       }
     }

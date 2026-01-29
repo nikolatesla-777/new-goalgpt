@@ -67,6 +67,9 @@ import { telegramRoutes } from './telegram.routes';
 // Scoring & Predictions
 import { registerScoringRoutes } from './scoring.routes';
 
+// Admin Panel (Phase-3A.1)
+import adminRoutes from './admin.routes';
+
 // ============================================================================
 // CENTRAL REGISTRATION FUNCTION
 // ============================================================================
@@ -171,6 +174,16 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // WebSocket auth is handled inside websocket.routes.ts
   // First message must contain valid JWT within 10 seconds
   app.register(websocketRoutes);
+
+  // ============================================================================
+  // API-KEY BASED ADMIN GROUP (Phase-3A.1)
+  // Admin panel endpoints requiring X-Admin-Api-Key header
+  // Uses ADMIN_API_KEY env variable for authentication
+  // Prefix: /api/admin
+  // ============================================================================
+  // Note: Different from JWT-based adminAPI group above
+  // This is for Phase-3A.1 admin panel with header-based auth
+  app.register(adminRoutes, { prefix: '/api/admin' });
 
   // ============================================================================
   // MIXED AUTH API GROUP
