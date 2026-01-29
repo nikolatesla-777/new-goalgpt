@@ -158,7 +158,7 @@ function recordApiSuccess(): void {
  * Fetch match state from TheSports API (PRIMARY source)
  */
 async function fetchFromApi(matchId: string): Promise<number> {
-  const client = new TheSportsClient();
+  const client = TheSportsClient.getInstance();
 
   try {
     const response = await client.get<TheSportsMatchResponse>(
