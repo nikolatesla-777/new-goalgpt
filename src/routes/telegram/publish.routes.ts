@@ -17,6 +17,7 @@
 
 import crypto from 'crypto';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { PoolClient } from 'pg';
 import { telegramBot } from '../../services/telegram/telegram.client';
 import { formatTelegramMessage } from '../../services/telegram/turkish.formatter';
 import { formatTelegramMessageV2 } from '../../services/telegram/turkish.formatter.v2';
@@ -26,7 +27,14 @@ import { logger } from '../../utils/logger';
 import { validateMatchStateForPublish } from '../../services/telegram/validators/matchStateValidator';
 import { fetchMatchStateForPublish } from '../../services/telegram/matchStateFetcher.service';
 import { validatePicks } from '../../services/telegram/validators/pickValidator';
-import { calculateConfidenceScore } from '../../services/telegram/confidenceScorer.service';
+import { calculateConfidenceScore, ConfidenceScoreResult } from '../../services/telegram/confidenceScorer.service';
+
+// Local type extension for backwards compatibility with code expecting additional properties
+interface ExtendedConfidenceScoreResult extends ConfidenceScoreResult {
+  tier: string;  // Alias for 'level' property
+  missingCount?: number;  // Optional - not used by current implementation
+  stars?: string;  // Optional - derived from score
+}
 
 interface PublishRequest {
   Body: {
@@ -681,14 +689,14 @@ export async function publishRoutes(fastify: FastifyInstance): Promise<void> {
               over25_pct: homeStats.seasonOver25Percentage_overall,
               corners_avg: homeStats.cornersAVG_overall,
               cards_avg: homeStats.cardsAVG_overall,
-            } : null,
+            } : undefined,
             away: awayStats ? {
               ppg: awayStats.seasonPPG_overall,
               btts_pct: awayStats.seasonBTTSPercentage_overall,
               over25_pct: awayStats.seasonOver25Percentage_overall,
               corners_avg: awayStats.cornersAVG_overall,
               cards_avg: awayStats.cardsAVG_overall,
-            } : null,
+            } : undefined,
           },
           h2h: fsMatch.h2h ? {
             total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
@@ -697,8 +705,7 @@ export async function publishRoutes(fastify: FastifyInstance): Promise<void> {
             away_wins: fsMatch.h2h.previous_matches_results?.team_b_wins,
             avg_goals: fsMatch.h2h.betting_stats?.avg_goals,
             btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage,
-          } : null,
-          trends: fsMatch.trends,
+          } : undefined,
           odds: {
             home: fsMatch.odds_ft_1,
             draw: fsMatch.odds_ft_x,
@@ -715,7 +722,16 @@ export async function publishRoutes(fastify: FastifyInstance): Promise<void> {
 
         // PHASE-2B: Calculate confidence score
         logger.info('[Telegram] 🎯 Calculating confidence score...', logContext);
-        const confidenceScore = calculateConfidenceScore(fsMatch, homeStats, awayStats);
+        const baseConfidenceScore = calculateConfidenceScore(matchData);
+
+        // Map to extended interface with backwards-compatible properties
+        const confidenceScore: ExtendedConfidenceScoreResult = {
+          ...baseConfidenceScore,
+          tier: baseConfidenceScore.level,  // Map 'level' to 'tier' for backwards compatibility
+          missingCount: 0,  // Not calculated by current implementation
+          stars: baseConfidenceScore.emoji,  // Use emoji as stars representation
+        };
+
         logContext.confidence_score = confidenceScore.score;
         logContext.confidence_tier = confidenceScore.tier;
         logContext.missing_count = confidenceScore.missingCount;
@@ -768,7 +784,7 @@ export async function publishRoutes(fastify: FastifyInstance): Promise<void> {
         // FIX: Acquire connection for draft post, release BEFORE Telegram API call
         logger.info('[Telegram] 💾 Creating DRAFT post...', logContext);
 
-        let dbClient = await pool.connect();
+        let dbClient: PoolClient | null = await pool.connect();
         let postId;
         try {
           // PHASE-0: Pass dedupeKey for idempotency tracking
