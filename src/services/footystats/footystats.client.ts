@@ -337,7 +337,7 @@ class FootyStatsAPIClient {
       await this.rateLimiter.acquire(endpoint);
       this.requestCount++;
 
-      logger.debug(`[FootyStats] Fetching ${endpoint} (attempt ${context.attempt}/${context.maxAttempts})`, {
+      logger.debug(`[FootyStats] Fetching ${endpoint} (attempt ${context.attempt}/3)`, {
         endpoint,
         params,
         attempt: context.attempt
@@ -357,7 +357,7 @@ class FootyStatsAPIClient {
           endpoint,
           status: response.status,
           attempt: context.attempt,
-          willRetry: context.attempt < context.maxAttempts
+          willRetry: context.attempt < 3
         });
         throw error;
       }
