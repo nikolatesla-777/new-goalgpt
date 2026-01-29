@@ -334,6 +334,26 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Settle Telegram daily lists by evaluating match results from TheSports API',
   },
+  {
+    name: 'Daily Auto-Preview',
+    schedule: '0 8 * * *', // Daily at 08:00 UTC
+    handler: async () => {
+      const { runDailyAutoPreview } = await import('./dailyAutoPreview.job');
+      await runDailyAutoPreview();
+    },
+    enabled: true,
+    description: 'PHASE-3B.4: Generate daily DRY_RUN preview reports for admin review',
+  },
+  {
+    name: 'Daily Auto-Publish',
+    schedule: '0 9 * * *', // Daily at 09:00 UTC (1 hour after preview)
+    handler: async () => {
+      const { runDailyAutoPublish } = await import('./dailyAutoPublish.job');
+      await runDailyAutoPublish();
+    },
+    enabled: false, // FEATURE-FLAGGED: Enable via AUTO_PUBLISH_ENABLED=true
+    description: 'PHASE-3B.4: Auto-publish predictions (feature-flagged, kill switch enabled)',
+  },
 ];
 
 /**
