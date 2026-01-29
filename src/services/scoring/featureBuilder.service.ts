@@ -180,24 +180,26 @@ export class FeatureBuilderService {
     try {
       const result = await pool.query(
         `SELECT
-          id,
-          external_id,
-          home_team_id,
-          away_team_id,
-          competition_id,
-          season_id,
-          home_team,
-          away_team,
-          match_time,
-          status_id,
-          home_score_display,
-          away_score_display,
-          home_scores,
-          away_scores,
-          statistics,
-          incidents
-        FROM ts_matches
-        WHERE external_id = $1
+          m.id,
+          m.external_id,
+          m.home_team_id,
+          m.away_team_id,
+          m.competition_id,
+          m.season_id,
+          ht.name as home_team,
+          at.name as away_team,
+          m.match_time,
+          m.status_id,
+          m.home_score_display,
+          m.away_score_display,
+          m.home_scores,
+          m.away_scores,
+          m.statistics,
+          m.incidents
+        FROM ts_matches m
+        LEFT JOIN ts_teams ht ON ht.external_id = m.home_team_id
+        LEFT JOIN ts_teams at ON at.external_id = m.away_team_id
+        WHERE m.external_id = $1
         LIMIT 1`,
         [externalId]
       );
