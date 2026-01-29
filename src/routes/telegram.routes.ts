@@ -251,18 +251,18 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/telegram/test-uuid', async (request, reply) => {
     try {
-      console.error('[TEST-UUID] Starting test query');
+      logger.debug('[TEST-UUID] Starting test query');
       const result = await safeQuery(
         `SELECT c.id, c.name, co.name as country_name
          FROM ts_competitions c
          LEFT JOIN ts_countries co ON c.country_id = co.external_id
          LIMIT 5`
       );
-      console.error('[TEST-UUID] Query succeeded, rows:', result.length);
+      logger.debug('[TEST-UUID] Query succeeded, rows:', result.length);
       return { success: true, rows: result.length };
     } catch (err: any) {
-      console.error('[TEST-UUID] Query failed:', err.message);
-      console.error('[TEST-UUID] Stack:', err.stack);
+      logger.debug('[TEST-UUID] Query failed:', err.message);
+      logger.debug('[TEST-UUID] Stack:', err.stack);
       return reply.status(500).send({ error: err.message, stack: err.stack });
     }
   });
@@ -534,12 +534,12 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         });
 
         // 🔍 DEBUG: Log fsMatch corners and cards
-        console.error('\n🔍🔍🔍 [Telegram Publish] fsMatch data check:');
-        console.error('  fsMatch.corners_potential:', fsMatch.corners_potential);
-        console.error('  fsMatch.cards_potential:', fsMatch.cards_potential);
-        console.error('  fsMatch.btts_potential:', fsMatch.btts_potential);
-        console.error('  typeof corners:', typeof fsMatch.corners_potential);
-        console.error('  typeof cards:', typeof fsMatch.cards_potential);
+        logger.debug('[Telegram Publish] fsMatch data check');
+        logger.debug('  fsMatch.corners_potential:', fsMatch.corners_potential);
+        logger.debug('  fsMatch.cards_potential:', fsMatch.cards_potential);
+        logger.debug('  fsMatch.btts_potential:', fsMatch.btts_potential);
+        logger.debug('  typeof corners:', typeof fsMatch.corners_potential);
+        logger.debug('  typeof cards:', typeof fsMatch.cards_potential);
 
         const matchData = {
           home_name: fsMatch.home_name,
@@ -590,11 +590,11 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         };
 
         // 🔍 DEBUG: Verify matchData.potentials has corners and cards
-        console.error('\n🔍🔍🔍 [Telegram Publish] matchData.potentials check:');
-        console.error('  matchData.potentials.corners:', matchData.potentials.corners);
-        console.error('  matchData.potentials.cards:', matchData.potentials.cards);
-        console.error('  matchData.potentials.btts:', matchData.potentials.btts);
-        console.error('  Full potentials:', JSON.stringify(matchData.potentials, null, 2));
+        logger.debug('[Telegram Publish] matchData.potentials check');
+        logger.debug('  matchData.potentials.corners:', matchData.potentials.corners);
+        logger.debug('  matchData.potentials.cards:', matchData.potentials.cards);
+        logger.debug('  matchData.potentials.btts:', matchData.potentials.btts);
+        logger.debug('  Full potentials:', JSON.stringify(matchData.potentials, null, 2));
 
         // PHASE-2B: Calculate confidence score
         logger.info('[Telegram] 🎯 Calculating confidence score...', logContext);
@@ -611,7 +611,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         });
 
         // 🔍 DEBUG: Log matchData.potentials before formatting
-        console.error('\n🔍🔍🔍 [TELEGRAM DEBUG] matchData.potentials:', JSON.stringify(matchData.potentials, null, 2));
+        logger.debug('[TELEGRAM DEBUG] matchData.potentials', { potentials: matchData.potentials });
         logger.info('[Telegram] 🔍 matchData.potentials:', {
           ...logContext,
           potentials: matchData.potentials,
@@ -632,20 +632,20 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         });
 
         // 🔍 DEBUG: Check if KART/KORNER sections are in message
-        console.error('🔍🔍🔍 [TELEGRAM DEBUG] Message has KART:', messageText.includes('KART'));
-        console.error('🔍🔍🔍 [TELEGRAM DEBUG] Message has KORNER:', messageText.includes('KORNER'));
+        logger.debug('🔍🔍🔍 [TELEGRAM DEBUG] Message has KART:', messageText.includes('KART'));
+        logger.debug('🔍🔍🔍 [TELEGRAM DEBUG] Message has KORNER:', messageText.includes('KORNER'));
 
         // 🔍 DEBUG: Check formatted message
-        console.log('\n' + '='.repeat(80));
-        console.log('[TELEGRAM DEBUG] formatTelegramMessage RESULT:');
-        console.log('Match:', matchData.home_name, 'vs', matchData.away_name);
-        console.log('Message Length:', messageText.length, 'chars');
-        console.log('Has Trends:', messageText.includes('Trendler'));
-        console.log('Has Ev:', messageText.includes('Trendler (Ev)'));
-        console.log('Has Dep:', messageText.includes('Trendler (Dep)'));
-        console.log('\nFULL MESSAGE:');
-        console.log(messageText);
-        console.log('='.repeat(80) + '\n');
+        logger.debug('='.repeat(80));
+        logger.debug('[TELEGRAM DEBUG] formatTelegramMessage RESULT:');
+        logger.debug('Match:', matchData.home_name, 'vs', matchData.away_name);
+        logger.debug('Message Length:', messageText.length, 'chars');
+        logger.debug('Has Trends:', messageText.includes('Trendler'));
+        logger.debug('Has Ev:', messageText.includes('Trendler (Ev)'));
+        logger.debug('Has Dep:', messageText.includes('Trendler (Dep)'));
+        logger.debug('\nFULL MESSAGE:');
+        logger.debug('[Message Text]', { messageText });
+        logger.debug('='.repeat(80) + '\n');
 
         // 9. PHASE-1: TRANSACTION SAFETY - Create DRAFT post first
         // FIX: Acquire connection for draft post, release BEFORE Telegram API call
@@ -1030,21 +1030,19 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get<{ Querystring: { date?: string } }>('/telegram/daily-lists/today', async (request, reply) => {
     const marker = '='.repeat(80) + '\n[ROUTE HANDLER] daily-lists/today CALLED\n' + '='.repeat(80) + '\n';
-    process.stdout.write(marker);
-    process.stderr.write(marker);
-    console.log(marker);
+    logger.debug('[ROUTE HANDLER] daily-lists/today CALLED');
 
     try {
       // Extract date query parameter (optional)
       const targetDate = request.query.date;
 
-      console.error('[TRACE-1] Starting daily-lists route handler', targetDate ? `for date: ${targetDate}` : '');
+      logger.debug('[TRACE]-1] Starting daily-lists route handler', targetDate ? `for date: ${targetDate}` : '');
       logger.info(`[TelegramDailyLists] 📊 Fetching lists for ${targetDate || 'today'}...`);
 
       // Get lists from database (or generate if not exists)
-      console.error('[TRACE-2] About to call getDailyLists()', targetDate ? `with date: ${targetDate}` : '');
+      logger.debug('[TRACE]-2] About to call getDailyLists()', targetDate ? `with date: ${targetDate}` : '');
       const lists = await getDailyLists(targetDate);
-      console.error('[TRACE-3] getDailyLists() returned:', lists.length, 'lists');
+      logger.debug('[TRACE]-3] getDailyLists() returned:', lists.length, 'lists');
 
       if (lists.length === 0) {
         return {
@@ -1056,7 +1054,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // Collect all unique matches for bulk score query
-      console.error('[TRACE-4] Collecting unique matches');
+      logger.debug('[TRACE]-4] Collecting unique matches');
       const allMatches = new Map<number, any>();
       const allMatchIds = new Set<string>(); // TheSports match IDs
 
@@ -1070,7 +1068,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       // Bulk query: Get match results from TheSports database
-      console.error('[TRACE-5] Fetching match results from TheSports for', allMatchIds.size, 'matches');
+      logger.debug('[TRACE]-5] Fetching match results from TheSports for', allMatchIds.size, 'matches');
       const matchResultsMap = new Map<string, any>();
 
       if (allMatchIds.size > 0) {
@@ -1088,7 +1086,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
             matchResultsMap.set(row.external_id, row);
           });
 
-          console.error('[TRACE-6] Fetched results for', matchResultsMap.size, 'matches from TheSports');
+          logger.debug('[TRACE]-6] Fetched results for', matchResultsMap.size, 'matches from TheSports');
         } finally {
           client.release();
         }
@@ -1096,16 +1094,16 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
 
       // Also get live scores for FootyStats (for pending matches)
       const liveScoresMap = await getLiveScoresForMatches(Array.from(allMatches.values()));
-      console.error('[TRACE-6b] FootyStats live scores:', liveScoresMap.size);
+      logger.debug('[TRACE]-6b] FootyStats live scores:', liveScoresMap.size);
 
       // Format response with match details + performance calculation
-      console.error('[TRACE-7] Formatting lists');
+      logger.debug('[TRACE]-7] Formatting lists');
       const formattedLists = await Promise.all(
         lists.map(async (list) => {
           // Calculate performance for finished matches
-          console.error('[TRACE-8] Calculating performance for list:', list.market);
+          logger.debug('[TRACE]-8] Calculating performance for list:', list.market);
           const performance = await calculateListPerformance(list);
-          console.error('[TRACE-9] Performance calculated for list:', list.market);
+          logger.debug('[TRACE]-9] Performance calculated for list:', list.market);
 
           return {
             market: list.market,
@@ -1137,7 +1135,7 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
                   result = settlement.result === 'WIN' ? 'won' :
                            settlement.result === 'VOID' ? 'void' : 'lost';
                 } catch (err) {
-                  console.error('[DailyLists] Error evaluating match:', err);
+                  logger.debug('[DailyLists] Error evaluating match', { error: err });
                   result = 'void';
                 }
               }
@@ -1187,9 +1185,9 @@ Stack: ${error.stack || 'No stack trace'}
 ==================================
 `;
       process.stderr.write(errorDetails);
-      console.log(errorDetails); // Also try stdout
-      console.error('[DEBUG] Daily lists error:', error.message);
-      console.error('[DEBUG] Stack:', error.stack?.substring(0, 500));
+      logger.error('[Error Details]', { errorDetails }); // Also try stdout
+      logger.debug('[DEBUG] Daily lists error:', error.message);
+      logger.debug('[DEBUG] Stack:', error.stack?.substring(0, 500));
 
       return reply.status(500).send({ error: error.message });
     }
