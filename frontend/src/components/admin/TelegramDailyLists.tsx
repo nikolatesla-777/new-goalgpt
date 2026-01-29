@@ -1,5 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { getTodayInTurkey, getYesterdayInTurkey, formatTimestampToTSI, formatMillisecondsToTSI, formatDateStringToLongTurkish, TSI_OFFSET_MS } from '../../utils/dateUtils';
+import {
+  useTelegramDailyListsToday,
+  useTelegramDailyListsRange,
+  usePublishDailyList,
+} from '../../api/hooks';
 
 // ============================================================================
 // INTERFACES
@@ -61,14 +66,6 @@ interface DailyList {
     pending: number;
     win_rate: number;
   };
-}
-
-interface DailyListsResponse {
-  success: boolean;
-  lists_count: number;
-  lists: DailyList[];
-  generated_at: number;
-  message?: string;
 }
 
 // ============================================================================
@@ -147,21 +144,35 @@ interface DateData {
 }
 
 export function TelegramDailyLists() {
-  const [lists, setLists] = useState<DailyList[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [publishingMarket, setPublishingMarket] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [expandedList, setExpandedList] = useState<string | null>(null);
   const [selectedRange, setSelectedRange] = useState<DateRange>('today');
-  const [historicalData, setHistoricalData] = useState<DateData[]>([]);
-  const [isHistoricalView, setIsHistoricalView] = useState(false);
+  const [publishingMarket, setPublishingMarket] = useState<string | null>(null);
 
-  // PR-2C: AbortController for cancelling in-flight requests
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Compute date range based on selected range
+  const { start, end } = useMemo(() => {
+    return getDateRange(selectedRange);
+  }, [selectedRange]);
+
+  // React Query hooks
+  const isToday = selectedRange === 'today';
+  const todayQuery = useTelegramDailyListsToday();
+  const rangeQuery = useTelegramDailyListsRange(start, end, !isToday);
+  const publishMutation = usePublishDailyList();
+
+  // Select active query based on range
+  const activeQuery = isToday ? todayQuery : rangeQuery;
+  const { data, isLoading, isError, error: queryError, refetch } = activeQuery;
+
+  // Extract lists and metadata from response
+  const lists = isToday && data ? (data as any).lists || [] : [];
+  const lastUpdated = isToday && data ? (data as any).generated_at || null : null;
+  const historicalData: DateData[] = !isToday && data ? (data as any).data || [] : [];
+  const isHistoricalView = !isToday;
+  const loading = isLoading;
+  const error = isError ? (queryError instanceof Error ? queryError.message : 'Bir hata oluştu') : null;
 
   // Calculate date ranges in Istanbul timezone (UTC+3)
-  const getDateRange = (range: DateRange): { start: string; end: string } => {
+  function getDateRange(range: DateRange): { start: string; end: string } {
     // Get today's date in Istanbul timezone (YYYY-MM-DD)
     const today = getTodayInTurkey();
 
@@ -187,138 +198,43 @@ export function TelegramDailyLists() {
     }
   };
 
-  const fetchLists = async () => {
-    setLoading(true);
-    setError(null);
-    setIsHistoricalView(false);
-    try {
-      const response = await fetch('/api/telegram/daily-lists/today');
-      if (!response.ok) throw new Error('API hatası');
-
-      const data: DailyListsResponse = await response.json();
-      console.log('📊 Daily Lists API Response:', data.lists_count, 'lists');
-      console.log('Markets:', data.lists.map(l => l.market));
-      setLists(data.lists || []);
-      setLastUpdated(data.generated_at);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchListsByDateRange = async (range: DateRange) => {
-    // PR-2C: Cancel previous request if still in flight
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      console.log('🚫 Cancelled previous date range request');
-    }
-
-    // Create new abort controller for this request
-    abortControllerRef.current = new AbortController();
-
-    setLoading(true);
-    setError(null);
-    setSelectedRange(range);
-
-    try {
-      // For "today", use the original endpoint which auto-generates if needed
-      if (range === 'today') {
-        console.log('📅 Fetching today\'s lists...');
-        const response = await fetch('/api/telegram/daily-lists/today', {
-          signal: abortControllerRef.current.signal,
-        });
-        if (!response.ok) throw new Error('API hatası');
-
-        const data: DailyListsResponse = await response.json();
-        console.log('📊 Today\'s lists:', data.lists_count, 'lists');
-
-        setIsHistoricalView(false);
-        setLists(data.lists || []);
-        setLastUpdated(data.generated_at);
-      } else {
-        // For other ranges, use the range endpoint for historical data
-        const { start, end } = getDateRange(range);
-        console.log(`📅 Fetching lists from ${start} to ${end}`);
-
-        const response = await fetch(`/api/telegram/daily-lists/range?start=${start}&end=${end}`, {
-          signal: abortControllerRef.current.signal,
-        });
-        if (!response.ok) throw new Error('API hatası');
-
-        const data = await response.json();
-        console.log('📅 Historical data:', data);
-
-        setIsHistoricalView(true);
-        setHistoricalData(data.data || []);
-      }
-    } catch (err: any) {
-      // Ignore abort errors (expected when user changes selection quickly)
-      if (err.name === 'AbortError') {
-        console.log('🚫 Request aborted (user changed selection)');
-        return;
-      }
-      setError(err.message);
-    } finally {
-      setLoading(false);
-      abortControllerRef.current = null;
-    }
-  };
-
+  // Publish single list handler
   const publishSingleList = async (list: DailyList) => {
     if (!confirm(`"${list.title}" listesini Telegram'a yayınlamak istediğinizden emin misiniz?`)) {
       return;
     }
 
     setPublishingMarket(list.market);
-    setError(null);
     try {
-      const response = await fetch(`/api/telegram/publish/daily-list/${list.market}`, {
-        method: 'POST',
+      const result = await publishMutation.mutateAsync({
+        market: list.market,
+        options: {}
       });
-
-      if (!response.ok) throw new Error('Yayınlama hatası');
-
-      const result = await response.json();
 
       if (result.success) {
         alert(`✅ Başarılı!\n\n"${list.title}" Telegram'a yayınlandı.\nMesaj ID: ${result.telegram_message_id}`);
-        await fetchLists();
       } else {
         alert(`⚠️ ${result.message || 'Yayınlama başarısız'}`);
       }
     } catch (err: any) {
-      setError(err.message);
-      alert(`❌ Hata: ${err.message}`);
+      alert(`❌ Hata: ${err instanceof Error ? err.message : 'Yayınlama hatası'}`);
     } finally {
       setPublishingMarket(null);
     }
   };
-
-  useEffect(() => {
-    // Load today's data by default
-    fetchListsByDateRange('today');
-
-    // PR-2C: Cleanup - abort any in-flight requests on unmount
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
 
   // Calculate stats based on view mode
   const displayLists = isHistoricalView
     ? historicalData.flatMap(d => d.lists)
     : lists;
 
-  const totalMatches = displayLists.reduce((sum, list) => sum + list.matches_count, 0);
+  const totalMatches = displayLists.reduce((sum: number, list: DailyList) => sum + list.matches_count, 0);
   const avgConfidence = displayLists.length > 0
-    ? Math.round(displayLists.reduce((sum, list) => sum + list.avg_confidence, 0) / displayLists.length)
+    ? Math.round(displayLists.reduce((sum: number, list: DailyList) => sum + list.avg_confidence, 0) / displayLists.length)
     : 0;
 
   // Calculate total performance across all lists
-  const totalPerformance = displayLists.reduce((acc, list) => {
+  const totalPerformance = displayLists.reduce((acc: { total: number; won: number; lost: number; pending: number }, list: DailyList) => {
     if (list.performance) {
       acc.total += list.performance.total;
       acc.won += list.performance.won;
@@ -373,7 +289,7 @@ export function TelegramDailyLists() {
               {/* Date Filter Buttons */}
               <div className="flex items-center gap-2 bg-white border-2 border-gray-200 rounded-xl p-1">
                 <button
-                  onClick={() => fetchListsByDateRange('today')}
+                  onClick={() => setSelectedRange('today')}
                   disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                     selectedRange === 'today'
@@ -384,7 +300,7 @@ export function TelegramDailyLists() {
                   Bugün
                 </button>
                 <button
-                  onClick={() => fetchListsByDateRange('yesterday')}
+                  onClick={() => setSelectedRange('yesterday')}
                   disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                     selectedRange === 'yesterday'
@@ -395,7 +311,7 @@ export function TelegramDailyLists() {
                   Dün
                 </button>
                 <button
-                  onClick={() => fetchListsByDateRange('last7days')}
+                  onClick={() => setSelectedRange('last7days')}
                   disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                     selectedRange === 'last7days'
@@ -406,7 +322,7 @@ export function TelegramDailyLists() {
                   Son 7 Gün
                 </button>
                 <button
-                  onClick={() => fetchListsByDateRange('thismonth')}
+                  onClick={() => setSelectedRange('thismonth')}
                   disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                     selectedRange === 'thismonth'
@@ -420,7 +336,7 @@ export function TelegramDailyLists() {
 
               {/* Refresh Button */}
               <button
-                onClick={fetchLists}
+                onClick={() => refetch()}
                 disabled={loading}
                 className="group relative px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all duration-300 disabled:opacity-50"
               >
@@ -773,7 +689,7 @@ export function TelegramDailyLists() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {lists.map((list) => {
+            {lists.map((list: DailyList) => {
               const config = MARKET_CONFIG[list.market];
               const isExpanded = expandedList === list.market;
               const isPublishing = publishingMarket === list.market;
@@ -875,7 +791,7 @@ export function TelegramDailyLists() {
                   {/* Matches Preview */}
                   <div className="p-6">
                     <div className="space-y-3 mb-4">
-                      {list.matches.slice(0, isExpanded ? undefined : 3).map((match, idx) => {
+                      {list.matches.slice(0, isExpanded ? undefined : 3).map((match: Match, idx: number) => {
                         // Determine match status
                         const now = Math.floor(Date.now() / 1000);
                         const matchStarted = match.date_unix <= now;
