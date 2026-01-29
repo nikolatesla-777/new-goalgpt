@@ -21,7 +21,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
-import pool from '../database/pool';
+import { pool } from '../database/connection';
 
 // Phase-3B Services
 import {

@@ -62,7 +62,7 @@ import { announcementsRoutes } from './announcements.routes';
 // External Integrations
 import { footyStatsRoutes } from './footystats.routes';
 import { partnersRoutes } from './partners.routes';
-import { telegramRoutes } from './telegram.routes';
+import { telegramRoutes } from './telegram';
 
 // Scoring & Predictions
 import { registerScoringRoutes } from './scoring.routes';
@@ -199,13 +199,4 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // Telegram publishing (TEMPORARY: PUBLIC for development, will add auth later)
   app.register(telegramRoutes, { prefix: '/api' });
-
-  // ============================================================================
-  // ADMIN OPS API GROUP (Phase-3B)
-  // Admin operations endpoints requiring ADMIN_API_KEY header
-  // Prefix: /api/admin
-  // ============================================================================
-  // These routes use x-admin-api-key header authentication (NOT JWT)
-  const adminOpsRoutes = await import('./admin.routes');
-  app.register(adminOpsRoutes.default, { prefix: '/api/admin' });
 }
