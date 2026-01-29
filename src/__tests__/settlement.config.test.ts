@@ -29,7 +29,11 @@ describe('Settlement Configuration', () => {
     });
 
     it('should reject config with missing market', () => {
-      const invalidConfig = { ...DEFAULT_SETTLEMENT_CONFIG };
+      // Deep copy to avoid mutating DEFAULT_SETTLEMENT_CONFIG
+      const invalidConfig: SettlementConfig = {
+        ...DEFAULT_SETTLEMENT_CONFIG,
+        markets: { ...DEFAULT_SETTLEMENT_CONFIG.markets },
+      };
       delete (invalidConfig.markets as any).OVER_25;
 
       const result = validateSettlementConfig(invalidConfig as SettlementConfig);

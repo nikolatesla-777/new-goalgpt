@@ -114,7 +114,18 @@ export function validateSettlementConfig(config: SettlementConfig): { valid: boo
  * Falls back to defaults if not set
  */
 export function loadSettlementConfig(): SettlementConfig {
-  const config = { ...DEFAULT_SETTLEMENT_CONFIG };
+  // Deep copy to avoid mutating DEFAULT_SETTLEMENT_CONFIG
+  const config: SettlementConfig = {
+    finishThresholdHours: DEFAULT_SETTLEMENT_CONFIG.finishThresholdHours,
+    markets: {
+      OVER_25: { ...DEFAULT_SETTLEMENT_CONFIG.markets.OVER_25 },
+      OVER_15: { ...DEFAULT_SETTLEMENT_CONFIG.markets.OVER_15 },
+      BTTS: { ...DEFAULT_SETTLEMENT_CONFIG.markets.BTTS },
+      HT_OVER_05: { ...DEFAULT_SETTLEMENT_CONFIG.markets.HT_OVER_05 },
+      CORNERS: { ...DEFAULT_SETTLEMENT_CONFIG.markets.CORNERS },
+      CARDS: { ...DEFAULT_SETTLEMENT_CONFIG.markets.CARDS },
+    },
+  };
 
   // Allow env override for finish threshold
   if (process.env.SETTLEMENT_FINISH_HOURS) {
