@@ -28,6 +28,7 @@ import { validatePicks } from '../services/telegram/validators/pickValidator';
 import { calculateConfidenceScore } from '../services/telegram/confidenceScorer.service';
 import { getDailyLists, refreshDailyLists, formatDailyListMessage, formatDailyListMessageWithResults } from '../services/telegram/dailyLists.service';
 import { evaluateMatch } from '../services/telegram/dailyListsSettlement.service';
+import { getSettlementConfig, MarketType } from '../config/settlement.config';
 
 interface PublishRequest {
   Body: {
@@ -980,65 +981,67 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         continue;
       }
 
-      // Settlement logic
+      // Phase 3: Config-driven settlement logic
+      const settlementConfig = getSettlementConfig();
+      const marketConfig = settlementConfig.markets[marketType as MarketType];
+
+      if (!marketConfig) {
+        logger.warn(`[TelegramDailyLists] Unknown market type: ${marketType}`, { match_id: match.match_id });
+        pending++;
+        continue;
+      }
+
       const homeScore = parseInt(result.home_score_display || '0');
       const awayScore = parseInt(result.away_score_display || '0');
-      const totalGoals = homeScore + awayScore;
-
       let matchWon = false;
 
-      switch (marketType) {
-        case 'OVER_25':
-          matchWon = totalGoals >= 3;
-          break;
-        case 'OVER_15':
-          matchWon = totalGoals >= 2;
-          break;
-        case 'BTTS':
-          matchWon = homeScore > 0 && awayScore > 0;
-          break;
-        case 'HT_OVER_05':
-          try {
+      try {
+        switch (marketConfig.scoreType) {
+          case 'FULL_TIME':
+            const totalGoals = homeScore + awayScore;
+            if (marketType === 'BTTS') {
+              // BTTS special case: both teams must score at least threshold
+              matchWon = homeScore >= marketConfig.threshold && awayScore >= marketConfig.threshold;
+            } else {
+              matchWon = totalGoals >= marketConfig.threshold;
+            }
+            break;
+
+          case 'HALF_TIME':
             const homeScores = JSON.parse(result.home_scores || '[]');
             const awayScores = JSON.parse(result.away_scores || '[]');
             const htHome = homeScores[0]?.score || 0;
             const htAway = awayScores[0]?.score || 0;
-            matchWon = (htHome + htAway) >= 1;
-          } catch (err) {
-            logger.warn('[TelegramDailyLists] Failed to parse HT scores', { match_id: match.match_id });
+            matchWon = (htHome + htAway) >= marketConfig.threshold;
+            break;
+
+          case 'SPECIAL':
+            const homeSpecialScores = JSON.parse(result.home_scores || '[]');
+            const awaySpecialScores = JSON.parse(result.away_scores || '[]');
+
+            // Parse scorePath (e.g., "home_scores[4].score + away_scores[4].score")
+            let specialValue = 0;
+            if (marketType === 'CORNERS') {
+              specialValue = (homeSpecialScores[4]?.score || 0) + (awaySpecialScores[4]?.score || 0);
+            } else if (marketType === 'CARDS') {
+              specialValue = (homeSpecialScores[2]?.score || 0) + (awaySpecialScores[2]?.score || 0);
+            }
+
+            matchWon = specialValue >= marketConfig.threshold;
+            break;
+
+          default:
+            logger.warn(`[TelegramDailyLists] Unknown scoreType: ${marketConfig.scoreType}`, { match_id: match.match_id, marketType });
             pending++;
             continue;
-          }
-          break;
-        case 'CORNERS':
-          try {
-            const homeScores = JSON.parse(result.home_scores || '[]');
-            const awayScores = JSON.parse(result.away_scores || '[]');
-            const homeCorners = homeScores[4]?.score || 0; // Corner stats at index 4
-            const awayCorners = awayScores[4]?.score || 0;
-            matchWon = (homeCorners + awayCorners) >= 10;
-          } catch (err) {
-            logger.warn('[TelegramDailyLists] Failed to parse corner stats', { match_id: match.match_id });
-            pending++;
-            continue;
-          }
-          break;
-        case 'CARDS':
-          try {
-            const homeScores = JSON.parse(result.home_scores || '[]');
-            const awayScores = JSON.parse(result.away_scores || '[]');
-            const homeYellow = homeScores[2]?.score || 0; // Yellow cards at index 2
-            const awayYellow = awayScores[2]?.score || 0;
-            matchWon = (homeYellow + awayYellow) >= 5;
-          } catch (err) {
-            logger.warn('[TelegramDailyLists] Failed to parse card stats', { match_id: match.match_id });
-            pending++;
-            continue;
-          }
-          break;
-        default:
-          pending++;
-          continue;
+        }
+      } catch (err) {
+        logger.warn(`[TelegramDailyLists] Failed to parse scores for ${marketType}`, {
+          match_id: match.match_id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        pending++;
+        continue;
       }
 
       if (matchWon) {

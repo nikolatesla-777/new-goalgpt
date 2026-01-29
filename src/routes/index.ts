@@ -58,6 +58,7 @@ import forumRoutes from './forum.routes';
 
 // Admin & Moderation
 import { announcementsRoutes } from './announcements.routes';
+import { diagnosticRoutes } from './diagnostic.routes';
 
 // External Integrations
 import { footyStatsRoutes } from './footystats.routes';
@@ -141,6 +142,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // Partner management
     adminAPI.register(partnersRoutes, { prefix: '/api/partners' });
+
+    // System diagnostics (Phase 4: Data Integrity)
+    adminAPI.register(diagnosticRoutes, { prefix: '/api' });
   });
 
   // ============================================================================
