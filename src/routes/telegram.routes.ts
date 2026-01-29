@@ -15,6 +15,7 @@
  * - Publishing requires admin role
  */
 
+import crypto from 'crypto';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { telegramBot } from '../services/telegram/telegram.client';
 import { formatTelegramMessage } from '../services/telegram/turkish.formatter';
@@ -42,6 +43,49 @@ interface PublishRequest {
 // PHASE-1: Configuration constants
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BACKOFF_MS = [1000, 3000, 9000]; // Exponential backoff: 1s, 3s, 9s
+
+// PHASE-0: Idempotency configuration
+const ALLOW_DUPLICATES = process.env.TELEGRAM_ALLOW_DUPLICATES === 'true';
+const TEMPLATE_VERSION = 'v2';
+const PUBLISH_DELAY_MS = 1000; // 1 second between messages for rate limiting
+
+/**
+ * PHASE-0: Generate dedupe key for idempotency
+ * SHA256 hash of: bot_id + content_type + match_id + template_version
+ */
+function generateDedupeKey(params: {
+  contentType: 'match' | 'daily_list';
+  matchId: string;
+}): string {
+  const botId = process.env.TELEGRAM_BOT_TOKEN?.substring(0, 10) || 'default';
+  const input = `${botId}:${params.contentType}:${params.matchId}:${TEMPLATE_VERSION}`;
+  return crypto.createHash('sha256').update(input).digest('hex').substring(0, 64);
+}
+
+/**
+ * PHASE-0: Check for existing post by dedupe_key
+ */
+async function checkExistingPostByDedupeKey(dedupeKey: string, client?: any) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
+  try {
+    const result = await client.query(
+      `SELECT id, telegram_message_id, status, match_id
+       FROM telegram_posts
+       WHERE dedupe_key = $1
+       LIMIT 1`,
+      [dedupeKey]
+    );
+    return result.rows[0] || null;
+  } finally {
+    if (shouldReleaseClient) {
+      client.release();
+    }
+  }
+}
 
 /**
  * PHASE-1: Idempotency check
@@ -76,12 +120,15 @@ async function checkExistingPost(matchId: string, channelId: string, client?: an
  * Reserves the idempotency slot before Telegram send
  *
  * FIX: Accepts optional client parameter to avoid connection churn
+ * PHASE-0: Added dedupe_key, content_type, template_version
  */
 async function createDraftPost(
   matchId: string,
   fsMatchId: number,
   channelId: string,
   content: string,
+  dedupeKey: string | null,
+  contentType: 'match' | 'daily_list' = 'match',
   client?: any
 ) {
   const shouldReleaseClient = !client;
@@ -92,13 +139,25 @@ async function createDraftPost(
   try {
     await client.query('BEGIN');
 
-    // ✅ REMOVED ON CONFLICT - Allow duplicate publishes of same match
+    // PHASE-0.1: Insert with ON CONFLICT for race condition protection
+    // If dedupe_key already exists, DO NOTHING and return null
     const result = await client.query(
-      `INSERT INTO telegram_posts (match_id, fs_match_id, channel_id, content, status)
-       VALUES ($1, $2, $3, $4, 'draft')
+      `INSERT INTO telegram_posts (match_id, fs_match_id, channel_id, content, status, dedupe_key, content_type, template_version)
+       VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7)
+       ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
        RETURNING id`,
-      [matchId, fsMatchId, channelId, content]
+      [matchId, fsMatchId, channelId, content, dedupeKey, contentType, TEMPLATE_VERSION]
     );
+
+    // If no id returned, conflict occurred - duplicate was skipped at DB level
+    if (dedupeKey && !result.rows[0]?.id) {
+      logger.info('[Telegram] ⏭️ DB CONFLICT: Duplicate dedupe_key, skipping insert', {
+        dedupe_key: dedupeKey,
+        match_id: matchId,
+      });
+      await client.query('ROLLBACK');
+      return null;
+    }
 
     await client.query('COMMIT');
     return result.rows[0]?.id || null;
@@ -170,6 +229,7 @@ async function markFailed(postId: string, error: string, retryCount: number, cli
 /**
  * PHASE-1: Retry logic with exponential backoff
  * Attempts Telegram send up to MAX_RETRY_ATTEMPTS times
+ * PHASE-0.1: Added 429 rate limit handling with separate retry counter
  *
  * FIX: Accepts optional client parameter, NO connection held during Telegram API call
  */
@@ -180,6 +240,8 @@ async function sendWithRetry(
   client?: any
 ): Promise<number> {
   let lastError: Error | null = null;
+  let rateLimitRetries = 0;
+  const MAX_RATE_LIMIT_RETRIES = 3; // Max 429 retries to prevent infinite loop
 
   for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
     try {
@@ -194,6 +256,38 @@ async function sendWithRetry(
       });
 
       if (!result.ok) {
+        // PHASE-0: Check if user blocked the bot (403)
+        if ((result as any).blocked) {
+          logger.warn(`[Telegram] ⚠️ User blocked bot - soft fail for post ${postId}`, {
+            post_id: postId,
+            error_code: (result as any).error_code,
+          });
+          // Return -1 to signal blocked (no retry needed)
+          return -1;
+        }
+
+        // PHASE-0.1: Handle 429 rate limited - wait and retry (don't count as normal attempt)
+        if ((result as any).rate_limited) {
+          rateLimitRetries++;
+          const retryAfter = (result as any).retry_after || 1;
+
+          if (rateLimitRetries > MAX_RATE_LIMIT_RETRIES) {
+            logger.error(`[Telegram] ❌ Max 429 retries (${MAX_RATE_LIMIT_RETRIES}) exceeded for post ${postId}`);
+            throw new Error(`Rate limited too many times (${rateLimitRetries} retries)`);
+          }
+
+          logger.warn(`[Telegram] ⚠️ Rate limited (429) - waiting ${retryAfter}s before retry (${rateLimitRetries}/${MAX_RATE_LIMIT_RETRIES})`, {
+            post_id: postId,
+            attempt: attempt + 1,
+            retry_after: retryAfter,
+            rate_limit_retry: rateLimitRetries,
+          });
+          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+          // Don't increment attempt, just continue to retry
+          attempt--; // Will be incremented by loop, so net effect is same attempt
+          continue;
+        }
+
         throw new Error(`Telegram API returned ok=false: ${JSON.stringify(result)}`);
       }
 
@@ -339,9 +433,34 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
           return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
         }
 
-        // 3. PHASE-1: IDEMPOTENCY CHECK - DISABLED (User wants to publish same match multiple times)
-        // Note: User requested ability to publish same match as many times as desired
-        logger.info('[Telegram] ⚠️ IDEMPOTENCY CHECK DISABLED - allowing duplicate publishes', logContext);
+        // 3. PHASE-0: IDEMPOTENCY CHECK (configurable via TELEGRAM_ALLOW_DUPLICATES env)
+        const dedupeKey = generateDedupeKey({
+          contentType: 'match',
+          matchId: match_id,
+        });
+        logContext.dedupe_key = dedupeKey;
+
+        if (!ALLOW_DUPLICATES) {
+          const existingPost = await checkExistingPostByDedupeKey(dedupeKey);
+          if (existingPost) {
+            logger.info('[Telegram] ⏭️ IDEMPOTENT: Duplicate detected, skipping publish', {
+              ...logContext,
+              existing_post_id: existingPost.id,
+              existing_message_id: existingPost.telegram_message_id,
+            });
+            return {
+              success: true,
+              idempotent: true,
+              skipped: true,
+              existing_post_id: existingPost.id,
+              telegram_message_id: existingPost.telegram_message_id,
+              message: 'Duplicate publish skipped (idempotency check)',
+            };
+          }
+          logger.info('[Telegram] ✅ Idempotency check passed - no duplicate found', logContext);
+        } else {
+          logger.info('[Telegram] ⚠️ IDEMPOTENCY DISABLED (TELEGRAM_ALLOW_DUPLICATES=true)', logContext);
+        }
 
         // 4. PHASE-2A: PICK VALIDATION
         logger.info('[Telegram] 🔍 Validating picks...', logContext);
@@ -654,7 +773,8 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         let dbClient = await pool.connect();
         let postId;
         try {
-          postId = await createDraftPost(match_id, fsIdNum, channelId, messageText, dbClient);
+          // PHASE-0: Pass dedupeKey for idempotency tracking
+          postId = await createDraftPost(match_id, fsIdNum, channelId, messageText, dedupeKey, 'match', dbClient);
 
           if (!postId) {
             // ON CONFLICT DO NOTHING triggered - race condition detected
@@ -690,6 +810,22 @@ export async function telegramRoutes(fastify: FastifyInstance): Promise<void> {
         try {
           // FIX: sendWithRetry does NOT hold connection during Telegram send
           telegramMessageId = await sendWithRetry(channelId, messageText, postId);
+
+          // PHASE-0: Check for blocked user (returns -1)
+          if (telegramMessageId === -1) {
+            logger.warn('[Telegram] ⚠️ User blocked bot - marking as failed (no retry)', {
+              ...logContext,
+              post_id: postId,
+            });
+            await markFailed(postId, 'User blocked bot (403 Forbidden)', 0);
+            return {
+              success: false,
+              blocked: true,
+              post_id: postId,
+              status: 'failed',
+              message: 'User blocked the bot - soft fail',
+            };
+          }
         } catch (err: any) {
           // All retries exhausted - mark as FAILED
           logger.error('[Telegram] ❌ Send failed after all retries, marking as FAILED', {
@@ -1566,6 +1702,13 @@ Stack: ${error.stack || 'No stack trace'}
             market: list.market,
             message_id: telegramMessageId,
           });
+
+          // PHASE-0: Throttle - wait between messages to avoid rate limiting
+          const listIndex = lists.indexOf(list);
+          if (listIndex < lists.length - 1) {
+            logger.debug(`[TelegramDailyLists] ⏳ Throttling ${PUBLISH_DELAY_MS}ms before next list...`);
+            await new Promise(resolve => setTimeout(resolve, PUBLISH_DELAY_MS));
+          }
 
         } catch (err: any) {
           logger.error(`[TelegramDailyLists] ❌ Failed to publish ${list.market} list`, {

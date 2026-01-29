@@ -244,6 +244,6 @@ export async function runTelegramSettlement(): Promise<void> {
         }
 
         logger.info(`[TelegramSettlement] Settled ${settledCount} posts`);
-    }
+      }
   );
 }
