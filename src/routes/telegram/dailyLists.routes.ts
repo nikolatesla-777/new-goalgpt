@@ -383,7 +383,7 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
         success: true,
         lists_count: lists.length,
         lists: formattedLists,
-        generated_at: Date.now(),
+        generated_at: lists.length > 0 ? lists[0].generated_at : Date.now(),
       };
 
     } catch (error: any) {
@@ -494,6 +494,7 @@ Stack: ${error.stack || 'No stack trace'}
             date,
             lists: listsWithPerformance,
             lists_count: lists.length,
+            generated_at: lists.length > 0 ? lists[0].generated_at : null,
           };
         })
       );

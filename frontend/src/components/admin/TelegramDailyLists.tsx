@@ -165,8 +165,14 @@ export function TelegramDailyLists() {
 
   // Extract lists and metadata from response
   const lists = isToday && data ? (data as any).lists || [] : [];
-  const lastUpdated = isToday && data ? (data as any).generated_at || null : null;
   const historicalData: DateData[] = !isToday && data ? (data as any).data || [] : [];
+
+  // Read generated_at from appropriate source based on view mode
+  const lastUpdated = isToday
+    ? ((data as any)?.generated_at || null)
+    : (historicalData.length > 0 && historicalData[0].lists.length > 0
+        ? historicalData[0].lists[0].generated_at
+        : null);
   const isHistoricalView = !isToday;
   const loading = isLoading;
   const error = isError ? (queryError instanceof Error ? queryError.message : 'Bir hata oluştu') : null;
