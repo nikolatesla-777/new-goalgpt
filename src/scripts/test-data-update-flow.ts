@@ -20,27 +20,37 @@ async function main() {
     console.log(JSON.stringify(dataUpdate, null, 2).slice(0, 10000));
     console.log('');
 
-    // Check if there are updated season_ids
-    if (dataUpdate.results && dataUpdate.results.season_ids) {
-      const seasonIds = dataUpdate.results.season_ids;
+    // Check if there are updated season_ids in keys "3", "4", "5", "6"
+    const allSeasonUpdates: any[] = [];
+    ['3', '4', '5', '6'].forEach(key => {
+      if (dataUpdate.results[key] && Array.isArray(dataUpdate.results[key])) {
+        allSeasonUpdates.push(...dataUpdate.results[key]);
+      }
+    });
+
+    if (allSeasonUpdates.length > 0) {
+      const seasonIds = allSeasonUpdates.map((item: any) => item.season_id);
       console.log(`✅ Found ${seasonIds.length} updated season_ids`);
       console.log('Season IDs:', seasonIds.slice(0, 10));
       console.log('');
 
-      if (seasonIds.length > 0) {
-        // Step 2: Get standings for first updated season
-        console.log('STEP 2: Fetching standings for first season_id...');
-        console.log('-'.repeat(80));
-        const firstSeasonId = seasonIds[0];
-        console.log('Season ID:', firstSeasonId);
+      // Step 2: Get standings for first updated season
+      console.log('STEP 2: Fetching standings for first season_id...');
+      console.log('-'.repeat(80));
+      const firstSeasonId = seasonIds[0];
+      console.log('Season ID:', firstSeasonId);
 
-        const standings = await theSportsAPI.get('/season/recent/table/detail', {
-          season_id: firstSeasonId
-        });
+      const standings = await theSportsAPI.get('/season/recent/table/detail', {
+        season_id: firstSeasonId
+      });
 
-        console.log('Standings response:');
-        console.log(JSON.stringify(standings, null, 2).slice(0, 5000));
-        console.log('');
+      console.log('Standings response:');
+      console.log(JSON.stringify(standings, null, 2).slice(0, 10000));
+      console.log('');
+
+      // If we got data, show it
+      if (standings.results && Object.keys(standings.results).length > 0) {
+        console.log('✅ GOT STANDINGS DATA!');
       }
     } else {
       console.log('ℹ️  No updated season_ids in last 120 seconds');

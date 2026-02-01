@@ -1,0 +1,10 @@
+{
+  "priority_leagues": [
+    {
+      "name": "Turkish Super League",
+      "ts_competition_id": "8y39mp1h6jmojxg",
+      "season_2025_2026_id": "4zp5rzgh8xvq82w"
+    }
+  ],
+  "notes": "These leagues are always synced, regardless of /data/update feed"
+}
