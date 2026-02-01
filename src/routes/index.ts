@@ -144,9 +144,6 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // Partner management
     adminAPI.register(partnersRoutes, { prefix: '/api/partners' });
 
-    // Standings management
-    adminAPI.register(adminStandingsRoutes);
-
     // System diagnostics (Phase 4: Data Integrity)
     adminAPI.register(diagnosticRoutes, { prefix: '/api' });
   });
@@ -188,4 +185,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // Telegram publishing (TEMPORARY: PUBLIC for development, will add auth later)
   app.register(telegramRoutes, { prefix: '/api' });
+
+  // Standings management (TEMPORARY: PUBLIC for admin panel, will add auth later)
+  app.register(adminStandingsRoutes);
 }

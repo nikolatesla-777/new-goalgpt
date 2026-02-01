@@ -59,14 +59,8 @@ export default function SuperLigStandingsPage() {
     setError(null);
 
     try {
-      const token = localStorage.getItem('auth_token');
       const response = await axios.get(
-        `/api/admin/standings/${SUPERLIG_COMPETITION_ID}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
+        `/api/admin/standings/${SUPERLIG_COMPETITION_ID}`
       );
 
       setData(response.data);
@@ -81,15 +75,8 @@ export default function SuperLigStandingsPage() {
     setSyncing(true);
 
     try {
-      const token = localStorage.getItem('auth_token');
       await axios.post(
-        `/api/admin/standings/sync/${SUPERLIG_COMPETITION_ID}`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
+        `/api/admin/standings/sync/${SUPERLIG_COMPETITION_ID}`
       );
 
       // Refresh data
