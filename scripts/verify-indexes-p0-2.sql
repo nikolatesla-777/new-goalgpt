@@ -1,5 +1,6 @@
 -- PR-P0-2: Index Verification Script
--- Verifies all 4 performance indexes were created successfully
+-- Verifies all 3 performance indexes were created successfully
+-- Note: Does NOT include composite index (phase8 already has idx_matches_live_status)
 
 -- ============================================================================
 -- SECTION 1: Index Existence and Size Verification
@@ -9,21 +10,11 @@
 \echo 'PR-P0-2: Index Verification'
 \echo '========================================='
 \echo ''
-
--- Index 1: Live matches composite
-\echo 'Index 1: idx_ts_matches_live_composite'
-SELECT
-  schemaname,
-  tablename,
-  indexname,
-  pg_size_pretty(pg_relation_size(indexname::regclass)) as index_size
-FROM pg_indexes
-WHERE indexname = 'idx_ts_matches_live_composite';
-
+\echo 'Note: Composite index skipped (phase8 has idx_matches_live_status)'
 \echo ''
 
--- Index 2: Live matches covering
-\echo 'Index 2: idx_ts_matches_live_covering'
+-- Index 1: Live matches covering (ONLY covering, no duplicate composite)
+\echo 'Index 1: idx_ts_matches_live_covering (COVERING)'
 SELECT
   schemaname,
   tablename,
@@ -34,8 +25,8 @@ WHERE indexname = 'idx_ts_matches_live_covering';
 
 \echo ''
 
--- Index 3: Daily lists settlement
-\echo 'Index 3: idx_telegram_daily_lists_settlement_enhanced'
+-- Index 2: Daily lists settlement
+\echo 'Index 2: idx_telegram_daily_lists_settlement_enhanced'
 SELECT
   schemaname,
   tablename,
@@ -46,8 +37,8 @@ WHERE indexname = 'idx_telegram_daily_lists_settlement_enhanced';
 
 \echo ''
 
--- Index 4: Subscription dashboard
-\echo 'Index 4: idx_customer_subscriptions_dashboard'
+-- Index 3: Subscription dashboard
+\echo 'Index 3: idx_customer_subscriptions_dashboard'
 SELECT
   schemaname,
   tablename,
@@ -61,14 +52,13 @@ WHERE indexname = 'idx_customer_subscriptions_dashboard';
 \echo 'All Indexes Summary'
 \echo '========================================='
 
--- Summary of all 4 indexes
+-- Summary of all 3 indexes (composite skipped - phase8 duplicate)
 SELECT
   indexname,
   tablename,
   pg_size_pretty(pg_relation_size(indexname::regclass)) as size
 FROM pg_indexes
 WHERE indexname IN (
-  'idx_ts_matches_live_composite',
   'idx_ts_matches_live_covering',
   'idx_telegram_daily_lists_settlement_enhanced',
   'idx_customer_subscriptions_dashboard'
@@ -85,9 +75,10 @@ ORDER BY indexname;
 -- SECTION 2: Query Plan Verification
 -- ============================================================================
 
--- Test 1: Live matches query (should use idx_ts_matches_live_composite or covering)
+-- Test 1: Live matches query (should use covering index)
 \echo 'Test 1: Live Matches Query Plan'
-\echo 'Expected: Index Scan using idx_ts_matches_live_composite or idx_ts_matches_live_covering'
+\echo 'Expected: Index Scan or Index-Only Scan using idx_ts_matches_live_covering'
+\echo 'Note: Planner may also choose phase8 idx_matches_live_status (both valid)'
 \echo ''
 
 EXPLAIN (ANALYZE, BUFFERS)
@@ -151,7 +142,6 @@ SELECT
   indexname
 FROM pg_indexes
 WHERE indexname IN (
-  'idx_ts_matches_live_composite',
   'idx_ts_matches_live_covering',
   'idx_telegram_daily_lists_settlement_enhanced',
   'idx_customer_subscriptions_dashboard'
@@ -167,6 +157,8 @@ AND indexname IN (
 \echo 'Verification Complete'
 \echo '========================================='
 \echo ''
-\echo 'If all 4 indexes appear above with sizes and query plans show Index Scan,'
+\echo 'If all 3 indexes appear above with sizes and query plans show Index Scan,'
 \echo 'then PR-P0-2 was deployed successfully.'
+\echo ''
+\echo 'Note: Composite index intentionally skipped (phase8 already has equivalent)'
 \echo ''

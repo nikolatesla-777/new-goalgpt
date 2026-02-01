@@ -7,11 +7,14 @@ import { logger } from '../../utils/logger';
  * Uses CREATE INDEX CONCURRENTLY for zero-downtime deployment.
  * Safe to run on production - no table locks.
  *
+ * IMPORTANT: Does NOT duplicate phase8 indexes
+ * - phase8 already has: idx_matches_live_status (composite on status_id, match_time)
+ * - This migration adds COVERING index (more efficient with INCLUDE clause)
+ *
  * Indexes created:
- * 1. idx_ts_matches_live_composite - Composite index for live match queries
- * 2. idx_ts_matches_live_covering - Covering index for live matches (reduces heap fetches)
- * 3. idx_telegram_daily_lists_settlement_enhanced - Enhanced partial index for settlement job
- * 4. idx_customer_subscriptions_dashboard - Composite index for dashboard queries
+ * 1. idx_ts_matches_live_covering - Covering index for live matches (enables Index-Only Scans)
+ * 2. idx_telegram_daily_lists_settlement_enhanced - Enhanced partial index for settlement job
+ * 3. idx_customer_subscriptions_dashboard - Composite index for dashboard queries
  *
  * Expected impact: 40-60% query speedup on hot paths
  */
@@ -20,21 +23,13 @@ export async function addPoolOptimizationIndexes(): Promise<void> {
 
   try {
     logger.info('[Migration:P0-2] Creating performance indexes (CONCURRENTLY)...');
+    logger.info('[Migration:P0-2] Note: Skipping composite index (phase8 already has idx_matches_live_status)');
 
-    // Index 1: Live matches composite (Priority 1 - CRITICAL)
+    // Index 1: Live matches COVERING index (Priority 1 - CRITICAL)
     // Target query: /api/matches/live (15+ second response times)
     // File: src/services/thesports/match/matchDatabase.service.ts:308-386
-    logger.info('[Migration:P0-2] Creating idx_ts_matches_live_composite...');
-    await client.query(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ts_matches_live_composite
-      ON ts_matches (status_id, match_time DESC)
-      WHERE status_id IN (2, 3, 4, 5, 7);
-    `);
-    logger.info('[Migration:P0-2] ✓ idx_ts_matches_live_composite created');
-
-    // Index 2: Live matches covering index (Priority 1 - CRITICAL)
-    // Includes commonly selected columns to enable Index-Only Scans
-    // Eliminates heap fetches, reducing I/O by 20-30%
+    // INCLUDE clause enables Index-Only Scans, eliminating heap fetches
+    // More efficient than phase8's idx_matches_live_status (composite without INCLUDE)
     logger.info('[Migration:P0-2] Creating idx_ts_matches_live_covering...');
     await client.query(`
       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ts_matches_live_covering
@@ -44,7 +39,7 @@ export async function addPoolOptimizationIndexes(): Promise<void> {
     `);
     logger.info('[Migration:P0-2] ✓ idx_ts_matches_live_covering created');
 
-    // Index 3: Daily lists settlement enhanced (Priority 2)
+    // Index 2: Daily lists settlement enhanced (Priority 2)
     // Target query: Daily lists settlement job (6-7 second queries)
     // File: src/jobs/dailyListsSettlement.job.ts:72-88
     // Schedule: Every 15 minutes
@@ -58,7 +53,7 @@ export async function addPoolOptimizationIndexes(): Promise<void> {
     `);
     logger.info('[Migration:P0-2] ✓ idx_telegram_daily_lists_settlement_enhanced created');
 
-    // Index 4: Subscription dashboard (Priority 3)
+    // Index 3: Subscription dashboard (Priority 3)
     // Target query: Dashboard subscription metrics (5-10 second aggregations)
     // File: src/services/dashboard.service.ts:108-117
     logger.info('[Migration:P0-2] Creating idx_customer_subscriptions_dashboard...');
@@ -69,7 +64,7 @@ export async function addPoolOptimizationIndexes(): Promise<void> {
     `);
     logger.info('[Migration:P0-2] ✓ idx_customer_subscriptions_dashboard created');
 
-    logger.info('[Migration:P0-2] All indexes created successfully');
+    logger.info('[Migration:P0-2] All 3 indexes created successfully');
     logger.info('[Migration:P0-2] Expected impact: 40-60% query speedup on hot paths');
 
   } catch (error: any) {
