@@ -16,7 +16,7 @@ const pool = new Pool({
   max: parseInt(process.env.DB_MAX_CONNECTIONS || '10'), // REDUCED for Supabase free tier
   min: 2, // REDUCED to minimize idle connections
   idleTimeoutMillis: 30000, // REDUCED for faster connection release
-  connectionTimeoutMillis: 15000, // Increased for Supabase stability
+  connectionTimeoutMillis: 45000, // Increased for standings queries (45s)
 
   // CRITICAL: Keep-alive settings to prevent connection drops
   keepAlive: true,
