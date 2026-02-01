@@ -334,6 +334,16 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Settle Telegram daily lists by evaluating match results from TheSports API',
   },
+  {
+    name: 'Live Standings Sync',
+    schedule: '*/2 * * * *', // Every 2 minutes
+    handler: async () => {
+      const { syncLiveStandings } = await import('./liveStandingsSync.job');
+      await syncLiveStandings();
+    },
+    enabled: true,
+    description: 'Sync real-time standings from TheSports /table/live (only when live matches exist)',
+  },
 ];
 
 /**
