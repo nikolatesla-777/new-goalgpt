@@ -25,13 +25,17 @@ interface StandingsRow {
 
 export async function adminStandingsRoutes(fastify: FastifyInstance) {
   /**
-   * GET /api/admin/standings/:competitionId
+   * GET /api/admin/standings/:competitionId?view=overall|home|away
    *
    * Returns FULL standings table with ALL statistics
    * Columns: Pos, Team, MP, W, D, L, GF, GA, GD, Pts, Last 5, PPG, CS%, BTTS%, xGF, 1.5+%, 2.5+%, AVG
+   *
+   * Query params:
+   * - view: 'overall' (default), 'home', 'away'
    */
   fastify.get('/api/admin/standings/:competitionId', async (request, reply) => {
     const { competitionId } = request.params as { competitionId: string };
+    const { view = 'overall' } = request.query as { view?: 'overall' | 'home' | 'away' };
 
     try {
       // Get standings from database
@@ -82,6 +86,16 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
       for (const row of rows) {
         const teamId = row.team_id;
 
+        // Build WHERE clause based on view
+        let whereClause = '';
+        if (view === 'home') {
+          whereClause = 'home_team_id = $1';
+        } else if (view === 'away') {
+          whereClause = 'away_team_id = $1';
+        } else {
+          whereClause = '(home_team_id = $1 OR away_team_id = $1)';
+        }
+
         // Get last 20 matches for statistics
         const matchesResult = await pool.query(`
           SELECT
@@ -92,7 +106,7 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
             match_time,
             statistics
           FROM ts_matches
-          WHERE (home_team_id = $1 OR away_team_id = $1)
+          WHERE ${whereClause}
             AND status_id = 8
             AND season_id = $2
           ORDER BY match_time DESC

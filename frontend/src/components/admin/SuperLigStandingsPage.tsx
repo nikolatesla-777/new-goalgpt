@@ -51,16 +51,18 @@ export default function SuperLigStandingsPage() {
   const [data, setData] = useState<StandingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDataSource, setShowDataSource] = useState(false);
+  const [selectedView, setSelectedView] = useState<'overall' | 'home' | 'away'>('overall');
 
   const SUPERLIG_COMPETITION_ID = '8y39mp1h6jmojxg';
 
-  const fetchStandings = async () => {
+  const fetchStandings = async (view: 'overall' | 'home' | 'away' = 'overall') => {
     setLoading(true);
     setError(null);
 
     try {
       const response = await axios.get(
-        `/api/admin/standings/${SUPERLIG_COMPETITION_ID}`
+        `/api/admin/standings/${SUPERLIG_COMPETITION_ID}`,
+        { params: { view } }
       );
 
       setData(response.data);
@@ -89,8 +91,8 @@ export default function SuperLigStandingsPage() {
   };
 
   useEffect(() => {
-    fetchStandings();
-  }, []);
+    fetchStandings(selectedView);
+  }, [selectedView]);
 
   const getFormBadgeColor = (result: string) => {
     switch (result) {
@@ -228,6 +230,50 @@ export default function SuperLigStandingsPage() {
             </div>
           </div>
         )}
+
+        {/* View Selector (HOME/AWAY) */}
+        <div className="bg-gray-800 rounded-xl p-4 mb-6 border border-gray-700">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400 text-sm font-medium">Görünüm:</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedView('overall')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  selectedView === 'overall'
+                    ? 'bg-blue-500 text-white shadow-lg'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                📊 Genel
+              </button>
+              <button
+                onClick={() => setSelectedView('home')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  selectedView === 'home'
+                    ? 'bg-green-500 text-white shadow-lg'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                🏠 İç Saha
+              </button>
+              <button
+                onClick={() => setSelectedView('away')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  selectedView === 'away'
+                    ? 'bg-orange-500 text-white shadow-lg'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                ✈️ Deplasman
+              </button>
+            </div>
+            <div className="ml-auto text-xs text-gray-500">
+              {selectedView === 'overall' && '(Tüm maçlar)'}
+              {selectedView === 'home' && '(Sadece ev sahibi maçlar)'}
+              {selectedView === 'away' && '(Sadece deplasman maçlar)'}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Standings Table */}
