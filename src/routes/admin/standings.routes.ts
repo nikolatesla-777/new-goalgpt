@@ -68,9 +68,9 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
       // Map database field names to expected format
       const rows = standings.map((row: any) => ({
         ...row,
-        mp: row.played,
-        draw: row.drawn,
-        loss: row.lost
+        mp: row.total || row.played || row.mp,
+        draw: row.draw !== undefined ? row.draw : (row.drawn !== undefined ? row.drawn : 0),
+        loss: row.loss !== undefined ? row.loss : (row.lost !== undefined ? row.lost : 0)
       }));
 
       // Get team names
