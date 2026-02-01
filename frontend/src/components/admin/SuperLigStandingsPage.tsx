@@ -345,7 +345,14 @@ export default function SuperLigStandingsPage() {
 
                       {/* Team Name */}
                       <td className="px-4 py-3 font-semibold text-white sticky left-[60px] bg-gray-800 z-10">
-                        {team.team_name}
+                        <div className="flex items-center gap-2">
+                          <span>{team.team_name}</span>
+                          {team.live_points !== undefined && team.points_diff !== 0 && (
+                            <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse">
+                              LIVE
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* TheSports Data */}
@@ -358,7 +365,17 @@ export default function SuperLigStandingsPage() {
                       <td className={`px-3 py-3 text-center bg-yellow-900/5 ${team.goal_diff > 0 ? 'text-green-400' : team.goal_diff < 0 ? 'text-red-400' : 'text-gray-400'}`}>
                         {team.goal_diff > 0 ? '+' : ''}{team.goal_diff}
                       </td>
-                      <td className="px-3 py-3 text-center font-bold text-white bg-yellow-900/5">{team.points}</td>
+                      <td className="px-3 py-3 text-center font-bold bg-yellow-900/5">
+                        {team.live_points !== undefined && team.points_diff !== 0 ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="text-gray-400 line-through text-sm">{team.points}</span>
+                            <span className="text-xl">→</span>
+                            <span className="text-green-400 font-bold text-lg animate-pulse">{team.live_points}</span>
+                          </div>
+                        ) : (
+                          <span className="text-white">{team.points}</span>
+                        )}
+                      </td>
 
                       {/* Calculated Data */}
                       <td className="px-3 py-3 bg-green-900/5">
