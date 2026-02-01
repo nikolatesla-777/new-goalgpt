@@ -28,9 +28,9 @@
       "country_code": "GER",
       "priority": 2,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "kn54qllhjzqvy9d",
+        "season_2025_2026_id": "gx7lm7ph40vm2wd",
+        "db_name": "German Bundesliga 2"
       },
       "footystats": {
         "league_name": "2. Bundesliga",
@@ -300,9 +300,9 @@
       "country_code": "CZE",
       "priority": 18,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "j1l4rjnhl0m7vx5",
+        "season_2025_2026_id": "kjw2r09h8llrz84",
+        "db_name": "Czech Chance Liga"
       },
       "footystats": {
         "league_name": "Czech First League",
@@ -538,9 +538,9 @@
       "country_code": "MEX",
       "priority": 32,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "9k82rekhp6repzj",
+        "season_2025_2026_id": "d23xmvkhe76qg8n",
+        "db_name": "Mexico Liga MX"
       },
       "footystats": {
         "league_name": "Mexican Liga MX",
@@ -725,9 +725,9 @@
       "country_code": "SRB",
       "priority": 43,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "yl5ergphk2r8k0o",
+        "season_2025_2026_id": "j1l4rjnhvz7m7vx",
+        "db_name": "Serbian Mozzart Bet Superliga"
       },
       "footystats": {
         "league_name": "Serbian SuperLiga",
@@ -810,9 +810,9 @@
       "country_code": "SWE",
       "priority": 48,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "l965mkyhg0r1ge4",
+        "season_2025_2026_id": "k82rekhvzv9repz",
+        "db_name": "Sweden Allsvenskan"
       },
       "footystats": {
         "league_name": "Swedish Allsvenskan",
