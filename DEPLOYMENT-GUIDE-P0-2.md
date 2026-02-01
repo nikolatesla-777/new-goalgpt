@@ -8,10 +8,14 @@
 
 ## Quick Overview
 
-This PR adds 4 critical database indexes to resolve pool exhaustion issues by reducing query execution times by 40-60%.
+This PR adds 3 critical database indexes to resolve pool exhaustion issues by reducing query execution times by 40-60%.
+
+**IMPORTANT**: Does NOT duplicate phase8 indexes
+- phase8 already has `idx_matches_live_status` (composite)
+- This PR adds COVERING index (more efficient with INCLUDE clause)
 
 **What's included**:
-- 2 indexes for live matches endpoint (Priority 1 - CRITICAL)
+- 1 covering index for live matches endpoint (Priority 1 - CRITICAL)
 - 1 index for daily lists settlement job (Priority 2)
 - 1 index for subscription dashboard (Priority 3)
 
@@ -56,15 +60,14 @@ npx tsx src/database/migrations/add-pool-optimization-indexes.ts
 **Expected output**:
 ```
 [info]: [Migration:P0-2] Creating performance indexes (CONCURRENTLY)...
-[info]: [Migration:P0-2] Creating idx_ts_matches_live_composite...
-[info]: [Migration:P0-2] ✓ idx_ts_matches_live_composite created
+[info]: [Migration:P0-2] Note: Skipping composite index (phase8 already has idx_matches_live_status)
 [info]: [Migration:P0-2] Creating idx_ts_matches_live_covering...
 [info]: [Migration:P0-2] ✓ idx_ts_matches_live_covering created
 [info]: [Migration:P0-2] Creating idx_telegram_daily_lists_settlement_enhanced...
 [info]: [Migration:P0-2] ✓ idx_telegram_daily_lists_settlement_enhanced created
 [info]: [Migration:P0-2] Creating idx_customer_subscriptions_dashboard...
 [info]: [Migration:P0-2] ✓ idx_customer_subscriptions_dashboard created
-[info]: [Migration:P0-2] All indexes created successfully
+[info]: [Migration:P0-2] All 3 indexes created successfully
 [info]: [Migration:P0-2] Expected impact: 40-60% query speedup on hot paths
 [info]: [Migration:P0-2] Migration completed successfully
 ```
@@ -78,7 +81,7 @@ npx tsx src/database/migrations/add-pool-optimization-indexes.ts
 psql $DATABASE_URL -f scripts/verify-indexes-p0-2.sql
 ```
 
-**Expected output**: Should show all 4 indexes with their sizes and query plans using "Index Scan"
+**Expected output**: Should show all 3 indexes with their sizes and query plans using "Index Scan" or "Index-Only Scan"
 
 ### Step 4: Test API Performance (Optional)
 
@@ -107,38 +110,42 @@ pm2 logs goalgpt-backend --lines 100
 
 After deployment, verify:
 
-- [ ] All 4 indexes created successfully
+- [ ] All 3 indexes created successfully
 - [ ] No errors in migration logs
 - [ ] No errors in application logs
 - [ ] `/api/matches/live` responds in <2 seconds
 - [ ] No increase in database CPU/memory usage
 - [ ] No pool exhaustion errors
 - [ ] Application remains responsive
+- [ ] No duplicate indexes with phase8
 
 ---
 
 ## Quick Verification Commands
 
 ```bash
-# Check index existence
+# Check index existence (3 new indexes)
 psql $DATABASE_URL -c "
 SELECT indexname, pg_size_pretty(pg_relation_size(indexname::regclass)) as size
 FROM pg_indexes
 WHERE indexname IN (
-  'idx_ts_matches_live_composite',
   'idx_ts_matches_live_covering',
   'idx_telegram_daily_lists_settlement_enhanced',
   'idx_customer_subscriptions_dashboard'
 );
 "
 
-# Check index usage
+# Check index usage (including phase8 for comparison)
 psql $DATABASE_URL -c "
 SELECT schemaname, tablename, indexname, idx_scan
 FROM pg_stat_user_indexes
-WHERE indexname LIKE 'idx_ts_matches_live%'
-   OR indexname LIKE 'idx_telegram_daily%'
-   OR indexname LIKE 'idx_customer_subscriptions_dashboard';
+WHERE indexname IN (
+  'idx_ts_matches_live_covering',
+  'idx_telegram_daily_lists_settlement_enhanced',
+  'idx_customer_subscriptions_dashboard',
+  'idx_matches_live_status'
+)
+ORDER BY indexname;
 "
 
 # Test query plan for live matches
@@ -166,7 +173,6 @@ cd /var/www/goalgpt
 psql $DATABASE_URL
 
 # Drop indexes (CONCURRENTLY for safety)
-DROP INDEX CONCURRENTLY IF EXISTS idx_ts_matches_live_composite;
 DROP INDEX CONCURRENTLY IF EXISTS idx_ts_matches_live_covering;
 DROP INDEX CONCURRENTLY IF EXISTS idx_telegram_daily_lists_settlement_enhanced;
 DROP INDEX CONCURRENTLY IF EXISTS idx_customer_subscriptions_dashboard;
@@ -179,7 +185,8 @@ git checkout main
 ```
 
 **Recovery Time**: <5 minutes
-**Impact**: Queries revert to current (slow) behavior
+**Impact**: Live matches queries use phase8's idx_matches_live_status (slower but functional)
+**Note**: phase8 indexes remain untouched
 
 ---
 
@@ -292,11 +299,12 @@ ANALYZE customer_subscriptions;
 ## Success Criteria
 
 ✅ Deployment successful if:
-- All 4 indexes created without errors
-- Query plans show "Index Scan" instead of "Seq Scan"
+- All 3 indexes created without errors
+- Query plans show "Index Scan" or "Index-Only Scan" instead of "Seq Scan"
 - API response times improved by 40-60%
 - No new errors in logs
 - Application remains stable for 24 hours
+- No duplicate indexes with phase8 (verified via pg_indexes)
 
 ---
 

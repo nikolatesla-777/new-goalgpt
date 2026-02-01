@@ -26,7 +26,11 @@
 
 ## Solution Overview
 
-Add 4 production-safe indexes using `CREATE INDEX CONCURRENTLY` pattern (already proven in codebase via `phase8-performance-indexes.ts`).
+Add 3 production-safe indexes using `CREATE INDEX CONCURRENTLY` pattern (already proven in codebase via `phase8-performance-indexes.ts`).
+
+**IMPORTANT**: Does NOT duplicate existing phase8 indexes
+- phase8 already has `idx_matches_live_status` (composite on status_id, match_time)
+- This PR adds COVERING index (more efficient with INCLUDE clause)
 
 **Expected Impact**:
 - 40-60% query speedup on hot paths
@@ -42,21 +46,9 @@ Add 4 production-safe indexes using `CREATE INDEX CONCURRENTLY` pattern (already
 
 **File**: `src/database/migrations/add-pool-optimization-indexes.ts`
 
-Creates 4 critical indexes:
+Creates 3 critical indexes (NOT 4 - avoiding duplication):
 
-#### Index 1: Live Matches Composite Index (Priority 1 - CRITICAL)
-```sql
-CREATE INDEX CONCURRENTLY idx_ts_matches_live_composite
-ON ts_matches (status_id, match_time DESC)
-WHERE status_id IN (2, 3, 4, 5, 7);
-```
-
-**Target**: `/api/matches/live` endpoint
-**Current Speed**: 15+ seconds
-**Expected Speedup**: 80-90% reduction (500ms → 50ms)
-**Why**: Eliminates full table scan, enables efficient status + time filtering
-
-#### Index 2: Live Matches Covering Index (Priority 1 - CRITICAL)
+#### Index 1: Live Matches Covering Index (Priority 1 - CRITICAL)
 ```sql
 CREATE INDEX CONCURRENTLY idx_ts_matches_live_covering
 ON ts_matches (status_id, match_time DESC)
@@ -64,12 +56,13 @@ INCLUDE (external_id, minute, home_score_display, away_score_display, competitio
 WHERE status_id IN (2, 3, 4, 5, 7);
 ```
 
-**Target**: Same endpoint as Index 1
-**Current Speed**: 50ms (after Index 1)
-**Expected Speedup**: Additional 20-30% reduction (50ms → 35ms)
-**Why**: Enables Index-Only Scans, eliminates heap fetches
+**Target**: `/api/matches/live` endpoint
+**Current Speed**: 15+ seconds
+**Expected Speedup**: 80-90% reduction (500ms → 50ms)
+**Why**: Enables Index-Only Scans with INCLUDE clause, more efficient than phase8 composite
+**Note**: Replaces need for phase8's `idx_matches_live_status` (planner will prefer covering index)
 
-#### Index 3: Daily Lists Settlement Enhanced (Priority 2)
+#### Index 2: Daily Lists Settlement Enhanced (Priority 2)
 ```sql
 CREATE INDEX CONCURRENTLY idx_telegram_daily_lists_settlement_enhanced
 ON telegram_daily_lists (status, settled_at, list_date DESC, market)
@@ -84,7 +77,7 @@ WHERE status = 'active'
 **Expected Speedup**: 50-60% reduction (500ms → 200ms)
 **Why**: More specific partial index predicate, includes all WHERE clause columns
 
-#### Index 4: Subscription Dashboard (Priority 3)
+#### Index 3: Subscription Dashboard (Priority 3)
 ```sql
 CREATE INDEX CONCURRENTLY idx_customer_subscriptions_dashboard
 ON customer_subscriptions (status, created_at DESC)
@@ -128,17 +121,15 @@ Provides:
 ### Small Footprint
 | Index | Estimated Size | Impact |
 |-------|----------------|--------|
-| idx_ts_matches_live_composite | 2-5 MB | Very Low |
 | idx_ts_matches_live_covering | 5-10 MB | Very Low |
 | idx_telegram_daily_lists_settlement_enhanced | 100-500 KB | Very Low |
 | idx_customer_subscriptions_dashboard | 1-2 MB | Very Low |
 
-**Total**: ~10-20 MB (negligible for production database)
+**Total**: ~7-12 MB (negligible for production database)
 
 ### Easy Rollback
 Each index can be dropped independently:
 ```sql
-DROP INDEX CONCURRENTLY IF EXISTS idx_ts_matches_live_composite;
 DROP INDEX CONCURRENTLY IF EXISTS idx_ts_matches_live_covering;
 DROP INDEX CONCURRENTLY IF EXISTS idx_telegram_daily_lists_settlement_enhanced;
 DROP INDEX CONCURRENTLY IF EXISTS idx_customer_subscriptions_dashboard;
@@ -161,7 +152,7 @@ npx tsc --noEmit src/database/migrations/add-pool-optimization-indexes.ts
 ```bash
 npx tsx src/database/migrations/add-pool-optimization-indexes.ts
 ```
-✅ All 4 indexes created successfully
+✅ All 3 indexes created successfully
 
 ### 3. Index Verification
 ```bash
@@ -176,7 +167,7 @@ SELECT * FROM ts_matches
 WHERE status_id IN (2,3,4,5,7)
 ORDER BY match_time DESC;
 ```
-✅ Shows "Index Scan using idx_ts_matches_live_composite" (not Seq Scan)
+✅ Shows "Index Scan using idx_ts_matches_live_covering" or "idx_matches_live_status" (both valid)
 
 ---
 
@@ -250,11 +241,11 @@ SELECT
   idx_tup_fetch
 FROM pg_stat_user_indexes
 WHERE indexname IN (
-  'idx_ts_matches_live_composite',
   'idx_ts_matches_live_covering',
   'idx_telegram_daily_lists_settlement_enhanced',
   'idx_customer_subscriptions_dashboard'
-);
+)
+OR indexname = 'idx_matches_live_status'; -- phase8 index (for comparison)
 ```
 
 ### 4. Pool Metrics
@@ -287,11 +278,13 @@ WHERE indexname IN (
 
 | File | Type | Lines | Description |
 |------|------|-------|-------------|
-| `src/database/migrations/add-pool-optimization-indexes.ts` | NEW | 120 | Index creation migration |
-| `scripts/verify-indexes-p0-2.sql` | NEW | 150 | Verification queries |
-| `PR-P0-2-DESCRIPTION.md` | NEW | 350 | This PR documentation |
+| `src/database/migrations/add-pool-optimization-indexes.ts` | NEW | ~100 | Index creation migration (3 indexes) |
+| `scripts/verify-indexes-p0-2.sql` | NEW | ~140 | Verification queries |
+| `PR-P0-2-DESCRIPTION.md` | NEW | ~320 | This PR documentation |
 
 **Total**: 3 new files, 0 modifications
+
+**Important Note**: Migration intentionally avoids duplicating phase8's `idx_matches_live_status`
 
 ---
 
@@ -301,19 +294,20 @@ If indexes cause unexpected issues:
 
 ### Quick Rollback (Emergency)
 ```sql
--- Drop all 4 indexes immediately
-DROP INDEX CONCURRENTLY IF EXISTS idx_ts_matches_live_composite;
+-- Drop all 3 indexes immediately
 DROP INDEX CONCURRENTLY IF EXISTS idx_ts_matches_live_covering;
 DROP INDEX CONCURRENTLY IF EXISTS idx_telegram_daily_lists_settlement_enhanced;
 DROP INDEX CONCURRENTLY IF EXISTS idx_customer_subscriptions_dashboard;
 ```
 
+**Note**: phase8's `idx_matches_live_status` will remain and continue to work
+
 ### Selective Rollback
 Drop individual indexes if specific issues arise:
 ```sql
--- Example: If covering index causes issues, keep composite index
+-- Example: If covering index causes issues, drop it (phase8 composite will take over)
 DROP INDEX CONCURRENTLY IF EXISTS idx_ts_matches_live_covering;
--- Keep idx_ts_matches_live_composite
+-- phase8's idx_matches_live_status continues to work
 ```
 
 **Recovery Time**: <5 minutes
@@ -339,15 +333,16 @@ DROP INDEX CONCURRENTLY IF EXISTS idx_ts_matches_live_covering;
 
 ## Success Criteria
 
-- [ ] All 4 indexes created successfully
+- [ ] All 3 indexes created successfully
 - [ ] No invalid indexes in pg_index
-- [ ] Query plans show Index Scan (not Seq Scan)
+- [ ] Query plans show Index Scan or Index-Only Scan (not Seq Scan)
 - [ ] `/api/matches/live` responds in <2 seconds
 - [ ] Daily lists settlement completes in <3 seconds
 - [ ] Dashboard queries complete in <8 seconds total
 - [ ] No increase in pool exhaustion errors
 - [ ] No production incidents
 - [ ] 24-hour monitoring shows stable performance
+- [ ] No duplicate indexes (verified against phase8)
 
 ---
 
