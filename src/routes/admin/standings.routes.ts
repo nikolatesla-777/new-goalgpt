@@ -80,69 +80,122 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         teamMap[team.external_id] = team.name;
       });
 
+      // OPTIMIZATION: Fetch ALL matches for ALL teams in one query
+      let allMatchesResult;
+      if (view === 'home') {
+        allMatchesResult = await pool.query(`
+          SELECT
+            home_team_id,
+            away_team_id,
+            home_score_display,
+            away_score_display,
+            match_time,
+            statistics
+          FROM (
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics,
+              ROW_NUMBER() OVER (PARTITION BY home_team_id ORDER BY match_time DESC) as rn
+            FROM ts_matches
+            WHERE home_team_id = ANY($1::text[])
+              AND status_id = 8
+              AND season_id = $2
+          ) subquery
+          WHERE rn <= 20
+        `, [teamIds, seasonId]);
+      } else if (view === 'away') {
+        allMatchesResult = await pool.query(`
+          SELECT
+            home_team_id,
+            away_team_id,
+            home_score_display,
+            away_score_display,
+            match_time,
+            statistics
+          FROM (
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics,
+              ROW_NUMBER() OVER (PARTITION BY away_team_id ORDER BY match_time DESC) as rn
+            FROM ts_matches
+            WHERE away_team_id = ANY($1::text[])
+              AND status_id = 8
+              AND season_id = $2
+          ) subquery
+          WHERE rn <= 20
+        `, [teamIds, seasonId]);
+      } else {
+        allMatchesResult = await pool.query(`
+          SELECT
+            home_team_id,
+            away_team_id,
+            home_score_display,
+            away_score_display,
+            match_time,
+            statistics
+          FROM (
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics,
+              CASE
+                WHEN home_team_id = ANY($1::text[]) THEN home_team_id
+                ELSE away_team_id
+              END as team_id,
+              ROW_NUMBER() OVER (
+                PARTITION BY
+                  CASE
+                    WHEN home_team_id = ANY($1::text[]) THEN home_team_id
+                    ELSE away_team_id
+                  END
+                ORDER BY match_time DESC
+              ) as rn
+            FROM ts_matches
+            WHERE (home_team_id = ANY($1::text[]) OR away_team_id = ANY($1::text[]))
+              AND status_id = 8
+              AND season_id = $2
+          ) subquery
+          WHERE rn <= 20
+        `, [teamIds, seasonId]);
+      }
+
+      // Group matches by team
+      const matchesByTeam: Record<string, any[]> = {};
+      teamIds.forEach(id => matchesByTeam[id] = []);
+
+      allMatchesResult.rows.forEach((match: any) => {
+        if (view === 'home' && matchesByTeam[match.home_team_id]) {
+          matchesByTeam[match.home_team_id].push(match);
+        } else if (view === 'away' && matchesByTeam[match.away_team_id]) {
+          matchesByTeam[match.away_team_id].push(match);
+        } else if (view === 'overall') {
+          // For overall view, add match to both teams involved
+          if (matchesByTeam[match.home_team_id]) {
+            matchesByTeam[match.home_team_id].push(match);
+          }
+          if (matchesByTeam[match.away_team_id]) {
+            matchesByTeam[match.away_team_id].push(match);
+          }
+        }
+      });
+
       // Calculate ALL statistics for each team
       const standings: StandingsRow[] = [];
 
       for (const row of rows) {
         const teamId = row.team_id;
-
-        // Get last 20 matches for statistics - with view filter
-        let matchesResult;
-
-        if (view === 'home') {
-          // HOME: Only matches where team is home
-          matchesResult = await pool.query(`
-            SELECT
-              home_team_id,
-              away_team_id,
-              home_score_display,
-              away_score_display,
-              match_time,
-              statistics
-            FROM ts_matches
-            WHERE home_team_id = $1
-              AND status_id = 8
-              AND season_id = $2
-            ORDER BY match_time DESC
-            LIMIT 20
-          `, [teamId, seasonId]);
-        } else if (view === 'away') {
-          // AWAY: Only matches where team is away
-          matchesResult = await pool.query(`
-            SELECT
-              home_team_id,
-              away_team_id,
-              home_score_display,
-              away_score_display,
-              match_time,
-              statistics
-            FROM ts_matches
-            WHERE away_team_id = $1
-              AND status_id = 8
-              AND season_id = $2
-            ORDER BY match_time DESC
-            LIMIT 20
-          `, [teamId, seasonId]);
-        } else {
-          // OVERALL: All matches (home + away)
-          matchesResult = await pool.query(`
-            SELECT
-              home_team_id,
-              away_team_id,
-              home_score_display,
-              away_score_display,
-              match_time,
-              statistics
-            FROM ts_matches
-            WHERE (home_team_id = $1 OR away_team_id = $1)
-              AND status_id = 8
-              AND season_id = $2
-            ORDER BY match_time DESC
-            LIMIT 20
-          `, [teamId, seasonId]);
-        }
-
-        const matches = matchesResult.rows;
+        const matches = matchesByTeam[teamId] || [];
 
         // Calculate statistics (including W-D-L for home/away)
         let matchesPlayed = matches.length;
