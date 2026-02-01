@@ -40,7 +40,7 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
     try {
       // Get standings from database
       const standingsResult = await pool.query(`
-        SELECT st.raw_response, st.updated_at, s.external_id as season_id
+        SELECT st.standings, st.updated_at, s.external_id as season_id
         FROM ts_standings st
         INNER JOIN ts_seasons s ON st.season_id = s.external_id
         WHERE s.competition_id = $1
@@ -55,17 +55,23 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const rawResponse = standingsResult.rows[0].raw_response;
+      const standings = standingsResult.rows[0].standings;
       const seasonId = standingsResult.rows[0].season_id;
       const updatedAt = standingsResult.rows[0].updated_at;
 
-      if (!rawResponse.results?.tables?.[0]?.rows) {
+      if (!Array.isArray(standings) || standings.length === 0) {
         return reply.status(404).send({
           error: 'Invalid standings data structure'
         });
       }
 
-      const rows = rawResponse.results.tables[0].rows;
+      // Map database field names to expected format
+      const rows = standings.map((row: any) => ({
+        ...row,
+        mp: row.played,
+        draw: row.drawn,
+        loss: row.lost
+      }));
 
       // Get team names
       const teamIds = rows.map((row: any) => row.team_id);
