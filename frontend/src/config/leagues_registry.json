@@ -1,0 +1,167 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-02-01",
+  "description": "Top 10 European leagues with TheSports + FootyStats mapping (Hobby Package)",
+  "leagues": [
+    {
+      "id": "premier-league",
+      "name": "Premier League",
+      "display_name": "Premier League",
+      "country": "England",
+      "country_code": "ENG",
+      "priority": 1,
+      "thesports": {
+        "competition_id": "jednm9whz0ryox8",
+        "season_2025_2026_id": "l965mkyhjpxr1ge",
+        "db_name": "English Premier League"
+      },
+      "footystats": {
+        "league_name": "Premier League",
+        "country": "England"
+      }
+    },
+    {
+      "id": "la-liga",
+      "name": "La Liga",
+      "display_name": "La Liga",
+      "country": "Spain",
+      "country_code": "ESP",
+      "priority": 2,
+      "thesports": {
+        "competition_id": "vl7oqdehlyr510j",
+        "season_2025_2026_id": "56ypq3nhxw7md7o",
+        "db_name": "Spanish La Liga"
+      },
+      "footystats": {
+        "league_name": "La Liga",
+        "country": "Spain"
+      }
+    },
+    {
+      "id": "bundesliga",
+      "name": "Bundesliga",
+      "display_name": "Bundesliga",
+      "country": "Germany",
+      "country_code": "GER",
+      "priority": 3,
+      "thesports": {
+        "competition_id": "gy0or5jhg6qwzv3",
+        "season_2025_2026_id": null,
+        "db_name": "Bundesliga"
+      },
+      "footystats": {
+        "league_name": "Bundesliga",
+        "country": "Germany"
+      }
+    },
+    {
+      "id": "serie-a",
+      "name": "Serie A",
+      "display_name": "Serie A",
+      "country": "Italy",
+      "country_code": "ITA",
+      "priority": 4,
+      "thesports": {
+        "competition_id": "4zp5rzghp5q82w1",
+        "season_2025_2026_id": "4zp5rzghn83q82w",
+        "db_name": "Italian Serie A"
+      },
+      "footystats": {
+        "league_name": "Serie A",
+        "country": "Italy"
+      }
+    },
+    {
+      "id": "ligue-1",
+      "name": "Ligue 1",
+      "display_name": "Ligue 1",
+      "country": "France",
+      "country_code": "FRA",
+      "priority": 5,
+      "thesports": {
+        "competition_id": "yl5ergphnzr8k0o",
+        "season_2025_2026_id": "9dn1m1gh645moep",
+        "db_name": "French Ligue 1"
+      },
+      "footystats": {
+        "league_name": "Ligue 1",
+        "country": "France"
+      }
+    },
+    {
+      "id": "super-lig",
+      "name": "Süper Lig",
+      "display_name": "Süper Lig",
+      "country": "Turkey",
+      "country_code": "TUR",
+      "priority": 6,
+      "thesports": {
+        "competition_id": "8y39mp1h6jmojxg",
+        "season_2025_2026_id": "4zp5rzgh8xvq82w",
+        "db_name": "Turkish Super League"
+      },
+      "footystats": {
+        "league_name": "Süper Lig",
+        "country": "Turkey"
+      }
+    },
+    {
+      "id": "eredivisie",
+      "name": "Eredivisie",
+      "display_name": "Eredivisie",
+      "country": "Netherlands",
+      "country_code": "NED",
+      "priority": 7,
+      "thesports": {
+        "competition_id": "vl7oqdeheyr510j",
+        "season_2025_2026_id": null,
+        "db_name": "Netherlands Eredivisie"
+      },
+      "footystats": {
+        "league_name": "Eredivisie",
+        "country": "Netherlands"
+      }
+    },
+    {
+      "id": "belgian-pro-league",
+      "name": "Belgian Pro League",
+      "display_name": "Pro League",
+      "country": "Belgium",
+      "country_code": "BEL",
+      "priority": 8,
+      "thesports": {
+        "competition_id": "9vjxm8gh22r6odg",
+        "season_2025_2026_id": "jednm9wh1klryox",
+        "db_name": "Belgian Pro League"
+      },
+      "footystats": {
+        "league_name": "Pro League",
+        "country": "Belgium"
+      }
+    },
+    {
+      "id": "scottish-premiership",
+      "name": "Scottish Premiership",
+      "display_name": "Premiership",
+      "country": "Scotland",
+      "country_code": "SCO",
+      "priority": 9,
+      "thesports": {
+        "competition_id": "p4jwq2gh1gm0veo",
+        "season_2025_2026_id": "p4jwq2ghlv3m0ve",
+        "db_name": "Scottish Premiership"
+      },
+      "footystats": {
+        "league_name": "Premiership",
+        "country": "Scotland"
+      }
+    }
+  ],
+  "notes": {
+    "package": "FootyStats Hobby Package - Top 10 European Leagues",
+    "thesports_ids": "Filled from ts_competitions table WHERE year LIKE '%2025%' OR year LIKE '%2026%'",
+    "footystats_ids": "League names from FootyStats API league-list endpoint",
+    "priority": "1 = Highest priority (auto-sync always), 10+ = Lower priority",
+    "missing_season_ids": "Some leagues don't have 2025-2026 season in database yet (marked as null)"
+  }
+}
