@@ -86,7 +86,219 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         teamMap[team.external_id] = team.name;
       });
 
-      // OPTIMIZATION: Fetch ALL matches for ALL teams in one query
+      // FOR OVERALL VIEW: Use database standings directly (they're already correct!)
+      // Only fetch matches for calculating additional metrics (Last 5, PPG, CS%, etc.)
+      if (view === 'overall') {
+        // Use database standings for core stats (MP, W, D, L, Pts)
+        const calculatedStandings: StandingsRow[] = [];
+
+        // Fetch last 20 matches for each team for additional metrics
+        const allMatchesResult = await pool.query(`
+          SELECT
+            home_team_id,
+            away_team_id,
+            home_score_display,
+            away_score_display,
+            match_time,
+            statistics
+          FROM (
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics,
+              CASE
+                WHEN home_team_id = ANY($1::text[]) THEN home_team_id
+                ELSE away_team_id
+              END as team_id,
+              ROW_NUMBER() OVER (
+                PARTITION BY
+                  CASE
+                    WHEN home_team_id = ANY($1::text[]) THEN home_team_id
+                    ELSE away_team_id
+                  END
+                ORDER BY match_time DESC
+              ) as rn
+            FROM ts_matches
+            WHERE (home_team_id = ANY($1::text[]) OR away_team_id = ANY($1::text[]))
+              AND status_id = 8
+              AND season_id = $2
+          ) subquery
+          WHERE rn <= 20
+        `, [teamIds, seasonId]);
+
+        // Group matches by team
+        const matchesByTeam: Record<string, any[]> = {};
+        teamIds.forEach(id => matchesByTeam[id] = []);
+
+        allMatchesResult.rows.forEach((match: any) => {
+          if (matchesByTeam[match.home_team_id]) {
+            matchesByTeam[match.home_team_id].push(match);
+          }
+          if (matchesByTeam[match.away_team_id]) {
+            matchesByTeam[match.away_team_id].push(match);
+          }
+        });
+
+        // Build standings using DATABASE values + calculated metrics
+        for (const row of rows) {
+          const teamId = row.team_id;
+          const matches = matchesByTeam[teamId] || [];
+
+          // USE DATABASE VALUES for core stats
+          const mp = row.total || row.mp || 0;
+          const won = row.won || 0;
+          const draw = row.draw || 0;
+          const loss = row.loss || 0;
+          const points = row.points || 0;
+          const goalsFor = row.goals || 0;
+          const goalsAgainst = row.goals_against || 0;
+          const goalDiff = row.goal_diff || 0;
+
+          // Calculate ADDITIONAL metrics from matches
+          let cleanSheets = 0;
+          let bttsCount = 0;
+          let over15Count = 0;
+          let over25Count = 0;
+          let totalXgFor = 0;
+          let xgCount = 0;
+
+          // Last 5 form
+          const last5Form: string[] = [];
+
+          matches.slice(0, Math.min(20, matches.length)).forEach((match: any, index: number) => {
+            const isHome = match.home_team_id === teamId;
+            const teamScore = isHome ? match.home_score_display : match.away_score_display;
+            const opponentScore = isHome ? match.away_score_display : match.home_score_display;
+            const totalMatchGoals = teamScore + opponentScore;
+
+            // Last 5 form
+            if (index < 5) {
+              if (teamScore > opponentScore) {
+                last5Form.push('W');
+              } else if (teamScore === opponentScore) {
+                last5Form.push('D');
+              } else {
+                last5Form.push('L');
+              }
+            }
+
+            // Clean sheet
+            if (opponentScore === 0) {
+              cleanSheets++;
+            }
+
+            // BTTS
+            if (teamScore > 0 && opponentScore > 0) {
+              bttsCount++;
+            }
+
+            // Over 1.5 total goals
+            if (totalMatchGoals > 1) {
+              over15Count++;
+            }
+
+            // Over 2.5 total goals
+            if (totalMatchGoals > 2) {
+              over25Count++;
+            }
+
+            // xG (if available)
+            if (match.statistics?.xg) {
+              const xgFor = isHome ? match.statistics.xg.home : match.statistics.xg.away;
+              if (typeof xgFor === 'number') {
+                totalXgFor += xgFor;
+                xgCount++;
+              }
+            }
+          });
+
+          const matchCount = matches.length;
+
+          calculatedStandings.push({
+            position: row.position,
+            team_id: teamId,
+            team_name: teamMap[teamId] || teamId,
+            mp,
+            won,
+            draw,
+            loss,
+            goals_for: goalsFor,
+            goals_against: goalsAgainst,
+            goal_diff: goalDiff,
+            points,
+            last_5: last5Form.reverse(),
+            ppg: mp > 0 ? parseFloat((points / mp).toFixed(2)) : 0,
+            cs_percent: matchCount > 0 ? Math.round((cleanSheets / matchCount) * 100) : 0,
+            btts_percent: matchCount > 0 ? Math.round((bttsCount / matchCount) * 100) : 0,
+            xgf: xgCount > 0 ? parseFloat((totalXgFor / xgCount).toFixed(2)) : null,
+            over_15_percent: matchCount > 0 ? Math.round((over15Count / matchCount) * 100) : 0,
+            over_25_percent: matchCount > 0 ? Math.round((over25Count / matchCount) * 100) : 0,
+            avg_goals: matchCount > 0 ? parseFloat((goalsFor / mp).toFixed(2)) : 0
+          });
+        }
+
+        // Check for live matches
+        const liveMatchesResult = await pool.query(`
+          SELECT
+            m.external_id,
+            m.home_team_id,
+            m.away_team_id,
+            m.home_score_display,
+            m.away_score_display,
+            m.status_id
+          FROM ts_matches m
+          WHERE m.season_id = $1
+            AND m.status_id IN (2, 3, 4, 5, 7)
+        `, [seasonId]);
+
+        let hasLiveMatches = liveMatchesResult.rows.length > 0;
+
+        if (hasLiveMatches) {
+          const livePointsMap: Record<string, number> = {};
+
+          liveMatchesResult.rows.forEach((match: any) => {
+            const homeScore = match.home_score_display || 0;
+            const awayScore = match.away_score_display || 0;
+
+            let homePoints = 0;
+            let awayPoints = 0;
+
+            if (homeScore > awayScore) {
+              homePoints = 3;
+            } else if (homeScore < awayScore) {
+              awayPoints = 3;
+            } else {
+              homePoints = 1;
+              awayPoints = 1;
+            }
+
+            livePointsMap[match.home_team_id] = (livePointsMap[match.home_team_id] || 0) + homePoints;
+            livePointsMap[match.away_team_id] = (livePointsMap[match.away_team_id] || 0) + awayPoints;
+          });
+
+          calculatedStandings.forEach(team => {
+            if (livePointsMap[team.team_id] !== undefined) {
+              const tempPoints = livePointsMap[team.team_id];
+              (team as any).live_points = team.points + tempPoints;
+              (team as any).live_position = team.position;
+              (team as any).points_diff = tempPoints;
+            }
+          });
+        }
+
+        return reply.send({
+          competition_id: competitionId,
+          season_id: seasonId,
+          updated_at: updatedAt,
+          has_live_matches: hasLiveMatches,
+          standings: calculatedStandings
+        });
+      }
+
+      // FOR HOME/AWAY VIEWS: Calculate from matches (existing logic)
       let allMatchesResult;
       if (view === 'home') {
         allMatchesResult = await pool.query(`
