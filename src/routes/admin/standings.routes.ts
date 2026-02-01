@@ -144,7 +144,11 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
 
         const matches = matchesResult.rows;
 
-        // Calculate statistics
+        // Calculate statistics (including W-D-L for home/away)
+        let matchesPlayed = matches.length;
+        let wins = 0;
+        let draws = 0;
+        let losses = 0;
         let cleanSheets = 0;
         let bttsCount = 0;
         let over15Count = 0;
@@ -162,6 +166,15 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
           const teamScore = isHome ? match.home_score_display : match.away_score_display;
           const opponentScore = isHome ? match.away_score_display : match.home_score_display;
           const totalMatchGoals = teamScore + opponentScore;
+
+          // W-D-L calculation
+          if (teamScore > opponentScore) {
+            wins++;
+          } else if (teamScore === opponentScore) {
+            draws++;
+          } else {
+            losses++;
+          }
 
           // Goals
           totalGoalsScored += teamScore;
@@ -205,21 +218,23 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         });
 
         const matchCount = matches.length;
+        const calculatedPoints = wins * 3 + draws;
+        const goalDiff = totalGoalsScored - totalGoalsConceded;
 
         standings.push({
-          position: row.position,
+          position: row.position, // Will be recalculated after sorting
           team_id: row.team_id,
           team_name: teamMap[row.team_id] || row.team_id,
-          mp: row.total,
-          won: row.won,
-          draw: row.draw,
-          loss: row.loss,
-          goals_for: row.goals,
-          goals_against: row.goals_against,
-          goal_diff: row.goal_diff,
-          points: row.points,
+          mp: matchesPlayed,
+          won: wins,
+          draw: draws,
+          loss: losses,
+          goals_for: totalGoalsScored,
+          goals_against: totalGoalsConceded,
+          goal_diff: goalDiff,
+          points: calculatedPoints,
           last_5: last5Form.reverse(),
-          ppg: row.total > 0 ? parseFloat((row.points / row.total).toFixed(2)) : 0,
+          ppg: matchesPlayed > 0 ? parseFloat((calculatedPoints / matchesPlayed).toFixed(2)) : 0,
           cs_percent: matchCount > 0 ? Math.round((cleanSheets / matchCount) * 100) : 0,
           btts_percent: matchCount > 0 ? Math.round((bttsCount / matchCount) * 100) : 0,
           xgf: xgCount > 0 ? parseFloat((totalXgFor / xgCount).toFixed(2)) : null,
@@ -228,6 +243,18 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
           avg_goals: matchCount > 0 ? parseFloat((totalGoalsScored / matchCount).toFixed(2)) : 0
         });
       }
+
+      // Re-sort standings by points, goal_diff, goals_for (standard league table rules)
+      standings.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.goal_diff !== a.goal_diff) return b.goal_diff - a.goal_diff;
+        return b.goals_for - a.goals_for;
+      });
+
+      // Recalculate positions after sorting
+      standings.forEach((team, index) => {
+        team.position = index + 1;
+      });
 
       return reply.send({
         competition_id: competitionId,
