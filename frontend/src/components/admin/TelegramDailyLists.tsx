@@ -589,7 +589,7 @@ export function TelegramDailyLists() {
                                       <div className="flex items-center justify-between mb-2">
                                         <span className="text-xs font-semibold opacity-90">Performans</span>
                                         <span className="text-lg font-bold">
-                                          {list.performance.won}/{list.performance.total - list.performance.pending}
+                                          {list.performance.won}/{list.performance.total}
                                           {list.performance.pending === 0 && (
                                             <span className="text-xs ml-1 opacity-80">
                                               ({list.performance.win_rate}%)
@@ -741,7 +741,7 @@ export function TelegramDailyLists() {
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-xs font-semibold opacity-90">Performans</span>
                               <span className="text-lg font-bold">
-                                {list.performance.won}/{list.performance.total - list.performance.pending}
+                                {list.performance.won}/{list.performance.total}
                                 {list.performance.pending === 0 && (
                                   <span className="text-xs ml-1 opacity-80">
                                     ({list.performance.win_rate}%)
