@@ -197,7 +197,7 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
       });
 
       // Calculate ALL statistics for each team
-      const standings: StandingsRow[] = [];
+      const calculatedStandings: StandingsRow[] = [];
 
       for (const row of rows) {
         const teamId = row.team_id;
@@ -280,7 +280,7 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         const calculatedPoints = wins * 3 + draws;
         const goalDiff = totalGoalsScored - totalGoalsConceded;
 
-        standings.push({
+        calculatedStandings.push({
           position: row.position, // Will be recalculated after sorting
           team_id: row.team_id,
           team_name: teamMap[row.team_id] || row.team_id,
@@ -304,14 +304,14 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
       }
 
       // Re-sort standings by points, goal_diff, goals_for (standard league table rules)
-      standings.sort((a, b) => {
+      calculatedStandings.sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
         if (b.goal_diff !== a.goal_diff) return b.goal_diff - a.goal_diff;
         return b.goals_for - a.goals_for;
       });
 
       // Recalculate positions after sorting
-      standings.forEach((team, index) => {
+      calculatedStandings.forEach((team, index) => {
         team.position = index + 1;
       });
 
@@ -365,7 +365,7 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
           });
 
           // Apply live points to standings
-          standings.forEach(team => {
+          calculatedStandings.forEach(team => {
             if (livePointsMap[team.team_id] !== undefined) {
               const tempPoints = livePointsMap[team.team_id];
               (team as any).live_points = team.points + tempPoints;
@@ -381,7 +381,7 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         season_id: seasonId,
         updated_at: updatedAt,
         has_live_matches: hasLiveMatches,
-        standings
+        standings: calculatedStandings
       });
 
     } catch (err: any) {
