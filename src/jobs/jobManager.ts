@@ -409,6 +409,16 @@ const jobs: JobDefinition[] = [
     enabled: false, // FEATURE-FLAGGED: Enable via AUTO_PUBLISH_ENABLED=true
     description: 'PHASE-3B.4: Auto-publish predictions (feature-flagged, kill switch enabled)',
   },
+  {
+    name: 'Live Standings Sync',
+    schedule: '*/2 * * * *', // Every 2 minutes
+    handler: async () => {
+      const { syncLiveStandings } = await import('./liveStandingsSync.job');
+      await syncLiveStandings();
+    },
+    enabled: true,
+    description: 'Sync real-time standings from TheSports /table/live (only when live matches exist)',
+  },
 ];
 
 /**

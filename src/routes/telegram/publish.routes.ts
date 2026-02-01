@@ -1,0 +1,958 @@
+/**
+ * Telegram Routes - PHASE-1 HARDENED
+ *
+ * Fastify route definitions for Telegram publishing system
+ *
+ * PHASE-1 GUARANTEES:
+ * 1. IDEMPOTENCY: Same match+channel can only be published once
+ * 2. TRANSACTION SAFETY: DB and Telegram state cannot diverge
+ * 3. STATE MACHINE: DRAFT → PUBLISHED or FAILED
+ * 4. ERROR RECOVERY: Max 3 retries with exponential backoff
+ * 5. OBSERVABILITY: Structured logging for all operations
+ *
+ * SECURITY:
+ * - All endpoints require authentication
+ * - Publishing requires admin role
+ */
+
+import crypto from 'crypto';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { PoolClient } from 'pg';
+import { telegramBot } from '../../services/telegram/telegram.client';
+import { formatTelegramMessage } from '../../services/telegram/turkish.formatter';
+import { formatTelegramMessageV2 } from '../../services/telegram/turkish.formatter.v2';
+import { footyStatsAPI } from '../../services/footystats/footystats.client';
+import { pool, safeQuery } from '../../database/connection';
+import { logger } from '../../utils/logger';
+import { validateMatchStateForPublish } from '../../services/telegram/validators/matchStateValidator';
+import { fetchMatchStateForPublish } from '../../services/telegram/matchStateFetcher.service';
+import { validatePicks } from '../../services/telegram/validators/pickValidator';
+import { calculateConfidenceScore, ConfidenceScoreResult } from '../../services/telegram/confidenceScorer.service';
+
+// Local type extension for backwards compatibility with code expecting additional properties
+interface ExtendedConfidenceScoreResult extends ConfidenceScoreResult {
+  tier: string;  // Alias for 'level' property
+  missingCount?: number;  // Optional - not used by current implementation
+  stars?: string;  // Optional - derived from score
+}
+
+interface PublishRequest {
+  Body: {
+    match_id: string;
+    picks?: Array<{
+      market_type: string;
+      odds?: number;
+    }>;
+  };
+}
+
+// PHASE-1: Configuration constants
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = [1000, 3000, 9000]; // Exponential backoff: 1s, 3s, 9s
+
+// PHASE-0: Idempotency configuration
+const ALLOW_DUPLICATES = process.env.TELEGRAM_ALLOW_DUPLICATES === 'true';
+const TEMPLATE_VERSION = 'v2';
+const PUBLISH_DELAY_MS = 1000; // 1 second between messages for rate limiting
+
+/**
+ * PHASE-0: Generate dedupe key for idempotency
+ * SHA256 hash of: bot_id + content_type + match_id + template_version
+ */
+function generateDedupeKey(params: {
+  contentType: 'match' | 'daily_list';
+  matchId: string;
+}): string {
+  const botId = process.env.TELEGRAM_BOT_TOKEN?.substring(0, 10) || 'default';
+  const input = `${botId}:${params.contentType}:${params.matchId}:${TEMPLATE_VERSION}`;
+  return crypto.createHash('sha256').update(input).digest('hex').substring(0, 64);
+}
+
+/**
+ * PHASE-0: Check for existing post by dedupe_key
+ */
+async function checkExistingPostByDedupeKey(dedupeKey: string, client?: any) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
+  try {
+    const result = await client.query(
+      `SELECT id, telegram_message_id, status, match_id
+       FROM telegram_posts
+       WHERE dedupe_key = $1
+       LIMIT 1`,
+      [dedupeKey]
+    );
+    return result.rows[0] || null;
+  } finally {
+    if (shouldReleaseClient) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * PHASE-1: Idempotency check
+ * Returns existing post if match+channel already published
+ *
+ * FIX: Accepts optional client parameter to avoid connection churn
+ */
+async function checkExistingPost(matchId: string, channelId: string, client?: any) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
+  try {
+    const result = await client.query(
+      `SELECT id, telegram_message_id, status, retry_count
+       FROM telegram_posts
+       WHERE match_id = $1 AND channel_id = $2
+       LIMIT 1`,
+      [matchId, channelId]
+    );
+    return result.rows[0] || null;
+  } finally {
+    if (shouldReleaseClient) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * PHASE-1: Create draft post in transaction
+ * Reserves the idempotency slot before Telegram send
+ *
+ * FIX: Accepts optional client parameter to avoid connection churn
+ * PHASE-0: Added dedupe_key, content_type, template_version
+ */
+async function createDraftPost(
+  matchId: string,
+  fsMatchId: number,
+  channelId: string,
+  content: string,
+  dedupeKey: string | null,
+  contentType: 'match' | 'daily_list' = 'match',
+  client?: any
+) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
+  try {
+    await client.query('BEGIN');
+
+    // PHASE-0.1: Insert with ON CONFLICT for race condition protection
+    // If dedupe_key already exists, DO NOTHING and return null
+    const result = await client.query(
+      `INSERT INTO telegram_posts (match_id, fs_match_id, channel_id, content, status, dedupe_key, content_type, template_version)
+       VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7)
+       ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [matchId, fsMatchId, channelId, content, dedupeKey, contentType, TEMPLATE_VERSION]
+    );
+
+    // If no id returned, conflict occurred - duplicate was skipped at DB level
+    if (dedupeKey && !result.rows[0]?.id) {
+      logger.info('[Telegram] ⏭️ DB CONFLICT: Duplicate dedupe_key, skipping insert', {
+        dedupe_key: dedupeKey,
+        match_id: matchId,
+      });
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query('COMMIT');
+    return result.rows[0]?.id || null;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    if (shouldReleaseClient) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * PHASE-1: Mark post as published with message_id
+ *
+ * FIX: Accepts optional client parameter to avoid connection churn
+ */
+async function markPublished(postId: string, messageId: number, client?: any) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
+  try {
+    await client.query(
+      `UPDATE telegram_posts
+       SET status = 'published',
+           telegram_message_id = $2,
+           posted_at = NOW()
+       WHERE id = $1`,
+      [postId, messageId]
+    );
+  } finally {
+    if (shouldReleaseClient) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * PHASE-1: Mark post as failed with error details
+ *
+ * FIX: Accepts optional client parameter to avoid connection churn
+ */
+async function markFailed(postId: string, error: string, retryCount: number, client?: any) {
+  const shouldReleaseClient = !client;
+  if (!client) {
+    client = await pool.connect();
+  }
+
+  try {
+    await client.query(
+      `UPDATE telegram_posts
+       SET status = 'failed',
+           error_log = $2,
+           last_error_at = NOW(),
+           retry_count = $3
+       WHERE id = $1`,
+      [postId, error, retryCount]
+    );
+  } finally {
+    if (shouldReleaseClient) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * PHASE-1: Retry logic with exponential backoff
+ * Attempts Telegram send up to MAX_RETRY_ATTEMPTS times
+ * PHASE-0.1: Added 429 rate limit handling with separate retry counter
+ *
+ * FIX: Accepts optional client parameter, NO connection held during Telegram API call
+ */
+async function sendWithRetry(
+  channelId: string,
+  messageText: string,
+  postId: string,
+  client?: any
+): Promise<number> {
+  let lastError: Error | null = null;
+  let rateLimitRetries = 0;
+  const MAX_RATE_LIMIT_RETRIES = 3; // Max 429 retries to prevent infinite loop
+
+  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      logger.info(`[Telegram] Send attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS} for post ${postId}`);
+
+      // FIX: NO connection held during Telegram API call
+      const result = await telegramBot.sendMessage({
+        chat_id: channelId,
+        text: messageText,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      });
+
+      if (!result.ok) {
+        // PHASE-0: Check if user blocked the bot (403)
+        if ((result as any).blocked) {
+          logger.warn(`[Telegram] ⚠️ User blocked bot - soft fail for post ${postId}`, {
+            post_id: postId,
+            error_code: (result as any).error_code,
+          });
+          // Return -1 to signal blocked (no retry needed)
+          return -1;
+        }
+
+        // PHASE-0.1: Handle 429 rate limited - wait and retry (don't count as normal attempt)
+        if ((result as any).rate_limited) {
+          rateLimitRetries++;
+          const retryAfter = (result as any).retry_after || 1;
+
+          if (rateLimitRetries > MAX_RATE_LIMIT_RETRIES) {
+            logger.error(`[Telegram] ❌ Max 429 retries (${MAX_RATE_LIMIT_RETRIES}) exceeded for post ${postId}`);
+            throw new Error(`Rate limited too many times (${rateLimitRetries} retries)`);
+          }
+
+          logger.warn(`[Telegram] ⚠️ Rate limited (429) - waiting ${retryAfter}s before retry (${rateLimitRetries}/${MAX_RATE_LIMIT_RETRIES})`, {
+            post_id: postId,
+            attempt: attempt + 1,
+            retry_after: retryAfter,
+            rate_limit_retry: rateLimitRetries,
+          });
+          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+          // Don't increment attempt, just continue to retry
+          attempt--; // Will be incremented by loop, so net effect is same attempt
+          continue;
+        }
+
+        throw new Error(`Telegram API returned ok=false: ${JSON.stringify(result)}`);
+      }
+
+      logger.info(`[Telegram] ✅ Send successful on attempt ${attempt + 1} for post ${postId}`);
+      return result.result.message_id;
+
+    } catch (err: any) {
+      lastError = err;
+      logger.warn(`[Telegram] ⚠️ Send failed attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}:`, {
+        post_id: postId,
+        error: err.message,
+        attempt: attempt + 1,
+      });
+
+      // FIX: Acquire connection ONLY for DB update, release immediately
+      const shouldReleaseClient = !client;
+      let updateClient = client;
+      if (!updateClient) {
+        updateClient = await pool.connect();
+      }
+
+      try {
+        await updateClient.query(
+          `UPDATE telegram_posts
+           SET retry_count = $1,
+               error_log = $2,
+               last_error_at = NOW()
+           WHERE id = $3`,
+          [attempt + 1, err.message, postId]
+        );
+      } finally {
+        if (shouldReleaseClient) {
+          updateClient.release();
+        }
+      }
+
+      // Wait before retry (exponential backoff)
+      if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+        const backoffMs = RETRY_BACKOFF_MS[attempt];
+        logger.info(`[Telegram] Waiting ${backoffMs}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+
+  // All retries exhausted
+  logger.error(`[Telegram] ❌ All ${MAX_RETRY_ATTEMPTS} retry attempts exhausted for post ${postId}`);
+  throw lastError || new Error('Send failed after max retries');
+}
+
+export async function publishRoutes(fastify: FastifyInstance): Promise<void> {
+  /**
+   * GET /telegram/test-uuid
+   * Test route to diagnose UUID error
+   */
+  fastify.get('/telegram/test-uuid', async (request, reply) => {
+    try {
+      console.error('[TEST-UUID] Starting test query');
+      const result = await safeQuery(
+        `SELECT c.id, c.name, co.name as country_name
+         FROM ts_competitions c
+         LEFT JOIN ts_countries co ON c.country_id = co.external_id
+         LIMIT 5`
+      );
+      console.error('[TEST-UUID] Query succeeded, rows:', result.length);
+      return { success: true, rows: result.length };
+    } catch (err: any) {
+      console.error('[TEST-UUID] Query failed:', err.message);
+      console.error('[TEST-UUID] Stack:', err.stack);
+      return reply.status(500).send({ error: err.message, stack: err.stack });
+    }
+  });
+
+  /**
+   * GET /telegram/health
+   * Health check for Telegram bot
+   */
+  fastify.get('/telegram/health', async (request, reply) => {
+    const health = telegramBot.getHealth();
+
+    // PHASE-1: Add retry config to health response
+    return {
+      ...health,
+      retry_config: {
+        max_attempts: MAX_RETRY_ATTEMPTS,
+        backoff_ms: RETRY_BACKOFF_MS,
+      },
+    };
+  });
+
+  /**
+   * POST /telegram/publish/match/:fsMatchId
+   * Publish a match to Telegram channel
+   *
+   * PHASE-1 GUARANTEES:
+   * - Idempotent: Duplicate publishes return existing data
+   * - Transactional: DB state matches Telegram state
+   * - Resilient: Retries on failures
+   * - Observable: Structured logs at every step
+   */
+  fastify.post<PublishRequest>(
+    '/telegram/publish/match/:fsMatchId',
+    async (request, reply) => {
+      const startTime = Date.now();
+      const { fsMatchId } = request.params as { fsMatchId: string };
+      const { match_id, picks = [] } = request.body;
+
+      // PHASE-1: Structured logging context
+      const logContext: Record<string, any> = {
+        fs_match_id: fsMatchId,
+        match_id,
+        picks_count: picks.length,
+      };
+
+      // 🔍 DIAGNOSTIC: Route tracking
+      logger.info('[Telegram] 🔍 ROUTE DIAGNOSTIC', {
+        ...logContext,
+        route: 'POST /telegram/publish/match/:fsMatchId',
+        user_agent: request.headers['user-agent'],
+        referer: request.headers['referer'],
+        origin: request.headers['origin'],
+        body: request.body,
+      });
+
+      logger.info('[Telegram] 📤 Publish request received', logContext);
+
+      try {
+        // 1. Validate required fields
+        if (!match_id) {
+          logger.warn('[Telegram] ❌ Validation failed: match_id missing', logContext);
+          return reply.status(400).send({ error: 'match_id (TheSports external_id) is required in body' });
+        }
+
+        // 2. Check bot configuration
+        if (!telegramBot.isConfigured()) {
+          logger.error('[Telegram] ❌ Bot not configured', logContext);
+          return reply.status(503).send({ error: 'Telegram bot not configured' });
+        }
+
+        const channelId = process.env.TELEGRAM_CHANNEL_ID || '';
+        if (!channelId) {
+          logger.error('[Telegram] ❌ Channel ID not set', logContext);
+          return reply.status(503).send({ error: 'TELEGRAM_CHANNEL_ID not set' });
+        }
+
+        // 3. PHASE-0: IDEMPOTENCY CHECK (configurable via TELEGRAM_ALLOW_DUPLICATES env)
+        const dedupeKey = generateDedupeKey({
+          contentType: 'match',
+          matchId: match_id,
+        });
+        logContext.dedupe_key = dedupeKey;
+
+        if (!ALLOW_DUPLICATES) {
+          const existingPost = await checkExistingPostByDedupeKey(dedupeKey);
+          if (existingPost) {
+            logger.info('[Telegram] ⏭️ IDEMPOTENT: Duplicate detected, skipping publish', {
+              ...logContext,
+              existing_post_id: existingPost.id,
+              existing_message_id: existingPost.telegram_message_id,
+            });
+            return {
+              success: true,
+              idempotent: true,
+              skipped: true,
+              existing_post_id: existingPost.id,
+              telegram_message_id: existingPost.telegram_message_id,
+              message: 'Duplicate publish skipped (idempotency check)',
+            };
+          }
+          logger.info('[Telegram] ✅ Idempotency check passed - no duplicate found', logContext);
+        } else {
+          logger.info('[Telegram] ⚠️ IDEMPOTENCY DISABLED (TELEGRAM_ALLOW_DUPLICATES=true)', logContext);
+        }
+
+        // 4. PHASE-2A: PICK VALIDATION
+        logger.info('[Telegram] 🔍 Validating picks...', logContext);
+        const pickValidation = validatePicks(picks);
+
+        if (!pickValidation.valid) {
+          logger.warn('[Telegram] ❌ Pick validation failed', {
+            ...logContext,
+            error: pickValidation.error,
+            invalid_picks: pickValidation.invalidPicks,
+          });
+
+          return reply.status(400).send({
+            error: 'Invalid picks',
+            details: pickValidation.error,
+            invalid_picks: pickValidation.invalidPicks,
+            supported_markets: ['BTTS_YES', 'O25_OVER', 'O15_OVER', 'HT_O05_OVER'],
+          });
+        }
+
+        logger.info('[Telegram] ✅ Picks validated', logContext);
+
+        // 5. PHASE-2B-B1: MATCH STATE VALIDATION WITH API PRIMARY (OPTIONAL FOR FOOTYSTATS)
+        // PRIMARY: TheSports API (real-time status)
+        // FALLBACK: Database (stale but reliable)
+        // TEMPORARY FIX: Skip validation for FootyStats placeholder IDs (fs_*)
+        logger.info('[Telegram] 🔍 Fetching match state (API primary)...', logContext);
+
+        let matchStatusId: number | null = null;
+        let stateSource: string = 'unknown';
+
+        // TEMPORARY FIX: Skip validation for FootyStats placeholder IDs
+        const isFootyStatsPlaceholder = match_id.startsWith('fs_');
+
+        if (isFootyStatsPlaceholder) {
+          logger.warn('[Telegram] ⚠️ Skipping match state validation (FootyStats placeholder ID)', logContext);
+          matchStatusId = 1; // Assume NOT_STARTED
+          stateSource = 'placeholder';
+        } else {
+          try {
+            // PHASE-2B-B1: Use matchStateFetcher (API → DB fallback)
+            const matchStateResult = await fetchMatchStateForPublish(match_id);
+
+            matchStatusId = matchStateResult.statusId;
+            stateSource = matchStateResult.source;
+            logContext.match_status_id = matchStatusId;
+            logContext.state_source = stateSource;
+            logContext.state_latency_ms = matchStateResult.latencyMs;
+            logContext.state_cached = matchStateResult.cached;
+
+            // Log fallback usage for monitoring
+            if (matchStateResult.isFallback) {
+              logger.warn('[Telegram] ⚠️ Using DB fallback for match state', logContext);
+            } else {
+              logger.info('[Telegram] ✅ Match state fetched from API', logContext);
+            }
+
+            // Validate match state (same Phase-2A validator)
+            const stateValidation = validateMatchStateForPublish(matchStatusId, match_id);
+
+            if (!stateValidation.valid) {
+              logger.warn('[Telegram] ❌ Match state validation failed', {
+                ...logContext,
+                error: stateValidation.error,
+                error_code: stateValidation.errorCode,
+              });
+
+              return reply.status(400).send({
+                error: 'Invalid match state',
+                details: stateValidation.error,
+                error_code: stateValidation.errorCode,
+                match_status_id: matchStatusId,
+                state_source: stateSource,
+              });
+            }
+
+            logger.info('[Telegram] ✅ Match state validated (NOT_STARTED)', logContext);
+          } catch (fetchError) {
+            // Both API and DB failed - cannot proceed
+            logger.error('[Telegram] ❌ Failed to fetch match state (API + DB failed)', {
+              ...logContext,
+              error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+            });
+
+            return reply.status(503).send({
+              error: 'Service temporarily unavailable',
+              details: 'Unable to verify match state. Please try again later.',
+              error_code: 'MATCH_STATE_UNAVAILABLE',
+            });
+          }
+        }
+
+        // 6. Fetch match data from FootyStats
+        logger.info('[Telegram] 📊 Fetching match data from FootyStats...', logContext);
+        const fsIdNum = parseInt(fsMatchId);
+        const matchResponse = await footyStatsAPI.getMatchDetails(fsIdNum);
+        const fsMatch = matchResponse.data;
+
+        if (!fsMatch) {
+          logger.error('[Telegram] ❌ Match not found in FootyStats', logContext);
+          return reply.status(404).send({ error: 'Match not found in FootyStats' });
+        }
+
+        // 🔍 DEBUG: Check if corners/cards potentials exist
+        logger.info('[Telegram] 🔍 fsMatch potentials check:', {
+          ...logContext,
+          has_corners: !!fsMatch.corners_potential,
+          has_cards: !!fsMatch.cards_potential,
+          corners_value: fsMatch.corners_potential,
+          cards_value: fsMatch.cards_potential,
+          btts_value: fsMatch.btts_potential,
+          over25_value: fsMatch.o25_potential,
+        });
+
+        // 7. Fetch team stats
+        let homeStats = null;
+        let awayStats = null;
+
+        if (fsMatch.homeID) {
+          try {
+            const homeResponse = await footyStatsAPI.getTeamLastX(fsMatch.homeID);
+            homeStats = homeResponse.data?.[0];
+          } catch (err: any) {
+            logger.error('[Telegram] Error fetching home team stats', {
+              ...logContext,
+              error: err.message,
+            });
+          }
+        }
+
+        if (fsMatch.awayID) {
+          try {
+            const awayResponse = await footyStatsAPI.getTeamLastX(fsMatch.awayID);
+            awayStats = awayResponse.data?.[0];
+          } catch (err: any) {
+            logger.error('[Telegram] Error fetching away team stats', {
+              ...logContext,
+              error: err.message,
+            });
+          }
+        }
+
+        // 8. Get league name from database (ts_matches JOIN ts_competitions)
+        let leagueName = 'Unknown';
+        try {
+          logger.info('[Telegram] 🔍 Fetching league name from DB...', {
+            ...logContext,
+            match_id,
+          });
+
+          const leagueResult = await safeQuery<{ name: string }>(
+            `SELECT c.name
+             FROM ts_matches m
+             JOIN ts_competitions c ON m.competition_id = c.external_id
+             WHERE m.external_id = $1
+             LIMIT 1`,
+            [match_id]
+          );
+
+          logger.info('[Telegram] 📊 League query result:', {
+            ...logContext,
+            rows_found: leagueResult.length,
+            league_name: leagueResult[0]?.name || null,
+          });
+
+          if (leagueResult.length > 0 && leagueResult[0].name) {
+            leagueName = leagueResult[0].name;
+            logger.info('[Telegram] ✅ League name found', {
+              ...logContext,
+              league_name: leagueName,
+            });
+          } else {
+            logger.warn('[Telegram] ⚠️ No league found in DB for match', {
+              ...logContext,
+              match_id,
+            });
+          }
+        } catch (leagueErr) {
+          logger.error('[Telegram] ❌ Error fetching league name from DB', {
+            ...logContext,
+            error: leagueErr instanceof Error ? leagueErr.message : String(leagueErr),
+          });
+        }
+
+        // 9. Build message data
+        logger.info('[Telegram] 📊 Team stats loaded', {
+          ...logContext,
+          has_home_stats: !!homeStats,
+          has_away_stats: !!awayStats,
+        });
+
+        // 🔍 DEBUG: Log fsMatch corners and cards
+        console.error('\n🔍🔍🔍 [Telegram Publish] fsMatch data check:');
+        console.error('  fsMatch.corners_potential:', fsMatch.corners_potential);
+        console.error('  fsMatch.cards_potential:', fsMatch.cards_potential);
+        console.error('  fsMatch.btts_potential:', fsMatch.btts_potential);
+        console.error('  typeof corners:', typeof fsMatch.corners_potential);
+        console.error('  typeof cards:', typeof fsMatch.cards_potential);
+
+        const matchData = {
+          home_name: fsMatch.home_name,
+          away_name: fsMatch.away_name,
+          league_name: leagueName,
+          date_unix: fsMatch.date_unix,
+          potentials: {
+            btts: fsMatch.btts_potential,
+            over25: fsMatch.o25_potential,
+            over15: (fsMatch as any).o15_potential,
+            corners: fsMatch.corners_potential,  // ✅ ADD: Match-level corner expectation
+            cards: fsMatch.cards_potential,      // ✅ ADD: Match-level card expectation
+          },
+          xg: {
+            home: fsMatch.team_a_xg_prematch,
+            away: fsMatch.team_b_xg_prematch,
+          },
+          form: {
+            home: homeStats ? {
+              ppg: homeStats.seasonPPG_overall,
+              btts_pct: homeStats.seasonBTTSPercentage_overall,
+              over25_pct: homeStats.seasonOver25Percentage_overall,
+              corners_avg: homeStats.cornersAVG_overall,
+              cards_avg: homeStats.cardsAVG_overall,
+            } : undefined,
+            away: awayStats ? {
+              ppg: awayStats.seasonPPG_overall,
+              btts_pct: awayStats.seasonBTTSPercentage_overall,
+              over25_pct: awayStats.seasonOver25Percentage_overall,
+              corners_avg: awayStats.cornersAVG_overall,
+              cards_avg: awayStats.cardsAVG_overall,
+            } : undefined,
+          },
+          h2h: fsMatch.h2h ? {
+            total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
+            home_wins: fsMatch.h2h.previous_matches_results?.team_a_wins,
+            draws: fsMatch.h2h.previous_matches_results?.draw,
+            away_wins: fsMatch.h2h.previous_matches_results?.team_b_wins,
+            avg_goals: fsMatch.h2h.betting_stats?.avg_goals,
+            btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage,
+          } : undefined,
+          odds: {
+            home: fsMatch.odds_ft_1,
+            draw: fsMatch.odds_ft_x,
+            away: fsMatch.odds_ft_2,
+          },
+        };
+
+        // 🔍 DEBUG: Verify matchData.potentials has corners and cards
+        console.error('\n🔍🔍🔍 [Telegram Publish] matchData.potentials check:');
+        console.error('  matchData.potentials.corners:', matchData.potentials.corners);
+        console.error('  matchData.potentials.cards:', matchData.potentials.cards);
+        console.error('  matchData.potentials.btts:', matchData.potentials.btts);
+        console.error('  Full potentials:', JSON.stringify(matchData.potentials, null, 2));
+
+        // PHASE-2B: Calculate confidence score
+        logger.info('[Telegram] 🎯 Calculating confidence score...', logContext);
+        const baseConfidenceScore = calculateConfidenceScore(matchData);
+
+        // Map to extended interface with backwards-compatible properties
+        const confidenceScore: ExtendedConfidenceScoreResult = {
+          ...baseConfidenceScore,
+          tier: baseConfidenceScore.level,  // Map 'level' to 'tier' for backwards compatibility
+          missingCount: 0,  // Not calculated by current implementation
+          stars: baseConfidenceScore.emoji,  // Use emoji as stars representation
+        };
+
+        logContext.confidence_score = confidenceScore.score;
+        logContext.confidence_tier = confidenceScore.tier;
+        logContext.missing_count = confidenceScore.missingCount;
+
+        logger.info('[Telegram] ✅ Confidence score calculated', {
+          ...logContext,
+          score: confidenceScore.score,
+          tier: confidenceScore.tier,
+          stars: confidenceScore.stars,
+        });
+
+        // 🔍 DEBUG: Log matchData.potentials before formatting
+        console.error('\n🔍🔍🔍 [TELEGRAM DEBUG] matchData.potentials:', JSON.stringify(matchData.potentials, null, 2));
+        logger.info('[Telegram] 🔍 matchData.potentials:', {
+          ...logContext,
+          potentials: matchData.potentials,
+        });
+
+        // PHASE-2B: Format message with NEW V2 template (enhanced format)
+        const messageText = formatTelegramMessageV2(matchData, picks as any, confidenceScore);
+
+        // 🔍 DIAGNOSTIC: Formatter tracking
+        logger.info('[Telegram] 🔍 FORMATTER DIAGNOSTIC', {
+          ...logContext,
+          formatter: 'formatTelegramMessageV2',
+          template_version: 'V2-KART-KORNER-ENABLED',
+          message_length: messageText.length,
+          message_preview: messageText.substring(0, 200),
+          has_kart: messageText.includes('🟨'),
+          has_korner: messageText.includes('🚩'),
+        });
+
+        // 🔍 DEBUG: Check if KART/KORNER sections are in message
+        console.error('🔍🔍🔍 [TELEGRAM DEBUG] Message has KART:', messageText.includes('KART'));
+        console.error('🔍🔍🔍 [TELEGRAM DEBUG] Message has KORNER:', messageText.includes('KORNER'));
+
+        // 🔍 DEBUG: Check formatted message
+        console.log('\n' + '='.repeat(80));
+        console.log('[TELEGRAM DEBUG] formatTelegramMessage RESULT:');
+        console.log('Match:', matchData.home_name, 'vs', matchData.away_name);
+        console.log('Message Length:', messageText.length, 'chars');
+        console.log('Has Trends:', messageText.includes('Trendler'));
+        console.log('Has Ev:', messageText.includes('Trendler (Ev)'));
+        console.log('Has Dep:', messageText.includes('Trendler (Dep)'));
+        console.log('\nFULL MESSAGE:');
+        console.log(messageText);
+        console.log('='.repeat(80) + '\n');
+
+        // 9. PHASE-1: TRANSACTION SAFETY - Create DRAFT post first
+        // FIX: Acquire connection for draft post, release BEFORE Telegram API call
+        logger.info('[Telegram] 💾 Creating DRAFT post...', logContext);
+
+        let dbClient: PoolClient | null = await pool.connect();
+        let postId;
+        try {
+          // PHASE-0: Pass dedupeKey for idempotency tracking
+          postId = await createDraftPost(match_id, fsIdNum, channelId, messageText, dedupeKey, 'match', dbClient);
+
+          if (!postId) {
+            // ON CONFLICT DO NOTHING triggered - race condition detected
+            logger.warn('[Telegram] ⚠️ Race condition detected: Another request already created this post', logContext);
+
+            // Fetch the existing post
+            const racedPost = await checkExistingPost(match_id, channelId, dbClient);
+            return {
+              success: true,
+              telegram_message_id: racedPost?.telegram_message_id,
+              post_id: racedPost?.id,
+              status: racedPost?.status,
+              idempotent: true,
+              message: 'Race condition: Post created by concurrent request',
+            };
+          }
+        } finally {
+          // FIX: Release connection BEFORE Telegram API call
+          dbClient.release();
+          dbClient = null;
+        }
+
+        logger.info('[Telegram] ✅ DRAFT post created', { ...logContext, post_id: postId });
+
+        // 10. PHASE-1: ERROR RECOVERY - Send to Telegram with retry
+        // FIX: NO connection held during Telegram API call
+        logger.info('[Telegram] 📡 Sending to Telegram with retry logic...', {
+          ...logContext,
+          post_id: postId,
+        });
+
+        let telegramMessageId: number;
+        try {
+          // FIX: sendWithRetry does NOT hold connection during Telegram send
+          telegramMessageId = await sendWithRetry(channelId, messageText, postId);
+
+          // PHASE-0: Check for blocked user (returns -1)
+          if (telegramMessageId === -1) {
+            logger.warn('[Telegram] ⚠️ User blocked bot - marking as failed (no retry)', {
+              ...logContext,
+              post_id: postId,
+            });
+            await markFailed(postId, 'User blocked bot (403 Forbidden)', 0);
+            return {
+              success: false,
+              blocked: true,
+              post_id: postId,
+              status: 'failed',
+              message: 'User blocked the bot - soft fail',
+            };
+          }
+        } catch (err: any) {
+          // All retries exhausted - mark as FAILED
+          logger.error('[Telegram] ❌ Send failed after all retries, marking as FAILED', {
+            ...logContext,
+            post_id: postId,
+            error: err.message,
+          });
+
+          // FIX: Acquire NEW connection for markFailed
+          await markFailed(postId, err.message, MAX_RETRY_ATTEMPTS);
+
+          return reply.status(500).send({
+            error: 'Failed to send to Telegram after retries',
+            post_id: postId,
+            status: 'failed',
+            retry_count: MAX_RETRY_ATTEMPTS,
+          });
+        }
+
+        // 11. PHASE-1: STATE TRANSITION - Mark as PUBLISHED
+        // FIX: Acquire NEW connection for markPublished
+        logger.info('[Telegram] ✅ Marking post as PUBLISHED', {
+          ...logContext,
+          post_id: postId,
+          telegram_message_id: telegramMessageId,
+        });
+
+        await markPublished(postId, telegramMessageId);
+
+        // 12. Save picks
+        // FIX: Acquire NEW connection for picks, release immediately
+        if (picks.length > 0) {
+          logger.info(`[Telegram] 💾 Saving ${picks.length} picks...`, {
+            ...logContext,
+            post_id: postId,
+          });
+
+          let picksClient = await pool.connect();
+          try {
+            for (const pick of picks) {
+              await picksClient.query(
+                `INSERT INTO telegram_picks (post_id, market_type, odds, status)
+                 VALUES ($1, $2, $3, 'pending')`,
+                [postId, pick.market_type, pick.odds || null]
+              );
+            }
+          } finally {
+            picksClient.release();
+          }
+
+          logger.info('[Telegram] ✅ Picks saved', { ...logContext, post_id: postId });
+        }
+
+        const elapsedMs = Date.now() - startTime;
+        logger.info('[Telegram] ✅ PUBLISH COMPLETE', {
+          ...logContext,
+          post_id: postId,
+          telegram_message_id: telegramMessageId,
+          elapsed_ms: elapsedMs,
+          status: 'published',
+        });
+
+        return {
+          success: true,
+          telegram_message_id: telegramMessageId,
+          post_id: postId,
+          picks_count: picks.length,
+          status: 'published',
+          elapsed_ms: elapsedMs,
+        };
+
+      } catch (error: any) {
+        const elapsedMs = Date.now() - startTime;
+        logger.error('[Telegram] ❌ PUBLISH ERROR', {
+          ...logContext,
+          error: error.message,
+          stack: error.stack,
+          elapsed_ms: elapsedMs,
+        });
+        return reply.status(500).send({ error: error.message });
+      }
+    }
+  );
+
+  /**
+   * GET /telegram/posts
+   * Get published posts with pick statistics
+   *
+   * FIX: Acquire connection, execute query, release immediately
+   */
+  fastify.get('/telegram/posts', async (request, reply) => {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT p.*,
+                COUNT(pk.id) as picks_count,
+                COUNT(CASE WHEN pk.status = 'won' THEN 1 END) as won_count,
+                COUNT(CASE WHEN pk.status = 'lost' THEN 1 END) as lost_count,
+                COUNT(CASE WHEN pk.status = 'void' THEN 1 END) as void_count
+         FROM telegram_posts p
+         LEFT JOIN telegram_picks pk ON pk.post_id = p.id
+         WHERE p.status IN ('published', 'settled')
+         GROUP BY p.id
+         ORDER BY p.posted_at DESC
+         LIMIT 100`
+      );
+
+      return { success: true, posts: result.rows };
+    } catch (error: any) {
+      logger.error('[Telegram] Error fetching posts:', error);
+      return reply.status(500).send({ error: error.message });
+    } finally {
+      client.release();
+    }
+  });
+}

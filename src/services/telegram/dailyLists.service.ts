@@ -632,7 +632,7 @@ export function formatDailyListMessage(list: DailyList, withResults: boolean = f
     const confidenceEmoji = confidence >= 70 ? '🔥' : '⭐';
 
     message += `${num} <b>${match.home_name} vs ${match.away_name}</b>\n`;
-    message += `🕒 ${timeStr} | 🏆 ${match.league_name || 'Bilinmiyor'}\n`;
+    message += `🕒 ${timeStr} | 🏆 ${match.league_name && match.league_name !== 'Unknown' ? match.league_name : 'Bilinmiyor'}\n`;
     message += `${confidenceEmoji} Güven: ${confidence}/100\n`;
     message += `📊 ${reason}\n\n`;
   });
@@ -778,7 +778,7 @@ export async function formatDailyListMessageWithResults(
     if (resultBadge) {
       message += `${resultBadge} | Skor: <b>${scoreStr}</b>\n`;
     } else {
-      message += `🕒 ${timeStr} | 🏆 ${match.league_name || 'Bilinmiyor'}\n`;
+      message += `🕒 ${timeStr} | 🏆 ${match.league_name && match.league_name !== 'Unknown' ? match.league_name : 'Bilinmiyor'}\n`;
     }
 
     message += `${confidenceEmoji} Güven: ${confidence}/100\n`;

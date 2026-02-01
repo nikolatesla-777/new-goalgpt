@@ -1,13 +1,8 @@
 /**
- * Phase-3A.1: Single Match Scoring Analysis Component
+ * Phase-3A: Single Match Scoring Analysis Component
  *
  * Admin screen for analyzing a single match scoring preview
  * Shows all 7 markets with probability, confidence, and publishability
- *
- * UPDATED (Phase-3A.1):
- * - Now uses Week-2A deterministic scoring endpoint: GET /api/matches/:id/scoring?locale=tr
- * - Displays clear error if Week-2A is not merged yet (503 status)
- * - Backward compatible with Phase-3A response format
  */
 
 import { useState } from 'react';
@@ -78,34 +73,17 @@ export function MatchScoringAnalysis() {
     setScoringData(null);
 
     try {
-      // Phase-3A.1: Use Week-2A deterministic scoring endpoint
       const response = await fetch(
-        `/api/matches/${fsMatchId}/scoring?locale=tr`
+        `/api/matches/${fsMatchId}/scoring-preview`
       );
-
-      if (response.status === 503) {
-        // Week-2A not merged yet
-        const errorData = await response.json();
-        throw new Error(
-          '⚠️ Week-2A Scoring Pipeline Not Available\n\n' +
-          'The deterministic scoring system (Week-2A) has not been merged yet. ' +
-          'This admin panel requires Week-2A to function properly.\n\n' +
-          'Status: ' + (errorData.week_2a_status || 'NOT_MERGED')
-        );
-      }
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch scoring data');
+        throw new Error(errorData.message || 'Failed to fetch scoring preview');
       }
 
       const data = await response.json();
-
-      // Week-2A returns data directly (no wrapper)
-      // If it has a "data" property (backward compatibility), use it
-      const scoringResult = data.data || data;
-
-      setScoringData(scoringResult);
+      setScoringData(data.data);
     } catch (err: any) {
       setError(err.message);
     } finally {

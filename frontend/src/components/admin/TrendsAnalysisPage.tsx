@@ -62,7 +62,7 @@ export default function TrendsAnalysisPage() {
   const [activeTab, setActiveTab] = useState<'goals' | 'corners' | 'cards' | 'form' | 'value'>('goals');
 
   // React Query hook replaces manual state management
-  const { data, isLoading, isError, error, refetch } = useTrendsAnalysis();
+  const { data, isLoading, isError, error: queryError, refetch } = useTrendsAnalysis();
 
   const trends: TrendsData = (data?.trends as any) || {
     goalTrends: [],
@@ -72,8 +72,10 @@ export default function TrendsAnalysisPage() {
     valueBets: []
   };
   const totalMatches = data?.totalMatches || 0;
+  const loading = isLoading;
+  const error = isError ? (queryError instanceof Error ? queryError.message : 'Failed to load trends') : null;
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
         <div className="text-white">Yükleniyor...</div>
@@ -81,12 +83,12 @@ export default function TrendsAnalysisPage() {
     );
   }
 
-  if (isError) {
+  if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
         <div className="text-center">
           <div className="text-red-400 mb-4">❌ Hata</div>
-          <div className="text-gray-400">{error instanceof Error ? error.message : 'Failed to load trends'}</div>
+          <div className="text-gray-400">{error}</div>
           <button
             onClick={() => refetch()}
             className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"

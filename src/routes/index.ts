@@ -58,11 +58,13 @@ import forumRoutes from './forum.routes';
 
 // Admin & Moderation
 import { announcementsRoutes } from './announcements.routes';
+import { diagnosticRoutes } from './diagnostic.routes';
+import { adminStandingsRoutes } from './admin/standings.routes';
 
 // External Integrations
 import { footyStatsRoutes } from './footystats.routes';
 import { partnersRoutes } from './partners.routes';
-import { telegramRoutes } from './telegram.routes';
+import { telegramRoutes } from './telegram';
 
 // Scoring & Predictions
 import { registerScoringRoutes } from './scoring.routes';
@@ -150,6 +152,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // Partner management
     adminAPI.register(partnersRoutes, { prefix: '/api/partners' });
+
+    // System diagnostics (Phase 4: Data Integrity)
+    adminAPI.register(diagnosticRoutes, { prefix: '/api' });
   });
 
   // ============================================================================
@@ -199,4 +204,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // Telegram publishing (TEMPORARY: PUBLIC for development, will add auth later)
   app.register(telegramRoutes, { prefix: '/api' });
+
+  // Standings management (TEMPORARY: PUBLIC for admin panel, will add auth later)
+  app.register(adminStandingsRoutes);
 }

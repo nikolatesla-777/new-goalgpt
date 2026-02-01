@@ -1,0 +1,464 @@
+import { FastifyInstance } from 'fastify';
+import { pool } from '../../database/connection';
+
+interface StandingsRow {
+  position: number;
+  team_id: string;
+  team_name: string;
+  mp: number;
+  won: number;
+  draw: number;
+  loss: number;
+  goals_for: number;
+  goals_against: number;
+  goal_diff: number;
+  points: number;
+  last_5: string[];
+  ppg: number;
+  cs_percent: number;
+  btts_percent: number;
+  xgf: number | null;
+  over_15_percent: number;
+  over_25_percent: number;
+  avg_goals: number;
+}
+
+export async function adminStandingsRoutes(fastify: FastifyInstance) {
+  /**
+   * GET /api/admin/standings/:competitionId?view=overall|home|away
+   *
+   * Returns FULL standings table with ALL statistics
+   * Columns: Pos, Team, MP, W, D, L, GF, GA, GD, Pts, Last 5, PPG, CS%, BTTS%, xGF, 1.5+%, 2.5+%, AVG
+   *
+   * Query params:
+   * - view: 'overall' (default), 'home', 'away'
+   */
+  fastify.get('/api/admin/standings/:competitionId', async (request, reply) => {
+    const { competitionId } = request.params as { competitionId: string };
+    const { view = 'overall' } = request.query as { view?: 'overall' | 'home' | 'away' };
+
+    try {
+      // Get standings from database
+      const standingsResult = await pool.query(`
+        SELECT st.standings, st.updated_at, s.external_id as season_id
+        FROM ts_standings st
+        INNER JOIN ts_seasons s ON st.season_id = s.external_id
+        WHERE s.competition_id = $1
+          AND (s.year LIKE '%2025%' OR s.year LIKE '%2026%')
+        ORDER BY st.updated_at DESC
+        LIMIT 1
+      `, [competitionId]);
+
+      if (standingsResult.rows.length === 0) {
+        return reply.status(404).send({
+          error: 'Standings not found for this competition'
+        });
+      }
+
+      const standings = standingsResult.rows[0].standings;
+      const seasonId = standingsResult.rows[0].season_id;
+      const updatedAt = standingsResult.rows[0].updated_at;
+
+      if (!Array.isArray(standings) || standings.length === 0) {
+        return reply.status(404).send({
+          error: 'Invalid standings data structure'
+        });
+      }
+
+      // Map database field names to expected format
+      const rows = standings.map((row: any) => ({
+        ...row,
+        mp: row.played,
+        draw: row.drawn,
+        loss: row.lost
+      }));
+
+      // Get team names
+      const teamIds = rows.map((row: any) => row.team_id);
+      const teamsResult = await pool.query(`
+        SELECT external_id, name
+        FROM ts_teams
+        WHERE external_id = ANY($1::text[])
+      `, [teamIds]);
+
+      const teamMap: Record<string, string> = {};
+      teamsResult.rows.forEach((team: any) => {
+        teamMap[team.external_id] = team.name;
+      });
+
+      // OPTIMIZATION: Fetch ALL matches for ALL teams in one query
+      let allMatchesResult;
+      if (view === 'home') {
+        allMatchesResult = await pool.query(`
+          SELECT
+            home_team_id,
+            away_team_id,
+            home_score_display,
+            away_score_display,
+            match_time,
+            statistics
+          FROM (
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics,
+              ROW_NUMBER() OVER (PARTITION BY home_team_id ORDER BY match_time DESC) as rn
+            FROM ts_matches
+            WHERE home_team_id = ANY($1::text[])
+              AND status_id = 8
+              AND season_id = $2
+          ) subquery
+          WHERE rn <= 20
+        `, [teamIds, seasonId]);
+      } else if (view === 'away') {
+        allMatchesResult = await pool.query(`
+          SELECT
+            home_team_id,
+            away_team_id,
+            home_score_display,
+            away_score_display,
+            match_time,
+            statistics
+          FROM (
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics,
+              ROW_NUMBER() OVER (PARTITION BY away_team_id ORDER BY match_time DESC) as rn
+            FROM ts_matches
+            WHERE away_team_id = ANY($1::text[])
+              AND status_id = 8
+              AND season_id = $2
+          ) subquery
+          WHERE rn <= 20
+        `, [teamIds, seasonId]);
+      } else {
+        allMatchesResult = await pool.query(`
+          SELECT
+            home_team_id,
+            away_team_id,
+            home_score_display,
+            away_score_display,
+            match_time,
+            statistics
+          FROM (
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics,
+              CASE
+                WHEN home_team_id = ANY($1::text[]) THEN home_team_id
+                ELSE away_team_id
+              END as team_id,
+              ROW_NUMBER() OVER (
+                PARTITION BY
+                  CASE
+                    WHEN home_team_id = ANY($1::text[]) THEN home_team_id
+                    ELSE away_team_id
+                  END
+                ORDER BY match_time DESC
+              ) as rn
+            FROM ts_matches
+            WHERE (home_team_id = ANY($1::text[]) OR away_team_id = ANY($1::text[]))
+              AND status_id = 8
+              AND season_id = $2
+          ) subquery
+          WHERE rn <= 20
+        `, [teamIds, seasonId]);
+      }
+
+      // Group matches by team
+      const matchesByTeam: Record<string, any[]> = {};
+      teamIds.forEach(id => matchesByTeam[id] = []);
+
+      allMatchesResult.rows.forEach((match: any) => {
+        if (view === 'home' && matchesByTeam[match.home_team_id]) {
+          matchesByTeam[match.home_team_id].push(match);
+        } else if (view === 'away' && matchesByTeam[match.away_team_id]) {
+          matchesByTeam[match.away_team_id].push(match);
+        } else if (view === 'overall') {
+          // For overall view, add match to both teams involved
+          if (matchesByTeam[match.home_team_id]) {
+            matchesByTeam[match.home_team_id].push(match);
+          }
+          if (matchesByTeam[match.away_team_id]) {
+            matchesByTeam[match.away_team_id].push(match);
+          }
+        }
+      });
+
+      // Calculate ALL statistics for each team
+      const standings: StandingsRow[] = [];
+
+      for (const row of rows) {
+        const teamId = row.team_id;
+        const matches = matchesByTeam[teamId] || [];
+
+        // Calculate statistics (including W-D-L for home/away)
+        let matchesPlayed = matches.length;
+        let wins = 0;
+        let draws = 0;
+        let losses = 0;
+        let cleanSheets = 0;
+        let bttsCount = 0;
+        let over15Count = 0;
+        let over25Count = 0;
+        let totalGoalsScored = 0;
+        let totalGoalsConceded = 0;
+        let totalXgFor = 0;
+        let xgCount = 0;
+
+        // Last 5 form
+        const last5Form: string[] = [];
+
+        matches.forEach((match: any, index: number) => {
+          const isHome = match.home_team_id === teamId;
+          const teamScore = isHome ? match.home_score_display : match.away_score_display;
+          const opponentScore = isHome ? match.away_score_display : match.home_score_display;
+          const totalMatchGoals = teamScore + opponentScore;
+
+          // W-D-L calculation
+          if (teamScore > opponentScore) {
+            wins++;
+          } else if (teamScore === opponentScore) {
+            draws++;
+          } else {
+            losses++;
+          }
+
+          // Goals
+          totalGoalsScored += teamScore;
+          totalGoalsConceded += opponentScore;
+
+          // Clean sheet
+          if (opponentScore === 0) {
+            cleanSheets++;
+          }
+
+          // BTTS
+          if (teamScore > 0 && opponentScore > 0) {
+            bttsCount++;
+          }
+
+          // Over 1.5 total goals
+          if (totalMatchGoals > 1) {
+            over15Count++;
+          }
+
+          // Over 2.5 total goals
+          if (totalMatchGoals > 2) {
+            over25Count++;
+          }
+
+          // xG (from statistics if available)
+          if (match.statistics && match.statistics.xg) {
+            const xgData = isHome ? match.statistics.xg.home : match.statistics.xg.away;
+            if (xgData && typeof xgData === 'number') {
+              totalXgFor += xgData;
+              xgCount++;
+            }
+          }
+
+          // Last 5 form
+          if (index < 5) {
+            if (teamScore > opponentScore) last5Form.push('W');
+            else if (teamScore < opponentScore) last5Form.push('L');
+            else last5Form.push('D');
+          }
+        });
+
+        const matchCount = matches.length;
+        const calculatedPoints = wins * 3 + draws;
+        const goalDiff = totalGoalsScored - totalGoalsConceded;
+
+        standings.push({
+          position: row.position, // Will be recalculated after sorting
+          team_id: row.team_id,
+          team_name: teamMap[row.team_id] || row.team_id,
+          mp: matchesPlayed,
+          won: wins,
+          draw: draws,
+          loss: losses,
+          goals_for: totalGoalsScored,
+          goals_against: totalGoalsConceded,
+          goal_diff: goalDiff,
+          points: calculatedPoints,
+          last_5: last5Form.reverse(),
+          ppg: matchesPlayed > 0 ? parseFloat((calculatedPoints / matchesPlayed).toFixed(2)) : 0,
+          cs_percent: matchCount > 0 ? Math.round((cleanSheets / matchCount) * 100) : 0,
+          btts_percent: matchCount > 0 ? Math.round((bttsCount / matchCount) * 100) : 0,
+          xgf: xgCount > 0 ? parseFloat((totalXgFor / xgCount).toFixed(2)) : null,
+          over_15_percent: matchCount > 0 ? Math.round((over15Count / matchCount) * 100) : 0,
+          over_25_percent: matchCount > 0 ? Math.round((over25Count / matchCount) * 100) : 0,
+          avg_goals: matchCount > 0 ? parseFloat((totalGoalsScored / matchCount).toFixed(2)) : 0
+        });
+      }
+
+      // Re-sort standings by points, goal_diff, goals_for (standard league table rules)
+      standings.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.goal_diff !== a.goal_diff) return b.goal_diff - a.goal_diff;
+        return b.goals_for - a.goals_for;
+      });
+
+      // Recalculate positions after sorting
+      standings.forEach((team, index) => {
+        team.position = index + 1;
+      });
+
+      // Check for live matches (real-time standings calculation)
+      // Only for overall view - calculate temporary points from ongoing matches
+      let hasLiveMatches = false;
+
+      if (view === 'overall') {
+        // Find all live matches in this competition
+        const liveMatchesResult = await pool.query(`
+          SELECT
+            m.external_id,
+            m.home_team_id,
+            m.away_team_id,
+            m.home_score_display,
+            m.away_score_display,
+            m.status_id
+          FROM ts_matches m
+          WHERE m.season_id = $1
+            AND m.status_id IN (2, 3, 4, 5, 7)
+        `, [seasonId]);
+
+        const liveMatches = liveMatchesResult.rows;
+
+        if (liveMatches.length > 0) {
+          hasLiveMatches = true;
+
+          // Calculate temporary points for teams with live matches
+          const livePointsMap: Record<string, number> = {};
+
+          liveMatches.forEach((match: any) => {
+            const homeScore = match.home_score_display || 0;
+            const awayScore = match.away_score_display || 0;
+
+            // Calculate temporary points for this match
+            let homePoints = 0;
+            let awayPoints = 0;
+
+            if (homeScore > awayScore) {
+              homePoints = 3;
+            } else if (homeScore < awayScore) {
+              awayPoints = 3;
+            } else {
+              homePoints = 1;
+              awayPoints = 1;
+            }
+
+            // Add to map
+            livePointsMap[match.home_team_id] = homePoints;
+            livePointsMap[match.away_team_id] = awayPoints;
+          });
+
+          // Apply live points to standings
+          standings.forEach(team => {
+            if (livePointsMap[team.team_id] !== undefined) {
+              const tempPoints = livePointsMap[team.team_id];
+              (team as any).live_points = team.points + tempPoints;
+              (team as any).live_position = team.position; // Will recalculate after sort
+              (team as any).points_diff = tempPoints;
+            }
+          });
+        }
+      }
+
+      return reply.send({
+        competition_id: competitionId,
+        season_id: seasonId,
+        updated_at: updatedAt,
+        has_live_matches: hasLiveMatches,
+        standings
+      });
+
+    } catch (err: any) {
+      fastify.log.error(err);
+      return reply.status(500).send({
+        error: 'Failed to fetch standings',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * POST /api/admin/standings/sync/:competitionId
+   *
+   * Force sync standings for a specific competition
+   */
+  fastify.post('/api/admin/standings/sync/:competitionId', async (request, reply) => {
+    const { competitionId } = request.params as { competitionId: string };
+
+    try {
+      // Get season ID
+      const seasonResult = await pool.query(`
+        SELECT external_id
+        FROM ts_seasons
+        WHERE competition_id = $1
+          AND (year LIKE '%2025%' OR year LIKE '%2026%')
+        ORDER BY year DESC
+        LIMIT 1
+      `, [competitionId]);
+
+      if (seasonResult.rows.length === 0) {
+        return reply.status(404).send({
+          error: 'Season not found for this competition'
+        });
+      }
+
+      const seasonId = seasonResult.rows[0].external_id;
+
+      // Import theSportsAPI and sync
+      const { theSportsAPI } = await import('../../core/TheSportsAPIManager');
+
+      const standings = await theSportsAPI.get('/season/recent/table/detail', {
+        uuid: seasonId
+      });
+
+      if (!standings.results?.tables?.[0]?.rows) {
+        return reply.status(404).send({
+          error: 'No standings data from API'
+        });
+      }
+
+      const rows = standings.results.tables[0].rows;
+
+      // Save to database
+      await pool.query(`
+        INSERT INTO ts_standings (season_id, standings, raw_response, updated_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (season_id)
+        DO UPDATE SET
+          standings = EXCLUDED.standings,
+          raw_response = EXCLUDED.raw_response,
+          updated_at = NOW()
+      `, [seasonId, JSON.stringify(rows), JSON.stringify(standings)]);
+
+      return reply.send({
+        success: true,
+        message: 'Standings synced successfully',
+        teams: rows.length,
+        season_id: seasonId
+      });
+
+    } catch (err: any) {
+      fastify.log.error(err);
+      return reply.status(500).send({
+        error: 'Failed to sync standings',
+        message: err.message
+      });
+    }
+  });
+}

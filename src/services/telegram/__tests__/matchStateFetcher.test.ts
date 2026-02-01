@@ -31,11 +31,11 @@ describe('matchStateFetcher.service', () => {
     // Reset mocks
     jest.clearAllMocks();
 
-    // Mock TheSportsClient.get
+    // Mock TheSportsClient.getInstance() to return mock instance
     mockTheSportsGet = jest.fn();
-    (TheSportsClient as jest.MockedClass<typeof TheSportsClient>).mockImplementation(() => ({
+    jest.spyOn(TheSportsClient, 'getInstance').mockReturnValue({
       get: mockTheSportsGet,
-    } as any));
+    } as any);
 
     // Mock pool.query
     mockPoolQuery = jest.fn();

@@ -9,7 +9,7 @@
  * - Compensation from /compensation/list
  */
 
-import { theSportsAPI } from '../../../core/TheSportsAPIManager';
+import { theSportsAPI, TheSportsAPIManager } from '../../../core/TheSportsAPIManager';
 import { MatchAnalysisService } from '../match/matchAnalysis.service';
 import { MatchLineupService } from '../match/matchLineup.service';
 import { SeasonStandingsService } from '../season/standings.service';
@@ -94,8 +94,8 @@ export class DailyPreSyncService {
                     hasMore = false;
                 } else {
                     page++;
-                    // Small delay between pages to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    // Use rate limiter between pages
+                    await TheSportsAPIManager.getInstance().rateLimit.acquire('compensation-pagination');
                 }
             }
             
@@ -161,10 +161,10 @@ export class DailyPreSyncService {
                     result.errors.push(`Lineup ${matchId}: ${error.message}`);
                 }
             }
-            
-            // Small delay between batches to avoid rate limiting
+
+            // Use rate limiter between batches
             if (i + BATCH_SIZE < matchIds.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await TheSportsAPIManager.getInstance().rateLimit.acquire('lineup-batch');
             }
         }
 
@@ -184,10 +184,10 @@ export class DailyPreSyncService {
                     result.errors.push(`Standings ${seasonId}: ${error.message}`);
                 }
             }
-            
-            // Small delay between batches to avoid rate limiting
+
+            // Use rate limiter between batches
             if (i + BATCH_SIZE < uniqueSeasons.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await TheSportsAPIManager.getInstance().rateLimit.acquire('standings-batch');
             }
         }
 

@@ -148,8 +148,37 @@ export function TelegramDailyLists() {
   const [selectedRange, setSelectedRange] = useState<DateRange>('today');
   const [publishingMarket, setPublishingMarket] = useState<string | null>(null);
 
+  // Compute date range based on selected range
+  const { start, end } = useMemo(() => {
+    return getDateRange(selectedRange);
+  }, [selectedRange]);
+
+  // React Query hooks
+  const isToday = selectedRange === 'today';
+  const todayQuery = useTelegramDailyListsToday();
+  const rangeQuery = useTelegramDailyListsRange(start, end, !isToday);
+  const publishMutation = usePublishDailyList();
+
+  // Select active query based on range
+  const activeQuery = isToday ? todayQuery : rangeQuery;
+  const { data, isLoading, isError, error: queryError, refetch } = activeQuery;
+
+  // Extract lists and metadata from response
+  const lists = isToday && data ? (data as any).lists || [] : [];
+  const historicalData: DateData[] = !isToday && data ? (data as any).data || [] : [];
+
+  // Read generated_at from appropriate source based on view mode
+  const lastUpdated = isToday
+    ? ((data as any)?.generated_at || null)
+    : (historicalData.length > 0 && historicalData[0].lists.length > 0
+        ? historicalData[0].lists[0].generated_at
+        : null);
+  const isHistoricalView = !isToday;
+  const loading = isLoading;
+  const error = isError ? (queryError instanceof Error ? queryError.message : 'Bir hata oluştu') : null;
+
   // Calculate date ranges in Istanbul timezone (UTC+3)
-  const getDateRange = (range: DateRange): { start: string; end: string } => {
+  function getDateRange(range: DateRange): { start: string; end: string } {
     // Get today's date in Istanbul timezone (YYYY-MM-DD)
     const today = getTodayInTurkey();
 
@@ -174,25 +203,6 @@ export function TelegramDailyLists() {
         return { start: today, end: today };
     }
   };
-
-  // Compute date range based on selected range
-  const { start, end } = useMemo(() => getDateRange(selectedRange), [selectedRange]);
-
-  // React Query hooks
-  const isToday = selectedRange === 'today';
-  const todayQuery = useTelegramDailyListsToday();
-  const rangeQuery = useTelegramDailyListsRange(start, end, !isToday);
-  const publishMutation = usePublishDailyList();
-
-  // Select active query based on range
-  const activeQuery = isToday ? todayQuery : rangeQuery;
-  const { data, isLoading, isError, error, refetch } = activeQuery;
-
-  // Extract lists and metadata from response
-  const lists = isToday && data ? (data as any).lists || [] : [];
-  const lastUpdated = isToday && data ? (data as any).generated_at || null : null;
-  const historicalData: DateData[] = !isToday && data ? (data as any).data || [] : [];
-  const isHistoricalView = !isToday;
 
   // Publish single list handler
   const publishSingleList = async (list: DailyList) => {
@@ -247,7 +257,7 @@ export function TelegramDailyLists() {
   // For stats card display
   const statsListsCount = isHistoricalView ? historicalData.length : displayLists.length;
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -286,7 +296,7 @@ export function TelegramDailyLists() {
               <div className="flex items-center gap-2 bg-white border-2 border-gray-200 rounded-xl p-1">
                 <button
                   onClick={() => setSelectedRange('today')}
-                  disabled={isLoading}
+                  disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                     selectedRange === 'today'
                       ? 'bg-blue-500 text-white shadow-md'
@@ -297,7 +307,7 @@ export function TelegramDailyLists() {
                 </button>
                 <button
                   onClick={() => setSelectedRange('yesterday')}
-                  disabled={isLoading}
+                  disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                     selectedRange === 'yesterday'
                       ? 'bg-blue-500 text-white shadow-md'
@@ -308,7 +318,7 @@ export function TelegramDailyLists() {
                 </button>
                 <button
                   onClick={() => setSelectedRange('last7days')}
-                  disabled={isLoading}
+                  disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                     selectedRange === 'last7days'
                       ? 'bg-blue-500 text-white shadow-md'
@@ -319,7 +329,7 @@ export function TelegramDailyLists() {
                 </button>
                 <button
                   onClick={() => setSelectedRange('thismonth')}
-                  disabled={isLoading}
+                  disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                     selectedRange === 'thismonth'
                       ? 'bg-blue-500 text-white shadow-md'
@@ -333,12 +343,12 @@ export function TelegramDailyLists() {
               {/* Refresh Button */}
               <button
                 onClick={() => refetch()}
-                disabled={isLoading}
+                disabled={loading}
                 className="group relative px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all duration-300 disabled:opacity-50"
               >
                 <div className="flex items-center gap-2">
                   <svg
-                    className={`w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors ${isLoading ? 'animate-spin' : ''}`}
+                    className={`w-5 h-5 text-gray-600 group-hover:text-blue-600 transition-colors ${loading ? 'animate-spin' : ''}`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -457,14 +467,14 @@ export function TelegramDailyLists() {
         </div>
 
         {/* Error Message */}
-        {isError && (
+        {error && (
           <div className="mb-6 bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-start gap-3">
             <svg className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
               <h4 className="font-semibold text-red-800 mb-1">Hata Oluştu</h4>
-              <p className="text-red-600">{error instanceof Error ? error.message : 'Bir hata oluştu'}</p>
+              <p className="text-red-600">{error}</p>
             </div>
           </div>
         )}
@@ -579,7 +589,7 @@ export function TelegramDailyLists() {
                                       <div className="flex items-center justify-between mb-2">
                                         <span className="text-xs font-semibold opacity-90">Performans</span>
                                         <span className="text-lg font-bold">
-                                          {list.performance.won}/{list.performance.total - list.performance.pending}
+                                          {list.performance.won}/{list.performance.total}
                                           {list.performance.pending === 0 && (
                                             <span className="text-xs ml-1 opacity-80">
                                               ({list.performance.win_rate}%)
@@ -731,7 +741,7 @@ export function TelegramDailyLists() {
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-xs font-semibold opacity-90">Performans</span>
                               <span className="text-lg font-bold">
-                                {list.performance.won}/{list.performance.total - list.performance.pending}
+                                {list.performance.won}/{list.performance.total}
                                 {list.performance.pending === 0 && (
                                   <span className="text-xs ml-1 opacity-80">
                                     ({list.performance.win_rate}%)

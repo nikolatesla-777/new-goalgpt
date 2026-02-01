@@ -439,7 +439,7 @@ export async function cleanupExpiredCache(): Promise<void> {
       pool.query(`DELETE FROM fs_today_matches_cache WHERE expires_at < NOW()`)
     ]);
 
-    const totalDeleted = results.reduce((sum, r) => sum + r.rowCount, 0);
+    const totalDeleted = results.reduce((sum, r) => sum + (r.rowCount ?? 0), 0);
     logger.info(`[Cache] Cleanup: Deleted ${totalDeleted} expired entries`);
 
     await logCacheOperation('all', 'cleanup', totalDeleted.toString());

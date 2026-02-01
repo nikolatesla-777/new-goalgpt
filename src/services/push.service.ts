@@ -7,6 +7,7 @@
 import admin from 'firebase-admin';
 import { db } from '../database/kysely';
 import { logger } from '../utils/logger';
+import { mapWithConcurrency } from '../utils/concurrency';
 
 export interface PushNotification {
   title: string;
@@ -125,13 +126,17 @@ export async function sendPushToMultipleUsers(
   let totalFailed = 0;
   let totalDelivered = 0;
 
-  // Process in batches of 100 to avoid overwhelming FCM
+  // Process in batches of 100, with max 20 concurrent DB operations
   const BATCH_SIZE = 100;
+  const CONCURRENCY_LIMIT = 20;
+
   for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
     const batch = userIds.slice(i, i + BATCH_SIZE);
 
-    const results = await Promise.all(
-      batch.map((userId) => sendPushToUser(userId, notification))
+    const results = await mapWithConcurrency(
+      batch,
+      CONCURRENCY_LIMIT,
+      async (userId) => sendPushToUser(userId, notification)
     );
 
     totalSent += results.filter((r) => r.success).length;
