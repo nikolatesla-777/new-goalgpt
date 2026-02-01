@@ -86,32 +86,61 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
       for (const row of rows) {
         const teamId = row.team_id;
 
-        // Build WHERE clause based on view
-        let whereClause = '';
-        if (view === 'home') {
-          whereClause = 'home_team_id = $1';
-        } else if (view === 'away') {
-          whereClause = 'away_team_id = $1';
-        } else {
-          whereClause = '(home_team_id = $1 OR away_team_id = $1)';
-        }
+        // Get last 20 matches for statistics - with view filter
+        let matchesResult;
 
-        // Get last 20 matches for statistics
-        const matchesResult = await pool.query(`
-          SELECT
-            home_team_id,
-            away_team_id,
-            home_score_display,
-            away_score_display,
-            match_time,
-            statistics
-          FROM ts_matches
-          WHERE ${whereClause}
-            AND status_id = 8
-            AND season_id = $2
-          ORDER BY match_time DESC
-          LIMIT 20
-        `, [teamId, seasonId]);
+        if (view === 'home') {
+          // HOME: Only matches where team is home
+          matchesResult = await pool.query(`
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics
+            FROM ts_matches
+            WHERE home_team_id = $1
+              AND status_id = 8
+              AND season_id = $2
+            ORDER BY match_time DESC
+            LIMIT 20
+          `, [teamId, seasonId]);
+        } else if (view === 'away') {
+          // AWAY: Only matches where team is away
+          matchesResult = await pool.query(`
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics
+            FROM ts_matches
+            WHERE away_team_id = $1
+              AND status_id = 8
+              AND season_id = $2
+            ORDER BY match_time DESC
+            LIMIT 20
+          `, [teamId, seasonId]);
+        } else {
+          // OVERALL: All matches (home + away)
+          matchesResult = await pool.query(`
+            SELECT
+              home_team_id,
+              away_team_id,
+              home_score_display,
+              away_score_display,
+              match_time,
+              statistics
+            FROM ts_matches
+            WHERE (home_team_id = $1 OR away_team_id = $1)
+              AND status_id = 8
+              AND season_id = $2
+            ORDER BY match_time DESC
+            LIMIT 20
+          `, [teamId, seasonId]);
+        }
 
         const matches = matchesResult.rows;
 
