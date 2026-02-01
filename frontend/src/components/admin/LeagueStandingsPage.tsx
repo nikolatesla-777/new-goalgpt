@@ -246,14 +246,14 @@ export default function LeagueStandingsPage() {
             </div>
           </div>
 
-          {data && (
+          {data && data.standings && (
             <div className="mt-4 pt-4 border-t border-blue-700/30 flex items-center justify-between text-sm">
               <div className="flex items-center gap-2 text-gray-400">
                 <Check className="w-4 h-4 text-green-400" />
                 <span>Son güncelleme: {getLastUpdatedTime()}</span>
               </div>
               <div className="text-gray-400">
-                18 takım • {data.standings.length} satır veri
+                {data.standings.length} takım • {data.standings.length} satır veri
               </div>
             </div>
           )}
@@ -358,7 +358,7 @@ export default function LeagueStandingsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {data.standings.map((team) => (
+                  {(data?.standings || []).map((team) => (
                     <tr
                       key={team.team_id}
                       className={`
