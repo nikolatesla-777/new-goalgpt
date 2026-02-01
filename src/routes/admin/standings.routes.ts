@@ -635,17 +635,17 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
       // Import theSportsAPI and sync
       const { theSportsAPI } = await import('../../core/TheSportsAPIManager');
 
-      const standings = await theSportsAPI.get('/season/recent/table/detail', {
+      const apiStandings = await theSportsAPI.get('/season/recent/table/detail', {
         uuid: seasonId
       });
 
-      if (!standings.results?.tables?.[0]?.rows) {
+      if (!apiStandings.results?.tables?.[0]?.rows) {
         return reply.status(404).send({
           error: 'No standings data from API'
         });
       }
 
-      const rows = standings.results.tables[0].rows;
+      const rows = apiStandings.results.tables[0].rows;
 
       // Save to database
       await pool.query(`
@@ -656,7 +656,7 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
           standings = EXCLUDED.standings,
           raw_response = EXCLUDED.raw_response,
           updated_at = NOW()
-      `, [seasonId, JSON.stringify(rows), JSON.stringify(standings)]);
+      `, [seasonId, JSON.stringify(rows), JSON.stringify(apiStandings)]);
 
       return reply.send({
         success: true,
