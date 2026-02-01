@@ -60,15 +60,17 @@ export default function LeagueStandingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showDataSource, setShowDataSource] = useState(false);
   const [selectedView, setSelectedView] = useState<'overall' | 'home' | 'away'>('overall');
-  const [selectedLeagueId, setSelectedLeagueId] = useState<string>('super-lig'); // Default: Süper Lig
+  // Find first league with valid competition_id as default
+  const defaultLeague = leaguesRegistry.leagues.find(l => l.thesports.competition_id) || leaguesRegistry.leagues[0];
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string>(defaultLeague.id);
 
   // Get competition ID from selected league
   const selectedLeague = leaguesRegistry.leagues.find(l => l.id === selectedLeagueId);
-  const competitionId = selectedLeague?.thesports.competition_id || '8y39mp1h6jmojxg';
+  const competitionId = selectedLeague?.thesports.competition_id;
 
   const fetchStandings = async (view: 'overall' | 'home' | 'away' = 'overall') => {
     if (!competitionId) {
-      setError('Selected league not available in database');
+      setError(`Selected league "${selectedLeague?.display_name || selectedLeagueId}" does not have TheSports mapping yet. Please select a different league.`);
       setLoading(false);
       return;
     }
@@ -164,11 +166,13 @@ export default function LeagueStandingsPage() {
                 onChange={(e) => setSelectedLeagueId(e.target.value)}
                 className="appearance-none px-6 py-3 pr-10 bg-gray-800 border border-gray-700 text-white rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 hover:bg-gray-750 transition-all cursor-pointer"
               >
-                {leaguesRegistry.leagues.map((league) => (
-                  <option key={league.id} value={league.id}>
-                    {league.country === 'Turkey' ? '🇹🇷' : league.country === 'England' ? '🏴󠁧󠁢󠁥󠁮󠁧󠁿' : league.country === 'Spain' ? '🇪🇸' : league.country === 'Germany' ? '🇩🇪' : league.country === 'Italy' ? '🇮🇹' : league.country === 'France' ? '🇫🇷' : '🌍'} {league.display_name}
-                  </option>
-                ))}
+                {leaguesRegistry.leagues
+                  .filter(league => league.thesports.competition_id) // Only show leagues with valid mapping
+                  .map((league) => (
+                    <option key={league.id} value={league.id}>
+                      {league.country === 'Turkey' ? '🇹🇷' : league.country === 'England' ? '🏴󠁧󠁢󠁥󠁮󠁧󠁿' : league.country === 'Spain' ? '🇪🇸' : league.country === 'Germany' ? '🇩🇪' : league.country === 'Italy' ? '🇮🇹' : league.country === 'France' ? '🇫🇷' : '🌍'} {league.display_name}
+                    </option>
+                  ))}
               </select>
               <CaretDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
