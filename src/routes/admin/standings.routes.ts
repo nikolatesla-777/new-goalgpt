@@ -309,37 +309,65 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         team.position = index + 1;
       });
 
-      // Check for live standings (real-time from ongoing matches)
-      const liveStandingsResult = await pool.query(`
-        SELECT standings, updated_at
-        FROM ts_standings_live
-        WHERE season_id = $1
-          AND updated_at > NOW() - INTERVAL '10 minutes'
-      `, [seasonId]);
-
-      let liveStandings = null;
+      // Check for live matches (real-time standings calculation)
+      // Only for overall view - calculate temporary points from ongoing matches
       let hasLiveMatches = false;
 
-      if (liveStandingsResult.rows.length > 0 && view === 'overall') {
-        // Only show live standings for overall view
-        liveStandings = liveStandingsResult.rows[0].standings;
-        hasLiveMatches = true;
+      if (view === 'overall') {
+        // Find all live matches in this competition
+        const liveMatchesResult = await pool.query(`
+          SELECT
+            m.external_id,
+            m.home_team_id,
+            m.away_team_id,
+            m.home_score_display,
+            m.away_score_display,
+            m.status_id
+          FROM ts_matches m
+          WHERE m.season_id = $1
+            AND m.status_id IN (2, 3, 4, 5, 7)
+        `, [seasonId]);
 
-        // Merge live data with calculated stats
-        const liveStandingsMap: Record<string, any> = {};
-        liveStandings.forEach((ls: any) => {
-          liveStandingsMap[ls.team_id] = ls;
-        });
+        const liveMatches = liveMatchesResult.rows;
 
-        // Add live_points field to each team
-        standings.forEach(team => {
-          const liveData = liveStandingsMap[team.team_id];
-          if (liveData) {
-            (team as any).live_points = liveData.points;
-            (team as any).live_position = liveData.position;
-            (team as any).points_diff = liveData.points - team.points;
-          }
-        });
+        if (liveMatches.length > 0) {
+          hasLiveMatches = true;
+
+          // Calculate temporary points for teams with live matches
+          const livePointsMap: Record<string, number> = {};
+
+          liveMatches.forEach((match: any) => {
+            const homeScore = match.home_score_display || 0;
+            const awayScore = match.away_score_display || 0;
+
+            // Calculate temporary points for this match
+            let homePoints = 0;
+            let awayPoints = 0;
+
+            if (homeScore > awayScore) {
+              homePoints = 3;
+            } else if (homeScore < awayScore) {
+              awayPoints = 3;
+            } else {
+              homePoints = 1;
+              awayPoints = 1;
+            }
+
+            // Add to map
+            livePointsMap[match.home_team_id] = homePoints;
+            livePointsMap[match.away_team_id] = awayPoints;
+          });
+
+          // Apply live points to standings
+          standings.forEach(team => {
+            if (livePointsMap[team.team_id] !== undefined) {
+              const tempPoints = livePointsMap[team.team_id];
+              (team as any).live_points = team.points + tempPoints;
+              (team as any).live_position = team.position; // Will recalculate after sort
+              (team as any).points_diff = tempPoints;
+            }
+          });
+        }
       }
 
       return reply.send({
