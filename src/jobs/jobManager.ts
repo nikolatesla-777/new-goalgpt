@@ -287,7 +287,7 @@ const jobs: JobDefinition[] = [
       const { predictionMatcherService } = await import('../services/ai/predictionMatcher.service');
       await predictionMatcherService.matchUnmatchedPredictions();
     },
-    enabled: true,
+    enabled: false, // DISABLED: Database schema error - confidence column missing
     description: 'Match predictions with NULL match_id to actual matches using team names and date',
   },
   {
