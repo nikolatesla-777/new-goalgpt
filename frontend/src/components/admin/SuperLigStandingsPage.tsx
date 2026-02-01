@@ -10,7 +10,6 @@ import {
   ArrowsClockwise,
   Check,
   Warning,
-  TrendUp,
   ChartBar,
   Target,
   Database
@@ -285,7 +284,7 @@ export default function SuperLigStandingsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {data.standings.map((team, index) => (
+                  {data.standings.map((team) => (
                     <tr
                       key={team.team_id}
                       className={`
