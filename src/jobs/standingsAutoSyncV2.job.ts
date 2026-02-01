@@ -2,18 +2,18 @@
  * Standings Auto-Sync Job V2
  *
  * IMPROVED APPROACH:
- * 1. Always syncs priority leagues (Süper Lig, etc.)
+ * 1. Always syncs leagues from leagues_registry.json (50 leagues)
  * 2. Also syncs leagues from /data/update (recent matches)
- * 3. Ensures major leagues always have fresh standings
+ * 3. Ensures all registry leagues always have fresh standings
  *
  * Frequency: Every 5 minutes
- * Coverage: Priority leagues + recent matches
+ * Coverage: Registry leagues (50) + recent matches
  */
 
 import { theSportsAPI } from '../core/TheSportsAPIManager';
 import { pool } from '../database/connection';
 import { logger } from '../utils/logger';
-import priorityLeaguesConfig from '../config/priority_leagues.json';
+import leaguesRegistry from '../config/leagues_registry.json';
 
 interface SyncResult {
   total: number;
@@ -39,23 +39,30 @@ export async function runStandingsAutoSyncV2(): Promise<SyncResult> {
 
     const allSeasonIds: Set<string> = new Set();
 
-    // Step 1: Add priority leagues
-    logger.info('[Standings Auto-Sync V2] Adding priority leagues...');
-    for (const league of priorityLeaguesConfig.priority_leagues) {
-      allSeasonIds.add(league.season_2025_2026_id);
+    // Step 1: Add leagues from registry (filter by competition_id and season_id)
+    logger.info('[Standings Auto-Sync V2] Adding leagues from registry...');
+    for (const league of leaguesRegistry.leagues) {
+      // Only sync leagues that have both competition_id and season_id
+      if (league.thesports.competition_id && league.thesports.season_2025_2026_id) {
+        allSeasonIds.add(league.thesports.season_2025_2026_id);
+      }
     }
-    logger.info(`[Standings Auto-Sync V2] ${allSeasonIds.size} priority leagues`);
+    logger.info(`[Standings Auto-Sync V2] ${allSeasonIds.size} leagues from registry`);
 
     // Step 2: Add leagues from /data/update
     logger.info('[Standings Auto-Sync V2] Checking /data/update for recent matches...');
-    const dataUpdate = await theSportsAPI.get('/data/update', {});
+    const dataUpdate: any = await theSportsAPI.get('/data/update', {});
 
     const recentUpdates: any[] = [];
-    ['3', '4', '5', '6'].forEach(key => {
-      if (dataUpdate.results[key] && Array.isArray(dataUpdate.results[key])) {
-        recentUpdates.push(...dataUpdate.results[key]);
-      }
-    });
+    if (dataUpdate.results && typeof dataUpdate.results === 'object') {
+      ['3', '4', '5', '6'].forEach(key => {
+        if (dataUpdate.results[key] && Array.isArray(dataUpdate.results[key])) {
+          recentUpdates.push(...dataUpdate.results[key]);
+        }
+      });
+    } else {
+      logger.warn('[Standings Auto-Sync V2] dataUpdate.results is undefined or invalid');
+    }
 
     const recentSeasonIds = [...new Set(recentUpdates.map((item: any) => item.season_id))];
 
@@ -82,7 +89,7 @@ export async function runStandingsAutoSyncV2(): Promise<SyncResult> {
     // Step 3: Fetch standings for all seasons
     for (const seasonId of Array.from(allSeasonIds)) {
       try {
-        const standings = await theSportsAPI.get('/season/recent/table/detail', {
+        const standings: any = await theSportsAPI.get('/season/recent/table/detail', {
           uuid: seasonId
         });
 
@@ -126,14 +133,14 @@ export async function runStandingsAutoSyncV2(): Promise<SyncResult> {
         result.success++;
         result.leagues.push(compName);
 
-        // Track whether it was priority or recent
-        const isPriority = priorityLeaguesConfig.priority_leagues.some(
-          league => league.season_2025_2026_id === seasonId
+        // Track whether it was from registry or recent update
+        const isFromRegistry = leaguesRegistry.leagues.some(
+          league => league.thesports.season_2025_2026_id === seasonId
         );
 
-        if (isPriority) {
+        if (isFromRegistry) {
           result.priority_synced++;
-          logger.info(`[Standings Auto-Sync V2] ✅ [PRIORITY] ${compName}: ${rows.length} teams`);
+          logger.info(`[Standings Auto-Sync V2] ✅ [REGISTRY] ${compName}: ${rows.length} teams`);
         } else {
           result.recent_synced++;
           logger.info(`[Standings Auto-Sync V2] ✅ [RECENT] ${compName}: ${rows.length} teams`);
@@ -149,7 +156,7 @@ export async function runStandingsAutoSyncV2(): Promise<SyncResult> {
     }
 
     logger.info(`[Standings Auto-Sync V2] Complete: ${result.success}/${result.total} leagues updated`);
-    logger.info(`[Standings Auto-Sync V2]   Priority: ${result.priority_synced} | Recent: ${result.recent_synced}`);
+    logger.info(`[Standings Auto-Sync V2]   Registry: ${result.priority_synced} | Recent: ${result.recent_synced}`);
     logger.info(`[Standings Auto-Sync V2] Updated leagues: ${result.leagues.join(', ')}`);
 
   } catch (err: any) {
@@ -168,7 +175,7 @@ if (require.main === module) {
       console.log(`  Total Seasons: ${result.total}`);
       console.log(`  Success: ${result.success}`);
       console.log(`  Failed: ${result.failed}`);
-      console.log(`  Priority Leagues: ${result.priority_synced}`);
+      console.log(`  Registry Leagues: ${result.priority_synced}`);
       console.log(`  Recent Leagues: ${result.recent_synced}`);
       console.log(`  Updated Leagues: ${result.leagues.join(', ')}`);
       console.log('='.repeat(80));

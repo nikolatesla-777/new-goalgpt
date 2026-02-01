@@ -1,40 +1,159 @@
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "last_updated": "2026-02-01",
-  "description": "Top 10 European leagues with TheSports + FootyStats mapping (Hobby Package)",
+  "description": "Top 50 leagues with TheSports + FootyStats mapping (Hobby Package)",
   "leagues": [
     {
-      "id": "premier-league",
-      "name": "Premier League",
-      "display_name": "Premier League",
-      "country": "England",
-      "country_code": "ENG",
+      "id": "1-lig",
+      "name": "1. Lig",
+      "display_name": "1. Lig",
+      "country": "Turkey",
+      "country_code": "TUR",
       "priority": 1,
       "thesports": {
-        "competition_id": "jednm9whz0ryox8",
-        "season_2025_2026_id": "l965mkyhjpxr1ge",
-        "db_name": "English Premier League"
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
       },
       "footystats": {
-        "league_name": "Premier League",
-        "country": "England"
+        "league_name": "1. Lig",
+        "country": "Turkey"
       }
     },
     {
-      "id": "la-liga",
-      "name": "La Liga",
-      "display_name": "La Liga",
-      "country": "Spain",
-      "country_code": "ESP",
+      "id": "2-bundesliga",
+      "name": "2. Bundesliga",
+      "display_name": "2. Bundesliga",
+      "country": "Germany",
+      "country_code": "GER",
       "priority": 2,
       "thesports": {
-        "competition_id": "vl7oqdehlyr510j",
-        "season_2025_2026_id": "56ypq3nhxw7md7o",
-        "db_name": "Spanish La Liga"
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
       },
       "footystats": {
-        "league_name": "La Liga",
-        "country": "Spain"
+        "league_name": "2. Bundesliga",
+        "country": "Germany"
+      }
+    },
+    {
+      "id": "argentine-primera-divisin",
+      "name": "Argentine Primera División",
+      "display_name": "Argentine Primera División",
+      "country": "Argentina",
+      "country_code": "ARG",
+      "priority": 3,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Argentine Primera División",
+        "country": "Argentina"
+      }
+    },
+    {
+      "id": "australian-aleague",
+      "name": "Australian A-League",
+      "display_name": "Australian A-League",
+      "country": "Australia",
+      "country_code": "AUS",
+      "priority": 4,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Australian A-League",
+        "country": "Australia"
+      }
+    },
+    {
+      "id": "austrian-bundesliga",
+      "name": "Austrian Bundesliga",
+      "display_name": "Austrian Bundesliga",
+      "country": "Austria",
+      "country_code": "AUT",
+      "priority": 5,
+      "thesports": {
+        "competition_id": "yl5ergphyvr8k0o",
+        "season_2025_2026_id": "v2y8m4zhlg8ql07",
+        "db_name": "Austrian Bundesliga"
+      },
+      "footystats": {
+        "league_name": "Austrian Bundesliga",
+        "country": "Austria"
+      }
+    },
+    {
+      "id": "belgian-pro-league",
+      "name": "Belgian Pro League",
+      "display_name": "Belgian Pro League",
+      "country": "Belgium",
+      "country_code": "BEL",
+      "priority": 6,
+      "thesports": {
+        "competition_id": "9vjxm8gh22r6odg",
+        "season_2025_2026_id": "jednm9wh1klryox",
+        "db_name": "Belgian Pro League"
+      },
+      "footystats": {
+        "league_name": "Belgian Pro League",
+        "country": "Belgium"
+      }
+    },
+    {
+      "id": "brasileiro-srie-a",
+      "name": "Brasileirão Série A",
+      "display_name": "Brasileirão Série A",
+      "country": "Brazil",
+      "country_code": "BRA",
+      "priority": 7,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Brasileirão Série A",
+        "country": "Brazil"
+      }
+    },
+    {
+      "id": "brasileiro-srie-b",
+      "name": "Brasileirão Série B",
+      "display_name": "Brasileirão Série B",
+      "country": "Brazil",
+      "country_code": "BRA",
+      "priority": 8,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Brasileirão Série B",
+        "country": "Brazil"
+      }
+    },
+    {
+      "id": "bulgarian-first-league",
+      "name": "Bulgarian First League",
+      "display_name": "Bulgarian First League",
+      "country": "Bulgaria",
+      "country_code": "BUL",
+      "priority": 9,
+      "thesports": {
+        "competition_id": "kn54qllhn0qvy9d",
+        "season_2025_2026_id": "9vjxm8ghyjkr6od",
+        "db_name": "Bulgarian First League"
+      },
+      "footystats": {
+        "league_name": "Bulgarian First League",
+        "country": "Bulgaria"
       }
     },
     {
@@ -43,7 +162,7 @@
       "display_name": "Bundesliga",
       "country": "Germany",
       "country_code": "GER",
-      "priority": 3,
+      "priority": 10,
       "thesports": {
         "competition_id": "gy0or5jhg6qwzv3",
         "season_2025_2026_id": null,
@@ -55,54 +174,173 @@
       }
     },
     {
-      "id": "serie-a",
-      "name": "Serie A",
-      "display_name": "Serie A",
-      "country": "Italy",
-      "country_code": "ITA",
-      "priority": 4,
+      "id": "championship",
+      "name": "Championship",
+      "display_name": "Championship",
+      "country": "England",
+      "country_code": "ENG",
+      "priority": 11,
       "thesports": {
-        "competition_id": "4zp5rzghp5q82w1",
-        "season_2025_2026_id": "4zp5rzghn83q82w",
-        "db_name": "Italian Serie A"
+        "competition_id": "l965mkyh32r1ge4",
+        "season_2025_2026_id": "56ypq3nhx51md7o",
+        "db_name": "English Football League Championship"
       },
       "footystats": {
-        "league_name": "Serie A",
-        "country": "Italy"
+        "league_name": "Championship",
+        "country": "England"
       }
     },
     {
-      "id": "ligue-1",
-      "name": "Ligue 1",
-      "display_name": "Ligue 1",
-      "country": "France",
-      "country_code": "FRA",
-      "priority": 5,
+      "id": "championship-scottish",
+      "name": "Championship (Scottish)",
+      "display_name": "Championship (Scottish)",
+      "country": "Scotland",
+      "country_code": "SCO",
+      "priority": 12,
       "thesports": {
-        "competition_id": "yl5ergphnzr8k0o",
-        "season_2025_2026_id": "9dn1m1gh645moep",
-        "db_name": "French Ligue 1"
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
       },
       "footystats": {
-        "league_name": "Ligue 1",
-        "country": "France"
+        "league_name": "Championship (Scottish)",
+        "country": "Scotland"
       }
     },
     {
-      "id": "super-lig",
-      "name": "Süper Lig",
-      "display_name": "Süper Lig",
-      "country": "Turkey",
-      "country_code": "TUR",
-      "priority": 6,
+      "id": "chilean-primera-divisin",
+      "name": "Chilean Primera División",
+      "display_name": "Chilean Primera División",
+      "country": "Chile",
+      "country_code": "CHI",
+      "priority": 13,
       "thesports": {
-        "competition_id": "8y39mp1h6jmojxg",
-        "season_2025_2026_id": "4zp5rzgh8xvq82w",
-        "db_name": "Turkish Super League"
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
       },
       "footystats": {
-        "league_name": "Süper Lig",
-        "country": "Turkey"
+        "league_name": "Chilean Primera División",
+        "country": "Chile"
+      }
+    },
+    {
+      "id": "chinese-super-league",
+      "name": "Chinese Super League",
+      "display_name": "Chinese Super League",
+      "country": "China",
+      "country_code": "CHN",
+      "priority": 14,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Chinese Super League",
+        "country": "China"
+      }
+    },
+    {
+      "id": "colombian-primera-a",
+      "name": "Colombian Primera A",
+      "display_name": "Colombian Primera A",
+      "country": "Colombia",
+      "country_code": "COL",
+      "priority": 15,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Colombian Primera A",
+        "country": "Colombia"
+      }
+    },
+    {
+      "id": "croatian-first-league",
+      "name": "Croatian First League",
+      "display_name": "Croatian First League",
+      "country": "Croatia",
+      "country_code": "CRO",
+      "priority": 16,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Croatian First League",
+        "country": "Croatia"
+      }
+    },
+    {
+      "id": "cypriot-first-division",
+      "name": "Cypriot First Division",
+      "display_name": "Cypriot First Division",
+      "country": "Cyprus",
+      "country_code": "CYP",
+      "priority": 17,
+      "thesports": {
+        "competition_id": "28",
+        "season_2025_2026_id": null,
+        "db_name": "Cypriot First Division"
+      },
+      "footystats": {
+        "league_name": "Cypriot First Division",
+        "country": "Cyprus"
+      }
+    },
+    {
+      "id": "czech-first-league",
+      "name": "Czech First League",
+      "display_name": "Czech First League",
+      "country": "Czech Republic",
+      "country_code": "CZE",
+      "priority": 18,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Czech First League",
+        "country": "Czech Republic"
+      }
+    },
+    {
+      "id": "danish-superliga",
+      "name": "Danish Superliga",
+      "display_name": "Danish Superliga",
+      "country": "Denmark",
+      "country_code": "DEN",
+      "priority": 19,
+      "thesports": {
+        "competition_id": "4zp5rzgh0eq82w1",
+        "season_2025_2026_id": "jednm9whj1lryox",
+        "db_name": "Danish Superliga"
+      },
+      "footystats": {
+        "league_name": "Danish Superliga",
+        "country": "Denmark"
+      }
+    },
+    {
+      "id": "eerste-divisie",
+      "name": "Eerste Divisie",
+      "display_name": "Eerste Divisie",
+      "country": "Netherlands",
+      "country_code": "NED",
+      "priority": 20,
+      "thesports": {
+        "competition_id": "kdj2ryohdkq1zpg",
+        "season_2025_2026_id": "v2y8m4zhlj8ql07",
+        "db_name": "Netherlands Eerste Divisie"
+      },
+      "footystats": {
+        "league_name": "Eerste Divisie",
+        "country": "Netherlands"
       }
     },
     {
@@ -111,7 +349,7 @@
       "display_name": "Eredivisie",
       "country": "Netherlands",
       "country_code": "NED",
-      "priority": 7,
+      "priority": 21,
       "thesports": {
         "competition_id": "vl7oqdeheyr510j",
         "season_2025_2026_id": null,
@@ -123,45 +361,505 @@
       }
     },
     {
-      "id": "belgian-pro-league",
-      "name": "Belgian Pro League",
-      "display_name": "Pro League",
-      "country": "Belgium",
-      "country_code": "BEL",
-      "priority": 8,
+      "id": "greek-super-league",
+      "name": "Greek Super League",
+      "display_name": "Greek Super League",
+      "country": "Greece",
+      "country_code": "GRE",
+      "priority": 22,
       "thesports": {
-        "competition_id": "9vjxm8gh22r6odg",
-        "season_2025_2026_id": "jednm9wh1klryox",
-        "db_name": "Belgian Pro League"
+        "competition_id": "e4wyrn4hoeq86pv",
+        "season_2025_2026_id": "l965mkyhpzpr1ge",
+        "db_name": "Greek Super League"
       },
       "footystats": {
-        "league_name": "Pro League",
-        "country": "Belgium"
+        "league_name": "Greek Super League",
+        "country": "Greece"
+      }
+    },
+    {
+      "id": "hungarian-nb-i",
+      "name": "Hungarian NB I",
+      "display_name": "Hungarian NB I",
+      "country": "Hungary",
+      "country_code": "HUN",
+      "priority": 23,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Hungarian NB I",
+        "country": "Hungary"
+      }
+    },
+    {
+      "id": "israeli-premier-league",
+      "name": "Israeli Premier League",
+      "display_name": "Israeli Premier League",
+      "country": "Israel",
+      "country_code": "ISR",
+      "priority": 24,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Israeli Premier League",
+        "country": "Israel"
+      }
+    },
+    {
+      "id": "j1-league",
+      "name": "J1 League",
+      "display_name": "J1 League",
+      "country": "Japan",
+      "country_code": "JPN",
+      "priority": 25,
+      "thesports": {
+        "competition_id": "z318q66hl1qo9jd",
+        "season_2025_2026_id": "4jwq2gh4o48m0ve",
+        "db_name": "Japanese J1 League"
+      },
+      "footystats": {
+        "league_name": "J1 League",
+        "country": "Japan"
+      }
+    },
+    {
+      "id": "k-league-1",
+      "name": "K League 1",
+      "display_name": "K League 1",
+      "country": "South Korea",
+      "country_code": "KOR",
+      "priority": 26,
+      "thesports": {
+        "competition_id": "gy0or5jhlxgqwzv",
+        "season_2025_2026_id": "jw2r09hl4xprz84",
+        "db_name": "Korean K League 1"
+      },
+      "footystats": {
+        "league_name": "K League 1",
+        "country": "South Korea"
+      }
+    },
+    {
+      "id": "la-liga",
+      "name": "La Liga",
+      "display_name": "La Liga",
+      "country": "Spain",
+      "country_code": "ESP",
+      "priority": 27,
+      "thesports": {
+        "competition_id": "vl7oqdehlyr510j",
+        "season_2025_2026_id": "56ypq3nhxw7md7o",
+        "db_name": "Spanish La Liga"
+      },
+      "footystats": {
+        "league_name": "La Liga",
+        "country": "Spain"
+      }
+    },
+    {
+      "id": "league-one",
+      "name": "League One",
+      "display_name": "League One",
+      "country": "England",
+      "country_code": "ENG",
+      "priority": 28,
+      "thesports": {
+        "competition_id": "8y39mp1hjzmojxg",
+        "season_2025_2026_id": "gpxwrxlhd12ryk0",
+        "db_name": "English Football League One"
+      },
+      "footystats": {
+        "league_name": "League One",
+        "country": "England"
+      }
+    },
+    {
+      "id": "league-two",
+      "name": "League Two",
+      "display_name": "League Two",
+      "country": "England",
+      "country_code": "ENG",
+      "priority": 29,
+      "thesports": {
+        "competition_id": "9k82rekhygrepzj",
+        "season_2025_2026_id": "p3glrw7hd10qdyj",
+        "db_name": "English Football League Two"
+      },
+      "footystats": {
+        "league_name": "League Two",
+        "country": "England"
+      }
+    },
+    {
+      "id": "ligue-1",
+      "name": "Ligue 1",
+      "display_name": "Ligue 1",
+      "country": "France",
+      "country_code": "FRA",
+      "priority": 30,
+      "thesports": {
+        "competition_id": "yl5ergphnzr8k0o",
+        "season_2025_2026_id": "9dn1m1gh645moep",
+        "db_name": "French Ligue 1"
+      },
+      "footystats": {
+        "league_name": "Ligue 1",
+        "country": "France"
+      }
+    },
+    {
+      "id": "ligue-2",
+      "name": "Ligue 2",
+      "display_name": "Ligue 2",
+      "country": "France",
+      "country_code": "FRA",
+      "priority": 31,
+      "thesports": {
+        "competition_id": "kjw2r09hw8rz84o",
+        "season_2025_2026_id": "gx7lm7ph407m2wd",
+        "db_name": "French Ligue 2"
+      },
+      "footystats": {
+        "league_name": "Ligue 2",
+        "country": "France"
+      }
+    },
+    {
+      "id": "mexican-liga-mx",
+      "name": "Mexican Liga MX",
+      "display_name": "Mexican Liga MX",
+      "country": "Mexico",
+      "country_code": "MEX",
+      "priority": 32,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Mexican Liga MX",
+        "country": "Mexico"
+      }
+    },
+    {
+      "id": "mls",
+      "name": "MLS",
+      "display_name": "MLS",
+      "country": "USA",
+      "country_code": "USA",
+      "priority": 33,
+      "thesports": {
+        "competition_id": "gpxwrxlh5opryk0",
+        "season_2025_2026_id": "p4jwq2ghlpkm0ve",
+        "db_name": "MLS ASG"
+      },
+      "footystats": {
+        "league_name": "MLS",
+        "country": "USA"
+      }
+    },
+    {
+      "id": "norwegian-eliteserien",
+      "name": "Norwegian Eliteserien",
+      "display_name": "Norwegian Eliteserien",
+      "country": "Norway",
+      "country_code": "NOR",
+      "priority": 34,
+      "thesports": {
+        "competition_id": "gy0or5jhj6qwzv3",
+        "season_2025_2026_id": "318q66hozovqo9j",
+        "db_name": "Norwegian Eliteserien"
+      },
+      "footystats": {
+        "league_name": "Norwegian Eliteserien",
+        "country": "Norway"
+      }
+    },
+    {
+      "id": "polish-ekstraklasa",
+      "name": "Polish Ekstraklasa",
+      "display_name": "Polish Ekstraklasa",
+      "country": "Poland",
+      "country_code": "POL",
+      "priority": 35,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Polish Ekstraklasa",
+        "country": "Poland"
+      }
+    },
+    {
+      "id": "premier-league",
+      "name": "Premier League",
+      "display_name": "Premier League",
+      "country": "England",
+      "country_code": "ENG",
+      "priority": 36,
+      "thesports": {
+        "competition_id": "jednm9whz0ryox8",
+        "season_2025_2026_id": "l965mkyhjpxr1ge",
+        "db_name": "English Premier League"
+      },
+      "footystats": {
+        "league_name": "Premier League",
+        "country": "England"
+      }
+    },
+    {
+      "id": "primeira-liga",
+      "name": "Primeira Liga",
+      "display_name": "Primeira Liga",
+      "country": "Portugal",
+      "country_code": "POR",
+      "priority": 37,
+      "thesports": {
+        "competition_id": "gx7lm7phpnm2wdk",
+        "season_2025_2026_id": "z318q66hlk0qo9j",
+        "db_name": "Liga Portugal 2"
+      },
+      "footystats": {
+        "league_name": "Primeira Liga",
+        "country": "Portugal"
+      }
+    },
+    {
+      "id": "romanian-liga-i",
+      "name": "Romanian Liga I",
+      "display_name": "Romanian Liga I",
+      "country": "Romania",
+      "country_code": "ROU",
+      "priority": 38,
+      "thesports": {
+        "competition_id": "v2y8m4zhw4ql074",
+        "season_2025_2026_id": "vl7oqdeh72or510",
+        "db_name": "Romanian Liga II"
+      },
+      "footystats": {
+        "league_name": "Romanian Liga I",
+        "country": "Romania"
+      }
+    },
+    {
+      "id": "russian-premier-league",
+      "name": "Russian Premier League",
+      "display_name": "Russian Premier League",
+      "country": "Russia",
+      "country_code": "RUS",
+      "priority": 39,
+      "thesports": {
+        "competition_id": "8y39mp1hwxmojxg",
+        "season_2025_2026_id": "jednm9wh1zjryox",
+        "db_name": "Russian Premier League"
+      },
+      "footystats": {
+        "league_name": "Russian Premier League",
+        "country": "Russia"
+      }
+    },
+    {
+      "id": "saudi-pro-league",
+      "name": "Saudi Pro League",
+      "display_name": "Saudi Pro League",
+      "country": "Saudi Arabia",
+      "country_code": "KSA",
+      "priority": 40,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Saudi Pro League",
+        "country": "Saudi Arabia"
       }
     },
     {
       "id": "scottish-premiership",
       "name": "Scottish Premiership",
-      "display_name": "Premiership",
+      "display_name": "Scottish Premiership",
       "country": "Scotland",
       "country_code": "SCO",
-      "priority": 9,
+      "priority": 41,
       "thesports": {
         "competition_id": "p4jwq2gh1gm0veo",
         "season_2025_2026_id": "p4jwq2ghlv3m0ve",
         "db_name": "Scottish Premiership"
       },
       "footystats": {
-        "league_name": "Premiership",
+        "league_name": "Scottish Premiership",
         "country": "Scotland"
+      }
+    },
+    {
+      "id": "segunda-divisin",
+      "name": "Segunda División",
+      "display_name": "Segunda División",
+      "country": "Spain",
+      "country_code": "ESP",
+      "priority": 42,
+      "thesports": {
+        "competition_id": "11",
+        "season_2025_2026_id": null,
+        "db_name": "Spanish Segunda División RFEF"
+      },
+      "footystats": {
+        "league_name": "Segunda División",
+        "country": "Spain"
+      }
+    },
+    {
+      "id": "serbian-superliga",
+      "name": "Serbian SuperLiga",
+      "display_name": "Serbian SuperLiga",
+      "country": "Serbia",
+      "country_code": "SRB",
+      "priority": 43,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Serbian SuperLiga",
+        "country": "Serbia"
+      }
+    },
+    {
+      "id": "serie-a",
+      "name": "Serie A",
+      "display_name": "Serie A",
+      "country": "Italy",
+      "country_code": "ITA",
+      "priority": 44,
+      "thesports": {
+        "competition_id": "4zp5rzghp5q82w1",
+        "season_2025_2026_id": "4zp5rzghn83q82w",
+        "db_name": "Italian Serie A"
+      },
+      "footystats": {
+        "league_name": "Serie A",
+        "country": "Italy"
+      }
+    },
+    {
+      "id": "serie-b",
+      "name": "Serie B",
+      "display_name": "Serie B",
+      "country": "Italy",
+      "country_code": "ITA",
+      "priority": 45,
+      "thesports": {
+        "competition_id": "j1l4rjnhx9m7vx5",
+        "season_2025_2026_id": "kdj2ryoh8xlq1zp",
+        "db_name": "Italian Serie B"
+      },
+      "footystats": {
+        "league_name": "Serie B",
+        "country": "Italy"
+      }
+    },
+    {
+      "id": "south-african-premier-division",
+      "name": "South African Premier Division",
+      "display_name": "South African Premier Division",
+      "country": "South Africa",
+      "country_code": "RSA",
+      "priority": 46,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "South African Premier Division",
+        "country": "South Africa"
+      }
+    },
+    {
+      "id": "sper-lig",
+      "name": "Süper Lig",
+      "display_name": "Süper Lig",
+      "country": "Turkey",
+      "country_code": "TUR",
+      "priority": 47,
+      "thesports": {
+        "competition_id": "8y39mp1h6jmojxg",
+        "season_2025_2026_id": "4zp5rzgh8xvq82w",
+        "db_name": "Turkish Super League"
+      },
+      "footystats": {
+        "league_name": "Süper Lig",
+        "country": "Turkey"
+      }
+    },
+    {
+      "id": "swedish-allsvenskan",
+      "name": "Swedish Allsvenskan",
+      "display_name": "Swedish Allsvenskan",
+      "country": "Sweden",
+      "country_code": "SWE",
+      "priority": 48,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Swedish Allsvenskan",
+        "country": "Sweden"
+      }
+    },
+    {
+      "id": "swiss-super-league",
+      "name": "Swiss Super League",
+      "display_name": "Swiss Super League",
+      "country": "Switzerland",
+      "country_code": "SUI",
+      "priority": 49,
+      "thesports": {
+        "competition_id": null,
+        "season_2025_2026_id": null,
+        "db_name": null
+      },
+      "footystats": {
+        "league_name": "Swiss Super League",
+        "country": "Switzerland"
+      }
+    },
+    {
+      "id": "ukrainian-premier-league",
+      "name": "Ukrainian Premier League",
+      "display_name": "Ukrainian Premier League",
+      "country": "Ukraine",
+      "country_code": "UKR",
+      "priority": 50,
+      "thesports": {
+        "competition_id": "gx7lm7ph7jm2wdk",
+        "season_2025_2026_id": "v2y8m4zhlzxql07",
+        "db_name": "Ukrainian Premier League"
+      },
+      "footystats": {
+        "league_name": "Ukrainian Premier League",
+        "country": "Ukraine"
       }
     }
   ],
   "notes": {
-    "package": "FootyStats Hobby Package - Top 10 European Leagues",
+    "package": "FootyStats Hobby Package - Top 50 Leagues",
     "thesports_ids": "Filled from ts_competitions table WHERE year LIKE '%2025%' OR year LIKE '%2026%'",
-    "footystats_ids": "League names from FootyStats API league-list endpoint",
-    "priority": "1 = Highest priority (auto-sync always), 10+ = Lower priority",
-    "missing_season_ids": "Some leagues don't have 2025-2026 season in database yet (marked as null)"
+    "footystats_ids": "League names from FootyStats allowlist (fs_competitions_allowlist)",
+    "priority": "1 = Highest priority (auto-sync always), 50+ = Lower priority",
+    "missing_season_ids": "Some leagues don't have 2025-2026 season in database yet (marked as null)",
+    "unmatched_leagues": "Leagues without TheSports match will have null IDs - manual mapping needed"
   }
 }
