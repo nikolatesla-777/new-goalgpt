@@ -11,6 +11,7 @@ import { LOCK_KEYS } from './lockKeys';
 import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
 import { FieldUpdate } from '../repositories/match.repository';
 import { LIVE_STATUSES_SQL } from '../types/thesports/enums/MatchState.enum';
+import { applyCronStagger, validateStaggerConfig, STAGGER_ENABLED, getJobStaggerOffset, getStaggerSummary } from './config/staggerConfig';
 
 // PR-8B: Using MatchOrchestrator for atomic match updates
 
@@ -430,18 +431,46 @@ export function initializeJobs() {
   const enabledJobs = jobs.filter((j) => j.enabled);
   const disabledJobs = jobs.filter((j) => !j.enabled);
 
+  // P1: Validate stagger configuration
+  if (STAGGER_ENABLED) {
+    const validation = validateStaggerConfig();
+    if (!validation.valid) {
+      logger.warn('⚠️ Job stagger collisions detected:');
+      validation.collisions.forEach(c => logger.warn(`   ${c}`));
+    } else {
+      logger.info('✅ Job stagger enabled (collision-free)');
+    }
+    logger.info(''); // Blank line for readability
+    logger.info(getStaggerSummary());
+    logger.info(''); // Blank line for readability
+  } else {
+    logger.info('⏸️ Job stagger disabled');
+  }
+
   // Schedule enabled jobs
   enabledJobs.forEach((job) => {
-    cron.schedule(job.schedule, async () => {
-      const startTime = new Date();
-      logger.info(`🔄 Job started: ${job.name}`);
+    // P1: Convert 5-field to 6-field cron with stagger offset
+    const effectiveSchedule = STAGGER_ENABLED
+      ? applyCronStagger(job.schedule, job.name)
+      : job.schedule;
 
-      // PHASE-0: Log job start to database
+    const staggerOffset = getJobStaggerOffset(job.name);
+
+    cron.schedule(effectiveSchedule, async () => {
+      const startTime = new Date();
+      const staggerInfo = STAGGER_ENABLED && staggerOffset > 0 ? ` (staggered +${staggerOffset}s)` : '';
+      logger.info(`🔄 Job started: ${job.name}${staggerInfo}`);
+
+      // PHASE-0: Log job start to database with stagger metadata
       await logJobExecution({
         jobName: job.name,
         status: 'running',
         startedAt: startTime,
-        metadata: { schedule: job.schedule },
+        metadata: {
+          schedule: job.schedule,              // Original 5-field
+          effective_schedule: effectiveSchedule, // With stagger (may be 6-field)
+          stagger_offset_s: staggerOffset,
+        },
       });
 
       try {
@@ -476,8 +505,12 @@ export function initializeJobs() {
       }
     });
 
+    // Enhanced logging with stagger info
     logger.info(`✅ Job scheduled: ${job.name}`);
-    logger.info(`   Schedule: ${job.schedule}`);
+    logger.info(`   Original: ${job.schedule}`);
+    if (STAGGER_ENABLED && effectiveSchedule !== job.schedule) {
+      logger.info(`   Staggered: ${effectiveSchedule} (+${staggerOffset}s offset)`);
+    }
     logger.info(`   Description: ${job.description}`);
   });
 

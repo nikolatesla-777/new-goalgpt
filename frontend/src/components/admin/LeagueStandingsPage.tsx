@@ -420,7 +420,7 @@ export default function LeagueStandingsPage() {
                       {/* Calculated Data */}
                       <td className="px-3 py-3 bg-green-900/5">
                         <div className="flex items-center justify-center gap-1">
-                          {team.last_5.map((result, i) => (
+                          {(team.last_5 || []).map((result, i) => (
                             <div
                               key={i}
                               className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${getFormBadgeColor(result)}`}
@@ -430,13 +430,13 @@ export default function LeagueStandingsPage() {
                           ))}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.ppg.toFixed(2)}</td>
-                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.cs_percent}%</td>
-                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.btts_percent}%</td>
+                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.ppg?.toFixed(2) || '-'}</td>
+                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.cs_percent ?? '-'}%</td>
+                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.btts_percent ?? '-'}%</td>
                       <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.xgf || '-'}</td>
-                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.over_15_percent}%</td>
-                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.over_25_percent}%</td>
-                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.avg_goals.toFixed(2)}</td>
+                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.over_15_percent ?? '-'}%</td>
+                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.over_25_percent ?? '-'}%</td>
+                      <td className="px-3 py-3 text-center text-gray-300 bg-green-900/5">{team.avg_goals?.toFixed(2) || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
