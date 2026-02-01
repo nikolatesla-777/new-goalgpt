@@ -118,6 +118,11 @@ const start = async () => {
     await fastify.listen({ port: PORT, host: HOST });
     logger.info(`🚀 Fastify server running on port ${PORT}`);
 
+    // Start Database Pool Monitoring (PR-P0-3)
+    logger.info('🔍 Starting Database Pool Monitoring...');
+    const { startPoolMonitor } = await import('./database/poolMonitor');
+    startPoolMonitor(30000); // 30s interval
+
     // Phase 3A: Using theSportsAPI singleton (global rate limiting enabled)
     logger.info('[Migration] Using TheSportsAPIManager singleton for all workers');
 
@@ -317,6 +322,12 @@ const shutdown = async () => {
     logger.info('[Shutdown] Disconnecting WebSocket...');
     if (websocketService) await websocketService.disconnect();
     logger.info('[Shutdown] ✅ WebSocket disconnected');
+
+    // Step 3.5: Stop pool monitoring (PR-P0-3)
+    logger.info('[Shutdown] Stopping pool monitor...');
+    const { stopPoolMonitor } = await import('./database/poolMonitor');
+    stopPoolMonitor();
+    logger.info('[Shutdown] ✅ Pool monitor stopped');
 
     // Step 4: Close database pool LAST (after all database operations complete)
     logger.info('[Shutdown] Closing database pool...');
