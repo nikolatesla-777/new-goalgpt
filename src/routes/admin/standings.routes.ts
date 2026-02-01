@@ -309,10 +309,44 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         team.position = index + 1;
       });
 
+      // Check for live standings (real-time from ongoing matches)
+      const liveStandingsResult = await pool.query(`
+        SELECT standings, updated_at
+        FROM ts_standings_live
+        WHERE season_id = $1
+          AND updated_at > NOW() - INTERVAL '10 minutes'
+      `, [seasonId]);
+
+      let liveStandings = null;
+      let hasLiveMatches = false;
+
+      if (liveStandingsResult.rows.length > 0 && view === 'overall') {
+        // Only show live standings for overall view
+        liveStandings = liveStandingsResult.rows[0].standings;
+        hasLiveMatches = true;
+
+        // Merge live data with calculated stats
+        const liveStandingsMap: Record<string, any> = {};
+        liveStandings.forEach((ls: any) => {
+          liveStandingsMap[ls.team_id] = ls;
+        });
+
+        // Add live_points field to each team
+        standings.forEach(team => {
+          const liveData = liveStandingsMap[team.team_id];
+          if (liveData) {
+            (team as any).live_points = liveData.points;
+            (team as any).live_position = liveData.position;
+            (team as any).points_diff = liveData.points - team.points;
+          }
+        });
+      }
+
       return reply.send({
         competition_id: competitionId,
         season_id: seasonId,
         updated_at: updatedAt,
+        has_live_matches: hasLiveMatches,
         standings
       });
 

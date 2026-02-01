@@ -36,12 +36,17 @@ interface StandingsRow {
   over_15_percent: number;
   over_25_percent: number;
   avg_goals: number;
+  // Live standings fields
+  live_points?: number;
+  live_position?: number;
+  points_diff?: number;
 }
 
 interface StandingsResponse {
   competition_id: string;
   season_id: string;
   updated_at: string;
+  has_live_matches: boolean;
   standings: StandingsRow[];
 }
 
