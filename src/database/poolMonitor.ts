@@ -78,8 +78,12 @@ export function getPoolStats(): PoolStats {
 // METRICS EMISSION
 // ============================================================
 
+// Rate-limiting state for log throttling
+let lastWarnLog = 0;
+let lastErrorLog = 0;
+
 /**
- * Emit pool metrics and log warnings if needed
+ * Emit pool metrics and log warnings if needed (original - no rate-limiting)
  */
 export function emitPoolMetrics(): void {
   const stats = getPoolStats();
@@ -122,6 +126,53 @@ export function emitPoolMetrics(): void {
   }
 }
 
+/**
+ * Emit pool metrics with rate-limited logging
+ *
+ * - ALWAYS emits metrics (no throttling)
+ * - Rate-limits log messages based on DB_POOL_LOG_INTERVAL_MS (default: 60s)
+ * - Uses configurable thresholds for WARN and CRITICAL alerts
+ */
+export function emitPoolMetricsRateLimited(): void {
+  const stats = getPoolStats();
+  const now = Date.now();
+
+  // ALWAYS emit metrics (no rate-limiting)
+  metrics.set('db.pool.total', stats.totalCount);
+  metrics.set('db.pool.idle', stats.idleCount);
+  metrics.set('db.pool.active', stats.activeCount);
+  metrics.set('db.pool.waiting', stats.waitingCount);
+  metrics.set('db.pool.utilization_pct', stats.utilizationPct);
+
+  // Rate-limited logging
+  const warnThreshold = parseInt(process.env.DB_POOL_UTIL_WARN_PCT || '80');
+  const critThreshold = parseInt(process.env.DB_POOL_UTIL_CRIT_PCT || '90');
+  const throttleMs = parseInt(process.env.DB_POOL_LOG_INTERVAL_MS || '60000');
+
+  // CRITICAL: waitingCount > 0 OR utilization >= 90%
+  if (stats.waitingCount > 0 || stats.utilizationPct >= critThreshold) {
+    if (now - lastErrorLog > throttleMs) {
+      logger.error('[PoolMonitor] CRITICAL: Pool near exhaustion!', {
+        ...stats,
+        utilization: `${stats.utilizationPct.toFixed(1)}%`,
+      });
+      metrics.inc('db.pool.critical_warning');
+      lastErrorLog = now;
+    }
+  }
+  // WARN: utilization >= 80%
+  else if (stats.utilizationPct >= warnThreshold) {
+    if (now - lastWarnLog > throttleMs) {
+      logger.warn('[PoolMonitor] HIGH: Pool utilization elevated', {
+        ...stats,
+        utilization: `${stats.utilizationPct.toFixed(1)}%`,
+      });
+      metrics.inc('db.pool.high_warning');
+      lastWarnLog = now;
+    }
+  }
+}
+
 // ============================================================
 // MONITORING LIFECYCLE
 // ============================================================
@@ -139,15 +190,23 @@ export function startPoolMonitor(intervalMs: number = 30000): void {
     return;
   }
 
-  // Emit initial metrics
-  emitPoolMetrics();
+  // Check env flag
+  if (process.env.DB_MONITOR_ENABLED === 'false') {
+    logger.info('[PoolMonitor] Disabled via DB_MONITOR_ENABLED=false');
+    return;
+  }
 
-  // Start periodic monitoring
-  monitorInterval = setInterval(emitPoolMetrics, intervalMs);
+  // Emit initial metrics (with rate-limiting)
+  emitPoolMetricsRateLimited();
+
+  // Start periodic monitoring (with rate-limiting)
+  monitorInterval = setInterval(emitPoolMetricsRateLimited, intervalMs);
 
   logger.info('[PoolMonitor] Started', {
     intervalMs,
     maxConnections: process.env.DB_MAX_CONNECTIONS || '25',
+    warnThreshold: `${process.env.DB_POOL_UTIL_WARN_PCT || '80'}%`,
+    critThreshold: `${process.env.DB_POOL_UTIL_CRIT_PCT || '90'}%`,
   });
 }
 

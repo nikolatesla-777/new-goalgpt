@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import dotenv from 'dotenv';
 import { logger } from '../utils/logger';
+import { metrics } from '../utils/metrics';
 
 dotenv.config();
 
@@ -70,6 +71,64 @@ pool.on('remove', () => {
   logger.debug('PostgreSQL client removed from pool, will create new if needed');
 });
 
+// ============================================================
+// QUERY PARSING UTILITIES
+// ============================================================
+
+/**
+ * Parse SQL query to extract operation type and table name
+ */
+function parseQueryInfo(sql: string): { operation: string; table: string } {
+  const normalized = sql.trim().toUpperCase();
+
+  let operation = 'UNKNOWN';
+  if (normalized.startsWith('SELECT')) operation = 'SELECT';
+  else if (normalized.startsWith('INSERT')) operation = 'INSERT';
+  else if (normalized.startsWith('UPDATE')) operation = 'UPDATE';
+  else if (normalized.startsWith('DELETE')) operation = 'DELETE';
+
+  let table = 'unknown';
+  try {
+    if (operation === 'SELECT') {
+      const fromMatch = normalized.match(/FROM\s+([a-z_][a-z0-9_]*)/i);
+      if (fromMatch) table = fromMatch[1].toLowerCase();
+    } else if (operation === 'INSERT') {
+      const intoMatch = normalized.match(/INTO\s+([a-z_][a-z0-9_]*)/i);
+      if (intoMatch) table = intoMatch[1].toLowerCase();
+    } else if (operation === 'UPDATE') {
+      const updateMatch = normalized.match(/UPDATE\s+([a-z_][a-z0-9_]*)/i);
+      if (updateMatch) table = updateMatch[1].toLowerCase();
+    } else if (operation === 'DELETE') {
+      const deleteMatch = normalized.match(/FROM\s+([a-z_][a-z0-9_]*)/i);
+      if (deleteMatch) table = deleteMatch[1].toLowerCase();
+    }
+  } catch (err) {
+    // Keep 'unknown' on parse error
+  }
+
+  return { operation, table };
+}
+
+/**
+ * Truncate SQL for logging (max 120 chars)
+ */
+function truncateSQL(sql: string): string {
+  const cleaned = sql.replace(/\s+/g, ' ').trim();
+  return cleaned.length > 120 ? cleaned.substring(0, 117) + '...' : cleaned;
+}
+
+/**
+ * Sanitize params for logging (count only, no values)
+ */
+function sanitizeParams(params?: any[]): string {
+  if (!params || params.length === 0) return '[]';
+  return `[${params.length} params]`;
+}
+
+// ============================================================
+// SAFE QUERY WRAPPER
+// ============================================================
+
 /**
  * Safe query wrapper with auto-retry on connection errors
  */
@@ -78,6 +137,8 @@ export async function safeQuery<T = any>(
   params?: any[],
   retries = 2
 ): Promise<T[]> {
+  const startTime = Date.now();
+  const { operation, table } = parseQueryInfo(text);
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -86,6 +147,27 @@ export async function safeQuery<T = any>(
       client = await pool.connect();
       const result = await client.query(text, params);
       client.release();
+
+      // SUCCESS: Record metrics
+      const durationMs = Date.now() - startTime;
+      metrics.recordDbQuery(operation, table, durationMs);
+
+      // Log slow queries
+      const slowThreshold = parseInt(process.env.DB_SLOW_QUERY_THRESHOLD_MS || '2000');
+      const slowLogEnabled = process.env.DB_SLOW_QUERY_LOG_ENABLED !== 'false';
+
+      if (slowLogEnabled && durationMs > slowThreshold) {
+        logger.warn('[DB] Slow query detected', {
+          durationMs,
+          operation,
+          table,
+          query: truncateSQL(text),
+          params: sanitizeParams(params),
+          threshold: slowThreshold,
+        });
+        metrics.inc('db.slow_queries', { operation, table });
+      }
+
       return result.rows as T[];
     } catch (err: any) {
       lastError = err;
@@ -127,6 +209,14 @@ export async function safeQuery<T = any>(
         err.message?.includes('connect');
 
       if (!isConnectionError || attempt === retries) {
+        // Record error metrics
+        const durationMs = Date.now() - startTime;
+        metrics.recordDbQuery(operation, table, durationMs);
+        metrics.inc('db.query_errors', {
+          operation,
+          table,
+          error_type: err.code || 'unknown'
+        });
         throw err;
       }
 
