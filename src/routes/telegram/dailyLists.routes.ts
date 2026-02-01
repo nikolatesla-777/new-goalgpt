@@ -428,11 +428,40 @@ Stack: ${error.stack || 'No stack trace'}
 
       logger.info(`[TelegramDailyLists] 📅 Fetching lists from ${start} to ${end}...`);
 
-      // Simple implementation: just get lists for start date (TODO: implement date range properly)
-      const lists = await getDailyLists(start);
+      // Validate date range (max 31 days to prevent abuse)
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysDiff < 0) {
+        return reply.status(400).send({
+          error: 'End date must be after or equal to start date'
+        });
+      }
+
+      if (daysDiff > 31) {
+        return reply.status(400).send({
+          error: 'Date range too large (max 31 days)'
+        });
+      }
+
+      // Fetch lists for each date in range
       const listsByDate: Record<string, any[]> = {};
-      if (lists.length > 0) {
-        listsByDate[start] = lists;
+      const currentDate = new Date(startDate);
+
+      while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+        const lists = await getDailyLists(dateStr);
+
+        if (lists.length > 0) {
+          listsByDate[dateStr] = lists;
+          logger.info(`[TelegramDailyLists] ✅ Found ${lists.length} lists for ${dateStr}`);
+        } else {
+          logger.info(`[TelegramDailyLists] ⚠️  No lists found for ${dateStr}`);
+        }
+
+        // Move to next day
+        currentDate.setDate(currentDate.getDate() + 1);
       }
 
       if (Object.keys(listsByDate).length === 0) {
