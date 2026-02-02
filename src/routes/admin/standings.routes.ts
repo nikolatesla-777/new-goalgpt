@@ -298,7 +298,128 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // FOR HOME/AWAY VIEWS: Calculate from matches (existing logic)
+      // FOR HOME/AWAY VIEWS: Use database home/away values (same as overall)
+      const calculatedStandings: StandingsRow[] = [];
+
+      if (view === 'home') {
+        // HOME VIEW: Use home_* fields from database
+        for (const row of rows) {
+          const teamId = row.team_id;
+
+          // USE DATABASE VALUES for home stats
+          const mp = row.home_played || 0;
+          const won = row.home_won || 0;
+          const draw = row.home_drawn || 0;
+          const loss = row.home_lost || 0;
+          const points = won * 3 + draw; // Calculate home points
+          const goalsFor = row.home_goals_for || 0;
+          const goalsAgainst = row.home_goals_against || 0;
+          const goalDiff = goalsFor - goalsAgainst;
+
+          calculatedStandings.push({
+            position: row.position,
+            team_id: teamId,
+            team_name: teamMap[teamId] || teamId,
+            mp,
+            won,
+            draw,
+            loss,
+            goals_for: goalsFor,
+            goals_against: goalsAgainst,
+            goal_diff: goalDiff,
+            points,
+            last_5: [],
+            ppg: mp > 0 ? parseFloat((points / mp).toFixed(2)) : 0,
+            cs_percent: 0,
+            btts_percent: 0,
+            xgf: null,
+            over_15_percent: 0,
+            over_25_percent: 0,
+            avg_goals: mp > 0 ? parseFloat((goalsFor / mp).toFixed(2)) : 0
+          });
+        }
+
+        // Re-sort by home points
+        calculatedStandings.sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.goal_diff !== a.goal_diff) return b.goal_diff - a.goal_diff;
+          return b.goals_for - a.goals_for;
+        });
+
+        // Recalculate positions
+        calculatedStandings.forEach((team, index) => {
+          team.position = index + 1;
+        });
+
+        return reply.send({
+          competition_id: competitionId,
+          season_id: seasonId,
+          updated_at: updatedAt,
+          has_live_matches: false,
+          standings: calculatedStandings
+        });
+      }
+
+      if (view === 'away') {
+        // AWAY VIEW: Use away_* fields from database
+        for (const row of rows) {
+          const teamId = row.team_id;
+
+          // USE DATABASE VALUES for away stats
+          const mp = row.away_played || 0;
+          const won = row.away_won || 0;
+          const draw = row.away_drawn || 0;
+          const loss = row.away_lost || 0;
+          const points = won * 3 + draw; // Calculate away points
+          const goalsFor = row.away_goals_for || 0;
+          const goalsAgainst = row.away_goals_against || 0;
+          const goalDiff = goalsFor - goalsAgainst;
+
+          calculatedStandings.push({
+            position: row.position,
+            team_id: teamId,
+            team_name: teamMap[teamId] || teamId,
+            mp,
+            won,
+            draw,
+            loss,
+            goals_for: goalsFor,
+            goals_against: goalsAgainst,
+            goal_diff: goalDiff,
+            points,
+            last_5: [],
+            ppg: mp > 0 ? parseFloat((points / mp).toFixed(2)) : 0,
+            cs_percent: 0,
+            btts_percent: 0,
+            xgf: null,
+            over_15_percent: 0,
+            over_25_percent: 0,
+            avg_goals: mp > 0 ? parseFloat((goalsFor / mp).toFixed(2)) : 0
+          });
+        }
+
+        // Re-sort by away points
+        calculatedStandings.sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.goal_diff !== a.goal_diff) return b.goal_diff - a.goal_diff;
+          return b.goals_for - a.goals_for;
+        });
+
+        // Recalculate positions
+        calculatedStandings.forEach((team, index) => {
+          team.position = index + 1;
+        });
+
+        return reply.send({
+          competition_id: competitionId,
+          season_id: seasonId,
+          updated_at: updatedAt,
+          has_live_matches: false,
+          standings: calculatedStandings
+        });
+      }
+
+      // OLD LOGIC BELOW - Should not reach here
       let allMatchesResult;
       if (view === 'home') {
         allMatchesResult = await pool.query(`
