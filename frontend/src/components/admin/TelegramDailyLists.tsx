@@ -113,7 +113,7 @@ const MARKET_CONFIG: Record<string, {
     darkBg: 'bg-purple-100',
   },
   CORNERS: {
-    label: 'KORNER',
+    label: 'Korner 7.5 ÜST',
     gradient: 'from-orange-500 to-orange-600',
     icon: '🚩',
     color: 'text-orange-600',
@@ -121,7 +121,7 @@ const MARKET_CONFIG: Record<string, {
     darkBg: 'bg-orange-100',
   },
   CARDS: {
-    label: 'KART',
+    label: 'Sarı Kart 3.5 ÜST',
     gradient: 'from-yellow-500 to-yellow-600',
     icon: '🟨',
     color: 'text-yellow-600',
@@ -955,12 +955,14 @@ export function TelegramDailyLists() {
                                     }
 
                                     // CASE 3: Match is live (TheSports data)
-                                    // SAFETY: Don't show CANLI if match is finished (status="Bitti") or has settlement result
+                                    // SAFETY: Don't show CANLI if match is finished (status="Bitti") or has final settlement (won/lost)
+                                    // NOTE: Show CANLI for VOID matches too (they're still live, just unmapped)
                                     if (match.live_score
                                         && match.live_score.status !== 'Bitti'
                                         && matchStarted
                                         && !matchFinished
-                                        && !match.result) {
+                                        && match.result !== 'won'
+                                        && match.result !== 'lost') {
                                       return (
                                         <>
                                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
