@@ -307,12 +307,13 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
           const teamId = row.team_id;
 
           // USE DATABASE VALUES for home stats
-          const mp = row.home_total || 0;
+          // Different leagues use different field names from TheSports API
+          const mp = row.home_played || row.home_total || 0;
           const won = row.home_won || 0;
-          const draw = row.home_draw || 0;
-          const loss = row.home_loss || 0;
+          const draw = row.home_drawn || row.home_draw || 0;
+          const loss = row.home_lost || row.home_loss || 0;
           const points = won * 3 + draw; // Calculate home points
-          const goalsFor = row.home_goals || 0;
+          const goalsFor = row.home_goals_for || row.home_goals || 0;
           const goalsAgainst = row.home_goals_against || 0;
           const goalDiff = goalsFor - goalsAgainst;
 
@@ -368,12 +369,13 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
           const teamId = row.team_id;
 
           // USE DATABASE VALUES for away stats
-          const mp = row.away_total || 0;
+          // Different leagues use different field names from TheSports API
+          const mp = row.away_played || row.away_total || 0;
           const won = row.away_won || 0;
-          const draw = row.away_draw || 0;
-          const loss = row.away_loss || 0;
+          const draw = row.away_drawn || row.away_draw || 0;
+          const loss = row.away_lost || row.away_loss || 0;
           const points = won * 3 + draw; // Calculate away points
-          const goalsFor = row.away_goals || 0;
+          const goalsFor = row.away_goals_for || row.away_goals || 0;
           const goalsAgainst = row.away_goals_against || 0;
           const goalDiff = goalsFor - goalsAgainst;
 
