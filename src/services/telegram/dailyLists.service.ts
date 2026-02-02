@@ -1175,13 +1175,31 @@ export async function refreshDailyLists(date?: string): Promise<DailyList[]> {
 
   logger.info(`[TelegramDailyLists] 🔄 FORCE REFRESH for ${targetDate}...`);
 
-  // Generate new lists for target date
+  // STEP 1: Load existing lists from database to preserve settlement data
+  const oldLists = await getDailyListsFromDatabase(targetDate);
+
+  // STEP 2: Generate new lists for target date
   const newLists = await generateDailyLists(targetDate);
 
-  // Save to database (will overwrite existing)
-  if (newLists.length > 0) {
-    await saveDailyListsToDatabase(targetDate, newLists);
+  // STEP 3: Preserve settlement data from old lists
+  const newListsWithSettlement = newLists.map(newList => {
+    const oldList = oldLists?.find(old => old.market === newList.market);
+    if (oldList && oldList.settlement_result) {
+      logger.info(`[TelegramDailyLists] 🔄 Preserving settlement data for ${newList.market} during force refresh`);
+      return {
+        ...newList,
+        settlement_result: oldList.settlement_result,
+        status: oldList.status,
+        settled_at: oldList.settled_at,
+      };
+    }
+    return newList;
+  });
+
+  // STEP 4: Save to database (will overwrite existing but preserve settlement)
+  if (newListsWithSettlement.length > 0) {
+    await saveDailyListsToDatabase(targetDate, newListsWithSettlement);
   }
 
-  return newLists;
+  return newListsWithSettlement;
 }
