@@ -25,7 +25,7 @@ async function getLiveScoresForMatches(matches: any[]): Promise<Map<number, any>
   if (matches.length === 0) return liveScores;
 
   try {
-    // Build conditions for each match (team names + time window)
+    // STEP 1: Try TheSports first (preferred source)
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
@@ -99,7 +99,57 @@ async function getLiveScoresForMatches(matches: any[]): Promise<Map<number, any>
       }
     });
 
-    logger.info(`[TelegramDailyLists] 📺 Found live scores for ${liveScores.size}/${matches.length} matches`);
+    logger.info(`[TelegramDailyLists] 📺 TheSports: Found ${liveScores.size}/${matches.length} live scores`);
+
+    // STEP 2: Fallback to FootyStats for unmapped matches
+    const unmappedMatches = matches.filter(m => !liveScores.has(m.fs_id));
+    if (unmappedMatches.length > 0) {
+      logger.info(`[TelegramDailyLists] 🔄 Fetching ${unmappedMatches.length} live scores from FootyStats...`);
+
+      const { footyStatsAPI } = await import('../../services/footystats/footystats.client');
+
+      // Fetch all today's matches from FootyStats (contains live scores)
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+      try {
+        const response = await footyStatsAPI.getTodaysMatches(today, 'Europe/Istanbul');
+        const fsMatches = response.data || [];
+
+        // Map FootyStats matches to our unmapped matches by fs_id
+        for (const match of unmappedMatches) {
+          const fsMatch = fsMatches.find((m: any) => m.id === match.fs_id);
+
+          if (fsMatch) {
+            // Check if match has started and has score data
+            if (fsMatch.status !== 'notstarted' && (fsMatch.homeGoalCount !== null || fsMatch.awayGoalCount !== null)) {
+              // Calculate approximate minute (FootyStats doesn't provide exact minute)
+              let minute = '';
+              const now = Math.floor(Date.now() / 1000);
+              const elapsed = now - fsMatch.date_unix;
+
+              if (fsMatch.status === 'complete') {
+                minute = 'FT';
+              } else if (elapsed > 0 && elapsed <= 5400) { // 0-90 minutes
+                const approxMinute = Math.min(90, Math.floor(elapsed / 60));
+                minute = `~${approxMinute}'`;
+              }
+
+              liveScores.set(match.fs_id, {
+                home: fsMatch.homeGoalCount || 0,
+                away: fsMatch.awayGoalCount || 0,
+                minute: minute,
+                status: fsMatch.status === 'complete' ? 'Bitti' : 'Canlı',
+              });
+            }
+          }
+        }
+
+        logger.info(`[TelegramDailyLists] 📺 FootyStats: Found ${liveScores.size - results.length} additional live scores`);
+      } catch (err) {
+        logger.error(`[TelegramDailyLists] ❌ Failed to fetch FootyStats live scores:`, err);
+      }
+    }
+
+    logger.info(`[TelegramDailyLists] 📺 TOTAL: Found ${liveScores.size}/${matches.length} live scores (TheSports + FootyStats)`);
   } catch (err) {
     logger.error('[TelegramDailyLists] Error fetching live scores:', err);
   }
