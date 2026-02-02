@@ -1047,19 +1047,24 @@ async function getDailyListsFromDatabase(date: string): Promise<DailyList[] | nu
       return null;
     }
 
-    const lists: DailyList[] = rows.map((row) => ({
-      market: row.market as any,
-      title: row.title,
-      emoji: row.emoji,
-      matches: JSON.parse(row.matches as any),
-      matches_count: row.matches_count,
-      avg_confidence: row.avg_confidence,
-      preview: row.preview,
-      generated_at: Number(row.generated_at),
-      status: row.status,
-      settlement_result: row.settlement_result,
-      settled_at: row.settled_at,
-    }));
+    const lists: DailyList[] = rows.map((row) => {
+      // DEBUG: Log what we're reading from database
+      logger.info(`[getDailyListsFromDatabase] DEBUG: row.market=${row.market}, row.status=${row.status}, has settlement_result=${row.settlement_result !== null && row.settlement_result !== undefined}`);
+
+      return {
+        market: row.market as any,
+        title: row.title,
+        emoji: row.emoji,
+        matches: JSON.parse(row.matches as any),
+        matches_count: row.matches_count,
+        avg_confidence: row.avg_confidence,
+        preview: row.preview,
+        generated_at: Number(row.generated_at),
+        status: row.status,
+        settlement_result: row.settlement_result,
+        settled_at: row.settled_at,
+      };
+    });
 
     logger.info(`[TelegramDailyLists] ✅ Loaded ${lists.length} lists from database`);
     return lists;
