@@ -857,10 +857,8 @@ export function TelegramDailyLists() {
                         // Determine match status (use backend values when available)
                         const now = Math.floor(Date.now() / 1000);
                         const matchStarted = match.date_unix <= now;
-                        // FIXED: Use backend's match_finished OR FootyStats status for unmapped matches
-                        const matchFinished = match.match_finished ||
-                                             (match as any).footystats_status === 'complete' ||
-                                             (match.date_unix <= (now - 2 * 60 * 60));
+                        // Use backend's match_finished (from TheSports only)
+                        const matchFinished = match.match_finished ?? (match.date_unix <= (now - 2 * 60 * 60));
 
                         // Generate tooltip text based on match status
                         const tooltipText = match.result === 'won'
@@ -931,7 +929,7 @@ export function TelegramDailyLists() {
                                       );
                                     }
 
-                                    // CASE 3: Match is live WITH score
+                                    // CASE 3: Match is live (TheSports data)
                                     if (match.live_score && matchStarted && !matchFinished) {
                                       return (
                                         <>
@@ -945,21 +943,11 @@ export function TelegramDailyLists() {
                                       );
                                     }
 
-                                    // CASE 3B: Match is live (FootyStats) but NO score available (unmapped to TheSports)
-                                    const footystatsStatus = (match as any).footystats_status;
-                                    if ((footystatsStatus === 'live' || footystatsStatus === 'inprogress') && matchStarted && !matchFinished) {
-                                      return (
-                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
-                                          🔴 CANLI (skor yok)
-                                        </span>
-                                      );
-                                    }
-
-                                    // CASE 4: Match started but no live score yet
+                                    // CASE 4: Match started but no live score (TheSports mapping failed)
                                     if (matchStarted && !matchFinished) {
                                       return (
-                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-600">
-                                          ▶️ Başladı
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
+                                          ⚠️ Eşleştirme Yok
                                         </span>
                                       );
                                     }
