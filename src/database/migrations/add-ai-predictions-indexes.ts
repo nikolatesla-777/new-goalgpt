@@ -25,7 +25,7 @@ async function migrate() {
     // Index 1: Match ID + Created (for LEFT JOIN LATERAL performance)
     console.log('Creating idx_ai_predictions_match_id_created...');
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_ai_predictions_match_id_created
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ai_predictions_match_id_created
       ON ai_predictions(match_id, created_at DESC)
       WHERE match_id IS NOT NULL
     `);
