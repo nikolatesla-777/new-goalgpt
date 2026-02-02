@@ -54,7 +54,7 @@ export async function runDailyListsSettlement(): Promise<void> {
       jobName: 'dailyListsSettlement',
       overlapGuard: true,
       advisoryLockKey: LOCK_KEYS.DAILY_LISTS_SETTLEMENT,
-      timeoutMs: 600000, // 10 minutes
+      timeoutMs: 300000, // 5 minutes (realistic max duration)
     },
     async (_ctx) => {
       logger.info('[DailyListsSettlement] 🚀 Starting settlement job...');
@@ -153,16 +153,18 @@ export async function runDailyListsSettlement(): Promise<void> {
             const hasVoidMatches = settlementResult.void > 0;
             const finalStatus = hasVoidMatches ? 'partial' : 'settled';
 
+            // Only update settled_at if this is the FIRST settlement
             await updateClient.query(
               `UPDATE telegram_daily_lists
-               SET settled_at = NOW(),
+               SET settled_at = COALESCE(settled_at, NOW()),
                    status = $1,
-                   settlement_result = $2
+                   settlement_result = $2,
+                   updated_at = NOW()
                WHERE id = $3`,
               [finalStatus, JSON.stringify(settlementResult), list.id]
             );
 
-            logger.info(`[DailyListsSettlement] ✅ List marked as ${finalStatus}`, {
+            logger.info(`[DailyListsSettlement] ✅ ${list.market}: ${settlementResult.won}W/${settlementResult.lost}L/${settlementResult.void}V (${finalStatus})`, {
               ...logContext,
               won: settlementResult.won,
               lost: settlementResult.lost,

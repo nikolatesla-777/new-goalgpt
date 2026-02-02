@@ -60,6 +60,7 @@ import forumRoutes from './forum.routes';
 import { announcementsRoutes } from './announcements.routes';
 import { diagnosticRoutes } from './diagnostic.routes';
 import { adminStandingsRoutes } from './admin/standings.routes';
+import settlementRoutes from './admin/settlement.routes';
 
 // External Integrations
 import { footyStatsRoutes } from './footystats.routes';
@@ -155,6 +156,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // System diagnostics (Phase 4: Data Integrity)
     adminAPI.register(diagnosticRoutes, { prefix: '/api' });
+
+    // Settlement monitoring
+    adminAPI.register(settlementRoutes, { prefix: '/api/admin/settlement' });
   });
 
   // ============================================================================

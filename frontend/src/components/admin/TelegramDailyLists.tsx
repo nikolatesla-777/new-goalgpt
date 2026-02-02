@@ -5,6 +5,8 @@ import {
   useTelegramDailyListsRange,
   usePublishDailyList,
 } from '../../api/hooks';
+import { isDailyListsResponse, isDateDataArray } from '../../api/types/guards';
+import { calculatePerformance } from '../../utils/performanceUtils';
 
 // ============================================================================
 // INTERFACES
@@ -164,8 +166,8 @@ export function TelegramDailyLists() {
   const { data, isLoading, isError, error: queryError, refetch } = activeQuery;
 
   // Extract lists and metadata from response
-  const lists = isToday && data ? (data as any).lists || [] : [];
-  const historicalData: DateData[] = !isToday && data ? (data as any).data || [] : [];
+  const lists = isToday && data && isDailyListsResponse(data) ? data.lists : [];
+  const historicalData: DateData[] = !isToday && data && isDateDataArray(data) ? data : [];
 
   // DEBUG: Log settlement data
   if (isToday && lists.length > 0) {
@@ -181,8 +183,8 @@ export function TelegramDailyLists() {
   }
 
   // Read generated_at from appropriate source based on view mode
-  const lastUpdated = isToday
-    ? ((data as any)?.generated_at || null)
+  const lastUpdated = isToday && isDailyListsResponse(data)
+    ? (data.generated_at ?? null)
     : (historicalData.length > 0 && historicalData[0].lists.length > 0
         ? historicalData[0].lists[0].generated_at
         : null);
@@ -224,22 +226,12 @@ export function TelegramDailyLists() {
     }
 
     setPublishingMarket(list.market);
-    try {
-      const result = await publishMutation.mutateAsync({
-        market: list.market,
-        options: {}
-      });
-
-      if (result.success) {
-        alert(`✅ Başarılı!\n\n"${list.title}" Telegram'a yayınlandı.\nMesaj ID: ${result.telegram_message_id}`);
-      } else {
-        alert(`⚠️ ${result.message || 'Yayınlama başarısız'}`);
-      }
-    } catch (err: any) {
-      alert(`❌ Hata: ${err instanceof Error ? err.message : 'Yayınlama hatası'}`);
-    } finally {
-      setPublishingMarket(null);
-    }
+    // Error handled by mutation onError callback
+    await publishMutation.mutateAsync({
+      market: list.market,
+      options: {}
+    });
+    setPublishingMarket(null);
   };
 
   // Calculate stats based on view mode
@@ -253,38 +245,12 @@ export function TelegramDailyLists() {
     : 0;
 
   // Calculate total performance across all lists by counting individual match results
-  const totalPerformance = useMemo(() => {
-    let total = 0;
-    let won = 0;
-    let lost = 0;
-    let pending = 0;
-    let voidCount = 0;
+  const totalPerformance = useMemo(() =>
+    calculatePerformance(displayLists),
+    [displayLists]
+  );
 
-    displayLists.forEach((list: DailyList) => {
-      // Count results from each match
-      list.matches.forEach((match: Match) => {
-        if (match.result === 'won') {
-          won++;
-          total++;
-        } else if (match.result === 'lost') {
-          lost++;
-          total++;
-        } else if (match.result === 'void') {
-          voidCount++;
-          // Void matches are not counted in total
-        } else {
-          // No result yet - pending (match not finished or not settled)
-          pending++;
-        }
-      });
-    });
-
-    return { total, won, lost, pending, void: voidCount };
-  }, [displayLists]);
-
-  const overallWinRate = totalPerformance.total > 0
-    ? Math.round((totalPerformance.won / totalPerformance.total) * 100)
-    : 0;
+  const overallWinRate = totalPerformance.winRate;
 
   // For stats card display
   const statsListsCount = isHistoricalView ? historicalData.length : displayLists.length;
@@ -644,17 +610,17 @@ export function TelegramDailyLists() {
                                           {/* Won segment */}
                                           <div
                                             className="bg-green-500"
-                                            style={{ width: `${(list.performance.won / list.performance.total) * 100}%` }}
+                                            style={{ width: `${list.performance?.total ? (list.performance.won / list.performance.total) * 100 : 0}%` }}
                                           />
                                           {/* Lost segment */}
                                           <div
                                             className="bg-red-500"
-                                            style={{ width: `${(list.performance.lost / list.performance.total) * 100}%` }}
+                                            style={{ width: `${list.performance?.total ? (list.performance.lost / list.performance.total) * 100 : 0}%` }}
                                           />
                                           {/* Pending segment */}
                                           <div
                                             className="bg-gray-400"
-                                            style={{ width: `${(list.performance.pending / list.performance.total) * 100}%` }}
+                                            style={{ width: `${list.performance?.total ? (list.performance.pending / list.performance.total) * 100 : 0}%` }}
                                           />
                                         </div>
                                       </div>
@@ -688,9 +654,9 @@ export function TelegramDailyLists() {
                                 {list.matches.slice(0, 3).map((match) => {
                                   // Generate tooltip for historical matches
                                   const historicalTooltip = match.result === 'won'
-                                    ? `✅ Kazandı - ${list.market}: Tahmin tuttu!${match.final_score ? ` (${match.final_score.home}-${match.final_score.away})` : ''}`
+                                    ? `✅ Kazandı - ${list.market}: Tahmin tuttu!${match.final_score ? ` (${match.final_score.home ?? 0}-${match.final_score.away ?? 0})` : ''}`
                                     : match.result === 'lost'
-                                    ? `❌ Kaybetti - ${list.market}: Tahmin tutmadı.${match.final_score ? ` (${match.final_score.home}-${match.final_score.away})` : ''}`
+                                    ? `❌ Kaybetti - ${list.market}: Tahmin tutmadı.${match.final_score ? ` (${match.final_score.home ?? 0}-${match.final_score.away ?? 0})` : ''}`
                                     : match.result === 'void'
                                     ? `⚪ Geçersiz - TheSports API eşleştirmesi başarısız.`
                                     : `Sonuç bekleniyor...`;
@@ -825,17 +791,17 @@ export function TelegramDailyLists() {
                                 {/* Won segment */}
                                 <div
                                   className="bg-green-500"
-                                  style={{ width: `${(list.performance.won / list.performance.total) * 100}%` }}
+                                  style={{ width: `${list.performance?.total ? (list.performance.won / list.performance.total) * 100 : 0}%` }}
                                 />
                                 {/* Lost segment */}
                                 <div
                                   className="bg-red-500"
-                                  style={{ width: `${(list.performance.lost / list.performance.total) * 100}%` }}
+                                  style={{ width: `${list.performance?.total ? (list.performance.lost / list.performance.total) * 100 : 0}%` }}
                                 />
                                 {/* Pending segment */}
                                 <div
                                   className="bg-gray-400"
-                                  style={{ width: `${(list.performance.pending / list.performance.total) * 100}%` }}
+                                  style={{ width: `${list.performance?.total ? (list.performance.pending / list.performance.total) * 100 : 0}%` }}
                                 />
                               </div>
                             </div>
@@ -887,15 +853,15 @@ export function TelegramDailyLists() {
 
                         // Generate tooltip text based on match status
                         const tooltipText = match.result === 'won'
-                          ? `✅ Kazandı - ${list.market}: Tahmin tuttu!${match.final_score ? ` (${match.final_score.home}-${match.final_score.away})` : ''}`
+                          ? `✅ Kazandı - ${list.market}: Tahmin tuttu!${match.final_score ? ` (${match.final_score.home ?? 0}-${match.final_score.away ?? 0})` : ''}`
                           : match.result === 'lost'
-                          ? `❌ Kaybetti - ${list.market}: Tahmin tutmadı.${match.final_score ? ` (${match.final_score.home}-${match.final_score.away})` : ''}`
+                          ? `❌ Kaybetti - ${list.market}: Tahmin tutmadı.${match.final_score ? ` (${match.final_score.home ?? 0}-${match.final_score.away ?? 0})` : ''}`
                           : match.result === 'void'
                           ? `⚪ Geçersiz - TheSports API eşleştirmesi başarısız. Maç settle edilemedi.`
                           : matchFinished
                           ? `⏳ Settlement Bekliyor - Maç bitti, sonuç değerlendirmesi yapılıyor...`
                           : matchStarted
-                          ? `▶️ Maç devam ediyor${match.live_score ? ` (${match.live_score.home}-${match.live_score.away} ${match.live_score.minute}')` : ''}`
+                          ? `▶️ Maç devam ediyor${match.live_score ? ` (${match.live_score?.home ?? 0}-${match.live_score?.away ?? 0} ${match.live_score?.minute ?? 0}')` : ''}`
                           : `⏰ Maç ${new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })} saatinde başlayacak`;
 
                         return (

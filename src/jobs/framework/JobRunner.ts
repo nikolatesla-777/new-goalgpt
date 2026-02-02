@@ -188,7 +188,7 @@ export class JobRunner {
         },
         {
           blocking: false, // Non-blocking - skip if lock held
-          timeoutMs: timeoutMs + 10_000, // Extra buffer for lock timeout (beyond job timeout)
+          timeoutMs: timeoutMs * 2, // 2x buffer for safety
         }
       );
 

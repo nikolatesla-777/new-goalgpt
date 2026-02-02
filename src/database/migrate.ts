@@ -822,6 +822,53 @@ async function runMigrations() {
         END IF;
       END
       $$;
+
+      -- ========================================================================
+      -- TELEGRAM DAILY LISTS (Phase 1.1)
+      -- ========================================================================
+
+      -- Create telegram_daily_lists table for daily AI prediction lists
+      CREATE TABLE IF NOT EXISTS telegram_daily_lists (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        market VARCHAR(20) NOT NULL,
+        list_date DATE NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        emoji VARCHAR(10) NOT NULL,
+        matches_count INTEGER DEFAULT 0,
+        avg_confidence INTEGER DEFAULT 0,
+        matches JSONB NOT NULL,
+        preview TEXT,
+        generated_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        telegram_message_id BIGINT,
+        channel_id VARCHAR(100),
+        settled_at TIMESTAMPTZ,
+        status VARCHAR(20) DEFAULT 'draft',
+        settlement_result JSONB,
+        UNIQUE(market, list_date),
+        CONSTRAINT status_enum CHECK (status IN ('draft', 'active', 'partial', 'settled', 'cancelled')),
+        CONSTRAINT settled_consistency CHECK (
+          CASE
+            WHEN status IN ('settled', 'partial') THEN settled_at IS NOT NULL
+            ELSE TRUE
+          END
+        )
+      );
+
+      -- Indexes for telegram_daily_lists
+      CREATE INDEX IF NOT EXISTS idx_telegram_daily_lists_date
+        ON telegram_daily_lists(list_date DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_telegram_daily_lists_market_date
+        ON telegram_daily_lists(market, list_date DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_telegram_daily_lists_settlement
+        ON telegram_daily_lists(status, list_date, settled_at)
+        WHERE status IN ('active', 'partial') AND settled_at IS NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_telegram_daily_lists_message_id
+        ON telegram_daily_lists(telegram_message_id)
+        WHERE telegram_message_id IS NOT NULL;
     `;
 
     await pool.query(migrationSQL);

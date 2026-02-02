@@ -13,6 +13,7 @@ import {
 import type {
   TelegramPublishRequest,
 } from '../types';
+import { toast } from '../../utils/toast';
 
 // ============================================================================
 // Query Keys
@@ -37,11 +38,11 @@ export function useTelegramDailyListsToday() {
   return useQuery({
     queryKey: telegramQueryKeys.dailyListsToday(),
     queryFn: getTelegramDailyListsToday,
-    staleTime: 0, // ZERO cache - always fetch fresh data for settlement updates
-    gcTime: 0, // Don't keep data in cache (formerly cacheTime)
-    refetchOnMount: 'always', // Always refetch when component mounts
-    refetchOnWindowFocus: true, // Refetch when window regains focus
-    refetchInterval: 60000, // Auto-refetch every 60 seconds
+    staleTime: 30000, // 30 seconds (was 0)
+    gcTime: 5 * 60 * 1000, // 5 minutes (was 0)
+    refetchOnMount: true, // Only on initial mount (was 'always')
+    refetchOnWindowFocus: false, // Disable (was true)
+    refetchInterval: false, // Disable polling (was 60000)
   });
 }
 
@@ -75,11 +76,15 @@ export function usePublishDailyList() {
       market: string;
       options?: TelegramPublishRequest;
     }) => publishTelegramDailyList(market, options),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       // Invalidate today's lists to refresh telegram_message_id
       queryClient.invalidateQueries({
         queryKey: telegramQueryKeys.dailyListsToday(),
       });
+      toast.success(`${variables.market} listesi başarıyla yayınlandı!`);
+    },
+    onError: (error: Error, variables) => {
+      toast.error(`${variables.market} yayınlanırken hata oluştu`, error);
     },
   });
 }
@@ -93,10 +98,15 @@ export function usePublishAllDailyLists() {
   return useMutation({
     mutationFn: (options?: TelegramPublishRequest) =>
       publishAllTelegramDailyLists(options),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({
         queryKey: telegramQueryKeys.dailyListsToday(),
       });
+      const count = data?.published_count ?? 0;
+      toast.success(`${count} liste başarıyla yayınlandı!`);
+    },
+    onError: (error: Error) => {
+      toast.error('Listeler yayınlanırken hata oluştu', error);
     },
   });
 }
@@ -114,6 +124,10 @@ export function useRegenerateDailyLists() {
       queryClient.invalidateQueries({
         queryKey: telegramQueryKeys.dailyLists(),
       });
+      toast.success('Listeler başarıyla yenilendi!');
+    },
+    onError: (error: Error) => {
+      toast.error('Listeler yenilenirken hata oluştu', error);
     },
   });
 }

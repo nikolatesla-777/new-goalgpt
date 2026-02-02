@@ -21,6 +21,8 @@
 import { footyStatsAPI } from '../footystats/footystats.client';
 import { logger } from '../../utils/logger';
 import { safeQuery } from '../../database/connection';
+import { getTodayInIstanbul } from '../../utils/timezoneUtils';
+import { DAILY_LISTS_CONFIG } from './dailyLists.constants';
 
 // ============================================================================
 // TYPES
@@ -425,7 +427,7 @@ function selectTopMatches(
  * @returns Array of DailyList objects (empty if no eligible matches)
  */
 export async function generateDailyLists(date?: string): Promise<DailyList[]> {
-  const targetDate = date || new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+  const targetDate = date || getTodayInIstanbul();
 
   logger.info(`[TelegramDailyLists] 🚀 Starting daily list generation for ${targetDate}...`);
 
@@ -845,34 +847,49 @@ export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Prom
   if (matches.length === 0) return matchMap;
 
   try {
-    // For each FootyStats match, find candidates in TheSports within time window
+    // Step 1: Calculate global time window (single query instead of N)
+    const TIME_WINDOW = DAILY_LISTS_CONFIG.TIME_WINDOW_SECONDS;
+    const minTimestamp = Math.min(...matches.map(m => m.date_unix)) - TIME_WINDOW;
+    const maxTimestamp = Math.max(...matches.map(m => m.date_unix)) + TIME_WINDOW;
+
+    // Step 2: Fetch ALL candidate matches in ONE query
+    const batchQuery = `
+      SELECT
+        m.external_id,
+        t1.name as home_team_name,
+        t2.name as away_team_name,
+        m.match_time
+      FROM ts_matches m
+      INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
+      INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+      WHERE m.match_time >= $1 AND m.match_time <= $2
+    `;
+
+    const allCandidates = await safeQuery(batchQuery, [minTimestamp, maxTimestamp]);
+    logger.info(`[TelegramDailyLists] Fetched ${allCandidates.length} candidate matches in single query`);
+
+    // Step 3: Match in-memory (fast fuzzy matching)
+    const SIMILARITY_THRESHOLD = DAILY_LISTS_CONFIG.SIMILARITY_THRESHOLD;
+
     for (const fsMatch of matches) {
-      const timeWindow = 3600; // +/- 1 hour
-      const minTime = fsMatch.date_unix - timeWindow;
-      const maxTime = fsMatch.date_unix + timeWindow;
+      // Filter candidates for this specific match's time window
+      const matchCandidates = allCandidates.filter(c =>
+        c.match_time >= fsMatch.date_unix - TIME_WINDOW &&
+        c.match_time <= fsMatch.date_unix + TIME_WINDOW
+      );
 
-      // Get all TheSports matches within time window
-      const candidateQuery = `
-        SELECT
-          m.external_id,
-          t1.name as home_team_name,
-          t2.name as away_team_name,
-          m.match_time
-        FROM ts_matches m
-        INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
-        INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
-        WHERE m.match_time >= $1 AND m.match_time <= $2
-      `;
-
-      const candidates = await safeQuery(candidateQuery, [minTime, maxTime]);
-
-      if (candidates.length === 0) continue;
+      if (matchCandidates.length === 0) {
+        logger.warn(
+          `[TelegramDailyLists] ❌ No candidates found for: "${fsMatch.home_name} vs ${fsMatch.away_name}"`
+        );
+        continue;
+      }
 
       // Find best match using fuzzy matching
       let bestMatch: any = null;
       let bestScore = 0;
 
-      for (const candidate of candidates) {
+      for (const candidate of matchCandidates) {
         // Calculate similarity scores for both teams
         const homeScore = calculateStringSimilarity(fsMatch.home_name, candidate.home_team_name);
         const awayScore = calculateStringSimilarity(fsMatch.away_name, candidate.away_team_name);
@@ -882,7 +899,7 @@ export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Prom
 
         // Time proximity bonus (closer time = slightly higher score)
         const timeDiff = Math.abs(candidate.match_time - fsMatch.date_unix);
-        const timeBonus = Math.max(0, (3600 - timeDiff) / 3600) * 0.1; // Up to 0.1 bonus
+        const timeBonus = Math.max(0, (TIME_WINDOW - timeDiff) / TIME_WINDOW) * 0.1; // Up to 0.1 bonus
 
         const finalScore = combinedScore + timeBonus;
 
@@ -893,8 +910,6 @@ export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Prom
       }
 
       // Accept match if score is above threshold
-      const SIMILARITY_THRESHOLD = 0.40; // 40% similarity required (lowered for better coverage)
-
       if (bestMatch && bestScore >= SIMILARITY_THRESHOLD) {
         matchMap.set(fsMatch.fs_id, bestMatch.external_id);
         logger.debug(
@@ -909,7 +924,8 @@ export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Prom
       }
     }
 
-    logger.info(`[TelegramDailyLists] 🔗 Mapped ${matchMap.size}/${matches.length} matches to TheSports (${Math.round(matchMap.size / matches.length * 100)}%)`);
+    const successRate = (matchMap.size / matches.length) * 100;
+    logger.info(`[TelegramDailyLists] 🔗 Mapped ${matchMap.size}/${matches.length} matches to TheSports (${successRate.toFixed(1)}%)`);
   } catch (err) {
     logger.error('[TelegramDailyLists] Error mapping matches to TheSports:', err);
   }
@@ -1099,61 +1115,78 @@ export async function getDailyLists(date?: string): Promise<DailyList[]> {
 
     logger.info(`[TelegramDailyLists] 📦 Found cached lists (${cacheAgeMinutes} minutes old)`);
 
-    // DEBUG: Check if settlement_result exists before filtering
-    cachedLists.forEach(list => {
-      logger.info(`[TelegramDailyLists] 🔍 List ${list.market} has settlement_result:`, !!list.settlement_result);
-    });
+    // 2. Identify settled vs unsettled lists
+    const settledListMarkets = cachedLists
+      .filter(list => list.status === 'settled' || list.settlement_result !== undefined)
+      .map(list => list.market);
 
-    // 2. Filter out started/finished matches (real-time filtering)
+    const unsettledListMarkets = cachedLists
+      .filter(list => !settledListMarkets.includes(list.market))
+      .map(list => list.market);
+
+    logger.info(`[TelegramDailyLists] 📊 Settled markets: ${settledListMarkets.join(', ')}`);
+    logger.info(`[TelegramDailyLists] 📊 Unsettled markets: ${unsettledListMarkets.join(', ')}`);
+
+    // 3. Only filter matches for UNSETTLED lists
     const now = Math.floor(Date.now() / 1000);
-    const filteredLists = cachedLists.map(list => ({
-      ...list,
-      matches: list.matches.filter(m => m.match.date_unix > now),
-      matches_count: list.matches.filter(m => m.match.date_unix > now).length,
-    })).filter(list => list.matches_count >= 3); // Keep only lists with 3+ valid matches
-
-    // DEBUG: Check if settlement_result exists after filtering
-    filteredLists.forEach(list => {
-      logger.info(`[TelegramDailyLists] 🔍 After filter, list ${list.market} has settlement_result:`, !!list.settlement_result);
+    const processedLists = cachedLists.map(list => {
+      if (settledListMarkets.includes(list.market)) {
+        // SETTLED: Return as-is, don't filter matches
+        logger.info(`[TelegramDailyLists] ✅ Preserving settled list: ${list.market} (${list.settlement_result?.won}/${list.settlement_result?.total})`);
+        return list;
+      } else {
+        // UNSETTLED: Filter upcoming matches
+        const filteredMatches = list.matches.filter(m => m.match.date_unix > now);
+        return {
+          ...list,
+          matches: filteredMatches,
+          matches_count: filteredMatches.length
+        };
+      }
     });
 
-    const totalValidMatches = filteredLists.reduce((sum, l) => sum + l.matches_count, 0);
+    // 4. Check if refresh needed ONLY for unsettled markets
+    const totalValidMatches = processedLists
+      .filter(list => unsettledListMarkets.includes(list.market))
+      .reduce((sum, list) => sum + list.matches.length, 0);
 
-    logger.info(`[TelegramDailyLists] ⏰ After filtering: ${filteredLists.length} lists, ${totalValidMatches} valid matches`);
+    const CACHE_TTL = DAILY_LISTS_CONFIG.CACHE_TTL_MS;
+    const shouldRefresh =
+      (cacheAge > CACHE_TTL) ||
+      (totalValidMatches < 10 && unsettledListMarkets.length > 0);
 
-    // 3. Cache refresh logic
-    const CACHE_TTL = 60 * 60 * 1000; // 1 hour
-    const shouldRefresh = cacheAge > CACHE_TTL || filteredLists.length === 0 || totalValidMatches < 10;
+    logger.info(`[TelegramDailyLists] ⏰ After filtering: ${processedLists.length} lists, ${totalValidMatches} unsettled valid matches`);
 
     if (shouldRefresh) {
-      logger.info(`[TelegramDailyLists] 🔄 Cache refresh needed (age: ${cacheAgeMinutes}m, valid lists: ${filteredLists.length}, matches: ${totalValidMatches})`);
+      logger.info(`[TelegramDailyLists] 🔄 Cache refresh needed (age: ${cacheAgeMinutes}m, unsettled matches: ${totalValidMatches})`);
       const newLists = await generateDailyLists(targetDate);
 
       if (newLists.length > 0) {
-        // PRESERVE SETTLEMENT DATA: Copy settlement_result from old cached lists to new lists
-        const newListsWithSettlement = newLists.map(newList => {
-          const oldList = cachedLists.find(old => old.market === newList.market);
-          if (oldList && oldList.settlement_result) {
-            logger.info(`[TelegramDailyLists] 🔄 Preserving settlement data for ${newList.market}`);
-            return {
-              ...newList,
-              settlement_result: oldList.settlement_result,
-              status: oldList.status,
-              settled_at: oldList.settled_at,
-            };
+        // Merge: Keep settled lists from cache, use new lists for unsettled
+        const finalLists = newLists.map(newList => {
+          const oldSettledList = processedLists.find(
+            old => old.market === newList.market && settledListMarkets.includes(old.market)
+          );
+
+          if (oldSettledList) {
+            // Use old settled list
+            logger.info(`[TelegramDailyLists] 🔄 Using cached settled list for ${newList.market}`);
+            return oldSettledList;
+          } else {
+            // Use new list
+            return newList;
           }
-          return newList;
         });
 
-        await saveDailyListsToDatabase(targetDate, newListsWithSettlement);
-        return newListsWithSettlement;
+        await saveDailyListsToDatabase(targetDate, finalLists);
+        return finalLists;
       }
     }
 
-    // 4. Return filtered cache if still valid
-    if (filteredLists.length > 0) {
-      logger.info(`[TelegramDailyLists] ✅ Using filtered cached lists`);
-      return filteredLists;
+    // 5. Return processed cache if still valid
+    if (processedLists.length > 0) {
+      logger.info(`[TelegramDailyLists] ✅ Using processed cached lists`);
+      return processedLists;
     }
   }
 
