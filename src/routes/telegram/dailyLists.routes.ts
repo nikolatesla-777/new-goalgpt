@@ -270,15 +270,38 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
       console.error('[TRACE-4] Collecting unique matches');
       const allMatches = new Map<number, any>();
       const allMatchIds = new Set<string>(); // TheSports match IDs
+      const unmappedMatches: any[] = [];
 
       lists.forEach(list => {
         list.matches.forEach((m: any) => {
           allMatches.set(m.match.fs_id, m.match);
           if (m.match.match_id) {
             allMatchIds.add(m.match.match_id);
+          } else {
+            // Collect unmapped matches for re-mapping
+            unmappedMatches.push(m.match);
           }
         });
       });
+
+      // ON-THE-FLY REMAPPING: Try to map unmapped matches again
+      if (unmappedMatches.length > 0) {
+        console.error(`[TRACE-4b] Attempting to remap ${unmappedMatches.length} unmapped matches...`);
+        const { mapFootyStatsToTheSports } = await import('../../services/telegram/dailyLists.service');
+        const remappedMatches = await mapFootyStatsToTheSports(unmappedMatches);
+
+        // Update match_id for successfully remapped matches
+        remappedMatches.forEach((external_id, fs_id) => {
+          const match = allMatches.get(fs_id);
+          if (match) {
+            match.match_id = external_id;
+            allMatchIds.add(external_id);
+            console.error(`[TRACE-4c] ✅ Remapped fs_id ${fs_id} → ${external_id}`);
+          }
+        });
+
+        logger.info(`[TelegramDailyLists] 🔄 Remapped ${remappedMatches.size}/${unmappedMatches.length} previously unmapped matches`);
+      }
 
       // Bulk query: Get match results from TheSports database
       console.error('[TRACE-5] Fetching match results from TheSports for', allMatchIds.size, 'matches');

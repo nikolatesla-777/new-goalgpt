@@ -26,7 +26,7 @@ import { safeQuery } from '../../database/connection';
 // TYPES
 // ============================================================================
 
-interface FootyStatsMatch {
+export interface FootyStatsMatch {
   fs_id: number;
   match_id?: string | null;  // ✅ ADD: TheSports external_id for settlement
   home_name: string;
@@ -836,7 +836,7 @@ function calculateStringSimilarity(str1: string, str2: string): number {
  * Uses fuzzy matching to improve match detection
  * Returns a map of fs_id -> TheSports external_id
  */
-async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Promise<Map<number, string>> {
+export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Promise<Map<number, string>> {
   const matchMap = new Map<number, string>();
 
   if (matches.length === 0) return matchMap;
