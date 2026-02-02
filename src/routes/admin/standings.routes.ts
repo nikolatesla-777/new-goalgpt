@@ -148,12 +148,13 @@ export async function adminStandingsRoutes(fastify: FastifyInstance) {
           const matches = matchesByTeam[teamId] || [];
 
           // USE DATABASE VALUES for core stats
-          const mp = row.total || row.mp || 0;
+          // Different leagues use different field names from TheSports API
+          const mp = row.total || row.played || row.mp || 0;
           const won = row.won || 0;
-          const draw = row.draw || 0;
-          const loss = row.loss || 0;
+          const draw = row.draw || row.drawn || 0;
+          const loss = row.loss || row.lost || 0;
           const points = row.points || 0;
-          const goalsFor = row.goals || 0;
+          const goalsFor = row.goals_for || row.goals || 0;
           const goalsAgainst = row.goals_against || 0;
           const goalDiff = row.goal_diff || 0;
 
