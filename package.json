@@ -25,6 +25,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:live-thesports": "THESPORTS_DEBUG=1 npx tsx src/__tests__/manual/live-thesports-smoke.ts",
+    "validate:migrations": "tsx scripts/validate-migrations.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f"
