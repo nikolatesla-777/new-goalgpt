@@ -68,7 +68,8 @@ export async function runDailyListsSettlement(): Promise<void> {
         logger.info(`[DailyListsSettlement] 📅 Checking lists for dates up to ${today}`);
 
         // Get unsettled lists for past dates (including today)
-        // INCLUDES: Partially settled lists (status='partial') with VOID matches
+        // INCLUDES: Active lists (status='active') and partial lists (status='partial')
+        // Note: Active lists may have settled_at timestamp from previous partial settlement
         const result = await client.query<DailyListRecord>(`
           SELECT
             id,
@@ -80,14 +81,8 @@ export async function runDailyListsSettlement(): Promise<void> {
             preview,
             settlement_result
           FROM telegram_daily_lists
-          WHERE (
-            -- Not yet settled
-            (status = 'active' AND settled_at IS NULL)
-            OR
-            -- Partially settled (has VOID matches that may now be complete)
-            (status = 'partial' AND settlement_result IS NOT NULL)
-          )
-          AND list_date <= $1
+          WHERE status IN ('active', 'partial')
+            AND list_date <= $1
           ORDER BY list_date ASC, market ASC
           LIMIT 100
         `, [today]);
