@@ -854,10 +854,11 @@ export function TelegramDailyLists() {
                   <div className="p-6">
                     <div className="space-y-3 mb-4">
                       {list.matches.slice(0, isExpanded ? undefined : 3).map((match: Match, idx: number) => {
-                        // Determine match status
+                        // Determine match status (use backend values when available)
                         const now = Math.floor(Date.now() / 1000);
                         const matchStarted = match.date_unix <= now;
-                        const matchFinished = match.date_unix <= (now - 2 * 60 * 60); // 2 hours after start = finished
+                        // FIXED: Use backend's match_finished instead of crude time calculation
+                        const matchFinished = match.match_finished ?? (match.date_unix <= (now - 2 * 60 * 60));
 
                         // Generate tooltip text based on match status
                         const tooltipText = match.result === 'won'
