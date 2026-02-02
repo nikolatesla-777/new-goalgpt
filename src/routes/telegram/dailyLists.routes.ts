@@ -25,81 +25,123 @@ async function getLiveScoresForMatches(matches: any[]): Promise<Map<number, any>
   if (matches.length === 0) return liveScores;
 
   try {
-    // ONLY TheSports - no FootyStats fallback
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
+    // Separate matches with match_id vs without
+    const matchesWithId = matches.filter(m => m.match_id);
+    const matchesWithoutId = matches.filter(m => !m.match_id);
 
-    matches.forEach(match => {
-      const homeFirstWord = match.home_name.split(' ')[0].toLowerCase();
-      const awayFirstWord = match.away_name.split(' ')[0].toLowerCase();
-      const timeWindow = 3600; // +/- 1 hour
+    // STRATEGY 1: Use match_id directly (most reliable)
+    if (matchesWithId.length > 0) {
+      const matchIds = matchesWithId.map(m => m.match_id);
+      const query = `
+        SELECT
+          m.external_id as match_id,
+          m.home_score_display, m.away_score_display, m.status_id,
+          m.minute
+        FROM ts_matches m
+        WHERE m.external_id = ANY($1)
+          AND m.status_id IN (2, 3, 4, 5, 7, 8)
+      `;
 
-      conditions.push(`(
-        (LOWER(t1.name) LIKE $${paramIndex} OR LOWER(t1.name) LIKE $${paramIndex + 1})
-        AND (LOWER(t2.name) LIKE $${paramIndex + 2} OR LOWER(t2.name) LIKE $${paramIndex + 3})
-        AND m.match_time >= $${paramIndex + 4}
-        AND m.match_time <= $${paramIndex + 5}
-      )`);
+      const results = await safeQuery(query, [matchIds]);
 
-      params.push(
-        `%${homeFirstWord}%`,
-        `${homeFirstWord}%`,
-        `%${awayFirstWord}%`,
-        `${awayFirstWord}%`,
-        match.date_unix - timeWindow,
-        match.date_unix + timeWindow
-      );
+      results.forEach((row: any) => {
+        const fsMatch = matchesWithId.find(m => m.match_id === row.match_id);
+        if (fsMatch) {
+          const statusMap: Record<number, string> = {
+            2: 'İlk Yarı',
+            3: 'Devre Arası',
+            4: 'İkinci Yarı',
+            5: 'Uzatma',
+            7: 'Penaltılar',
+            8: 'Bitti',
+          };
 
-      paramIndex += 6;
-    });
+          liveScores.set(fsMatch.fs_id, {
+            home: parseInt(row.home_score_display) || 0,
+            away: parseInt(row.away_score_display) || 0,
+            minute: row.minute || '',
+            status: statusMap[row.status_id] || 'Canlı',
+          });
+        }
+      });
+    }
 
-    const query = `
-      SELECT
-        m.home_score_display, m.away_score_display, m.status_id,
-        m.current_time, m.match_time,
-        t1.name as home_team_name, t2.name as away_team_name
-      FROM ts_matches m
-      INNER JOIN ts_teams t1 ON m.home_team_id= t1.external_id
-      INNER JOIN ts_teams t2 ON m.away_team_id= t2.external_id
-      WHERE m.status_id IN (2, 3, 4, 5, 7, 8)
-        AND (${conditions.join(' OR ')})
-    `;
+    // STRATEGY 2: Fallback to fuzzy matching for unmapped matches
+    if (matchesWithoutId.length > 0) {
+      const conditions: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
 
-    const results = await safeQuery(query, params);
+      matchesWithoutId.forEach(match => {
+        const homeFirstWord = match.home_name.split(' ')[0].toLowerCase();
+        const awayFirstWord = match.away_name.split(' ')[0].toLowerCase();
+        const timeWindow = 3600; // +/- 1 hour
 
-    // Match results back to FootyStats matches
-    results.forEach((row: any) => {
-      const matchingFsMatch = matches.find(m => {
-        const homeFirstWord = m.home_name.split(' ')[0].toLowerCase();
-        const awayFirstWord = m.away_name.split(' ')[0].toLowerCase();
-        return (
-          row.home_team_name.toLowerCase().includes(homeFirstWord) &&
-          row.away_team_name.toLowerCase().includes(awayFirstWord) &&
-          Math.abs(row.match_time - m.date_unix) <= 3600
+        conditions.push(`(
+          (LOWER(t1.name) LIKE $${paramIndex} OR LOWER(t1.name) LIKE $${paramIndex + 1})
+          AND (LOWER(t2.name) LIKE $${paramIndex + 2} OR LOWER(t2.name) LIKE $${paramIndex + 3})
+          AND m.match_time >= $${paramIndex + 4}
+          AND m.match_time <= $${paramIndex + 5}
+        )`);
+
+        params.push(
+          `%${homeFirstWord}%`,
+          `${homeFirstWord}%`,
+          `%${awayFirstWord}%`,
+          `${awayFirstWord}%`,
+          match.date_unix - timeWindow,
+          match.date_unix + timeWindow
         );
+
+        paramIndex += 6;
       });
 
-      if (matchingFsMatch) {
-        const statusMap: Record<number, string> = {
-          2: 'İlk Yarı',
-          3: 'Devre Arası',
-          4: 'İkinci Yarı',
-          5: 'Uzatma',
-          7: 'Penaltılar',
-          8: 'Bitti',
-        };
+      const query = `
+        SELECT
+          m.home_score_display, m.away_score_display, m.status_id,
+          m.minute, m.match_time,
+          t1.name as home_team_name, t2.name as away_team_name
+        FROM ts_matches m
+        INNER JOIN ts_teams t1 ON m.home_team_id= t1.external_id
+        INNER JOIN ts_teams t2 ON m.away_team_id= t2.external_id
+        WHERE m.status_id IN (2, 3, 4, 5, 7, 8)
+          AND (${conditions.join(' OR ')})
+      `;
 
-        liveScores.set(matchingFsMatch.fs_id, {
-          home: parseInt(row.home_score_display) || 0,
-          away: parseInt(row.away_score_display) || 0,
-          minute: row.current_time || '',
-          status: statusMap[row.status_id] || 'Canlı',
+      const results = await safeQuery(query, params);
+
+      results.forEach((row: any) => {
+        const matchingFsMatch = matchesWithoutId.find(m => {
+          const homeFirstWord = m.home_name.split(' ')[0].toLowerCase();
+          const awayFirstWord = m.away_name.split(' ')[0].toLowerCase();
+          return (
+            row.home_team_name.toLowerCase().includes(homeFirstWord) &&
+            row.away_team_name.toLowerCase().includes(awayFirstWord) &&
+            Math.abs(row.match_time - m.date_unix) <= 3600
+          );
         });
-      }
-    });
 
-    logger.info(`[TelegramDailyLists] 📺 Found live scores for ${liveScores.size}/${matches.length} matches from TheSports`);
+        if (matchingFsMatch) {
+          const statusMap: Record<number, string> = {
+            2: 'İlk Yarı',
+            3: 'Devre Arası',
+            4: 'İkinci Yarı',
+            5: 'Uzatma',
+            7: 'Penaltılar',
+            8: 'Bitti',
+          };
+
+          liveScores.set(matchingFsMatch.fs_id, {
+            home: parseInt(row.home_score_display) || 0,
+            away: parseInt(row.away_score_display) || 0,
+            minute: row.minute || '',
+            status: statusMap[row.status_id] || 'Canlı',
+          });
+        }
+      });
+    }
+
+    logger.info(`[TelegramDailyLists] 📺 Found live scores for ${liveScores.size}/${matches.length} matches (${matchesWithId.length} via match_id, ${matchesWithoutId.length} via fuzzy)`);
   } catch (err) {
     logger.error('[TelegramDailyLists] Error fetching live scores from TheSports:', err);
   }
@@ -108,7 +150,11 @@ async function getLiveScoresForMatches(matches: any[]): Promise<Map<number, any>
 }
 
 /**
- * Calculate performance for a daily list (check finished matches)
+ * Calculate performance for a daily list
+ *
+ * STRATEGY:
+ * 1. If list has settlement_result from database, use it (most accurate)
+ * 2. Otherwise, count based on match results inline (realtime)
  */
 async function calculateListPerformance(list: any): Promise<{
   total: number;
@@ -117,6 +163,23 @@ async function calculateListPerformance(list: any): Promise<{
   pending: number;
   win_rate: number;
 }> {
+  // STRATEGY 1: Use database settlement_result if available (preferred)
+  if (list.settlement_result) {
+    const settlement = list.settlement_result;
+    const total = (settlement.won || 0) + (settlement.lost || 0);
+    const win_rate = total > 0 ? Math.round((settlement.won / total) * 100) : 0;
+
+    return {
+      total,
+      won: settlement.won || 0,
+      lost: settlement.lost || 0,
+      pending: list.matches.length - total - (settlement.void || 0),
+      win_rate,
+    };
+  }
+
+  // STRATEGY 2: Realtime calculation based on match results (fallback)
+  // This runs for unsettled lists only
   const now = Math.floor(Date.now() / 1000);
   let won = 0;
   let lost = 0;
@@ -124,7 +187,6 @@ async function calculateListPerformance(list: any): Promise<{
 
   for (const candidate of list.matches) {
     const match = candidate.match;
-    const marketType = list.market;
 
     // Check if match is finished (>2 hours after start)
     const matchFinished = match.date_unix <= (now - 2 * 60 * 60);
@@ -136,100 +198,46 @@ async function calculateListPerformance(list: any): Promise<{
 
     // Get match result from TheSports database (match by team names + time window)
     try {
-      // Extract first word of team names for fuzzy matching
-      const homeFirstWord = match.home_name.split(' ')[0].toLowerCase();
-      const awayFirstWord = match.away_name.split(' ')[0].toLowerCase();
-      const timeWindow = 3600; // +/- 1 hour
+      // Use match_id if available (preferred)
+      if (match.match_id) {
+        const result = await safeQuery(
+          `SELECT m.external_id, m.home_score_display, m.away_score_display, m.status_id,
+                  m.home_scores, m.away_scores
+           FROM ts_matches m
+           WHERE m.external_id = $1 AND m.status_id = 8
+           LIMIT 1`,
+          [match.match_id]
+        );
 
-      const result = await safeQuery(
-        `SELECT m.home_score_display, m.away_score_display, m.status_id,
-                m.home_scores, m.away_scores,
-                t1.name as home_team_name, t2.name as away_team_name
-         FROM ts_matches m
-         INNER JOIN ts_teams t1 ON m.home_team_id= t1.external_id
-         INNER JOIN ts_teams t2 ON m.away_team_id= t2.external_id
-         WHERE (LOWER(t1.name) LIKE $1 OR LOWER(t1.name) LIKE $2)
-           AND (LOWER(t2.name) LIKE $3 OR LOWER(t2.name) LIKE $4)
-           AND m.match_time >= $5
-           AND m.match_time <= $6
-           AND m.status_id = 8
-         LIMIT 1`,
-        [
-          `%${homeFirstWord}%`,
-          `${homeFirstWord}%`,
-          `%${awayFirstWord}%`,
-          `${awayFirstWord}%`,
-          match.date_unix - timeWindow,
-          match.date_unix + timeWindow
-        ]
-      );
+        if (result.length === 0) {
+          pending++; // Not finished yet
+          continue;
+        }
 
-      if (result.length === 0) {
-        pending++; // No result yet or not finished
+        // Use evaluateMatch from settlement service (consistent logic)
+        const { evaluateMatch } = await import('../../services/telegram/dailyListsSettlement.service');
+        const evaluation = evaluateMatch(list.market, result[0]);
+
+        if (evaluation.result === 'WIN') {
+          won++;
+        } else if (evaluation.result === 'LOSS') {
+          lost++;
+        } else {
+          pending++; // VOID
+        }
         continue;
       }
 
-      const homeScore = parseInt(result[0].home_score_display) || 0;
-      const awayScore = parseInt(result[0].away_score_display) || 0;
-      const totalGoals = homeScore + awayScore;
-
-      logger.info(`[TelegramDailyLists] Match found: ${result[0].home_team_name} ${homeScore}-${awayScore} ${result[0].away_team_name}`, {
-        fs_id: match.fs_id,
-        footystats_teams: `${match.home_name} vs ${match.away_name}`,
-        thesports_teams: `${result[0].home_team_name} vs ${result[0].away_team_name}`,
-      });
-
-      // Check market result - FIXED: Use simple switch statement
-      let isWin = false;
-      switch (marketType) {
-        case 'OVER_25':
-          isWin = totalGoals >= 3;
-          break;
-        case 'OVER_15':
-          isWin = totalGoals >= 2;
-          break;
-        case 'BTTS':
-          isWin = homeScore > 0 && awayScore > 0;
-          break;
-        case 'HT_OVER_05':
-          // Extract HT score from JSON arrays
-          try {
-            const homeScores = JSON.parse(result[0].home_scores || '[]');
-            const awayScores = JSON.parse(result[0].away_scores || '[]');
-            const htHomeScore = homeScores[0]?.score || 0;
-            const htAwayScore = awayScores[0]?.score || 0;
-            const htTotalGoals = htHomeScore + htAwayScore;
-            isWin = htTotalGoals >= 1;
-            logger.info(`[TelegramDailyLists] HT Score: ${htHomeScore}-${htAwayScore}, Result: ${isWin ? 'WON' : 'LOST'}`, {
-              fs_id: match.fs_id,
-            });
-          } catch (err) {
-            logger.warn('[TelegramDailyLists] Failed to parse HT scores, marking as pending', { fs_id: match.fs_id });
-            pending++;
-            continue;
-          }
-          break;
-        case 'CORNERS':
-        case 'CARDS':
-          // Would need detailed stats, skip for now
-          pending++;
-          continue;
-      }
-
-      if (isWin) {
-        won++;
-      } else {
-        lost++;
-      }
+      // Fallback: No match_id, skip
+      pending++;
     } catch (err) {
       logger.error('[TelegramDailyLists] Error checking match result:', err);
       pending++;
     }
   }
 
-  const total = list.matches.length;
-  const settled = won + lost;
-  const win_rate = settled > 0 ? Math.round((won / settled) * 100) : 0;
+  const total = won + lost; // Total settled (won + lost, excluding void and pending)
+  const win_rate = total > 0 ? Math.round((won / total) * 100) : 0;
 
   return { total, won, lost, pending, win_rate };
 }
@@ -349,6 +357,7 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
             avg_confidence: Math.round(
               list.matches.reduce((sum: number, m: any) => sum + m.confidence, 0) / list.matches.length
             ),
+            settlement_result: list.settlement_result, // Include settlement result from database
             matches: list.matches.map((m: any) => {
               const matchId = m.match.match_id;
               const tsMatch = matchId ? matchResultsMap.get(matchId) : null;
