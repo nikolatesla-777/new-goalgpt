@@ -273,6 +273,36 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
       const lists = await getDailyLists(targetDate);
       console.error('[TRACE-3] getDailyLists() returned:', lists.length, 'lists');
 
+      // CRITICAL FIX: Load settlement data directly from database
+      // getDailyLists() may not include settlement_result due to cache refresh logic
+      console.error('[TRACE-3b] Loading settlement data from database...');
+      const client = await pool.connect();
+      try {
+        const settlementQuery = await client.query(
+          `SELECT market, settlement_result, status, settled_at
+           FROM telegram_daily_lists
+           WHERE list_date = $1`,
+          [targetDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' })]
+        );
+
+        const settlementMap = new Map(
+          settlementQuery.rows.map(row => [row.market, row])
+        );
+
+        // Merge settlement data into lists
+        lists.forEach(list => {
+          const settlement = settlementMap.get(list.market);
+          if (settlement && settlement.settlement_result) {
+            list.settlement_result = settlement.settlement_result;
+            list.status = settlement.status;
+            list.settled_at = settlement.settled_at;
+            console.error(`[TRACE-3c] Added settlement for ${list.market}: won=${settlement.settlement_result.won}`);
+          }
+        });
+      } finally {
+        client.release();
+      }
+
       if (lists.length === 0) {
         return {
           success: true,
