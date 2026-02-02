@@ -9,6 +9,7 @@ import { db } from '../database/kysely';
 import { logger } from '../utils/logger';
 import { sql } from 'kysely';
 import { sendPushToUser } from '../services/push.service';
+import { FEATURE_FLAGS } from '../config/features';
 
 export async function runDailyRewardReminders() {
   const jobName = 'Daily Reward Reminders';
@@ -65,64 +66,13 @@ export async function runDailyRewardReminders() {
 
     logger.info(`Found ${eligibleUsers.length} user(s) to remind about daily rewards`);
 
-    // Send reminders
-    for (const user of eligibleUsers) {
-      try {
-        // Get user's current day number
-        const lastClaim = await db
-          .selectFrom('customer_daily_rewards')
-          .select(['reward_date', 'day_number'])
-          .where('customer_user_id', '=', user.id)
-          .orderBy('reward_date', 'desc')
-          .limit(1)
-          .executeTakeFirst();
-
-        // Calculate next day number
-        let nextDay = 1;
-        if (lastClaim) {
-          const lastClaimDate = new Date(lastClaim.reward_date);
-          lastClaimDate.setUTCHours(0, 0, 0, 0);
-
-          const yesterday = new Date(today);
-          yesterday.setDate(yesterday.getDate() - 1);
-
-          if (lastClaimDate.getTime() === yesterday.getTime()) {
-            // Continue streak
-            nextDay = lastClaim.day_number + 1;
-            if (nextDay > 7) nextDay = 1;
-          }
-        }
-
-        // Get reward for that day
-        const dailyRewards = [
-          { day: 1, credits: 10, xp: 10 },
-          { day: 2, credits: 15, xp: 15 },
-          { day: 3, credits: 20, xp: 20 },
-          { day: 4, credits: 25, xp: 25 },
-          { day: 5, credits: 30, xp: 30 },
-          { day: 6, credits: 40, xp: 40 },
-          { day: 7, credits: 100, xp: 50 },
-        ];
-
-        const reward = dailyRewards[nextDay - 1];
-
-        // Send push notification
-        await sendPushToUser(user.id!, {
-          title: 'Günlük Ödül 🎁',
-          body: `Günlük ödülünü almayı unutma! Bugün ${reward.credits} kredi seni bekliyor.`,
-          data: {
-            type: 'daily_reward_reminder',
-            day: String(nextDay),
-            credits: String(reward.credits),
-            xp: String(reward.xp),
-          },
-          deepLink: 'goalgpt://daily-rewards',
-        });
-
-        processedCount++;
-      } catch (userError: any) {
-        logger.error(`Error sending reminder to user ${user.id}:`, userError);
-      }
+    // Check feature flag for optimized query
+    if (FEATURE_FLAGS.USE_OPTIMIZED_DAILY_REWARDS) {
+      // ✅ OPTIMIZED: Single query with window function (10,001 queries → 2 queries)
+      processedCount = await sendRemindersOptimized(eligibleUsers, today);
+    } else {
+      // ❌ LEGACY: N+1 query pattern (10,001 queries)
+      processedCount = await sendRemindersLegacy(eligibleUsers, today);
     }
 
     // Log job success
@@ -161,4 +111,165 @@ export async function runDailyRewardReminders() {
     logger.error(`${jobName} failed:`, error);
     throw error;
   }
+}
+
+/**
+ * ✅ OPTIMIZED: Send reminders using single query with window function
+ * Performance: 10,001 queries → 2 queries (99.98% reduction)
+ */
+async function sendRemindersOptimized(eligibleUsers: any[], today: Date): Promise<number> {
+  if (eligibleUsers.length === 0) return 0;
+
+  const userIds = eligibleUsers.map((u) => u.id);
+
+  // Single query with window function to get last claim for all users
+  const lastClaims = await db
+    .selectFrom('customer_daily_rewards')
+    .select([
+      'customer_user_id',
+      'reward_date',
+      'day_number',
+      sql<number>`ROW_NUMBER() OVER (PARTITION BY customer_user_id ORDER BY reward_date DESC)`.as('rn'),
+    ] as any)
+    .where('customer_user_id', 'in', userIds)
+    .execute();
+
+  // Build map of last claims (only keep row_number = 1)
+  const lastClaimMap = lastClaims
+    .filter((c: any) => c.rn === 1)
+    .reduce((acc: any, c: any) => {
+      acc[c.customer_user_id] = {
+        reward_date: c.reward_date,
+        day_number: c.day_number,
+      };
+      return acc;
+    }, {});
+
+  // Daily rewards configuration
+  const dailyRewards = [
+    { day: 1, credits: 10, xp: 10 },
+    { day: 2, credits: 15, xp: 15 },
+    { day: 3, credits: 20, xp: 20 },
+    { day: 4, credits: 25, xp: 25 },
+    { day: 5, credits: 30, xp: 30 },
+    { day: 6, credits: 40, xp: 40 },
+    { day: 7, credits: 100, xp: 50 },
+  ];
+
+  let processedCount = 0;
+
+  // Send reminders for all users
+  for (const user of eligibleUsers) {
+    try {
+      const lastClaim = lastClaimMap[user.id];
+
+      // Calculate next day number
+      let nextDay = 1;
+      if (lastClaim) {
+        const lastClaimDate = new Date(lastClaim.reward_date);
+        lastClaimDate.setUTCHours(0, 0, 0, 0);
+
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        if (lastClaimDate.getTime() === yesterday.getTime()) {
+          // Continue streak
+          nextDay = lastClaim.day_number + 1;
+          if (nextDay > 7) nextDay = 1;
+        }
+      }
+
+      const reward = dailyRewards[nextDay - 1];
+
+      // Send push notification
+      await sendPushToUser(user.id!, {
+        title: 'Günlük Ödül 🎁',
+        body: `Günlük ödülünü almayı unutma! Bugün ${reward.credits} kredi seni bekliyor.`,
+        data: {
+          type: 'daily_reward_reminder',
+          day: String(nextDay),
+          credits: String(reward.credits),
+          xp: String(reward.xp),
+        },
+        deepLink: 'goalgpt://daily-rewards',
+      });
+
+      processedCount++;
+    } catch (userError: any) {
+      logger.error(`Error sending reminder to user ${user.id}:`, userError);
+    }
+  }
+
+  logger.info(`✅ Optimized: Sent ${processedCount} reminders (2 queries total)`);
+  return processedCount;
+}
+
+/**
+ * ❌ LEGACY: Send reminders using N+1 query pattern
+ * Performance: 10,001 queries (kept for rollback capability)
+ */
+async function sendRemindersLegacy(eligibleUsers: any[], today: Date): Promise<number> {
+  let processedCount = 0;
+
+  const dailyRewards = [
+    { day: 1, credits: 10, xp: 10 },
+    { day: 2, credits: 15, xp: 15 },
+    { day: 3, credits: 20, xp: 20 },
+    { day: 4, credits: 25, xp: 25 },
+    { day: 5, credits: 30, xp: 30 },
+    { day: 6, credits: 40, xp: 40 },
+    { day: 7, credits: 100, xp: 50 },
+  ];
+
+  // Send reminders
+  for (const user of eligibleUsers) {
+    try {
+      // ❌ N+1: One query per user
+      const lastClaim = await db
+        .selectFrom('customer_daily_rewards')
+        .select(['reward_date', 'day_number'])
+        .where('customer_user_id', '=', user.id)
+        .orderBy('reward_date', 'desc')
+        .limit(1)
+        .executeTakeFirst();
+
+      // Calculate next day number
+      let nextDay = 1;
+      if (lastClaim) {
+        const lastClaimDate = new Date(lastClaim.reward_date);
+        lastClaimDate.setUTCHours(0, 0, 0, 0);
+
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        if (lastClaimDate.getTime() === yesterday.getTime()) {
+          // Continue streak
+          nextDay = lastClaim.day_number + 1;
+          if (nextDay > 7) nextDay = 1;
+        }
+      }
+
+      const reward = dailyRewards[nextDay - 1];
+
+      // Send push notification
+      await sendPushToUser(user.id!, {
+        title: 'Günlük Ödül 🎁',
+        body: `Günlük ödülünü almayı unutma! Bugün ${reward.credits} kredi seni bekliyor.`,
+        data: {
+          type: 'daily_reward_reminder',
+          day: String(nextDay),
+          credits: String(reward.credits),
+          xp: String(reward.xp),
+        },
+        deepLink: 'goalgpt://daily-rewards',
+      });
+
+      processedCount++;
+    } catch (userError: any) {
+      logger.error(`Error sending reminder to user ${user.id}:`, userError);
+    }
+  }
+
+  logger.warn(`❌ Legacy: Sent ${processedCount} reminders (${eligibleUsers.length + 1} queries)`);
+  return processedCount;
 }

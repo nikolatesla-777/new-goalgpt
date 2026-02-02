@@ -9,6 +9,7 @@ import { db } from '../database/kysely';
 import { logger } from '../utils/logger';
 import { sql } from 'kysely';
 import { sendPushToAudience, sendPushToMultipleUsers } from '../services/push.service';
+import { FEATURE_FLAGS } from '../config/features';
 
 export async function runScheduledNotifications() {
   const jobName = 'Scheduled Notifications';
@@ -32,14 +33,37 @@ export async function runScheduledNotifications() {
 
     // Find notifications that are due to be sent
     const now = new Date();
-    const pendingNotifications = await db
-      .selectFrom('scheduled_notifications')
-      .selectAll()
-      .where('status', '=', 'pending')
-      .where('scheduled_at', '<=', now)
-      .orderBy('scheduled_at', 'asc')
-      .limit(10) // Process max 10 notifications per run
-      .execute();
+
+    let pendingNotifications;
+    if (FEATURE_FLAGS.USE_OPTIMIZED_SCHEDULED_NOTIFICATIONS) {
+      // ✅ OPTIMIZED: Select only needed columns (SELECT * → SELECT specific fields)
+      pendingNotifications = await db
+        .selectFrom('scheduled_notifications')
+        .select([
+          'id',
+          'title_tr',
+          'body_tr',
+          'image_url',
+          'deep_link_url',
+          'target_audience',
+          'segment_filter',
+        ] as any)
+        .where('status', '=', 'pending')
+        .where('scheduled_at', '<=', now)
+        .orderBy('scheduled_at', 'asc')
+        .limit(10) // Process max 10 notifications per run
+        .execute();
+    } else {
+      // ❌ LEGACY: SELECT * loads all columns (including large JSONB fields)
+      pendingNotifications = await db
+        .selectFrom('scheduled_notifications')
+        .selectAll()
+        .where('status', '=', 'pending')
+        .where('scheduled_at', '<=', now)
+        .orderBy('scheduled_at', 'asc')
+        .limit(10)
+        .execute();
+    }
 
     if (pendingNotifications.length === 0) {
       logger.debug('No pending notifications to send');
