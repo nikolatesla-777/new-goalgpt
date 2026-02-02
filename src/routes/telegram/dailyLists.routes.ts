@@ -365,6 +365,8 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
                 potentials: m.match.potentials,
                 xg: m.match.xg,
                 odds: m.match.odds,
+                // FootyStats status (for unmapped matches)
+                footystats_status: m.match.status || null,
                 live_score: liveScoresMap.get(m.match.fs_id) || null,
                 // NEW: Match result data for mobile app
                 match_finished: matchFinished,

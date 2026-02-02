@@ -857,8 +857,10 @@ export function TelegramDailyLists() {
                         // Determine match status (use backend values when available)
                         const now = Math.floor(Date.now() / 1000);
                         const matchStarted = match.date_unix <= now;
-                        // FIXED: Use backend's match_finished instead of crude time calculation
-                        const matchFinished = match.match_finished ?? (match.date_unix <= (now - 2 * 60 * 60));
+                        // FIXED: Use backend's match_finished OR FootyStats status for unmapped matches
+                        const matchFinished = match.match_finished ||
+                                             (match as any).footystats_status === 'complete' ||
+                                             (match.date_unix <= (now - 2 * 60 * 60));
 
                         // Generate tooltip text based on match status
                         const tooltipText = match.result === 'won'
@@ -929,7 +931,7 @@ export function TelegramDailyLists() {
                                       );
                                     }
 
-                                    // CASE 3: Match is live
+                                    // CASE 3: Match is live WITH score
                                     if (match.live_score && matchStarted && !matchFinished) {
                                       return (
                                         <>
@@ -940,6 +942,16 @@ export function TelegramDailyLists() {
                                             {match.live_score.home}-{match.live_score.away} {match.live_score.minute}'
                                           </span>
                                         </>
+                                      );
+                                    }
+
+                                    // CASE 3B: Match is live (FootyStats) but NO score available (unmapped to TheSports)
+                                    const footystatsStatus = (match as any).footystats_status;
+                                    if ((footystatsStatus === 'live' || footystatsStatus === 'inprogress') && matchStarted && !matchFinished) {
+                                      return (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
+                                          🔴 CANLI (skor yok)
+                                        </span>
                                       );
                                     }
 
