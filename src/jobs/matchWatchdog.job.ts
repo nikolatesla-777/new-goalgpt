@@ -23,6 +23,8 @@ import { jobRunner } from './framework/JobRunner';
 import { LOCK_KEYS } from './lockKeys';
 import { matchOrchestrator } from '../modules/matches/services/MatchOrchestrator';
 import { FieldUpdate } from '../repositories/match.repository';
+import { ConcurrencyLimiter } from '../utils/concurrency';
+import { CONCURRENCY_LIMITS } from '../config/features';
 
 // PR-8B: Using MatchOrchestrator for atomic match updates
 
@@ -327,32 +329,25 @@ export class MatchWatchdogWorker {
         logger.debug(`[Watchdog] Global Sweep: Processing ${count} active live matches.`);
       }
 
-      // Process in chunks to prevent blocking the event loop
-      // This is critical for performance when feed is large (e.g. 100+ matches)
-      const chunk = 15;
-      for (let i = 0; i < count; i += chunk) {
-        const batch = liveMatches.slice(i, i + chunk);
-        await Promise.all(batch.map(async (m) => {
-          const matchId = m.id || m.match_id;
-          if (!matchId) return;
+      // ✅ BOUNDED CONCURRENCY: Process with controlled concurrency
+      // Prevents pool exhaustion when processing large batches
+      const limiter = new ConcurrencyLimiter(CONCURRENCY_LIMITS.MATCH_WATCHDOG);
 
-          try {
-            // Reconcile logic now handles:
-            // 1. Auto-insert if missing
-            // 2. Status update if changed
-            // 3. Timestamp override
-            await this.matchDetailLiveService.reconcileMatchToDatabase(matchId);
-          } catch (err: any) {
-            // Log warning but continue sweep
-            logger.warn(`[Watchdog] Global Sweep failed for ${matchId}: ${err.message}`);
-          }
-        }));
+      await limiter.forEach(liveMatches, async (m) => {
+        const matchId = m.id || m.match_id;
+        if (!matchId) return;
 
-        // Tiny yield to let other events process
-        if (i + chunk < count) {
-          await new Promise(r => setTimeout(r, 50));
+        try {
+          // Reconcile logic now handles:
+          // 1. Auto-insert if missing
+          // 2. Status update if changed
+          // 3. Timestamp override
+          await this.matchDetailLiveService.reconcileMatchToDatabase(matchId);
+        } catch (err: any) {
+          // Log warning but continue sweep
+          logger.warn(`[Watchdog] Global Sweep failed for ${matchId}: ${err.message}`);
         }
-      }
+      });
     } catch (error: any) {
       logger.error('[Watchdog] Global Sweep Fatal Error:', error);
     }

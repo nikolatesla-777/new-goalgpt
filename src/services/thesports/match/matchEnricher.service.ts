@@ -12,6 +12,8 @@ import { MatchRecent } from '../../../types/thesports/match';
 import { TeamData } from '../../../types/thesports/team';
 import { Competition } from '../competition/competition.service';
 import { logger } from '../../../utils/logger';
+import { ConcurrencyLimiter } from '../../../utils/concurrency';
+import { CONCURRENCY_LIMITS } from '../../../config/features';
 
 export interface EnrichedMatch extends MatchRecent {
   home_team: TeamData;
@@ -57,8 +59,10 @@ export class MatchEnricherService {
     const missingTeamIds = Array.from(teamIds).filter(id => !teams.has(id));
     if (missingTeamIds.length > 0) {
       logger.debug(`Fetching ${missingTeamIds.length} missing teams from API`);
-      // Fetch in parallel but limit concurrency
-      const fetchPromises = missingTeamIds.slice(0, 10).map(async (teamId) => {
+
+      // ✅ BOUNDED CONCURRENCY: Prevent pool exhaustion
+      const limiter = new ConcurrencyLimiter(CONCURRENCY_LIMITS.MATCH_ENRICHER);
+      await limiter.forEach(missingTeamIds.slice(0, 10), async (teamId) => {
         try {
           const team = await this.teamDataService.getTeamById(teamId);
           if (team && team.name && team.name !== 'Unknown Team') {
@@ -69,73 +73,27 @@ export class MatchEnricherService {
           logger.warn(`Failed to fetch team ${teamId} from API:`, error.message);
         }
       });
-      await Promise.all(fetchPromises);
     }
 
-    // Enrich matches
+    // Enrich matches with existing data
     const enrichedMatches = matches.map((match) => {
-        // Try to get team from map, or fetch individually as last resort
-        let homeTeam = teams.get(match.home_team_id);
-        if (!homeTeam || homeTeam.name === 'Unknown Team') {
-          // Try to fetch individually
-          this.teamDataService.getTeamById(match.home_team_id)
-            .then(team => {
-              if (team && team.name && team.name !== 'Unknown Team') {
-                logger.debug(`Fetched home team ${match.home_team_id}: ${team.name}`);
-              }
-            })
-            .catch(() => {});
-          
-          homeTeam = {
-            id: match.home_team_id,
-            name: 'Unknown Team',
-            short_name: null,
-            logo_url: null,
-          };
-        }
-        
-        let awayTeam = teams.get(match.away_team_id);
-        if (!awayTeam || awayTeam.name === 'Unknown Team') {
-          // Try to fetch individually
-          this.teamDataService.getTeamById(match.away_team_id)
-            .then(team => {
-              if (team && team.name && team.name !== 'Unknown Team') {
-                logger.debug(`Fetched away team ${match.away_team_id}: ${team.name}`);
-              }
-            })
-            .catch(() => {});
-          
-          awayTeam = {
-            id: match.away_team_id,
-            name: 'Unknown Team',
-            short_name: null,
-            logo_url: null,
-          };
-        }
+        const homeTeam = teams.get(match.home_team_id) || {
+          id: match.home_team_id,
+          name: 'Unknown Team',
+          short_name: null,
+          logo_url: null,
+        };
+
+        const awayTeam = teams.get(match.away_team_id) || {
+          id: match.away_team_id,
+          name: 'Unknown Team',
+          short_name: null,
+          logo_url: null,
+        };
+
         const competition = match.competition_id
           ? competitions.get(match.competition_id) || null
           : null;
-
-        // Fetch logos if missing (non-blocking)
-        if (!homeTeam.logo_url) {
-          this.teamLogoService.getTeamLogoUrl(match.home_team_id)
-            .then(logoUrl => {
-              if (logoUrl) {
-                logger.debug(`Fetched logo for home team: ${match.home_team_id}`);
-              }
-            })
-            .catch(err => logger.warn(`Failed to fetch logo for ${match.home_team_id}:`, err));
-        }
-
-        if (!awayTeam.logo_url) {
-          this.teamLogoService.getTeamLogoUrl(match.away_team_id)
-            .then(logoUrl => {
-              if (logoUrl) {
-                logger.debug(`Fetched logo for away team: ${match.away_team_id}`);
-              }
-            })
-            .catch(err => logger.warn(`Failed to fetch logo for ${match.away_team_id}:`, err));
-        }
 
         return {
           ...match,
@@ -144,6 +102,68 @@ export class MatchEnricherService {
           competition: competition || undefined,
         };
     });
+
+    // ✅ BOUNDED CONCURRENCY: Fetch missing teams/logos with proper tracking
+    // Collect all teams that still need fetching
+    const teamsToFetch: Array<{ matchIndex: number; teamType: 'home' | 'away'; teamId: string }> = [];
+    enrichedMatches.forEach((match, index) => {
+      if (match.home_team.name === 'Unknown Team') {
+        teamsToFetch.push({ matchIndex: index, teamType: 'home', teamId: match.home_team_id });
+      }
+      if (match.away_team.name === 'Unknown Team') {
+        teamsToFetch.push({ matchIndex: index, teamType: 'away', teamId: match.away_team_id });
+      }
+    });
+
+    // Fetch missing teams with bounded concurrency
+    if (teamsToFetch.length > 0) {
+      const limiter = new ConcurrencyLimiter(CONCURRENCY_LIMITS.MATCH_ENRICHER);
+      await limiter.forEach(teamsToFetch, async ({ matchIndex, teamType, teamId }) => {
+        try {
+          const team = await this.teamDataService.getTeamById(teamId);
+          if (team && team.name && team.name !== 'Unknown Team') {
+            if (teamType === 'home') {
+              enrichedMatches[matchIndex].home_team = team;
+            } else {
+              enrichedMatches[matchIndex].away_team = team;
+            }
+            logger.debug(`✅ Fetched ${teamType} team ${teamId}: ${team.name}`);
+          }
+        } catch (error: any) {
+          logger.warn(`❌ Failed to fetch ${teamType} team ${teamId}:`, error.message);
+        }
+      });
+    }
+
+    // Fetch logos for teams missing them (with bounded concurrency)
+    const logosToFetch: Array<{ matchIndex: number; teamType: 'home' | 'away'; teamId: string }> = [];
+    enrichedMatches.forEach((match, index) => {
+      if (!match.home_team.logo_url) {
+        logosToFetch.push({ matchIndex: index, teamType: 'home', teamId: match.home_team_id });
+      }
+      if (!match.away_team.logo_url) {
+        logosToFetch.push({ matchIndex: index, teamType: 'away', teamId: match.away_team_id });
+      }
+    });
+
+    if (logosToFetch.length > 0) {
+      const limiter = new ConcurrencyLimiter(CONCURRENCY_LIMITS.MATCH_ENRICHER);
+      await limiter.forEach(logosToFetch, async ({ matchIndex, teamType, teamId }) => {
+        try {
+          const logoUrl = await this.teamLogoService.getTeamLogoUrl(teamId);
+          if (logoUrl) {
+            if (teamType === 'home') {
+              enrichedMatches[matchIndex].home_team.logo_url = logoUrl;
+            } else {
+              enrichedMatches[matchIndex].away_team.logo_url = logoUrl;
+            }
+            logger.debug(`✅ Fetched logo for ${teamType} team: ${teamId}`);
+          }
+        } catch (error: any) {
+          logger.warn(`❌ Failed to fetch logo for ${teamId}:`, error.message);
+        }
+      });
+    }
 
     return enrichedMatches;
   }
