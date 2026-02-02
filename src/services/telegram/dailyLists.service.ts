@@ -1057,6 +1057,11 @@ export async function getDailyLists(date?: string): Promise<DailyList[]> {
 
     logger.info(`[TelegramDailyLists] 📦 Found cached lists (${cacheAgeMinutes} minutes old)`);
 
+    // DEBUG: Check if settlement_result exists before filtering
+    cachedLists.forEach(list => {
+      logger.info(`[TelegramDailyLists] 🔍 List ${list.market} has settlement_result:`, !!list.settlement_result);
+    });
+
     // 2. Filter out started/finished matches (real-time filtering)
     const now = Math.floor(Date.now() / 1000);
     const filteredLists = cachedLists.map(list => ({
@@ -1064,6 +1069,11 @@ export async function getDailyLists(date?: string): Promise<DailyList[]> {
       matches: list.matches.filter(m => m.match.date_unix > now),
       matches_count: list.matches.filter(m => m.match.date_unix > now).length,
     })).filter(list => list.matches_count >= 3); // Keep only lists with 3+ valid matches
+
+    // DEBUG: Check if settlement_result exists after filtering
+    filteredLists.forEach(list => {
+      logger.info(`[TelegramDailyLists] 🔍 After filter, list ${list.market} has settlement_result:`, !!list.settlement_result);
+    });
 
     const totalValidMatches = filteredLists.reduce((sum, l) => sum + l.matches_count, 0);
 
