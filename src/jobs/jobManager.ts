@@ -351,14 +351,14 @@ const jobs: JobDefinition[] = [
     description: 'Settle Telegram published picks for finished matches',
   },
   {
-    name: 'Telegram Daily Lists',
-    schedule: '0 10 * * *', // Daily at 10:00 AM UTC (13:00 Turkey time)
+    name: 'Telegram Daily Lists Auto-Publish',
+    schedule: '30 9 * * *', // Daily at 09:30 UTC (30 minutes after generation at 09:00)
     handler: async () => {
       const { runTelegramDailyListsJob } = await import('./telegramDailyLists.job');
       await runTelegramDailyListsJob();
     },
-    enabled: true,
-    description: 'Automated daily prediction lists for Telegram (Over 2.5, BTTS, HT Over 0.5)',
+    enabled: process.env.AUTO_PUBLISH_ENABLED === 'true', // Read from environment variable
+    description: 'Auto-publish daily prediction lists to Telegram (feature-flagged, 6 markets)',
   },
   {
     name: 'Daily Lists Generation',
@@ -379,6 +379,16 @@ const jobs: JobDefinition[] = [
     },
     enabled: true,
     description: 'Settle Telegram daily lists by evaluating match results from TheSports API',
+  },
+  {
+    name: 'Missing Leagues Report',
+    schedule: '0 12 * * *', // Daily at 12:00 UTC (after lists are generated and published)
+    handler: async () => {
+      const { runMissingLeaguesReport } = await import('./missingLeaguesReport.job');
+      await runMissingLeaguesReport();
+    },
+    enabled: true,
+    description: 'Generate daily report of unmapped matches grouped by league for admin review',
   },
   {
     name: 'Job Logs Cleanup',
@@ -402,13 +412,13 @@ const jobs: JobDefinition[] = [
   },
   {
     name: 'Daily Auto-Publish',
-    schedule: '0 9 * * *', // Daily at 09:00 UTC (1 hour after preview)
+    schedule: '30 9 * * *', // Daily at 09:30 UTC (30 minutes after list generation at 09:00)
     handler: async () => {
       const { runDailyAutoPublish } = await import('./dailyAutoPublish.job');
       await runDailyAutoPublish();
     },
-    enabled: false, // FEATURE-FLAGGED: Enable via AUTO_PUBLISH_ENABLED=true
-    description: 'PHASE-3B.4: Auto-publish predictions (feature-flagged, kill switch enabled)',
+    enabled: process.env.AUTO_PUBLISH_ENABLED === 'true', // Read from environment variable
+    description: 'PHASE-3B.4: Auto-publish daily lists to Telegram (feature-flagged, kill switch enabled)',
   },
   {
     name: 'Live Standings Sync',

@@ -113,6 +113,9 @@ export const LOCK_KEYS = {
   /** Daily lists settlement - settles published daily lists with match results */
   DAILY_LISTS_SETTLEMENT: 910000000030n,
 
+  /** Missing leagues report - generates report of unmapped matches by league */
+  MISSING_LEAGUES_REPORT: 910000000031n,
+
   // ============================================================
   // MATCH-LEVEL LOCKS (920_000_000_xxx + match_id)
   // These prevent concurrent updates to the same match

@@ -797,7 +797,43 @@ export async function formatDailyListMessageWithResults(
 // ============================================================================
 
 /**
+ * Calculate string similarity score (0-1) using Jaro-Winkler distance
+ * Higher score = more similar strings
+ */
+function calculateStringSimilarity(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase().trim();
+  const s2 = str2.toLowerCase().trim();
+
+  if (s1 === s2) return 1.0;
+
+  // Remove common prefixes like "Club", "Atlético", etc.
+  const s1Clean = s1.replace(/^(club|atletico|athletic|fc|cf|ac|sc|sporting|real)\s+/i, '');
+  const s2Clean = s2.replace(/^(club|atletico|athletic|fc|cf|ac|sc|sporting|real)\s+/i, '');
+
+  if (s1Clean === s2Clean) return 0.95;
+
+  // Check if one string contains the other
+  if (s1.includes(s2) || s2.includes(s1)) return 0.85;
+  if (s1Clean.includes(s2Clean) || s2Clean.includes(s1Clean)) return 0.8;
+
+  // Simple character-based similarity
+  const longer = s1.length > s2.length ? s1 : s2;
+  const shorter = s1.length > s2.length ? s2 : s1;
+  const longerLength = longer.length;
+
+  if (longerLength === 0) return 1.0;
+
+  let matches = 0;
+  for (let i = 0; i < shorter.length; i++) {
+    if (longer.includes(shorter[i])) matches++;
+  }
+
+  return matches / longerLength;
+}
+
+/**
  * Map FootyStats matches to TheSports matches using team names and time window
+ * Uses fuzzy matching to improve match detection
  * Returns a map of fs_id -> TheSports external_id
  */
 async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Promise<Map<number, string>> {
@@ -806,68 +842,71 @@ async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Promise<Map
   if (matches.length === 0) return matchMap;
 
   try {
-    // Build conditions for each match (team names + time window)
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    matches.forEach(match => {
-      const homeFirstWord = match.home_name.split(' ')[0].toLowerCase();
-      const awayFirstWord = match.away_name.split(' ')[0].toLowerCase();
+    // For each FootyStats match, find candidates in TheSports within time window
+    for (const fsMatch of matches) {
       const timeWindow = 3600; // +/- 1 hour
+      const minTime = fsMatch.date_unix - timeWindow;
+      const maxTime = fsMatch.date_unix + timeWindow;
 
-      conditions.push(`(
-        (LOWER(t1.name) LIKE $${paramIndex} OR LOWER(t1.name) LIKE $${paramIndex + 1})
-        AND (LOWER(t2.name) LIKE $${paramIndex + 2} OR LOWER(t2.name) LIKE $${paramIndex + 3})
-        AND m.match_time >= $${paramIndex + 4}
-        AND m.match_time <= $${paramIndex + 5}
-      )`);
+      // Get all TheSports matches within time window
+      const candidateQuery = `
+        SELECT
+          m.external_id,
+          t1.name as home_team_name,
+          t2.name as away_team_name,
+          m.match_time
+        FROM ts_matches m
+        INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
+        INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+        WHERE m.match_time >= $1 AND m.match_time <= $2
+      `;
 
-      params.push(
-        `%${homeFirstWord}%`,
-        `${homeFirstWord}%`,
-        `%${awayFirstWord}%`,
-        `${awayFirstWord}%`,
-        match.date_unix - timeWindow,
-        match.date_unix + timeWindow
-      );
+      const candidates = await safeQuery(candidateQuery, [minTime, maxTime]);
 
-      paramIndex += 6;
-    });
+      if (candidates.length === 0) continue;
 
-    const query = `
-      SELECT
-        m.external_id,
-        t1.name as home_team_name,
-        t2.name as away_team_name,
-        m.match_time
-      FROM ts_matches m
-      INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
-      INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
-      WHERE ${conditions.join(' OR ')}
-    `;
+      // Find best match using fuzzy matching
+      let bestMatch: any = null;
+      let bestScore = 0;
 
-    const results = await safeQuery(query, params);
+      for (const candidate of candidates) {
+        // Calculate similarity scores for both teams
+        const homeScore = calculateStringSimilarity(fsMatch.home_name, candidate.home_team_name);
+        const awayScore = calculateStringSimilarity(fsMatch.away_name, candidate.away_team_name);
 
-    // Match results back to FootyStats matches
-    results.forEach((row: any) => {
-      const matchingFsMatch = matches.find(m => {
-        const homeFirstWord = m.home_name.split(' ')[0].toLowerCase();
-        const awayFirstWord = m.away_name.split(' ')[0].toLowerCase();
-        return (
-          row.home_team_name.toLowerCase().includes(homeFirstWord) &&
-          row.away_team_name.toLowerCase().includes(awayFirstWord) &&
-          Math.abs(row.match_time - m.date_unix) <= 3600
-        );
-      });
+        // Combined score (both teams must match reasonably well)
+        const combinedScore = (homeScore + awayScore) / 2;
 
-      if (matchingFsMatch) {
-        matchMap.set(matchingFsMatch.fs_id, row.external_id);
-        logger.debug(`[TelegramDailyLists] Mapped FS match ${matchingFsMatch.fs_id} to TS match ${row.external_id}`);
+        // Time proximity bonus (closer time = slightly higher score)
+        const timeDiff = Math.abs(candidate.match_time - fsMatch.date_unix);
+        const timeBonus = Math.max(0, (3600 - timeDiff) / 3600) * 0.1; // Up to 0.1 bonus
+
+        const finalScore = combinedScore + timeBonus;
+
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
+          bestMatch = candidate;
+        }
       }
-    });
 
-    logger.info(`[TelegramDailyLists] 🔗 Mapped ${matchMap.size}/${matches.length} matches to TheSports`);
+      // Accept match if score is above threshold
+      const SIMILARITY_THRESHOLD = 0.65; // 65% similarity required
+
+      if (bestMatch && bestScore >= SIMILARITY_THRESHOLD) {
+        matchMap.set(fsMatch.fs_id, bestMatch.external_id);
+        logger.debug(
+          `[TelegramDailyLists] ✅ Fuzzy matched: "${fsMatch.home_name} vs ${fsMatch.away_name}" → ` +
+          `"${bestMatch.home_team_name} vs ${bestMatch.away_team_name}" (score: ${bestScore.toFixed(2)})`
+        );
+      } else {
+        logger.warn(
+          `[TelegramDailyLists] ❌ No match found for: "${fsMatch.home_name} vs ${fsMatch.away_name}" ` +
+          `(best score: ${bestScore.toFixed(2)}, threshold: ${SIMILARITY_THRESHOLD})`
+        );
+      }
+    }
+
+    logger.info(`[TelegramDailyLists] 🔗 Mapped ${matchMap.size}/${matches.length} matches to TheSports (${Math.round(matchMap.size / matches.length * 100)}%)`);
   } catch (err) {
     logger.error('[TelegramDailyLists] Error mapping matches to TheSports:', err);
   }

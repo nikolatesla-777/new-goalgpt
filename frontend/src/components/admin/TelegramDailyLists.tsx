@@ -239,16 +239,35 @@ export function TelegramDailyLists() {
     ? Math.round(displayLists.reduce((sum: number, list: DailyList) => sum + list.avg_confidence, 0) / displayLists.length)
     : 0;
 
-  // Calculate total performance across all lists
-  const totalPerformance = displayLists.reduce((acc: { total: number; won: number; lost: number; pending: number }, list: DailyList) => {
-    if (list.performance) {
-      acc.total += list.performance.total;
-      acc.won += list.performance.won;
-      acc.lost += list.performance.lost;
-      acc.pending += list.performance.pending;
-    }
-    return acc;
-  }, { total: 0, won: 0, lost: 0, pending: 0 });
+  // Calculate total performance across all lists by counting individual match results
+  const totalPerformance = useMemo(() => {
+    let total = 0;
+    let won = 0;
+    let lost = 0;
+    let pending = 0;
+    let voidCount = 0;
+
+    displayLists.forEach((list: DailyList) => {
+      // Count results from each match
+      list.matches.forEach((match: Match) => {
+        if (match.result === 'won') {
+          won++;
+          total++;
+        } else if (match.result === 'lost') {
+          lost++;
+          total++;
+        } else if (match.result === 'void') {
+          voidCount++;
+          // Void matches are not counted in total
+        } else {
+          // No result yet - pending (match not finished or not settled)
+          pending++;
+        }
+      });
+    });
+
+    return { total, won, lost, pending, void: voidCount };
+  }, [displayLists]);
 
   const overallWinRate = totalPerformance.total > 0
     ? Math.round((totalPerformance.won / totalPerformance.total) * 100)
@@ -503,13 +522,21 @@ export function TelegramDailyLists() {
                 const dateAvgConfidence = dateData.lists.length > 0
                   ? Math.round(dateData.lists.reduce((sum, list) => sum + list.avg_confidence, 0) / dateData.lists.length)
                   : 0;
+                // Calculate performance by counting individual match results
                 const dateTotalPerformance = dateData.lists.reduce((acc, list) => {
-                  if (list.performance) {
-                    acc.total += list.performance.total;
-                    acc.won += list.performance.won;
-                    acc.lost += list.performance.lost;
-                    acc.pending += list.performance.pending;
-                  }
+                  list.matches.forEach((match: Match) => {
+                    if (match.result === 'won') {
+                      acc.won++;
+                      acc.total++;
+                    } else if (match.result === 'lost') {
+                      acc.lost++;
+                      acc.total++;
+                    } else if (match.result === 'void') {
+                      // Void matches not counted in total
+                    } else {
+                      acc.pending++;
+                    }
+                  });
                   return acc;
                 }, { total: 0, won: 0, lost: 0, pending: 0 });
                 const dateWinRate = dateTotalPerformance.total > 0
@@ -645,21 +672,50 @@ export function TelegramDailyLists() {
                             {/* Summary View (no expand/collapse for historical) */}
                             <div className="p-6">
                               <div className="text-sm text-gray-600 mb-3">
-                                {list.matches.slice(0, 3).map((match) => (
-                                  <div key={match.fs_id} className="mb-2 pb-2 border-b border-gray-100 last:border-0">
-                                    <p className="font-medium text-gray-900">
-                                      {match.home_name} vs {match.away_name}
-                                    </p>
-                                    <p className="text-xs text-gray-500">
-                                      {match.league_name} • Güven: {match.confidence}%
-                                      {match.live_score && (
-                                        <span className="ml-2 font-bold text-blue-600">
-                                          {match.live_score.home}-{match.live_score.away}
-                                        </span>
-                                      )}
-                                    </p>
-                                  </div>
-                                ))}
+                                {list.matches.slice(0, 3).map((match) => {
+                                  // Generate tooltip for historical matches
+                                  const historicalTooltip = match.result === 'won'
+                                    ? `✅ Kazandı - ${list.market}: Tahmin tuttu!${match.final_score ? ` (${match.final_score.home}-${match.final_score.away})` : ''}`
+                                    : match.result === 'lost'
+                                    ? `❌ Kaybetti - ${list.market}: Tahmin tutmadı.${match.final_score ? ` (${match.final_score.home}-${match.final_score.away})` : ''}`
+                                    : match.result === 'void'
+                                    ? `⚪ Geçersiz - TheSports API eşleştirmesi başarısız.`
+                                    : `Sonuç bekleniyor...`;
+
+                                  return (
+                                    <div
+                                      key={match.fs_id}
+                                      title={historicalTooltip}
+                                      className="mb-2 pb-2 border-b border-gray-100 last:border-0 cursor-help"
+                                    >
+                                      <p className="font-medium text-gray-900">
+                                        {match.home_name} vs {match.away_name}
+                                        {match.result && (
+                                          <span className={`ml-2 text-xs ${
+                                            match.result === 'won' ? 'text-green-600' :
+                                            match.result === 'lost' ? 'text-red-600' :
+                                            'text-gray-500'
+                                          }`}>
+                                            {match.result === 'won' ? '✅' : match.result === 'lost' ? '❌' : '⚪'}
+                                          </span>
+                                        )}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        {match.league_name} • Güven: {match.confidence}%
+                                        {match.final_score && (
+                                          <span className="ml-2 font-bold text-gray-700">
+                                            {match.final_score.home}-{match.final_score.away}
+                                          </span>
+                                        )}
+                                        {match.live_score && !match.final_score && (
+                                          <span className="ml-2 font-bold text-blue-600">
+                                            {match.live_score.home}-{match.live_score.away}
+                                          </span>
+                                        )}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
                                 {list.matches.length > 3 && (
                                   <p className="text-xs text-gray-400 mt-2 text-center">
                                     ... ve {list.matches.length - 3} maç daha
@@ -803,10 +859,24 @@ export function TelegramDailyLists() {
                         const matchStarted = match.date_unix <= now;
                         const matchFinished = match.date_unix <= (now - 2 * 60 * 60); // 2 hours after start = finished
 
+                        // Generate tooltip text based on match status
+                        const tooltipText = match.result === 'won'
+                          ? `✅ Kazandı - ${list.market}: Tahmin tuttu!${match.final_score ? ` (${match.final_score.home}-${match.final_score.away})` : ''}`
+                          : match.result === 'lost'
+                          ? `❌ Kaybetti - ${list.market}: Tahmin tutmadı.${match.final_score ? ` (${match.final_score.home}-${match.final_score.away})` : ''}`
+                          : match.result === 'void'
+                          ? `⚪ Geçersiz - TheSports API eşleştirmesi başarısız. Maç settle edilemedi.`
+                          : matchFinished
+                          ? `⏳ Settlement Bekliyor - Maç bitti, sonuç değerlendirmesi yapılıyor...`
+                          : matchStarted
+                          ? `▶️ Maç devam ediyor${match.live_score ? ` (${match.live_score.home}-${match.live_score.away} ${match.live_score.minute}')` : ''}`
+                          : `⏰ Maç ${new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })} saatinde başlayacak`;
+
                         return (
                           <div
                             key={match.fs_id}
-                            className={`${config.lightBg} rounded-xl p-4 border-2 border-transparent hover:border-gray-200 transition-all duration-200 ${
+                            title={tooltipText}
+                            className={`${config.lightBg} rounded-xl p-4 border-2 border-transparent hover:border-gray-200 transition-all duration-200 cursor-help ${
                               matchStarted ? 'opacity-60' : ''
                             }`}
                           >
@@ -818,50 +888,72 @@ export function TelegramDailyLists() {
                                     {match.home_name} vs {match.away_name}
                                   </span>
 
-                                  {/* Match Status & Score */}
-                                  {match.match_finished && match.final_score && (
-                                    <>
-                                      {/* Score Badge */}
-                                      <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-gray-200 text-gray-700">
-                                        {match.final_score.home}-{match.final_score.away}
-                                      </span>
+                                  {/* Match Status & Score - Settlement-Aware */}
+                                  {(() => {
+                                    // CASE 1: Settlement completed (final_score and result available)
+                                    if (match.match_finished && match.final_score && match.result) {
+                                      return (
+                                        <>
+                                          {/* Final Score Badge */}
+                                          <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-gray-200 text-gray-700">
+                                            FT {match.final_score.home}-{match.final_score.away}
+                                          </span>
 
-                                      {/* Won/Lost Badge */}
-                                      {match.result === 'won' && (
-                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-green-100 text-green-700">
-                                          ✅ Kazandı
-                                        </span>
-                                      )}
-                                      {match.result === 'lost' && (
-                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-700">
-                                          ❌ Kaybetti
-                                        </span>
-                                      )}
-                                      {match.result === 'void' && (
-                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
-                                          ⚪ Geçersiz
-                                        </span>
-                                      )}
-                                    </>
-                                  )}
+                                          {/* Result Badge */}
+                                          {match.result === 'won' && (
+                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-green-100 text-green-700">
+                                              ✅ Kazandı
+                                            </span>
+                                          )}
+                                          {match.result === 'lost' && (
+                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-700">
+                                              ❌ Kaybetti
+                                            </span>
+                                          )}
+                                          {match.result === 'void' && (
+                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
+                                              ⚪ Geçersiz
+                                            </span>
+                                          )}
+                                        </>
+                                      );
+                                    }
 
-                                  {/* Live/Started matches (old logic for matches without final_score) */}
-                                  {matchStarted && !match.match_finished && (
-                                    <>
-                                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                        matchFinished
-                                          ? 'bg-gray-200 text-gray-600'
-                                          : 'bg-red-100 text-red-600 animate-pulse'
-                                      }`}>
-                                        {matchFinished ? 'BİTTİ' : 'CANLI'}
-                                      </span>
-                                      {match.live_score && (
-                                        <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
-                                          {match.live_score.home}-{match.live_score.away} {match.live_score.minute}
+                                    // CASE 2: Match finished but settlement pending
+                                    if (matchFinished && !match.result) {
+                                      return (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-orange-100 text-orange-600 animate-pulse">
+                                          ⏳ Settle Bekliyor
                                         </span>
-                                      )}
-                                    </>
-                                  )}
+                                      );
+                                    }
+
+                                    // CASE 3: Match is live
+                                    if (match.live_score && matchStarted && !matchFinished) {
+                                      return (
+                                        <>
+                                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
+                                            🔴 CANLI
+                                          </span>
+                                          <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
+                                            {match.live_score.home}-{match.live_score.away} {match.live_score.minute}'
+                                          </span>
+                                        </>
+                                      );
+                                    }
+
+                                    // CASE 4: Match started but no live score yet
+                                    if (matchStarted && !matchFinished) {
+                                      return (
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-600">
+                                          ▶️ Başladı
+                                        </span>
+                                      );
+                                    }
+
+                                    // CASE 5: Match not started yet (default - show nothing, time is shown elsewhere)
+                                    return null;
+                                  })()}
                                 </div>
                                 <div className="flex items-center gap-4 text-xs text-gray-500">
                                   <span className="flex items-center gap-1">

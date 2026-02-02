@@ -35,6 +35,12 @@ export async function runTelegramDailyListsJob(): Promise<void> {
     async (_ctx) => {
       logger.info('[TelegramDailyLists.Job] 🚀 Starting daily lists job...');
 
+      // Kill switch check
+      if (process.env.AUTO_PUBLISH_KILL_SWITCH === 'true') {
+        logger.warn('[TelegramDailyLists.Job] ⚠️ Kill switch active (AUTO_PUBLISH_KILL_SWITCH=true). Skipping auto-publish.');
+        return;
+      }
+
       try {
         // Call the publish endpoint (using internal request)
         const baseUrl = process.env.INTERNAL_API_URL || 'http://localhost:3000';

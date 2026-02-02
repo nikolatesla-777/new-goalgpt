@@ -182,10 +182,91 @@ export async function runDailyListsSettlement(): Promise<void> {
         }
       }
 
+      // Alert system: Check for critical issues
+      const totalProcessed = settledCount + failedCount;
+
+      if (totalProcessed > 0) {
+        const failureRate = (failedCount / totalProcessed) * 100;
+
+        // CRITICAL: High settlement failure rate
+        if (failureRate > 50 && failedCount > 0) {
+          logger.error(
+            `[DailyListsSettlement] 🚨 CRITICAL: HIGH SETTLEMENT FAILURE RATE`,
+            {
+              failure_rate: `${failureRate.toFixed(1)}%`,
+              failed: failedCount,
+              total: totalProcessed,
+              message: `${failedCount}/${totalProcessed} lists failed to settle. This requires immediate attention.`,
+            }
+          );
+        } else if (failureRate > 25 && failedCount > 0) {
+          logger.warn(
+            `[DailyListsSettlement] ⚠️ WARNING: Elevated settlement failure rate`,
+            {
+              failure_rate: `${failureRate.toFixed(1)}%`,
+              failed: failedCount,
+              total: totalProcessed,
+            }
+          );
+        }
+
+        // Calculate mapping rate for settled lists
+        if (settledCount > 0) {
+          try {
+            const today = getTodayInIstanbul();
+            const mappingQuery = await pool.query(`
+              SELECT
+                COUNT(*) as total_matches,
+                COUNT(CASE WHEN (matches->'match'->>'match_id') IS NOT NULL AND (matches->'match'->>'match_id') != 'null' THEN 1 END) as mapped_matches
+              FROM telegram_daily_lists,
+                   jsonb_array_elements(matches) as matches
+              WHERE list_date = $1
+                AND status != 'draft'
+            `, [today]);
+
+            const totalMatches = parseInt(mappingQuery.rows[0]?.total_matches || '0', 10);
+            const mappedMatches = parseInt(mappingQuery.rows[0]?.mapped_matches || '0', 10);
+
+            if (totalMatches > 0) {
+              const mappingRate = (mappedMatches / totalMatches) * 100;
+
+              if (mappingRate < 80) {
+                logger.error(
+                  `[DailyListsSettlement] 🚨 CRITICAL: LOW MAPPING RATE`,
+                  {
+                    mapping_rate: `${mappingRate.toFixed(1)}%`,
+                    mapped: mappedMatches,
+                    total: totalMatches,
+                    unmapped: totalMatches - mappedMatches,
+                    message: `Only ${mappingRate.toFixed(1)}% of matches were mapped to TheSports. ` +
+                             `This will prevent proper settlement. Check leagues_registry.json and team name matching.`,
+                  }
+                );
+              } else if (mappingRate < 90) {
+                logger.warn(
+                  `[DailyListsSettlement] ⚠️ WARNING: Below-target mapping rate`,
+                  {
+                    mapping_rate: `${mappingRate.toFixed(1)}%`,
+                    mapped: mappedMatches,
+                    total: totalMatches,
+                    target: '95%+',
+                  }
+                );
+              }
+            }
+          } catch (mappingError: any) {
+            logger.error(`[DailyListsSettlement] ❌ Failed to calculate mapping rate:`, {
+              error: mappingError.message,
+            });
+          }
+        }
+      }
+
       logger.info(`[DailyListsSettlement] ✅ Settlement job completed`, {
         total_lists: unsettledLists.length,
         settled: settledCount,
         failed: failedCount,
+        success_rate: totalProcessed > 0 ? `${((settledCount / totalProcessed) * 100).toFixed(1)}%` : 'N/A',
       });
     }
   );
