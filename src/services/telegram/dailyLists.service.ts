@@ -68,6 +68,9 @@ export interface DailyList {
   avg_confidence?: number;
   preview?: string;
   generated_at: number;
+  status?: string;
+  settlement_result?: any;
+  settled_at?: Date | null;
   performance?: {
     total: number;
     won: number;
@@ -890,7 +893,7 @@ export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Prom
       }
 
       // Accept match if score is above threshold
-      const SIMILARITY_THRESHOLD = 0.65; // 65% similarity required
+      const SIMILARITY_THRESHOLD = 0.40; // 40% similarity required (lowered for better coverage)
 
       if (bestMatch && bestScore >= SIMILARITY_THRESHOLD) {
         matchMap.set(fsMatch.fs_id, bestMatch.external_id);
@@ -935,14 +938,15 @@ async function saveDailyListsToDatabase(date: string, lists: DailyList[]): Promi
     try {
       await safeQuery(
         `INSERT INTO telegram_daily_lists
-          (market, list_date, title, emoji, matches_count, avg_confidence, matches, preview, generated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9))
+          (market, list_date, title, emoji, matches_count, avg_confidence, matches, preview, generated_at, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9), 'active')
          ON CONFLICT (market, list_date)
          DO UPDATE SET
            matches = EXCLUDED.matches,
            matches_count = EXCLUDED.matches_count,
            avg_confidence = EXCLUDED.avg_confidence,
            preview = EXCLUDED.preview,
+           status = 'active',
            updated_at = NOW()`,
         [
           list.market,
@@ -980,9 +984,13 @@ async function getDailyListsFromDatabase(date: string): Promise<DailyList[] | nu
       avg_confidence: number;
       preview: string;
       generated_at: Date;
+      status: string;
+      settlement_result: any;
+      settled_at: Date | null;
     }>(
       `SELECT market, title, emoji, matches, matches_count, avg_confidence, preview,
-              EXTRACT(EPOCH FROM generated_at)::bigint * 1000 as generated_at
+              EXTRACT(EPOCH FROM generated_at)::bigint * 1000 as generated_at,
+              status, settlement_result, settled_at
        FROM telegram_daily_lists
        WHERE list_date = $1
        ORDER BY
@@ -1011,6 +1019,9 @@ async function getDailyListsFromDatabase(date: string): Promise<DailyList[] | nu
       avg_confidence: row.avg_confidence,
       preview: row.preview,
       generated_at: Number(row.generated_at),
+      status: row.status,
+      settlement_result: row.settlement_result,
+      settled_at: row.settled_at,
     }));
 
     logger.info(`[TelegramDailyLists] ✅ Loaded ${lists.length} lists from database`);
