@@ -150,7 +150,11 @@ export async function safeQuery<T = any>(
 
       // SUCCESS: Record metrics
       const durationMs = Date.now() - startTime;
-      metrics.recordDbQuery(operation, table, durationMs);
+      try {
+        metrics.recordDbQuery(operation, table, durationMs);
+      } catch (metricsErr) {
+        // Ignore metrics errors - don't break the query
+      }
 
       // Log slow queries
       const slowThreshold = parseInt(process.env.DB_SLOW_QUERY_THRESHOLD_MS || '2000');
@@ -211,7 +215,11 @@ export async function safeQuery<T = any>(
       if (!isConnectionError || attempt === retries) {
         // Record error metrics
         const durationMs = Date.now() - startTime;
-        metrics.recordDbQuery(operation, table, durationMs);
+        try {
+          metrics.recordDbQuery(operation, table, durationMs);
+        } catch (metricsErr) {
+          // Ignore metrics errors
+        }
         metrics.inc('db.query_errors', {
           operation,
           table,

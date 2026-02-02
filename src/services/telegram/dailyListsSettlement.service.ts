@@ -93,19 +93,43 @@ export function evaluateMatch(
     away_team: matchResult.away_name,
   };
 
-  // SAFETY GUARD: Match must be finished (status_id = 8)
-  if (matchResult.status_id !== 8) {
-    logger.warn(`[DailyListsSettlement] Match not finished`, {
-      match_id: matchResult.external_id,
-      status_id: matchResult.status_id,
-    });
+  // SAFETY GUARD: Check match status based on market type
+  // HT_OVER_05: Can settle after halftime (status_id >= 3)
+  // Other markets: Must wait until match ends (status_id = 8)
 
-    return {
-      ...baseResult,
-      result: 'VOID',
-      reason: 'Match not finished',
-      rule: `Status: ${matchResult.status_id} (not ENDED)`,
-    };
+  if (marketType === 'HT_OVER_05') {
+    // For HT markets, we can settle once halftime is complete (status >= 3)
+    // Status 3 = Halftime, 4 = Second Half, 5 = Overtime, 7 = Penalties, 8 = Ended
+    if (matchResult.status_id < 3) {
+      logger.warn(`[DailyListsSettlement] HT market - match still in first half`, {
+        match_id: matchResult.external_id,
+        status_id: matchResult.status_id,
+        market: marketType,
+      });
+
+      return {
+        ...baseResult,
+        result: 'VOID',
+        reason: 'First half not complete yet',
+        rule: `Status: ${matchResult.status_id} (HT not available)`,
+      };
+    }
+  } else {
+    // For full-time markets, match must be finished (status_id = 8)
+    if (matchResult.status_id !== 8) {
+      logger.warn(`[DailyListsSettlement] Match not finished`, {
+        match_id: matchResult.external_id,
+        status_id: matchResult.status_id,
+        market: marketType,
+      });
+
+      return {
+        ...baseResult,
+        result: 'VOID',
+        reason: 'Match not finished',
+        rule: `Status: ${matchResult.status_id} (not ENDED)`,
+      };
+    }
   }
 
   const homeScore = matchResult.home_score_display || 0;
@@ -142,8 +166,26 @@ export function evaluateMatch(
 
     case 'HT_OVER_05': {
       // Extract half-time scores from JSONB arrays
-      const htHome = matchResult.home_scores?.[0]?.score;
-      const htAway = matchResult.away_scores?.[0]?.score;
+      // TheSports stores scores in two formats:
+      // 1. Array of numbers: [1, 0, ...] where [0] = HT score
+      // 2. Array of objects: [{score: 1}, ...] (legacy)
+
+      let htHome: number;
+      let htAway: number;
+
+      // Handle both array formats
+      if (typeof matchResult.home_scores?.[0] === 'number') {
+        // Format 1: Direct number array
+        htHome = matchResult.home_scores[0];
+        htAway = matchResult.away_scores[0];
+      } else if (typeof matchResult.home_scores?.[0] === 'object') {
+        // Format 2: Object array (legacy)
+        htHome = matchResult.home_scores[0]?.score;
+        htAway = matchResult.away_scores[0]?.score;
+      } else {
+        htHome = null;
+        htAway = null;
+      }
 
       // SAFETY GUARD: Validate HT data exists
       if (htHome === null || htHome === undefined || htAway === null || htAway === undefined) {
@@ -174,8 +216,20 @@ export function evaluateMatch(
 
     case 'CORNERS': {
       // TheSports stores corners in home_scores[4] and away_scores[4]
-      const cornersHome = matchResult.home_scores?.[4]?.score;
-      const cornersAway = matchResult.away_scores?.[4]?.score;
+      let cornersHome: number;
+      let cornersAway: number;
+
+      // Handle both array formats
+      if (typeof matchResult.home_scores?.[4] === 'number') {
+        cornersHome = matchResult.home_scores[4];
+        cornersAway = matchResult.away_scores[4];
+      } else if (typeof matchResult.home_scores?.[4] === 'object') {
+        cornersHome = matchResult.home_scores[4]?.score;
+        cornersAway = matchResult.away_scores[4]?.score;
+      } else {
+        cornersHome = null;
+        cornersAway = null;
+      }
 
       // SAFETY GUARD: Validate corner data exists
       if (cornersHome === null || cornersHome === undefined || cornersAway === null || cornersAway === undefined) {
@@ -205,9 +259,21 @@ export function evaluateMatch(
     }
 
     case 'CARDS': {
-      // TheSports stores cards in home_scores[2] (home yellow) and away_scores[3] (away yellow)
-      const cardsHome = matchResult.home_scores?.[2]?.score;
-      const cardsAway = matchResult.away_scores?.[3]?.score;
+      // TheSports stores cards in home_scores[2] (home yellow) and away_scores[2] (away yellow)
+      let cardsHome: number;
+      let cardsAway: number;
+
+      // Handle both array formats
+      if (typeof matchResult.home_scores?.[2] === 'number') {
+        cardsHome = matchResult.home_scores[2];
+        cardsAway = matchResult.away_scores[2];
+      } else if (typeof matchResult.home_scores?.[2] === 'object') {
+        cardsHome = matchResult.home_scores[2]?.score;
+        cardsAway = matchResult.away_scores[2]?.score;
+      } else {
+        cardsHome = null;
+        cardsAway = null;
+      }
 
       // SAFETY GUARD: Validate card data exists
       if (cardsHome === null || cardsHome === undefined || cardsAway === null || cardsAway === undefined) {
@@ -332,16 +398,18 @@ export async function settleDailyList(list: DailyListRecord): Promise<ListSettle
   // Fetch all match results in one query (performance optimization)
   const matchResults = await safeQuery<TheSportsMatchResult>(
     `SELECT
-      external_id,
-      home_name,
-      away_name,
-      status_id,
-      home_score_display,
-      away_score_display,
-      home_scores,
-      away_scores
-     FROM ts_matches
-     WHERE external_id = ANY($1)`,
+      m.external_id,
+      ht.name as home_name,
+      at.name as away_name,
+      m.status_id,
+      m.home_score_display,
+      m.away_score_display,
+      m.home_scores,
+      m.away_scores
+     FROM ts_matches m
+     JOIN ts_teams ht ON m.home_team_id = ht.external_id
+     JOIN ts_teams at ON m.away_team_id = at.external_id
+     WHERE m.external_id = ANY($1)`,
     [matchIds]
   );
 

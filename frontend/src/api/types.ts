@@ -8,23 +8,55 @@
 // ============================================================================
 
 export interface DailyListMatch {
-  match_id: string | null;
-  home: string;
-  away: string;
-  league: string;
-  date: string;
+  fs_id: number;
+  match_id?: string | null;
+  home_name: string;
+  away_name: string;
+  league_name: string;
   date_unix: number;
-  prediction_value: number;
   confidence: number;
-  reasoning?: string;
+  reason?: string;
+  potentials?: {
+    btts?: number;
+    over25?: number;
+    over15?: number;
+    corners?: number;
+    cards?: number;
+  };
+  xg?: {
+    home?: number;
+    away?: number;
+  };
+  odds?: {
+    home?: number;
+    draw?: number;
+    away?: number;
+  };
+  live_score?: {
+    home: number;
+    away: number;
+    minute: string;
+    status: string;
+  };
+  // Settlement fields (from backend settlement system)
+  match_finished?: boolean | null;
+  final_score?: {
+    home: number;
+    away: number;
+  } | null;
+  result?: 'won' | 'lost' | 'void' | 'pending';
+  settlement_reason?: string | null;
 }
 
 export interface DailyList {
   market: string;
   title: string;
-  description: string;
   emoji: string;
+  matches_count: number;
+  avg_confidence: number;
   matches: DailyListMatch[];
+  preview?: string;
+  generated_at?: number;
   performance?: {
     total: number;
     won: number;
@@ -32,8 +64,28 @@ export interface DailyList {
     pending: number;
     win_rate: number;
   };
+  settlement_result?: {
+    won: number;
+    lost: number;
+    void: number;
+    list_id?: string;
+    list_type?: string;
+    matches?: Array<{
+      fs_match_id: number;
+      match_id?: string;
+      home_team: string;
+      away_team: string;
+      result: string;
+      home_score?: number;
+      away_score?: number;
+      reason?: string;
+      rule?: string;
+    }>;
+  };
+  status?: string;
+  settled_at?: string | null;
   telegram_message_id?: string | null;
-  published_at?: string | null;
+  channel_id?: string | null;
 }
 
 export interface DailyListsResponse {

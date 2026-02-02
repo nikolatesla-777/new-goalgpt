@@ -167,6 +167,19 @@ export function TelegramDailyLists() {
   const lists = isToday && data ? (data as any).lists || [] : [];
   const historicalData: DateData[] = !isToday && data ? (data as any).data || [] : [];
 
+  // DEBUG: Log settlement data
+  if (isToday && lists.length > 0) {
+    const btts = lists.find((l: any) => l.market === 'BTTS');
+    if (btts && btts.matches && btts.matches.length > 0) {
+      console.log('🔍 [DEBUG] BTTS First Match:', btts.matches[0]);
+      console.log('🔍 [DEBUG] First Match Settlement Data:', {
+        result: btts.matches[0].result,
+        match_finished: btts.matches[0].match_finished,
+        final_score: btts.matches[0].final_score,
+      });
+    }
+  }
+
   // Read generated_at from appropriate source based on view mode
   const lastUpdated = isToday
     ? ((data as any)?.generated_at || null)
@@ -854,6 +867,18 @@ export function TelegramDailyLists() {
                   <div className="p-6">
                     <div className="space-y-3 mb-4">
                       {list.matches.slice(0, isExpanded ? undefined : 3).map((match: Match, idx: number) => {
+                        // DEBUG: Log every match during render
+                        if (match.home_name.includes('Boca')) {
+                          console.log('🚨 RENDERING BOCA JUNIORS:', {
+                            home: match.home_name,
+                            away: match.away_name,
+                            match_finished: match.match_finished,
+                            final_score: match.final_score,
+                            result: match.result,
+                            'Has all fields?': !!(match.match_finished && match.final_score && match.result)
+                          });
+                        }
+
                         // Determine match status (use backend values when available)
                         const now = Math.floor(Date.now() / 1000);
                         const matchStarted = match.date_unix <= now;
@@ -943,8 +968,8 @@ export function TelegramDailyLists() {
                                       );
                                     }
 
-                                    // CASE 4: Match started but no live score (TheSports mapping failed)
-                                    if (matchStarted && !matchFinished) {
+                                    // CASE 4: Match started but NO MAPPING (match_id is null)
+                                    if (matchStarted && !matchFinished && !match.match_id) {
                                       return (
                                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
                                           ⚠️ Eşleştirme Yok

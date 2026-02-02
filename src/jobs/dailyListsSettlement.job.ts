@@ -68,7 +68,7 @@ export async function runDailyListsSettlement(): Promise<void> {
         logger.info(`[DailyListsSettlement] 📅 Checking lists for dates up to ${today}`);
 
         // Get unsettled lists for past dates (including today)
-        // Only process lists that have been posted to Telegram (telegram_message_id IS NOT NULL)
+        // Process all active lists regardless of Telegram publication status
         const result = await client.query<DailyListRecord>(`
           SELECT
             id,
@@ -81,7 +81,6 @@ export async function runDailyListsSettlement(): Promise<void> {
           FROM telegram_daily_lists
           WHERE status = 'active'
             AND settled_at IS NULL
-            AND telegram_message_id IS NOT NULL
             AND list_date <= $1
           ORDER BY list_date ASC, market ASC
           LIMIT 100
@@ -113,34 +112,37 @@ export async function runDailyListsSettlement(): Promise<void> {
           // 1. Settle the list (evaluate all matches)
           const settlementResult = await settleDailyList(list);
 
-          // 2. Format Telegram message
-          const newMessage = formatSettlementMessage(
-            list.market,
-            settlementResult,
-            list.preview || ''
-          );
-
-          // 3. Edit Telegram message (NO connection held during API call)
-          logger.info(`[DailyListsSettlement] 📡 Editing Telegram message...`, {
-            ...logContext,
-            telegram_message_id: list.telegram_message_id,
-          });
-
-          try {
-            await telegramBot.editMessageText(
-              list.channel_id,
-              list.telegram_message_id,
-              newMessage
+          // 2. Edit Telegram message (OPTIONAL - only if published to Telegram)
+          if (list.telegram_message_id && list.channel_id) {
+            const newMessage = formatSettlementMessage(
+              list.market,
+              settlementResult,
+              list.preview || ''
             );
 
-            logger.info(`[DailyListsSettlement] ✅ Telegram message edited`, logContext);
-
-          } catch (telegramError: any) {
-            // Log error but continue (mark as settled even if edit fails)
-            logger.error(`[DailyListsSettlement] ⚠️ Failed to edit Telegram message (will still mark as settled)`, {
+            logger.info(`[DailyListsSettlement] 📡 Editing Telegram message...`, {
               ...logContext,
-              error: telegramError.message,
+              telegram_message_id: list.telegram_message_id,
             });
+
+            try {
+              await telegramBot.editMessageText(
+                list.channel_id,
+                list.telegram_message_id,
+                newMessage
+              );
+
+              logger.info(`[DailyListsSettlement] ✅ Telegram message edited`, logContext);
+
+            } catch (telegramError: any) {
+              // Log error but continue (mark as settled even if edit fails)
+              logger.error(`[DailyListsSettlement] ⚠️ Failed to edit Telegram message (will still mark as settled)`, {
+                ...logContext,
+                error: telegramError.message,
+              });
+            }
+          } else {
+            logger.info(`[DailyListsSettlement] ⏭️ Skipping Telegram edit (not published to Telegram)`, logContext);
           }
 
           // 4. Mark as settled in database (acquire NEW connection)

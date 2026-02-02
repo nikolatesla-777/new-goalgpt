@@ -289,7 +289,7 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
           settlementQuery.rows.map(row => [row.market, row])
         );
 
-        // Merge settlement data into lists
+        // Merge settlement data into lists AND individual matches
         lists.forEach(list => {
           const settlement = settlementMap.get(list.market);
           if (settlement && settlement.settlement_result) {
@@ -297,6 +297,30 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
             list.status = settlement.status;
             list.settled_at = settlement.settled_at;
             console.error(`[TRACE-3c] Added settlement for ${list.market}: won=${settlement.settlement_result.won}`);
+
+            // CRITICAL FIX: Map settlement results to individual matches
+            // settlement_result.matches contains detailed match results with scores and outcomes
+            if (settlement.settlement_result.matches && Array.isArray(settlement.settlement_result.matches)) {
+              // Create a map of fs_match_id -> settlement match data
+              const settlementMatchesMap = new Map(
+                settlement.settlement_result.matches.map((sm: any) => [sm.fs_match_id, sm])
+              );
+
+              // Update each match in list.matches with settlement data
+              list.matches.forEach((candidate: any) => {
+                const settlementMatch = settlementMatchesMap.get(candidate.match.fs_id);
+                if (settlementMatch) {
+                  // Add settlement data to the match object for frontend consumption
+                  candidate._settlement = {
+                    result: settlementMatch.result, // 'WIN', 'LOSS', 'VOID'
+                    home_score: settlementMatch.home_score,
+                    away_score: settlementMatch.away_score,
+                    reason: settlementMatch.reason,
+                  };
+                  console.error(`[TRACE-3d] Mapped settlement for fs_id ${candidate.match.fs_id}: result=${settlementMatch.result}`);
+                }
+              });
+            }
           }
         });
       } finally {
@@ -397,6 +421,42 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
             ),
             settlement_result: list.settlement_result, // Include settlement result from database
             matches: list.matches.map((m: any) => {
+              // PRIORITY 1: Use settlement data if available (most reliable)
+              if (m._settlement) {
+                console.error(`[TRACE-10] Using settlement data for fs_id ${m.match.fs_id}: result=${m._settlement.result}`);
+
+                // Extract settlement match data from database
+                const settlementMatch = list.settlement_result?.matches?.find(
+                  (sm: any) => sm.fs_match_id === m.match.fs_id
+                );
+
+                return {
+                  fs_id: m.match.fs_id,
+                  match_id: m.match.match_id,
+                  home_name: m.match.home_name,
+                  away_name: m.match.away_name,
+                  league_name: m.match.league_name,
+                  date_unix: m.match.date_unix,
+                  confidence: m.confidence,
+                  reason: m.reason,
+                  potentials: m.match.potentials,
+                  xg: m.match.xg,
+                  odds: m.match.odds,
+                  live_score: liveScoresMap.get(m.match.fs_id) || null,
+                  // Settlement data (from database)
+                  match_finished: true, // Settlement only happens for finished matches
+                  final_score: {
+                    home: m._settlement.home_score || 0,
+                    away: m._settlement.away_score || 0,
+                  },
+                  result: m._settlement.result === 'WIN' ? 'won' :
+                          m._settlement.result === 'VOID' ? 'void' : 'lost',
+                  // Add reason + rule for debugging (fallback to rule if reason not available)
+                  settlement_reason: m._settlement.reason || settlementMatch?.rule || null,
+                };
+              }
+
+              // PRIORITY 2: Fallback to real-time TheSports data (for unsettled matches)
               const matchId = m.match.match_id;
               const tsMatch = matchId ? matchResultsMap.get(matchId) : null;
 
@@ -436,7 +496,7 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
                 xg: m.match.xg,
                 odds: m.match.odds,
                 live_score: liveScoresMap.get(m.match.fs_id) || null,
-                // Match result data (TheSports only)
+                // Match result data (TheSports only - real-time for unsettled)
                 match_finished: matchFinished,
                 final_score: finalScore,
                 result: result, // 'won' | 'lost' | 'void' | 'pending'

@@ -37,7 +37,11 @@ export function useTelegramDailyListsToday() {
   return useQuery({
     queryKey: telegramQueryKeys.dailyListsToday(),
     queryFn: getTelegramDailyListsToday,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 0, // ZERO cache - always fetch fresh data for settlement updates
+    gcTime: 0, // Don't keep data in cache (formerly cacheTime)
+    refetchOnMount: 'always', // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchInterval: 60000, // Auto-refetch every 60 seconds
   });
 }
 
