@@ -163,11 +163,19 @@ async function calculateListPerformance(list: any): Promise<{
   pending: number;
   win_rate: number;
 }> {
+  // DEBUG: Log what we're receiving
+  console.log(`[calculateListPerformance] DEBUG: list.market=${list.market}, has settlement_result=${!!list.settlement_result}`);
+  if (list.settlement_result) {
+    console.log(`[calculateListPerformance] DEBUG: settlement_result=`, JSON.stringify(list.settlement_result));
+  }
+
   // STRATEGY 1: Use database settlement_result if available (preferred)
   if (list.settlement_result) {
     const settlement = list.settlement_result;
     const total = (settlement.won || 0) + (settlement.lost || 0);
     const win_rate = total > 0 ? Math.round((settlement.won / total) * 100) : 0;
+
+    console.log(`[calculateListPerformance] DEBUG: Using settlement_result for ${list.market}: won=${settlement.won}, lost=${settlement.lost}, void=${settlement.void}`);
 
     return {
       total,
