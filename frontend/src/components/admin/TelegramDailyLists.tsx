@@ -955,7 +955,12 @@ export function TelegramDailyLists() {
                                     }
 
                                     // CASE 3: Match is live (TheSports data)
-                                    if (match.live_score && matchStarted && !matchFinished) {
+                                    // SAFETY: Don't show CANLI if match is finished (status="Bitti") or has settlement result
+                                    if (match.live_score
+                                        && match.live_score.status !== 'Bitti'
+                                        && matchStarted
+                                        && !matchFinished
+                                        && !match.result) {
                                       return (
                                         <>
                                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
