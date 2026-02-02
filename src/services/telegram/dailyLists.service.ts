@@ -936,30 +936,67 @@ async function saveDailyListsToDatabase(date: string, lists: DailyList[]): Promi
     const preview = formatDailyListMessage(list);
 
     try {
-      await safeQuery(
-        `INSERT INTO telegram_daily_lists
-          (market, list_date, title, emoji, matches_count, avg_confidence, matches, preview, generated_at, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9), 'active')
-         ON CONFLICT (market, list_date)
-         DO UPDATE SET
-           matches = EXCLUDED.matches,
-           matches_count = EXCLUDED.matches_count,
-           avg_confidence = EXCLUDED.avg_confidence,
-           preview = EXCLUDED.preview,
-           status = 'active',
-           updated_at = NOW()`,
-        [
-          list.market,
-          date,
-          list.title,
-          list.emoji,
-          matchesCount,
-          avgConfidence,
-          JSON.stringify(list.matches),
-          preview,
-          list.generated_at / 1000,
-        ]
-      );
+      // Build query dynamically based on whether settlement_result exists
+      const hasSettlement = list.settlement_result !== undefined;
+
+      if (hasSettlement) {
+        // PRESERVE SETTLEMENT: Include settlement fields in UPSERT
+        await safeQuery(
+          `INSERT INTO telegram_daily_lists
+            (market, list_date, title, emoji, matches_count, avg_confidence, matches, preview, generated_at, status, settlement_result, settled_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9), $10, $11, $12)
+           ON CONFLICT (market, list_date)
+           DO UPDATE SET
+             matches = EXCLUDED.matches,
+             matches_count = EXCLUDED.matches_count,
+             avg_confidence = EXCLUDED.avg_confidence,
+             preview = EXCLUDED.preview,
+             status = COALESCE(EXCLUDED.status, telegram_daily_lists.status),
+             settlement_result = COALESCE(EXCLUDED.settlement_result, telegram_daily_lists.settlement_result),
+             settled_at = COALESCE(EXCLUDED.settled_at, telegram_daily_lists.settled_at),
+             updated_at = NOW()`,
+          [
+            list.market,
+            date,
+            list.title,
+            list.emoji,
+            matchesCount,
+            avgConfidence,
+            JSON.stringify(list.matches),
+            preview,
+            list.generated_at / 1000,
+            list.status || 'active',
+            list.settlement_result ? JSON.stringify(list.settlement_result) : null,
+            list.settled_at || null,
+          ]
+        );
+      } else {
+        // NO SETTLEMENT: Use existing query (don't overwrite settlement if exists)
+        await safeQuery(
+          `INSERT INTO telegram_daily_lists
+            (market, list_date, title, emoji, matches_count, avg_confidence, matches, preview, generated_at, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9), 'active')
+           ON CONFLICT (market, list_date)
+           DO UPDATE SET
+             matches = EXCLUDED.matches,
+             matches_count = EXCLUDED.matches_count,
+             avg_confidence = EXCLUDED.avg_confidence,
+             preview = EXCLUDED.preview,
+             status = COALESCE(telegram_daily_lists.status, 'active'),
+             updated_at = NOW()`,
+          [
+            list.market,
+            date,
+            list.title,
+            list.emoji,
+            matchesCount,
+            avgConfidence,
+            JSON.stringify(list.matches),
+            preview,
+            list.generated_at / 1000,
+          ]
+        );
+      }
 
       logger.info(`[TelegramDailyLists] ✅ Saved ${list.market} list (${matchesCount} matches)`);
     } catch (error: any) {
@@ -1088,8 +1125,23 @@ export async function getDailyLists(date?: string): Promise<DailyList[]> {
       const newLists = await generateDailyLists(targetDate);
 
       if (newLists.length > 0) {
-        await saveDailyListsToDatabase(targetDate, newLists);
-        return newLists;
+        // PRESERVE SETTLEMENT DATA: Copy settlement_result from old cached lists to new lists
+        const newListsWithSettlement = newLists.map(newList => {
+          const oldList = cachedLists.find(old => old.market === newList.market);
+          if (oldList && oldList.settlement_result) {
+            logger.info(`[TelegramDailyLists] 🔄 Preserving settlement data for ${newList.market}`);
+            return {
+              ...newList,
+              settlement_result: oldList.settlement_result,
+              status: oldList.status,
+              settled_at: oldList.settled_at,
+            };
+          }
+          return newList;
+        });
+
+        await saveDailyListsToDatabase(targetDate, newListsWithSettlement);
+        return newListsWithSettlement;
       }
     }
 
