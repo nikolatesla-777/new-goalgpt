@@ -45,9 +45,9 @@
       "country_code": "ARG",
       "priority": 3,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "p3glrw7hevqdyjv",
+        "season_2025_2026_id": "vjxm8gh4vvwr6od",
+        "db_name": "Argentine Division 1"
       },
       "footystats": {
         "league_name": "Argentine Primera División",
@@ -62,9 +62,9 @@
       "country_code": "AUS",
       "priority": 4,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "9k82rekhvz2repz",
+        "season_2025_2026_id": "j1l4rjnhvdjm7vx",
+        "db_name": "Australia A-League"
       },
       "footystats": {
         "league_name": "Australian A-League",
@@ -113,9 +113,9 @@
       "country_code": "BRA",
       "priority": 7,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "4zp5rzgh9zq82w1",
+        "season_2025_2026_id": "3glrw7hwkk4qdyj",
+        "db_name": "Brazilian Serie A"
       },
       "footystats": {
         "league_name": "Brasileirão Série A",
@@ -130,9 +130,9 @@
       "country_code": "BRA",
       "priority": 8,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "j1l4rjnh0xm7vx5",
+        "season_2025_2026_id": "yl5ergphzjkr8k0",
+        "db_name": "Brazilian Serie B"
       },
       "footystats": {
         "league_name": "Brasileirão Série B",
@@ -198,9 +198,9 @@
       "country_code": "SCO",
       "priority": 12,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "jednm9wheoryox8",
+        "season_2025_2026_id": "z318q66hl40qo9j",
+        "db_name": "Scottish Championship"
       },
       "footystats": {
         "league_name": "Championship (Scottish)",
@@ -215,9 +215,9 @@
       "country_code": "CHI",
       "priority": 13,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "8y39mp1hgpmojxg",
+        "season_2025_2026_id": "318q66hozjnqo9j",
+        "db_name": "Chilean Cup"
       },
       "footystats": {
         "league_name": "Chilean Primera División",
@@ -249,9 +249,9 @@
       "country_code": "COL",
       "priority": 15,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "56ypq3nhyymd7oj",
+        "season_2025_2026_id": "pxwrxlhgp1yryk0",
+        "db_name": "Categoría Primera A"
       },
       "footystats": {
         "league_name": "Colombian Primera A",
@@ -266,9 +266,9 @@
       "country_code": "CRO",
       "priority": 16,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "gx7lm7pho13m2wd",
+        "season_2025_2026_id": "9k82rekhl9krepz",
+        "db_name": "Croatian First Football League"
       },
       "footystats": {
         "league_name": "Croatian First League",
@@ -385,9 +385,9 @@
       "country_code": "HUN",
       "priority": 23,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "d23xmvkh8nqg8ny",
+        "season_2025_2026_id": "kn54qllhvjyqvy9",
+        "db_name": "Merkantil Bank Liga"
       },
       "footystats": {
         "league_name": "Hungarian NB I",
@@ -402,9 +402,9 @@
       "country_code": "ISR",
       "priority": 24,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "kdj2ryoh7eq1zpg",
+        "season_2025_2026_id": "vl7oqdeh746r510",
+        "db_name": "Israel Premier League"
       },
       "footystats": {
         "league_name": "Israeli Premier League",
@@ -589,9 +589,9 @@
       "country_code": "POL",
       "priority": 35,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "vl7oqdeh3lr510j",
+        "season_2025_2026_id": "p4jwq2gh8l5m0ve",
+        "db_name": "PKO Bank Polski EKSTRAKLASA"
       },
       "footystats": {
         "league_name": "Polish Ekstraklasa",
@@ -674,9 +674,9 @@
       "country_code": "KSA",
       "priority": 40,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "j1l4rjnh66nm7vx",
+        "season_2025_2026_id": "e4wyrn4hgxyq86p",
+        "db_name": "Saudi Professional League"
       },
       "footystats": {
         "league_name": "Saudi Pro League",
@@ -776,9 +776,9 @@
       "country_code": "RSA",
       "priority": 46,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "p4jwq2gh472m0ve",
+        "season_2025_2026_id": "z318q66hl67qo9j",
+        "db_name": "South Africa Premier Soccer League"
       },
       "footystats": {
         "league_name": "South African Premier Division",
@@ -827,9 +827,9 @@
       "country_code": "SUI",
       "priority": 49,
       "thesports": {
-        "competition_id": null,
-        "season_2025_2026_id": null,
-        "db_name": null
+        "competition_id": "z8yomo4hx9q0j6l",
+        "season_2025_2026_id": "9dn1m1gh63nmoep",
+        "db_name": "Switzerland Super League"
       },
       "footystats": {
         "league_name": "Swiss Super League",
