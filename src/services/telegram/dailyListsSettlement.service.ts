@@ -16,6 +16,7 @@
 
 import { logger } from '../../utils/logger';
 import { safeQuery } from '../../database/connection';
+import { MatchTeamStatsService } from '../thesports/match/matchTeamStats.service';
 
 // ============================================================================
 // TYPES
@@ -67,9 +68,9 @@ export interface DailyListRecord {
 // SETTLEMENT THRESHOLDS (USER CONFIGURABLE)
 // ============================================================================
 
-// TODO: User needs to confirm these thresholds
-const CORNERS_THRESHOLD = 10; // Total corners >= 10 = WIN
-const CARDS_THRESHOLD = 5;    // Total cards >= 5 = WIN
+// Updated 2026-02-02: User confirmed new thresholds
+const CORNERS_THRESHOLD = 8;  // Total corners >= 8 = WIN (7.5 ÜST)
+const CARDS_THRESHOLD = 4;    // Total cards >= 4 = WIN (3.5 ÜST)
 
 // ============================================================================
 // CORE EVALUATION FUNCTIONS
@@ -80,11 +81,13 @@ const CARDS_THRESHOLD = 5;    // Total cards >= 5 = WIN
  *
  * @param marketType - Market to evaluate (OVER_25, OVER_15, BTTS, HT_OVER_05, CORNERS, CARDS)
  * @param matchResult - TheSports match data
+ * @param teamStats - Team statistics (for CORNERS and CARDS)
  * @returns Settlement result (WIN/LOSS/VOID with reasoning)
  */
 export function evaluateMatch(
   marketType: string,
-  matchResult: TheSportsMatchResult
+  matchResult: TheSportsMatchResult,
+  teamStats?: any[]
 ): MatchSettlement {
   const baseResult: Omit<MatchSettlement, 'result' | 'reason' | 'rule'> = {
     match_id: matchResult.external_id,
@@ -215,7 +218,29 @@ export function evaluateMatch(
     }
 
     case 'CORNERS': {
-      // TheSports stores corners in home_scores[4] and away_scores[4]
+      // PRIORITY 1: Use team stats API (more accurate)
+      if (teamStats && Array.isArray(teamStats) && teamStats.length === 2) {
+        const homeTeamStats = teamStats[0];
+        const awayTeamStats = teamStats[1];
+
+        const cornersHome = homeTeamStats?.corner_kicks ?? null;
+        const cornersAway = awayTeamStats?.corner_kicks ?? null;
+
+        if (cornersHome !== null && cornersAway !== null) {
+          const totalCorners = parseInt(String(cornersHome)) + parseInt(String(cornersAway));
+
+          return {
+            ...baseResult,
+            result: totalCorners >= CORNERS_THRESHOLD ? 'WIN' : 'LOSS',
+            home_score: homeScore,
+            away_score: awayScore,
+            rule: `CORNERS O7.5: Total >= ${CORNERS_THRESHOLD} (${totalCorners} corners)`,
+            reason: `${totalCorners} corners (${cornersHome} + ${cornersAway})`,
+          };
+        }
+      }
+
+      // FALLBACK: Use home_scores/away_scores array (less accurate)
       let cornersHome: number;
       let cornersAway: number;
 
@@ -237,6 +262,7 @@ export function evaluateMatch(
           match_id: matchResult.external_id,
           home_scores: matchResult.home_scores,
           away_scores: matchResult.away_scores,
+          team_stats_available: !!teamStats,
         });
 
         return {
@@ -254,12 +280,35 @@ export function evaluateMatch(
         result: totalCorners >= CORNERS_THRESHOLD ? 'WIN' : 'LOSS',
         home_score: homeScore,
         away_score: awayScore,
-        rule: `CORNERS: Total >= ${CORNERS_THRESHOLD} (${totalCorners} corners)`,
+        rule: `CORNERS O7.5: Total >= ${CORNERS_THRESHOLD} (${totalCorners} corners - fallback)`,
+        reason: `${totalCorners} corners`,
       };
     }
 
     case 'CARDS': {
-      // TheSports stores cards in home_scores[2] (home yellow) and away_scores[2] (away yellow)
+      // PRIORITY 1: Use team stats API (more accurate)
+      if (teamStats && Array.isArray(teamStats) && teamStats.length === 2) {
+        const homeTeamStats = teamStats[0];
+        const awayTeamStats = teamStats[1];
+
+        const cardsHome = homeTeamStats?.yellow_cards ?? null;
+        const cardsAway = awayTeamStats?.yellow_cards ?? null;
+
+        if (cardsHome !== null && cardsAway !== null) {
+          const totalCards = parseInt(String(cardsHome)) + parseInt(String(cardsAway));
+
+          return {
+            ...baseResult,
+            result: totalCards >= CARDS_THRESHOLD ? 'WIN' : 'LOSS',
+            home_score: homeScore,
+            away_score: awayScore,
+            rule: `CARDS O3.5: Total >= ${CARDS_THRESHOLD} (${totalCards} cards)`,
+            reason: `${totalCards} yellow cards (${cardsHome} + ${cardsAway})`,
+          };
+        }
+      }
+
+      // FALLBACK: Use home_scores/away_scores array (less accurate)
       let cardsHome: number;
       let cardsAway: number;
 
@@ -281,6 +330,7 @@ export function evaluateMatch(
           match_id: matchResult.external_id,
           home_scores: matchResult.home_scores,
           away_scores: matchResult.away_scores,
+          team_stats_available: !!teamStats,
         });
 
         return {
@@ -298,7 +348,8 @@ export function evaluateMatch(
         result: totalCards >= CARDS_THRESHOLD ? 'WIN' : 'LOSS',
         home_score: homeScore,
         away_score: awayScore,
-        rule: `CARDS: Total >= ${CARDS_THRESHOLD} (${totalCards} cards)`,
+        rule: `CARDS O3.5: Total >= ${CARDS_THRESHOLD} (${totalCards} cards - fallback)`,
+        reason: `${totalCards} yellow cards`,
       };
     }
 
@@ -417,6 +468,47 @@ export async function settleDailyList(list: DailyListRecord): Promise<ListSettle
   const resultsMap = new Map<string, TheSportsMatchResult>();
   matchResults.forEach(r => resultsMap.set(r.external_id, r));
 
+  // Fetch team stats for CORNERS and CARDS markets (only if needed)
+  let teamStatsMap = new Map<string, any>();
+  if (list.market === 'CORNERS' || list.market === 'CARDS') {
+    try {
+      const teamStatsService = new MatchTeamStatsService();
+
+      // Fetch team stats for each match in parallel
+      const teamStatsPromises = matchIds.map(async (matchId) => {
+        try {
+          const response = await teamStatsService.getMatchTeamStats({ match_id: matchId });
+          const matchStats = response.results?.[0];
+          if (matchStats && matchStats.stats) {
+            return { matchId, stats: matchStats.stats };
+          }
+        } catch (err: any) {
+          logger.warn(`[DailyListsSettlement] Failed to fetch team stats for ${matchId}`, {
+            error: err.message,
+          });
+        }
+        return { matchId, stats: null };
+      });
+
+      const teamStatsResults = await Promise.all(teamStatsPromises);
+      teamStatsResults.forEach(result => {
+        if (result.stats) {
+          teamStatsMap.set(result.matchId, result.stats);
+        }
+      });
+
+      logger.info(`[DailyListsSettlement] Fetched team stats for ${teamStatsMap.size}/${matchIds.length} matches`, {
+        market: list.market,
+      });
+
+    } catch (err: any) {
+      logger.error(`[DailyListsSettlement] Error fetching team stats`, {
+        error: err.message,
+        market: list.market,
+      });
+    }
+  }
+
   // Evaluate each match
   for (const matchCandidate of matches) {
     const match = matchCandidate.match;
@@ -455,8 +547,11 @@ export async function settleDailyList(list: DailyListRecord): Promise<ListSettle
       continue;
     }
 
+    // Get team stats for this match (if available)
+    const matchTeamStats = teamStatsMap.get(matchId);
+
     // Evaluate match against market
-    const settlement = evaluateMatch(list.market, matchResult);
+    const settlement = evaluateMatch(list.market, matchResult, matchTeamStats);
     settlement.fs_match_id = match.fs_id || 0;
 
     settlements.push(settlement);
