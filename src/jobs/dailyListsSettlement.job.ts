@@ -68,7 +68,7 @@ export async function runDailyListsSettlement(): Promise<void> {
         logger.info(`[DailyListsSettlement] 📅 Checking lists for dates up to ${today}`);
 
         // Get unsettled lists for past dates (including today)
-        // Process all active lists regardless of Telegram publication status
+        // INCLUDES: Partially settled lists (status='partial') with VOID matches
         const result = await client.query<DailyListRecord>(`
           SELECT
             id,
@@ -77,11 +77,17 @@ export async function runDailyListsSettlement(): Promise<void> {
             matches,
             telegram_message_id,
             channel_id,
-            preview
+            preview,
+            settlement_result
           FROM telegram_daily_lists
-          WHERE status = 'active'
-            AND settled_at IS NULL
-            AND list_date <= $1
+          WHERE (
+            -- Not yet settled
+            (status = 'active' AND settled_at IS NULL)
+            OR
+            -- Partially settled (has VOID matches that may now be complete)
+            (status = 'partial' AND settlement_result IS NOT NULL)
+          )
+          AND list_date <= $1
           ORDER BY list_date ASC, market ASC
           LIMIT 100
         `, [today]);
@@ -148,21 +154,27 @@ export async function runDailyListsSettlement(): Promise<void> {
           // 4. Mark as settled in database (acquire NEW connection)
           const updateClient = await pool.connect();
           try {
+            // Determine final status: 'settled' if all matches complete, 'partial' if VOID matches remain
+            const hasVoidMatches = settlementResult.void > 0;
+            const finalStatus = hasVoidMatches ? 'partial' : 'settled';
+
             await updateClient.query(
               `UPDATE telegram_daily_lists
                SET settled_at = NOW(),
-                   status = 'settled',
-                   settlement_result = $1
-               WHERE id = $2`,
-              [JSON.stringify(settlementResult), list.id]
+                   status = $1,
+                   settlement_result = $2
+               WHERE id = $3`,
+              [finalStatus, JSON.stringify(settlementResult), list.id]
             );
 
-            logger.info(`[DailyListsSettlement] ✅ List marked as settled`, {
+            logger.info(`[DailyListsSettlement] ✅ List marked as ${finalStatus}`, {
               ...logContext,
               won: settlementResult.won,
               lost: settlementResult.lost,
               void: settlementResult.void,
               total: settlementResult.matches.length,
+              status: finalStatus,
+              note: hasVoidMatches ? 'Will retry VOID matches in next run' : 'All matches settled'
             });
 
             settledCount++;
