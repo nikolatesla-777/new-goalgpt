@@ -430,6 +430,10 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
                   (sm: any) => sm.fs_match_id === m.match.fs_id
                 );
 
+                // CRITICAL: VOID means match hasn't finished or couldn't be evaluated
+                // Don't show final_score or match_finished for VOID results
+                const isVoid = m._settlement.result === 'VOID';
+
                 return {
                   fs_id: m.match.fs_id,
                   match_id: m.match.match_id,
@@ -444,8 +448,9 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
                   odds: m.match.odds,
                   live_score: liveScoresMap.get(m.match.fs_id) || null,
                   // Settlement data (from database)
-                  match_finished: true, // Settlement only happens for finished matches
-                  final_score: {
+                  // VOID matches should NOT show as finished
+                  match_finished: isVoid ? false : true,
+                  final_score: isVoid ? null : {
                     home: m._settlement.home_score || 0,
                     away: m._settlement.away_score || 0,
                   },
