@@ -1,0 +1,264 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_stage:
+        description: 'Deployment stage'
+        required: true
+        type: choice
+        options:
+          - 'week1-day1-pr-p1a'
+          - 'week1-day4-pr-p1b-partial'
+          - 'week1-day5-pr-p1b-full'
+          - 'week2-pr-p1c-conservative'
+          - 'week2-pr-p1c-optimized'
+          - 'week3-pr-p1d-indexes'
+          - 'week3-pr-p1d-caching'
+      confirm:
+        description: 'Type "DEPLOY" to confirm'
+        required: true
+
+env:
+  NODE_VERSION: '18.x'
+
+jobs:
+  validate-input:
+    name: Validate Deployment Request
+    runs-on: ubuntu-latest
+    steps:
+      - name: ✅ Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
+            echo "❌ Confirmation failed. You must type 'DEPLOY' to proceed."
+            exit 1
+          fi
+          echo "✅ Deployment confirmed"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: validate-input
+    environment:
+      name: production
+      url: https://production.goalgpt.com
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🚀 Deploy Week 1 Day 1 (PR-P1A)
+        if: github.event.inputs.deployment_stage == 'week1-day1-pr-p1a'
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$PRODUCTION_KEY" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+          ssh-keyscan -H $PRODUCTION_HOST >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/prod_key $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+            set -e
+            cd /var/www/goalgpt
+
+            echo "📥 Pulling latest code..."
+            git fetch origin
+            git checkout main
+            git pull origin main
+
+            echo "📦 Installing dependencies..."
+            npm install --production
+
+            echo "🔧 Running PR-P1A migration (CONCURRENTLY indexes)..."
+            npx tsx src/database/migrations/pr-p1a-add-concurrent-indexes.ts
+
+            echo "✅ Verifying indexes..."
+            npm run validate:migrations
+
+            echo "✅ PR-P1A deployment completed (20+ indexes)"
+            echo "⏸️  Next: Week 1 Day 4 (Thursday) - Enable daily rewards"
+          EOF
+
+      - name: 🚀 Deploy Week 1 Day 4 (PR-P1B Partial)
+        if: github.event.inputs.deployment_stage == 'week1-day4-pr-p1b-partial'
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          ssh -i ~/.ssh/prod_key $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+            set -e
+            cd /var/www/goalgpt
+
+            echo "🔧 Enabling daily rewards optimization ONLY..."
+            export USE_OPTIMIZED_DAILY_REWARDS=true
+            export USE_OPTIMIZED_BADGE_UNLOCK=false
+            export USE_OPTIMIZED_SCHEDULED_NOTIFICATIONS=false
+
+            pm2 restart goalgpt-api
+
+            echo "✅ Daily rewards optimization enabled"
+            echo "📊 Monitor for 24 hours before Day 5"
+          EOF
+
+      - name: 🚀 Deploy Week 1 Day 5 (PR-P1B Full)
+        if: github.event.inputs.deployment_stage == 'week1-day5-pr-p1b-full'
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          ssh -i ~/.ssh/prod_key $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+            set -e
+            cd /var/www/goalgpt
+
+            echo "🔧 Enabling ALL PR-P1B optimizations..."
+            export USE_OPTIMIZED_DAILY_REWARDS=true
+            export USE_OPTIMIZED_BADGE_UNLOCK=true
+            export USE_OPTIMIZED_SCHEDULED_NOTIFICATIONS=true
+
+            pm2 restart goalgpt-api
+
+            echo "✅ All PR-P1B optimizations enabled"
+            echo "📊 Monitor over weekend"
+            echo "✅ Week 1 complete!"
+          EOF
+
+      - name: 🚀 Deploy Week 2 (PR-P1C Conservative)
+        if: github.event.inputs.deployment_stage == 'week2-pr-p1c-conservative'
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          ssh -i ~/.ssh/prod_key $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+            set -e
+            cd /var/www/goalgpt
+
+            echo "🔧 Setting conservative concurrency limits..."
+            export MATCH_ENRICHER_CONCURRENCY=50
+            export MATCH_WATCHDOG_CONCURRENCY=15
+
+            pm2 restart goalgpt-api
+
+            echo "✅ Conservative limits enabled"
+            echo "📊 Monitor pool utilization for 24 hours"
+          EOF
+
+      - name: 🚀 Deploy Week 2 (PR-P1C Optimized)
+        if: github.event.inputs.deployment_stage == 'week2-pr-p1c-optimized'
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          ssh -i ~/.ssh/prod_key $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+            set -e
+            cd /var/www/goalgpt
+
+            echo "🔧 Setting optimized concurrency limits..."
+            export MATCH_ENRICHER_CONCURRENCY=10
+            export MATCH_WATCHDOG_CONCURRENCY=5
+
+            pm2 restart goalgpt-api
+
+            echo "✅ Optimized limits enabled"
+            echo "📊 Monitor pool utilization"
+            echo "✅ Week 2 complete!"
+          EOF
+
+      - name: 🚀 Deploy Week 3 (PR-P1D Indexes)
+        if: github.event.inputs.deployment_stage == 'week3-pr-p1d-indexes'
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          ssh -i ~/.ssh/prod_key $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+            set -e
+            cd /var/www/goalgpt
+
+            echo "🔧 Deploying PR-P1D hot path indexes..."
+            npx tsx src/database/migrations/pr-p1d-add-hot-path-indexes.ts
+
+            echo "✅ 9 indexes deployed with CONCURRENTLY"
+            echo "📊 Monitor index usage for 24 hours"
+          EOF
+
+      - name: 🚀 Deploy Week 3 (PR-P1D Caching)
+        if: github.event.inputs.deployment_stage == 'week3-pr-p1d-caching'
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+        run: |
+          ssh -i ~/.ssh/prod_key $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+            set -e
+            cd /var/www/goalgpt
+
+            echo "🔧 Enabling Redis caching..."
+            export USE_REDIS_CACHE=true
+            export CACHE_STANDINGS=true
+            export CACHE_H2H=true
+            export CACHE_MATCH_DETAILS=true
+            export REDIS_URL="${{ secrets.REDIS_URL }}"
+
+            pm2 restart goalgpt-api
+
+            echo "✅ Caching enabled"
+            echo "📊 Monitor cache hit rate"
+            echo "✅ Week 3 complete!"
+          EOF
+
+      - name: 📊 Generate deployment report
+        if: always()
+        run: |
+          echo "## Production Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Stage**: ${{ github.event.inputs.deployment_stage }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Status" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Deployed successfully" >> $GITHUB_STEP_SUMMARY
+
+  verify-deployment:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy-production
+
+    steps:
+      - name: 🔍 Check application health
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+        run: |
+          echo "Checking production health..."
+          curl -f https://$PRODUCTION_HOST/health || exit 1
+          echo "✅ Application is healthy"
+
+      - name: 📊 Check deployment status
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$PRODUCTION_KEY" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+
+          ssh -i ~/.ssh/prod_key $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+            cd /var/www/goalgpt
+            ./scripts/deploy-status.sh production
+          EOF

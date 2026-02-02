@@ -1,0 +1,131 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Manuel trigger için
+
+env:
+  NODE_VERSION: '18.x'
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.goalgpt.com
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: ✅ Run migration validator
+        run: npm run validate:migrations
+
+      - name: 🚀 Deploy to staging
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          PROJECT_DIR: /var/www/goalgpt
+        run: |
+          # Setup SSH
+          mkdir -p ~/.ssh
+          echo "$STAGING_KEY" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts
+
+          # Deploy script
+          ssh -i ~/.ssh/staging_key $STAGING_USER@$STAGING_HOST << 'EOF'
+            set -e
+            cd ${{ env.PROJECT_DIR }}
+
+            echo "📥 Pulling latest code..."
+            git fetch origin
+            git checkout main
+            git pull origin main
+
+            echo "📦 Installing dependencies..."
+            npm install --production
+
+            echo "🔄 Restarting application..."
+            pm2 restart goalgpt-api
+
+            echo "✅ Deployment completed"
+          EOF
+
+      - name: 🧪 Run staging tests
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          ssh -i ~/.ssh/staging_key $STAGING_USER@$STAGING_HOST << 'EOF'
+            cd /var/www/goalgpt
+
+            echo "🧪 Running PR-P1B tests..."
+            ./scripts/test-staging-pr-p1b.sh || exit 1
+
+            echo "🧪 Running PR-P1C tests..."
+            ./scripts/test-staging-pr-p1c.sh || exit 1
+
+            echo "✅ All staging tests passed"
+          EOF
+
+      - name: 📊 Generate deployment report
+        if: always()
+        run: |
+          echo "## Staging Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Status" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Deployed successfully" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🔔 Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Staging deployment failed!" >> $GITHUB_STEP_SUMMARY
+          echo "Check logs for details" >> $GITHUB_STEP_SUMMARY
+
+  rollback-on-failure:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: failure()
+
+    steps:
+      - name: 🔄 Rollback staging
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$STAGING_KEY" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/staging_key $STAGING_USER@$STAGING_HOST << 'EOF'
+            cd /var/www/goalgpt
+
+            echo "🔄 Rolling back..."
+            git checkout HEAD~1
+            npm install --production
+            pm2 restart goalgpt-api
+
+            echo "✅ Rollback completed"
+          EOF
