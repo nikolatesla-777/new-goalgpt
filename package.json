@@ -58,6 +58,7 @@
     "joi": "^17.11.0",
     "jsonwebtoken": "^9.0.3",
     "kysely": "^0.28.9",
+    "moment-timezone": "^0.6.0",
     "mqtt": "^5.14.1",
     "node-cache": "^5.1.2",
     "node-cron": "^3.0.3",
