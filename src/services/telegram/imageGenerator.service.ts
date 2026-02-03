@@ -296,6 +296,72 @@ function generateHTML(list: DailyList): string {
           border-color: #fdba74;
         }
 
+        .match-status {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 8px;
+          flex-wrap: wrap;
+        }
+
+        .live-badge {
+          background: #ef4444;
+          color: white;
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .live-score {
+          background: #3b82f6;
+          color: white;
+          padding: 4px 12px;
+          border-radius: 6px;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .result-badge {
+          padding: 6px 12px;
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .result-badge.won {
+          background: #d1fae5;
+          color: #065f46;
+          border: 1.5px solid #6ee7b7;
+        }
+
+        .result-badge.lost {
+          background: #fee2e2;
+          color: #991b1b;
+          border: 1.5px solid #fca5a5;
+        }
+
+        .result-badge.void {
+          background: #e5e7eb;
+          color: #6b7280;
+          border: 1.5px solid #d1d5db;
+        }
+
+        .final-score {
+          background: #f3f4f6;
+          color: #374151;
+          padding: 4px 12px;
+          border-radius: 6px;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
         .footer {
           text-align: center;
           padding: 24px;
@@ -354,6 +420,24 @@ function generateHTML(list: DailyList): string {
                 <div class="match-number">#${idx + 1}</div>
                 <div class="team-names">${match.match.home_name} vs ${match.match.away_name}</div>
               </div>
+
+              ${match.live_score ? `
+                <div class="match-status">
+                  <div class="live-badge">🔴 CANLI</div>
+                  <div class="live-score">${match.live_score.home} - ${match.live_score.away} ${match.live_score.minute}'</div>
+                </div>
+              ` : match.final_score ? `
+                <div class="match-status">
+                  <div class="final-score">${match.final_score.home} - ${match.final_score.away} FT</div>
+                  ${match.result === 'won' ? `
+                    <div class="result-badge won">✅ Kazandı</div>
+                  ` : match.result === 'lost' ? `
+                    <div class="result-badge lost">❌ Kaybetti</div>
+                  ` : match.result === 'void' ? `
+                    <div class="result-badge void">⚪ İptal</div>
+                  ` : ''}
+                </div>
+              ` : ''}
 
               ${list.market === 'OVER_25' && (match.match.potentials || match.match.xg) ? `
                 <div class="stats-badges">
