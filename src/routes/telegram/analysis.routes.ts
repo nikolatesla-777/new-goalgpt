@@ -5,8 +5,8 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { pool, safeQuery } from '../../database/connection';
 import { logger } from '../../utils/logger';
+import { footyStatsAPI } from '../../services/footystats/footystats.client';
 import {
   generateMatchAnalysis,
   formatAnalysisForTelegram,
@@ -28,42 +28,50 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
     logger.info(`[AnalysisRoutes] Generating analysis for match ${matchId}`);
 
     try {
-      // Fetch match data from FootyStats
-      const matchQuery = `
-        SELECT
-          m.id,
-          m.home_name,
-          m.away_name,
-          m.competition_name,
-          m.date_unix,
-          m.btts_potential,
-          m.o25_potential,
-          m.o15_potential,
-          m.team_a_xg_prematch,
-          m.team_b_xg_prematch,
-          m.corners_potential,
-          m.cards_potential,
-          m.shots_potential,
-          m.fouls_potential,
-          m.odds_ft_1,
-          m.odds_ft_x,
-          m.odds_ft_2,
-          m.h2h,
-          m.trends
-        FROM footystats_match m
-        WHERE m.id = $1
-      `;
+      // Fetch match data from FootyStats API
+      const response = await footyStatsAPI.getMatchDetails(parseInt(matchId));
 
-      const matchResult = await safeQuery(matchQuery, [parseInt(matchId)]);
-
-      if (matchResult.length === 0) {
+      if (!response.success || !response.data) {
         return reply.status(404).send({
           error: 'Match not found',
-          message: `Match with ID ${matchId} does not exist`,
+          message: `Match with ID ${matchId} does not exist in FootyStats`,
         });
       }
 
-      const match = matchResult[0];
+      const fsMatch = response.data;
+
+      // Map FootyStats data to our format
+      const match = {
+        id: fsMatch.id,
+        home_name: fsMatch.homeTeam,
+        away_name: fsMatch.awayTeam,
+        competition_name: fsMatch.competition || 'Unknown League',
+        date_unix: fsMatch.date_unix,
+        btts_potential: fsMatch.pre_match_teamA_overall_btts_percentage,
+        o25_potential: fsMatch.pre_match_teamA_overall_over25_percentage,
+        o15_potential: fsMatch.pre_match_teamA_overall_over15_percentage,
+        team_a_xg_prematch: fsMatch.team_a_xg_prematch,
+        team_b_xg_prematch: fsMatch.team_b_xg_prematch,
+        corners_potential: fsMatch.pre_match_teamA_overall_corners_for_90_per_match,
+        cards_potential: fsMatch.pre_match_teamA_overall_cards_for_90_per_match,
+        shots_potential: fsMatch.pre_match_teamA_overall_shots_on_target_for_90_per_match,
+        fouls_potential: fsMatch.pre_match_teamA_overall_fouls_committed_for_90_per_match,
+        odds_ft_1: fsMatch.odds_ft_1,
+        odds_ft_x: fsMatch.odds_ft_x,
+        odds_ft_2: fsMatch.odds_ft_2,
+        h2h: fsMatch.h2h ? {
+          total_matches: fsMatch.h2h.total,
+          home_wins: fsMatch.h2h.homeWins,
+          draws: fsMatch.h2h.draws,
+          away_wins: fsMatch.h2h.awayWins,
+          btts_pct: fsMatch.h2h.btts_pct,
+          avg_goals: fsMatch.h2h.avg_goals,
+          over15_pct: fsMatch.h2h.over15_pct,
+          over25_pct: fsMatch.h2h.over25_pct,
+          over35_pct: fsMatch.h2h.over35_pct,
+        } : undefined,
+        trends: fsMatch.trends,
+      };
 
       // Generate analysis
       const analysis = generateMatchAnalysis({
@@ -127,6 +135,7 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
    * POST /telegram/analysis/bulk
    *
    * Generate analysis for multiple matches
+   * NOTE: This endpoint fetches each match individually from FootyStats API
    */
   fastify.post('/telegram/analysis/bulk', async (request, reply) => {
     const { matchIds } = request.body as { matchIds: number[] };
@@ -138,81 +147,71 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
       });
     }
 
-    if (matchIds.length > 20) {
+    if (matchIds.length > 10) {
       return reply.status(400).send({
         error: 'Invalid request',
-        message: 'Maximum 20 matches can be analyzed at once',
+        message: 'Maximum 10 matches can be analyzed at once',
       });
     }
 
     logger.info(`[AnalysisRoutes] Generating bulk analysis for ${matchIds.length} matches`);
 
     try {
-      // Fetch all matches
-      const matchQuery = `
-        SELECT
-          m.id,
-          m.home_name,
-          m.away_name,
-          m.competition_name,
-          m.date_unix,
-          m.btts_potential,
-          m.o25_potential,
-          m.o15_potential,
-          m.team_a_xg_prematch,
-          m.team_b_xg_prematch,
-          m.corners_potential,
-          m.cards_potential,
-          m.shots_potential,
-          m.fouls_potential,
-          m.odds_ft_1,
-          m.odds_ft_x,
-          m.odds_ft_2,
-          m.h2h,
-          m.trends
-        FROM footystats_match m
-        WHERE m.id = ANY($1)
-      `;
+      // Fetch all matches from FootyStats API
+      const matchPromises = matchIds.map(id => footyStatsAPI.getMatchDetails(id));
+      const matchResponses = await Promise.all(matchPromises);
 
-      const matches = await safeQuery(matchQuery, [matchIds]);
+      const validMatches = matchResponses
+        .filter(res => res.success && res.data)
+        .map(res => res.data!);
 
-      if (matches.length === 0) {
+      if (validMatches.length === 0) {
         return reply.status(404).send({
           error: 'No matches found',
-          message: 'None of the provided match IDs exist',
+          message: 'None of the provided match IDs exist in FootyStats',
         });
       }
 
       // Generate analysis for each match
-      const analyses = matches.map((match: any) => {
+      const analyses = validMatches.map((fsMatch: any) => {
         const analysis = generateMatchAnalysis({
-          home_name: match.home_name,
-          away_name: match.away_name,
-          competition_name: match.competition_name,
-          date_unix: match.date_unix,
-          btts_potential: match.btts_potential,
-          o25_potential: match.o25_potential,
-          o15_potential: match.o15_potential,
-          team_a_xg_prematch: match.team_a_xg_prematch,
-          team_b_xg_prematch: match.team_b_xg_prematch,
-          corners_potential: match.corners_potential,
-          cards_potential: match.cards_potential,
-          shots_potential: match.shots_potential,
-          fouls_potential: match.fouls_potential,
-          odds_ft_1: match.odds_ft_1,
-          odds_ft_x: match.odds_ft_x,
-          odds_ft_2: match.odds_ft_2,
-          h2h: match.h2h,
-          trends: match.trends,
+          home_name: fsMatch.homeTeam,
+          away_name: fsMatch.awayTeam,
+          competition_name: fsMatch.competition || 'Unknown League',
+          date_unix: fsMatch.date_unix,
+          btts_potential: fsMatch.pre_match_teamA_overall_btts_percentage,
+          o25_potential: fsMatch.pre_match_teamA_overall_over25_percentage,
+          o15_potential: fsMatch.pre_match_teamA_overall_over15_percentage,
+          team_a_xg_prematch: fsMatch.team_a_xg_prematch,
+          team_b_xg_prematch: fsMatch.team_b_xg_prematch,
+          corners_potential: fsMatch.pre_match_teamA_overall_corners_for_90_per_match,
+          cards_potential: fsMatch.pre_match_teamA_overall_cards_for_90_per_match,
+          shots_potential: fsMatch.pre_match_teamA_overall_shots_on_target_for_90_per_match,
+          fouls_potential: fsMatch.pre_match_teamA_overall_fouls_committed_for_90_per_match,
+          odds_ft_1: fsMatch.odds_ft_1,
+          odds_ft_x: fsMatch.odds_ft_x,
+          odds_ft_2: fsMatch.odds_ft_2,
+          h2h: fsMatch.h2h ? {
+            total_matches: fsMatch.h2h.total,
+            home_wins: fsMatch.h2h.homeWins,
+            draws: fsMatch.h2h.draws,
+            away_wins: fsMatch.h2h.awayWins,
+            btts_pct: fsMatch.h2h.btts_pct,
+            avg_goals: fsMatch.h2h.avg_goals,
+            over15_pct: fsMatch.h2h.over15_pct,
+            over25_pct: fsMatch.h2h.over25_pct,
+            over35_pct: fsMatch.h2h.over35_pct,
+          } : undefined,
+          trends: fsMatch.trends,
         });
 
         return {
-          matchId: match.id,
+          matchId: fsMatch.id,
           match: {
-            home_name: match.home_name,
-            away_name: match.away_name,
-            competition_name: match.competition_name,
-            date_unix: match.date_unix,
+            home_name: fsMatch.homeTeam,
+            away_name: fsMatch.awayTeam,
+            competition_name: fsMatch.competition || 'Unknown League',
+            date_unix: fsMatch.date_unix,
           },
           analysis: {
             title: analysis.title,
