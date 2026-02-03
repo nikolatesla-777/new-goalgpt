@@ -942,59 +942,13 @@ Canlıya girmeden önce oran ve kadro kontrolü önerilir.
                                   <span className="truncate">{match.league_name}</span>
                                 </div>
 
-                                {/* Team Names */}
-                                <div className="flex items-center gap-2">
+                                {/* Row 2: Team Names */}
+                                <div className="flex items-center gap-2 mb-2">
                                   <span className="text-lg font-bold text-gray-400">#{idx + 1}</span>
                                   <span className={`text-sm font-bold ${matchStarted ? 'text-gray-500' : 'text-gray-900'}`}>
                                     {match.home_name} vs {match.away_name}
                                   </span>
                                 </div>
-
-                                {/* Live/Pending Status Badges (separate row) */}
-                                {(() => {
-                                  // CASE 2: Match finished but settlement pending
-                                  if (matchFinished && !match.result) {
-                                    return (
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-orange-100 text-orange-600 animate-pulse">
-                                          ⏳ Settle Bekliyor
-                                        </span>
-                                      </div>
-                                    );
-                                  }
-
-                                  // CASE 3: Match is live (TheSports data)
-                                  if (match.live_score
-                                      && match.live_score.status !== 'Bitti'
-                                      && matchStarted
-                                      && !matchFinished
-                                      && match.result !== 'won'
-                                      && match.result !== 'lost') {
-                                    return (
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
-                                          🔴 CANLI
-                                        </span>
-                                        <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
-                                          {match.live_score.home}-{match.live_score.away} {match.live_score.minute}'
-                                        </span>
-                                      </div>
-                                    );
-                                  }
-
-                                  // CASE 4: Match started but NO MAPPING (match_id is null)
-                                  if (matchStarted && !matchFinished && !match.match_id) {
-                                    return (
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
-                                          ⚠️ Eşleştirme Yok
-                                        </span>
-                                      </div>
-                                    );
-                                  }
-
-                                  return null;
-                                })()}
                               </div>
                               <div className={`px-3 py-1 rounded-lg font-bold text-sm ${
                                 match.confidence >= 80 ? 'bg-green-100 text-green-700' :
@@ -1005,9 +959,9 @@ Canlıya girmeden önce oran ve kadro kontrolü önerilir.
                               </div>
                             </div>
 
-                            {/* Statistics Badges - Only for OVER 2.5 Market */}
+                            {/* Row 3: Statistics Badges - Only for OVER 2.5 Market */}
                             {list.market === 'OVER_25' && (match.potentials || match.xg) && (
-                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap mb-2">
                                 {match.potentials?.over25 && (
                                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">
                                     🔥 Ü2.5: {match.potentials.over25}%
@@ -1025,6 +979,52 @@ Canlıya girmeden önce oran ve kadro kontrolü önerilir.
                                 )}
                               </div>
                             )}
+
+                            {/* Row 4: Live Score / Settlement Status */}
+                            {(() => {
+                              // CASE 1: Match finished but settlement pending
+                              if (matchFinished && !match.result) {
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-orange-100 text-orange-600 animate-pulse">
+                                      ⏳ Settle Bekliyor
+                                    </span>
+                                  </div>
+                                );
+                              }
+
+                              // CASE 2: Match is live (TheSports data)
+                              if (match.live_score
+                                  && match.live_score.status !== 'Bitti'
+                                  && matchStarted
+                                  && !matchFinished
+                                  && match.result !== 'won'
+                                  && match.result !== 'lost') {
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
+                                      🔴 CANLI
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
+                                      {match.live_score.home}-{match.live_score.away} {match.live_score.minute}'
+                                    </span>
+                                  </div>
+                                );
+                              }
+
+                              // CASE 3: Match started but NO MAPPING (match_id is null)
+                              if (matchStarted && !matchFinished && !match.match_id) {
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
+                                      ⚠️ Eşleştirme Yok
+                                    </span>
+                                  </div>
+                                );
+                              }
+
+                              return null;
+                            })()}
 
                             {/* Minimal Result Banner (Settlement completed) */}
                             {match.match_finished && match.final_score && match.result && (
