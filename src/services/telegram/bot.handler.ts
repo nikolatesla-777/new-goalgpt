@@ -10,7 +10,7 @@
 
 import { telegramBot } from './telegram.client';
 import { logger } from '../../utils/logger';
-import { getDailyLists } from './dailyLists.service';
+// import { getDailyLists } from './dailyLists.service'; // TODO: Re-enable after fixing dependencies
 import { pool } from '../../database/connection';
 
 // ============================================================================
@@ -167,7 +167,8 @@ Sorularınız için: @goalgpt_support`;
  */
 async function getDailyListPreview(market: string): Promise<string> {
   try {
-    const lists = await getDailyLists();
+    // const lists = await getDailyLists(); // TODO: Re-enable
+    const lists: any[] = []; // Temporary mock
     const list = lists.find(l => l.market === market);
 
     if (!list) {
