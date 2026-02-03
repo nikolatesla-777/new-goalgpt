@@ -985,8 +985,8 @@ Canlıya girmeden önce oran ve kadro kontrolü önerilir.
                               // CASE 1: Match finished but settlement pending
                               if (matchFinished && !match.result) {
                                 return (
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-orange-100 text-orange-600 animate-pulse">
+                                  <div className="flex items-center justify-between bg-orange-50 -mx-4 px-4 py-2 -mb-4 rounded-b-xl border-t border-orange-200">
+                                    <span className="text-sm font-semibold text-orange-600">
                                       ⏳ Settle Bekliyor
                                     </span>
                                   </div>
@@ -1001,11 +1001,14 @@ Canlıya girmeden önce oran ve kadro kontrolü önerilir.
                                   && match.result !== 'won'
                                   && match.result !== 'lost') {
                                 return (
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
-                                      🔴 CANLI
-                                    </span>
-                                    <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
+                                  <div className="flex items-center justify-between bg-red-50 -mx-4 px-4 py-2 -mb-4 rounded-b-xl border-t border-red-200">
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white">
+                                        <span className="text-xs">●</span>
+                                      </div>
+                                      <span className="text-sm font-semibold text-red-700">CANLI</span>
+                                    </div>
+                                    <span className="text-sm font-bold text-gray-700">
                                       {match.live_score.home}-{match.live_score.away} {match.live_score.minute}'
                                     </span>
                                   </div>
@@ -1015,8 +1018,8 @@ Canlıya girmeden önce oran ve kadro kontrolü önerilir.
                               // CASE 3: Match started but NO MAPPING (match_id is null)
                               if (matchStarted && !matchFinished && !match.match_id) {
                                 return (
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
+                                  <div className="flex items-center justify-between bg-gray-50 -mx-4 px-4 py-2 -mb-4 rounded-b-xl border-t border-gray-200">
+                                    <span className="text-sm font-semibold text-gray-600">
                                       ⚠️ Eşleştirme Yok
                                     </span>
                                   </div>
