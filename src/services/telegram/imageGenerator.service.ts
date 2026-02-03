@@ -59,7 +59,7 @@ function generateHTML(list: DailyList): string {
         }
 
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
           background: #f3f4f6;
           padding: 0;
           margin: 0;
@@ -118,8 +118,11 @@ function generateHTML(list: DailyList): string {
         }
 
         .icon {
-          font-size: 48px;
+          font-size: 52px;
           line-height: 1;
+          font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+          -webkit-font-smoothing: antialiased;
+          text-rendering: optimizeLegibility;
         }
 
         .header-title {
@@ -393,7 +396,12 @@ export async function generateDailyListImage(list: DailyList): Promise<Buffer> {
       html,
       type: 'png',
       puppeteerArgs: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--font-render-hinting=none',
+        ],
       },
       quality: 100,
     }) as Buffer;
