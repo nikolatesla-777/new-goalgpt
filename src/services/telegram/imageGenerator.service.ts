@@ -58,19 +58,23 @@ function generateHTML(list: DailyList): string {
           box-sizing: border-box;
         }
 
+        html, body {
+          width: 560px;
+          height: auto;
+          margin: 0;
+          padding: 0;
+          overflow-x: hidden;
+        }
+
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-          background: #f3f4f6;
-          padding: 0;
-          margin: 0;
+          background: transparent;
         }
 
         .container {
           width: 560px;
           background: #ffffff;
-          border-radius: 24px;
           overflow: hidden;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.15);
         }
 
         .header {
@@ -402,6 +406,10 @@ export async function generateDailyListImage(list: DailyList): Promise<Buffer> {
           '--disable-dev-shm-usage',
           '--font-render-hinting=none',
         ],
+        defaultViewport: {
+          width: 560,
+          height: 1200,
+        },
       },
       quality: 100,
     }) as Buffer;
