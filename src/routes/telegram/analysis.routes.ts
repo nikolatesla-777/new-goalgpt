@@ -41,18 +41,18 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
       const fsMatch = response.data;
 
       // DEBUG: Log available fields
-      logger.info(`[AnalysisRoutes] FootyStats fields available:`, {
-        btts: !!fsMatch.pre_match_teamA_overall_btts_percentage,
-        o25: !!fsMatch.pre_match_teamA_overall_over25_percentage,
-        o15: !!fsMatch.pre_match_teamA_overall_over15_percentage,
-        ht_over_05: !!fsMatch.pre_match_teamA_overall_first_half_goals_for_percentage,
-        corners: !!fsMatch.pre_match_teamA_overall_corners_for_90_per_match,
-        cards: !!fsMatch.pre_match_teamA_overall_cards_for_90_per_match,
-        xg: !!fsMatch.team_a_xg_prematch,
-        form: !!fsMatch.team_a_form_string,
-        h2h: !!fsMatch.h2h,
-        trends: !!fsMatch.trends,
-      });
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('[DEBUG] FootyStats Match Data Keys:', Object.keys(fsMatch).join(', '));
+      console.log('[DEBUG] Field Availability:');
+      console.log('  btts_potential:', fsMatch.pre_match_teamA_overall_btts_percentage);
+      console.log('  o25_potential:', fsMatch.pre_match_teamA_overall_over25_percentage);
+      console.log('  o15_potential:', fsMatch.pre_match_teamA_overall_over15_percentage);
+      console.log('  ht_over_05:', fsMatch.pre_match_teamA_overall_first_half_goals_for_percentage);
+      console.log('  corners:', fsMatch.pre_match_teamA_overall_corners_for_90_per_match);
+      console.log('  cards:', fsMatch.pre_match_teamA_overall_cards_for_90_per_match);
+      console.log('  h2h:', fsMatch.h2h ? 'YES' : 'NO');
+      console.log('  trends:', fsMatch.trends ? 'YES' : 'NO');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // Map FootyStats data to our format
       const match = {
