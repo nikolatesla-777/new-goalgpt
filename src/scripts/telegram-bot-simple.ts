@@ -27,6 +27,49 @@ async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
   );
 }
 
+async function sendInvoice(chatId: number) {
+  try {
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/sendInvoice`,
+      {
+        chat_id: chatId,
+        title: '⭐️ GoalGPT VIP Üyelik',
+        description: 'Haftalık VIP üyelik ile sınırsız AI tahmin, canlı maç analizleri ve özel kuponlara erişin!',
+        payload: `vip_weekly_${chatId}_${Date.now()}`,
+        currency: 'XTR', // Telegram Stars
+        prices: [
+          {
+            label: 'VIP Üyelik (1 Hafta)',
+            amount: 500 // 500 Stars
+          }
+        ],
+        photo_url: 'https://partnergoalgpt.com/assets/vip-badge.png',
+        photo_width: 640,
+        photo_height: 640,
+        need_name: false,
+        need_phone_number: false,
+        need_email: false,
+        need_shipping_address: false,
+        is_flexible: false,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '⭐️ 500 Stars ile Öde (≈199.99₺)',
+                pay: true
+              }
+            ]
+          ]
+        }
+      }
+    );
+    logger.info('[Bot] Invoice sent', { chat_id: chatId });
+  } catch (error: any) {
+    logger.error('[Bot] Error sending invoice:', error.message);
+    throw error;
+  }
+}
+
 function getMainMenuKeyboard() {
   return {
     inline_keyboard: [
@@ -58,6 +101,78 @@ function getBackButton() {
       [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }],
     ],
   };
+}
+
+async function handlePreCheckoutQuery(preCheckoutQuery: any) {
+  const queryId = preCheckoutQuery.id;
+  const userId = preCheckoutQuery.from.id;
+
+  logger.info('[Bot] Pre-checkout query', {
+    query_id: queryId,
+    user_id: userId,
+    invoice_payload: preCheckoutQuery.invoice_payload
+  });
+
+  try {
+    // Approve the payment
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/answerPreCheckoutQuery`,
+      {
+        pre_checkout_query_id: queryId,
+        ok: true
+      }
+    );
+    logger.info('[Bot] Pre-checkout approved', { query_id: queryId });
+  } catch (error: any) {
+    logger.error('[Bot] Error approving pre-checkout:', error.message);
+    // Reject payment
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/answerPreCheckoutQuery`,
+      {
+        pre_checkout_query_id: queryId,
+        ok: false,
+        error_message: 'Ödeme işlenirken bir hata oluştu. Lütfen tekrar deneyin.'
+      }
+    );
+  }
+}
+
+async function handleSuccessfulPayment(message: any) {
+  const chatId = message.chat.id;
+  const payment = message.successful_payment;
+  const userId = message.from.id;
+  const firstName = message.from.first_name;
+
+  logger.info('[Bot] Successful payment received', {
+    user_id: userId,
+    telegram_payment_charge_id: payment.telegram_payment_charge_id,
+    invoice_payload: payment.invoice_payload,
+    total_amount: payment.total_amount
+  });
+
+  try {
+    // TODO: Save to database (next step)
+    // For now, just send confirmation message
+
+    await sendMessage(
+      chatId,
+      `🎉 *Ödeme Başarılı!*\n\n` +
+      `Tebrikler ${firstName}! VIP üyeliğiniz aktif edildi.\n\n` +
+      `⭐️ *Ödeme:* ${payment.total_amount} Stars\n` +
+      `📅 *Süre:* 7 gün\n` +
+      `🔓 *Durum:* Aktif\n\n` +
+      `Artık tüm VIP içeriklere erişebilirsiniz! 🚀\n\n` +
+      `Mini app'i açmak için: /goalgpt`
+    );
+
+    logger.info('[Bot] VIP subscription activated', { user_id: userId });
+  } catch (error: any) {
+    logger.error('[Bot] Error handling successful payment:', error.message);
+    await sendMessage(
+      chatId,
+      `⚠️ Ödemeniz alındı ancak üyelik aktivasyonunda bir sorun oluştu. Destek ekibimiz en kısa sürede sizinle iletişime geçecek.`
+    );
+  }
 }
 
 async function handleCallbackQuery(callbackQuery: any) {
@@ -161,6 +276,18 @@ async function handleCallbackQuery(callbackQuery: any) {
 }
 
 async function handleUpdate(update: any) {
+  // Handle pre-checkout query (payment confirmation)
+  if (update.pre_checkout_query) {
+    await handlePreCheckoutQuery(update.pre_checkout_query);
+    return;
+  }
+
+  // Handle successful payment
+  if (update.message?.successful_payment) {
+    await handleSuccessfulPayment(update.message);
+    return;
+  }
+
   // Handle callback queries (button clicks)
   if (update.callback_query) {
     await handleCallbackQuery(update.callback_query);
@@ -184,12 +311,30 @@ async function handleUpdate(update: any) {
       getMainMenuKeyboard()
     );
   }
+  else if (text === '/goalgpt') {
+    await sendMessage(
+      chatId,
+      `📱 *GoalGPT Mini App*\n\n` +
+      `Aşağıdaki butona tıklayarak GoalGPT Mini App'i açabilirsiniz! 🚀`,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: '📱 GoalGPT\'yi Aç',
+              web_app: { url: 'https://partnergoalgpt.com/miniapp' }
+            }
+          ]
+        ]
+      }
+    );
+  }
   else if (text === '/help' || text === '/yardim') {
     await sendMessage(
       chatId,
       `📖 *Yardım*\n\n` +
       `Aşağıdaki komutları kullanabilirsiniz:\n\n` +
       `🏠 /start - Başlangıç\n` +
+      `📱 /goalgpt - GoalGPT Mini App Aç\n` +
       `📊 /gunluk - Günlük tahmin listeleri\n` +
       `⚽️ /canli - Canlı maçlar\n` +
       `🤖 /analizyap - AI analiz iste\n` +
@@ -279,13 +424,27 @@ async function handleUpdate(update: any) {
   else if (text === '/uyeol') {
     await sendMessage(
       chatId,
-      `🚀 *Prime Üyelik*\n\n` +
-      `Prime üyelik 🚀\n\n` +
-      `✅ Sınırsız analiz\n` +
-      `✅ VIP tahminler\n` +
+      `⭐️ *GoalGPT VIP Üyelik*\n\n` +
+      `VIP üyelikle neler kazanırsınız?\n\n` +
+      `✅ Sınırsız AI tahmin\n` +
+      `✅ Canlı maç analizleri\n` +
+      `✅ Özel VIP kuponlar\n` +
+      `✅ Günlük tahmin listeleri\n` +
       `✅ Öncelikli destek\n\n` +
-      `Yakında aktif olacak! 💎`
+      `💰 *Fiyat:* 500 ⭐️ Telegram Stars (≈199.99₺)\n` +
+      `📅 *Süre:* 1 Hafta\n\n` +
+      `Aşağıdaki butona tıklayarak ödeme yapabilirsiniz! 👇`
     );
+
+    // Send invoice
+    try {
+      await sendInvoice(chatId);
+    } catch (error: any) {
+      await sendMessage(
+        chatId,
+        `❌ Ödeme sistemi şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.`
+      );
+    }
   }
   else if (text === '/hesapla') {
     await sendMessage(
@@ -375,12 +534,12 @@ async function startPolling() {
             await handleUpdate(update);
             offset = update.update_id + 1;
           } catch (error: any) {
-            logger.error('[Bot] Error handling update:', error);
+            logger.error('[Bot] Error handling update:', error.message || error);
           }
         }
       }
     } catch (error: any) {
-      logger.error('[Bot] Error in polling loop:', error);
+      logger.error('[Bot] Error in polling loop:', error.message || String(error));
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
