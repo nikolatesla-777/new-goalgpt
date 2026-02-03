@@ -40,7 +40,7 @@ async function sendInvoice(chatId: number) {
         prices: [
           {
             label: 'VIP Üyelik (1 Hafta)',
-            amount: 500 // 500 Stars
+            amount: 200 // 200 Stars
           }
         ],
         photo_url: 'https://partnergoalgpt.com/assets/vip-badge.png',
@@ -55,7 +55,7 @@ async function sendInvoice(chatId: number) {
           inline_keyboard: [
             [
               {
-                text: '⭐️ 500 Stars ile Öde (≈199.99₺)',
+                text: '⭐️ 200 Stars ile Öde (≈199₺)',
                 pay: true
               }
             ]
@@ -431,7 +431,7 @@ async function handleUpdate(update: any) {
       `✅ Özel VIP kuponlar\n` +
       `✅ Günlük tahmin listeleri\n` +
       `✅ Öncelikli destek\n\n` +
-      `💰 *Fiyat:* 500 ⭐️ Telegram Stars (≈199.99₺)\n` +
+      `💰 *Fiyat:* 200 ⭐️ Telegram Stars (≈199₺)\n` +
       `📅 *Süre:* 1 Hafta\n\n` +
       `Aşağıdaki butona tıklayarak ödeme yapabilirsiniz! 👇`
     );
