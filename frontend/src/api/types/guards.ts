@@ -18,7 +18,7 @@ export function isDailyListsResponse(data: unknown): data is DailyListsResponse 
   return (
     'lists' in obj &&
     Array.isArray(obj.lists) &&
-    (obj.generated_at === undefined || typeof obj.generated_at === 'string')
+    (obj.generated_at === undefined || typeof obj.generated_at === 'string' || typeof obj.generated_at === 'number')
   );
 }
 
