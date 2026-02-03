@@ -15,18 +15,152 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 let offset = 0;
 let isRunning = true;
 
-async function sendMessage(chatId: number, text: string) {
+async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
   await axios.post(
     `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
     {
       chat_id: chatId,
       text,
       parse_mode: 'Markdown',
+      reply_markup: replyMarkup,
     }
   );
 }
 
+function getMainMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📊 Günlük Listeler', callback_data: 'menu_gunluk' },
+        { text: '⚽️ Canlı Maçlar', callback_data: 'menu_canli' },
+      ],
+      [
+        { text: '🤖 AI Analiz', callback_data: 'menu_analiz' },
+        { text: '🎁 Kupon Hazırla', callback_data: 'menu_kupon' },
+      ],
+      [
+        { text: '📈 Performans', callback_data: 'menu_performans' },
+        { text: '⚙️ Ayarlar', callback_data: 'menu_ayarlar' },
+      ],
+    ],
+  };
+}
+
+function getBackButton() {
+  return {
+    inline_keyboard: [
+      [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }],
+    ],
+  };
+}
+
+async function handleCallbackQuery(callbackQuery: any) {
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+  const data = callbackQuery.data;
+
+  logger.info('[Bot] Callback query', { chat_id: chatId, data });
+
+  // Answer callback to remove loading state
+  await axios.post(
+    `https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`,
+    { callback_query_id: callbackQuery.id }
+  );
+
+  // Edit message based on callback
+  if (data === 'menu_main') {
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: '⚽️ *GoalGPT Ana Menü*\n\nNe yapmak istersiniz?',
+        parse_mode: 'Markdown',
+        reply_markup: getMainMenuKeyboard(),
+      }
+    );
+  }
+  else if (data === 'menu_gunluk') {
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: '📊 *Günlük Tahmin Listeleri*\n\nAI destekli günlük tahmin listelerimiz hazırlanıyor...\n\nBu özellik çok yakında aktif olacak! 🎯',
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'menu_canli') {
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: '⚽️ *Canlı Maçlar*\n\nCanlı maç skorları ve analizleri...\n\nBu özellik çok yakında aktif olacak! 📺',
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'menu_analiz') {
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: '🤖 *AI Analiz*\n\nBir maç linki gönderin, AI analizi yapayım! 🔬',
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'menu_kupon') {
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: '🎁 *Kupon Hazırla*\n\nAI destekli kupon önerisi yakında! 📝',
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'menu_performans') {
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: '📈 *Performans Takibi*\n\nİstatistikleriniz:\n✅ Kazanılan: -\n❌ Kaybedilen: -\n📊 Başarı oranı: -%\n\nYakında detaylı istatistikler! 📊',
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'menu_ayarlar') {
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: '⚙️ *Ayarlar*\n\nBildirim ayarlarınızı düzenleyin:\n\n🔔 Bildirimler: Açık\n⏰ Bildirim saati: 09:00\n\nYakında özelleştirilebilir! 🎯',
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+}
+
 async function handleUpdate(update: any) {
+  // Handle callback queries (button clicks)
+  if (update.callback_query) {
+    await handleCallbackQuery(update.callback_query);
+    return;
+  }
+
   if (!update.message?.text) return;
 
   const chatId = update.message.chat.id;
@@ -40,7 +174,8 @@ async function handleUpdate(update: any) {
       chatId,
       `⚽️ Merhaba ${firstName}!\n\n` +
       `GoalGPT'e hoş geldiniz. AI destekli maç tahmin sistemi.\n\n` +
-      `📋 Menüden komutları seçebilirsiniz!`
+      `📋 Aşağıdaki menüden seçim yapabilirsiniz:`,
+      getMainMenuKeyboard()
     );
   }
   else if (text === '/help' || text === '/yardim') {
@@ -66,7 +201,8 @@ async function handleUpdate(update: any) {
       chatId,
       `📊 *Günlük Tahmin Listeleri*\n\n` +
       `AI destekli günlük tahmin listelerimiz hazırlanıyor...\n\n` +
-      `Bu özellik çok yakında aktif olacak! 🎯`
+      `Bu özellik çok yakında aktif olacak! 🎯`,
+      getBackButton()
     );
   }
   else if (text === '/canli') {
