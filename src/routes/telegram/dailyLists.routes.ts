@@ -360,13 +360,17 @@ export async function dailyListsRoutes(fastify: FastifyInstance): Promise<void> 
         const { mapFootyStatsToTheSports } = await import('../../services/telegram/dailyLists.service');
         const remappedMatches = await mapFootyStatsToTheSports(unmappedMatches);
 
-        // Update match_id for successfully remapped matches
-        remappedMatches.forEach((external_id, fs_id) => {
+        // Update match_id and league_name for successfully remapped matches
+        remappedMatches.forEach((matchData, fs_id) => {
           const match = allMatches.get(fs_id);
           if (match) {
-            match.match_id = external_id;
-            allMatchIds.add(external_id);
-            console.error(`[TRACE-4c] ✅ Remapped fs_id ${fs_id} → ${external_id}`);
+            match.match_id = matchData.match_id;
+            allMatchIds.add(matchData.match_id);
+            // Update league_name if available from TheSports and current value is 'Unknown'
+            if (matchData.league_name && match.league_name === 'Unknown') {
+              match.league_name = matchData.league_name;
+            }
+            console.error(`[TRACE-4c] ✅ Remapped fs_id ${fs_id} → ${matchData.match_id} | League: ${matchData.league_name || match.league_name}`);
           }
         });
 

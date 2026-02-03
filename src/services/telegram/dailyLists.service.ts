@@ -487,15 +487,22 @@ export async function generateDailyLists(date?: string): Promise<DailyList[]> {
     const matchIdMap = await mapFootyStatsToTheSports(allMatches);
     logger.info(`[TelegramDailyLists] 🔗 Mapped ${matchIdMap.size}/${allMatches.length} matches to TheSports`);
 
-    // 3. Enrich matches with TheSports match_id for settlement
+    // 3. Enrich matches with TheSports match_id and league_name
     const enrichMatches = (candidates: MatchCandidate[]): MatchCandidate[] => {
-      return candidates.map(c => ({
-        ...c,
-        match: {
-          ...c.match,
-          match_id: matchIdMap.get(c.match.fs_id) || null,
-        },
-      }));
+      return candidates.map(c => {
+        const matchData = matchIdMap.get(c.match.fs_id);
+        return {
+          ...c,
+          match: {
+            ...c.match,
+            match_id: matchData?.match_id || null,
+            // Update league_name with TheSports data if available and current value is 'Unknown'
+            league_name: (matchData?.league_name && c.match.league_name === 'Unknown')
+              ? matchData.league_name
+              : c.match.league_name,
+          },
+        };
+      });
     };
 
     // 4. Generate lists for each market
@@ -839,10 +846,10 @@ function calculateStringSimilarity(str1: string, str2: string): number {
 /**
  * Map FootyStats matches to TheSports matches using team names and time window
  * Uses fuzzy matching to improve match detection
- * Returns a map of fs_id -> TheSports external_id
+ * Returns a map of fs_id -> {match_id, league_name}
  */
-export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Promise<Map<number, string>> {
-  const matchMap = new Map<number, string>();
+export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Promise<Map<number, { match_id: string; league_name?: string }>> {
+  const matchMap = new Map<number, { match_id: string; league_name?: string }>();
 
   if (matches.length === 0) return matchMap;
 
@@ -858,10 +865,12 @@ export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Prom
         m.external_id,
         t1.name as home_team_name,
         t2.name as away_team_name,
-        m.match_time
+        m.match_time,
+        c.name as competition_name
       FROM ts_matches m
       INNER JOIN ts_teams t1 ON m.home_team_id = t1.external_id
       INNER JOIN ts_teams t2 ON m.away_team_id = t2.external_id
+      LEFT JOIN ts_competitions c ON m.competition_id = c.external_id
       WHERE m.match_time >= $1 AND m.match_time <= $2
     `;
 
@@ -911,10 +920,13 @@ export async function mapFootyStatsToTheSports(matches: FootyStatsMatch[]): Prom
 
       // Accept match if score is above threshold
       if (bestMatch && bestScore >= SIMILARITY_THRESHOLD) {
-        matchMap.set(fsMatch.fs_id, bestMatch.external_id);
+        matchMap.set(fsMatch.fs_id, {
+          match_id: bestMatch.external_id,
+          league_name: bestMatch.competition_name || undefined
+        });
         logger.debug(
           `[TelegramDailyLists] ✅ Fuzzy matched: "${fsMatch.home_name} vs ${fsMatch.away_name}" → ` +
-          `"${bestMatch.home_team_name} vs ${bestMatch.away_team_name}" (score: ${bestScore.toFixed(2)})`
+          `"${bestMatch.home_team_name} vs ${bestMatch.away_team_name}" | League: ${bestMatch.competition_name || 'Unknown'} (score: ${bestScore.toFixed(2)})`
         );
       } else {
         logger.warn(

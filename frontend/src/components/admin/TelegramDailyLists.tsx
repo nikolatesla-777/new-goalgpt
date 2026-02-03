@@ -20,7 +20,7 @@ interface Match {
   league_name: string;
   date_unix: number;
   confidence: number;
-  reason: string;
+  reason?: string;
   potentials?: {
     btts?: number;
     over25?: number;
@@ -59,8 +59,8 @@ interface DailyList {
   matches_count: number;
   avg_confidence: number;
   matches: Match[];
-  preview: string;
-  generated_at: number;
+  preview?: string;
+  generated_at?: number;
   performance?: {
     total: number;
     won: number;
@@ -183,11 +183,17 @@ export function TelegramDailyLists() {
   }
 
   // Read generated_at from appropriate source based on view mode
-  const lastUpdated = isToday && isDailyListsResponse(data)
+  const lastUpdatedRaw = isToday && isDailyListsResponse(data)
     ? (data.generated_at ?? null)
     : (historicalData.length > 0 && historicalData[0].lists.length > 0
         ? historicalData[0].lists[0].generated_at
         : null);
+
+  // Convert lastUpdated to milliseconds (number)
+  const lastUpdated: number | null = lastUpdatedRaw
+    ? (typeof lastUpdatedRaw === 'string' ? new Date(lastUpdatedRaw).getTime() : lastUpdatedRaw)
+    : null;
+
   const isHistoricalView = !isToday;
   const loading = isLoading;
   const error = isError ? (queryError instanceof Error ? queryError.message : 'Bir hata oluştu') : null;

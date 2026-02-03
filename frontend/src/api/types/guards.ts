@@ -3,7 +3,7 @@
  * Provides runtime type checking to replace unsafe type assertions
  */
 
-import { DailyListsResponse } from '../types';
+import type { DailyListsResponse } from '../types';
 
 export interface DateData {
   date: string;

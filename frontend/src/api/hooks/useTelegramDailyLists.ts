@@ -76,7 +76,7 @@ export function usePublishDailyList() {
       market: string;
       options?: TelegramPublishRequest;
     }) => publishTelegramDailyList(market, options),
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       // Invalidate today's lists to refresh telegram_message_id
       queryClient.invalidateQueries({
         queryKey: telegramQueryKeys.dailyListsToday(),
@@ -98,12 +98,11 @@ export function usePublishAllDailyLists() {
   return useMutation({
     mutationFn: (options?: TelegramPublishRequest) =>
       publishAllTelegramDailyLists(options),
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: telegramQueryKeys.dailyListsToday(),
       });
-      const count = data?.published_count ?? 0;
-      toast.success(`${count} liste başarıyla yayınlandı!`);
+      toast.success('Listeler başarıyla yayınlandı!');
     },
     onError: (error: Error) => {
       toast.error('Listeler yayınlanırken hata oluştu', error);
