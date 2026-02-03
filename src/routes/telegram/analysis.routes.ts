@@ -43,9 +43,9 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
       // Map FootyStats data to our format
       const match = {
         id: fsMatch.id,
-        home_name: fsMatch.homeTeam,
-        away_name: fsMatch.awayTeam,
-        competition_name: fsMatch.competition || 'Unknown League',
+        home_name: fsMatch.home_name,
+        away_name: fsMatch.away_name,
+        competition_name: fsMatch.competition_name || fsMatch.league_name || 'Unknown League',
         date_unix: fsMatch.date_unix,
         btts_potential: fsMatch.pre_match_teamA_overall_btts_percentage,
         o25_potential: fsMatch.pre_match_teamA_overall_over25_percentage,
@@ -175,9 +175,9 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
       // Generate analysis for each match
       const analyses = validMatches.map((fsMatch: any) => {
         const analysis = generateMatchAnalysis({
-          home_name: fsMatch.homeTeam,
-          away_name: fsMatch.awayTeam,
-          competition_name: fsMatch.competition || 'Unknown League',
+          home_name: fsMatch.home_name,
+          away_name: fsMatch.away_name,
+          competition_name: fsMatch.competition_name || fsMatch.league_name || 'Unknown League',
           date_unix: fsMatch.date_unix,
           btts_potential: fsMatch.pre_match_teamA_overall_btts_percentage,
           o25_potential: fsMatch.pre_match_teamA_overall_over25_percentage,
@@ -208,9 +208,9 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
         return {
           matchId: fsMatch.id,
           match: {
-            home_name: fsMatch.homeTeam,
-            away_name: fsMatch.awayTeam,
-            competition_name: fsMatch.competition || 'Unknown League',
+            home_name: fsMatch.home_name,
+            away_name: fsMatch.away_name,
+            competition_name: fsMatch.competition_name || fsMatch.league_name || 'Unknown League',
             date_unix: fsMatch.date_unix,
           },
           analysis: {
