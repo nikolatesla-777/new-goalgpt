@@ -960,7 +960,7 @@ export function TelegramDailyLists() {
                                 <div className="text-xs text-gray-600 font-medium space-y-1">
                                   {match.potentials && (
                                     <div>
-                                      ÜST2.5: {match.potentials.over25 ?? '-'}% | BTTS: {match.potentials.btts ?? '-'}% | Avg: {match.potentials.avg ?? '-'}%
+                                      ÜST2.5: {match.potentials.over25 ?? '-'}% | BTTS: {match.potentials.btts ?? '-'}%
                                     </div>
                                   )}
                                   {match.xg && (
