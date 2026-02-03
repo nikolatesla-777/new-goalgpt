@@ -942,55 +942,59 @@ Canlıya girmeden önce oran ve kadro kontrolü önerilir.
                                   <span className="truncate">{match.league_name}</span>
                                 </div>
 
-                                {/* Team Names & Status Badges (Bottom Row) */}
+                                {/* Team Names */}
                                 <div className="flex items-center gap-2">
                                   <span className="text-lg font-bold text-gray-400">#{idx + 1}</span>
-                                  <span className={`text-sm font-bold truncate ${matchStarted ? 'text-gray-500' : 'text-gray-900'}`}>
+                                  <span className={`text-sm font-bold ${matchStarted ? 'text-gray-500' : 'text-gray-900'}`}>
                                     {match.home_name} vs {match.away_name}
                                   </span>
+                                </div>
 
-                                  {/* Live/Pending Status Badges (inline, for non-settled matches) */}
-                                  {(() => {
-                                    // CASE 2: Match finished but settlement pending
-                                    if (matchFinished && !match.result) {
-                                      return (
+                                {/* Live/Pending Status Badges (separate row) */}
+                                {(() => {
+                                  // CASE 2: Match finished but settlement pending
+                                  if (matchFinished && !match.result) {
+                                    return (
+                                      <div className="flex items-center gap-2 mt-1">
                                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-orange-100 text-orange-600 animate-pulse">
                                           ⏳ Settle Bekliyor
                                         </span>
-                                      );
-                                    }
+                                      </div>
+                                    );
+                                  }
 
-                                    // CASE 3: Match is live (TheSports data)
-                                    if (match.live_score
-                                        && match.live_score.status !== 'Bitti'
-                                        && matchStarted
-                                        && !matchFinished
-                                        && match.result !== 'won'
-                                        && match.result !== 'lost') {
-                                      return (
-                                        <>
-                                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
-                                            🔴 CANLI
-                                          </span>
-                                          <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
-                                            {match.live_score.home}-{match.live_score.away} {match.live_score.minute}'
-                                          </span>
-                                        </>
-                                      );
-                                    }
+                                  // CASE 3: Match is live (TheSports data)
+                                  if (match.live_score
+                                      && match.live_score.status !== 'Bitti'
+                                      && matchStarted
+                                      && !matchFinished
+                                      && match.result !== 'won'
+                                      && match.result !== 'lost') {
+                                    return (
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
+                                          🔴 CANLI
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-700">
+                                          {match.live_score.home}-{match.live_score.away} {match.live_score.minute}'
+                                        </span>
+                                      </div>
+                                    );
+                                  }
 
-                                    // CASE 4: Match started but NO MAPPING (match_id is null)
-                                    if (matchStarted && !matchFinished && !match.match_id) {
-                                      return (
+                                  // CASE 4: Match started but NO MAPPING (match_id is null)
+                                  if (matchStarted && !matchFinished && !match.match_id) {
+                                    return (
+                                      <div className="flex items-center gap-2 mt-1">
                                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 text-gray-600">
                                           ⚠️ Eşleştirme Yok
                                         </span>
-                                      );
-                                    }
+                                      </div>
+                                    );
+                                  }
 
-                                    return null;
-                                  })()}
-                                </div>
+                                  return null;
+                                })()}
                               </div>
                               <div className={`px-3 py-1 rounded-lg font-bold text-sm ${
                                 match.confidence >= 80 ? 'bg-green-100 text-green-700' :
