@@ -22,8 +22,11 @@ interface MatchData {
   btts_potential?: number;
   o25_potential?: number;
   o15_potential?: number;
+  ht_over_05_potential?: number;
   team_a_xg_prematch?: number;
   team_b_xg_prematch?: number;
+  team_a_form?: string;
+  team_b_form?: string;
   corners_potential?: number;
   cards_potential?: number;
   shots_potential?: number;
@@ -239,6 +242,28 @@ function generateCornersAnalysis(match: MatchData): string | null {
 }
 
 /**
+ * Generate HT Over 0.5 (First Half Goals) analysis
+ */
+function generateHTOver05Analysis(match: MatchData): string | null {
+  if (!match.ht_over_05_potential) return null;
+
+  const htOver05 = match.ht_over_05_potential;
+
+  let analysis = `**İlk Yarı Gol (HT Over 0.5):**\n`;
+  analysis += `İlk yarıda en az 1 gol görülme olasılığı %${htOver05} olarak hesaplanmaktadır. `;
+
+  if (htOver05 >= 70) {
+    analysis += `Yüksek oran, her iki takımın da maça hızlı başlayacağını ve erken gol arayışında olacağını gösteriyor. İlk 45 dakikada tempolu bir oyun beklenmektedir.`;
+  } else if (htOver05 >= 55) {
+    analysis += `Orta seviyedeki oran, takımların tempo tuttuğunu ve ilk yarıda gol görmemizin muhtemel olduğunu işaret ediyor.`;
+  } else {
+    analysis += `Düşük oran, takımların temkinli başlayabileceğini ve ilk yarının daha taktiksel geçebileceğini gösteriyor. Asıl hareketlilik ikinci yarıda olabilir.`;
+  }
+
+  return analysis;
+}
+
+/**
  * Generate cards analysis
  */
 function generateCardsAnalysis(match: MatchData): string | null {
@@ -250,11 +275,63 @@ function generateCardsAnalysis(match: MatchData): string | null {
   analysis += `Maçta beklenen toplam kart sayısı yaklaşık ${cards.toFixed(1)}'dir. `;
 
   if (cards >= 4) {
-    analysis += `Yüksek kart beklentisi, maçın fiziksel ve sert geçebileceğini, hakem kontrolünün önemli olacağını göstermektedir.`;
+    analysis += `Yüksek kart beklentisi, maçın fiziksel ve sert geçebileceğini, hakem kontrolünün önemli olacağını göstermektedir. Sarı kart bahisleri için uygun bir maç olabilir.`;
   } else if (cards >= 2.5) {
     analysis += `Orta seviyedeki kart beklentisi, normal düzeyde fiziksel mücadele beklediğimizi gösteriyor.`;
   } else {
     analysis += `Düşük kart beklentisi, maçın fair-play çerçevesinde, teknik ağırlıklı oynanacağını işaret ediyor.`;
+  }
+
+  return analysis;
+}
+
+/**
+ * Generate form and trends analysis
+ */
+function generateFormAnalysis(match: MatchData): string | null {
+  const hasTrends = match.trends && (match.trends.home?.length || match.trends.away?.length);
+  const hasForm = match.team_a_form || match.team_b_form;
+
+  if (!hasTrends && !hasForm) return null;
+
+  let analysis = `**Form ve Trend Analizi:**\n`;
+
+  // Home team trends
+  if (match.trends?.home && match.trends.home.length > 0) {
+    const positiveTrends = match.trends.home.filter(t => t.sentiment === 'positive').length;
+    const negativeTrends = match.trends.home.filter(t => t.sentiment === 'negative').length;
+
+    analysis += `${match.home_name}: `;
+    if (positiveTrends > negativeTrends) {
+      analysis += `Son dönemde yükselen bir grafik çiziyor. ${match.trends.home.slice(0, 2).map(t => t.text).join(', ')}. `;
+    } else if (negativeTrends > positiveTrends) {
+      analysis += `Son maçlarda zorluk yaşıyor. ${match.trends.home.slice(0, 2).map(t => t.text).join(', ')}. `;
+    } else {
+      analysis += `İstikrarlı bir performans sergiliyor. `;
+    }
+  }
+
+  // Away team trends
+  if (match.trends?.away && match.trends.away.length > 0) {
+    const positiveTrends = match.trends.away.filter(t => t.sentiment === 'positive').length;
+    const negativeTrends = match.trends.away.filter(t => t.sentiment === 'negative').length;
+
+    analysis += `${match.away_name}: `;
+    if (positiveTrends > negativeTrends) {
+      analysis += `İyi bir formda. ${match.trends.away.slice(0, 2).map(t => t.text).join(', ')}. `;
+    } else if (negativeTrends > positiveTrends) {
+      analysis += `Form düşüklüğü yaşıyor. ${match.trends.away.slice(0, 2).map(t => t.text).join(', ')}. `;
+    } else {
+      analysis += `Dengeli bir süreç geçiriyor. `;
+    }
+  }
+
+  // Form strings if available
+  if (match.team_a_form) {
+    analysis += `\n\n${match.home_name} son maç formu: ${match.team_a_form} `;
+  }
+  if (match.team_b_form) {
+    analysis += `\n${match.away_name} son maç formu: ${match.team_b_form}`;
   }
 
   return analysis;
@@ -377,6 +454,17 @@ function generateRecommendations(match: MatchData): Array<{
     });
   }
 
+  // HT Over 0.5 Recommendation
+  if (match.ht_over_05_potential && match.ht_over_05_potential >= 60) {
+    const confidence = getConfidenceLevel(match.ht_over_05_potential);
+    recommendations.push({
+      market: 'İlk Yarı Gol',
+      prediction: '0.5 Üst',
+      reasoning: `İlk yarıda en az 1 gol görülme olasılığı %${match.ht_over_05_potential} seviyesindedir. Takımlar maça hızlı başlayacak ve erken gol arayışında olacaktır.`,
+      confidence,
+    });
+  }
+
   // Corners Recommendation
   if (match.corners_potential && match.corners_potential >= 9) {
     const confidence = match.corners_potential >= 10 ? 'high' : 'medium';
@@ -384,6 +472,17 @@ function generateRecommendations(match: MatchData): Array<{
       market: 'Korner',
       prediction: `${Math.floor(match.corners_potential)}.5 Üst`,
       reasoning: `Maç başına beklenen korner sayısı ${match.corners_potential.toFixed(1)}'dir. Her iki takım da kanat oyununa önem veren bir tarz sergiliyor.`,
+      confidence,
+    });
+  }
+
+  // Cards Recommendation
+  if (match.cards_potential && match.cards_potential >= 3.5) {
+    const confidence = match.cards_potential >= 4.5 ? 'high' : 'medium';
+    recommendations.push({
+      market: 'Kart',
+      prediction: `${Math.floor(match.cards_potential)}.5 Üst`,
+      reasoning: `Maçta beklenen toplam kart sayısı ${match.cards_potential.toFixed(1)}'dir. Fiziksel bir mücadele ve yüksek tempo beklenmektedir.`,
       confidence,
     });
   }
@@ -407,12 +506,14 @@ export function generateMatchAnalysis(match: MatchData): MatchAnalysis {
 
   // Generate analysis sections
   const sections = [
+    generateXGAnalysis(match),
     generateBTTSAnalysis(match),
     generateO25Analysis(match),
     generateO15Analysis(match),
-    generateXGAnalysis(match),
+    generateHTOver05Analysis(match),
     generateCornersAnalysis(match),
     generateCardsAnalysis(match),
+    generateFormAnalysis(match),
     generateH2HAnalysis(match),
     generateOddsAnalysis(match),
   ].filter(Boolean); // Remove null sections
