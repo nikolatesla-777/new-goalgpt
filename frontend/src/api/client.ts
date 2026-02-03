@@ -12,6 +12,7 @@ import type {
   TrendsAnalysisResponse,
   PlayerSearchResponse,
   LeagueStandingsResponse,
+  MatchAnalysisResponse,
 } from './types';
 
 // ============================================================================
@@ -135,6 +136,20 @@ export async function getLeagueStandings(
 }
 
 // ============================================================================
+// Match Analysis API
+// ============================================================================
+
+/**
+ * Generate AI-powered analysis for a match
+ * @param matchId FootyStats match ID
+ */
+export async function generateMatchAnalysis(
+  matchId: number
+): Promise<MatchAnalysisResponse> {
+  return post<MatchAnalysisResponse>(`/telegram/analysis/match/${matchId}`, {});
+}
+
+// ============================================================================
 // Export all as default
 // ============================================================================
 
@@ -145,6 +160,9 @@ export default {
   publishTelegramDailyList,
   publishAllTelegramDailyLists,
   regenerateTelegramDailyLists,
+
+  // Match Analysis
+  generateMatchAnalysis,
 
   // Trends
   getTrendsAnalysis,

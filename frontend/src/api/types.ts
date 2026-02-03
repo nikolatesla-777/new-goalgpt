@@ -205,3 +205,37 @@ export interface LeagueStandingsResponse {
   season: string;
   standings: StandingsTeam[];
 }
+
+// ============================================================================
+// Match Analysis
+// ============================================================================
+
+export interface MatchAnalysisRecommendation {
+  market: string;
+  prediction: string;
+  reasoning: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface MatchAnalysis {
+  title: string;
+  fullAnalysis: string;
+  recommendations: MatchAnalysisRecommendation[];
+  generatedAt: string;
+}
+
+export interface MatchAnalysisResponse {
+  success: boolean;
+  match: {
+    id: number;
+    home_name: string;
+    away_name: string;
+    competition_name: string;
+    date_unix: number;
+  };
+  analysis: MatchAnalysis;
+  formatted: {
+    telegram: string;
+    copy: string;
+  };
+}

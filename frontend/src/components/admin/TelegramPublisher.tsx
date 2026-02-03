@@ -4,6 +4,7 @@ import {
   useTelegramHealth,
   usePublishToTelegram,
 } from '../../api/hooks';
+import { MatchAnalysisModal } from './MatchAnalysisModal';
 
 // ============================================================================
 // INTERFACES
@@ -74,6 +75,8 @@ export function TelegramPublisher() {
   const [publishSuccess, setPublishSuccess] = useState<number | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
   const [publishingMatchId, setPublishingMatchId] = useState<number | null>(null);
+  const [analysisModalMatchId, setAnalysisModalMatchId] = useState<number | null>(null);
+  const [analysisModalMatchName, setAnalysisModalMatchName] = useState<string>('');
 
   // Date filter state - default to today
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -652,6 +655,19 @@ export function TelegramPublisher() {
                                   </div>
                                 </div>
 
+                                {/* Analysis Button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAnalysisModalMatchId(match.id);
+                                    setAnalysisModalMatchName(`${match.home_name} vs ${match.away_name}`);
+                                  }}
+                                  className="w-full py-3 rounded-xl font-bold text-gray-700 text-base bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 hover:from-green-100 hover:to-emerald-100 hover:shadow-lg hover:border-green-300 transition-all duration-200 flex items-center justify-center gap-2 mb-3"
+                                >
+                                  <span className="text-2xl">🍀</span>
+                                  <span>Maç Analizi Üret</span>
+                                </button>
+
                                 {/* Publish Button */}
                                 <button
                                   onClick={(e) => {
@@ -710,6 +726,18 @@ export function TelegramPublisher() {
             </div>
           </div>
       </div>
+
+      {/* Analysis Modal */}
+      {analysisModalMatchId && (
+        <MatchAnalysisModal
+          matchId={analysisModalMatchId}
+          matchName={analysisModalMatchName}
+          onClose={() => {
+            setAnalysisModalMatchId(null);
+            setAnalysisModalMatchName('');
+          }}
+        />
+      )}
     </div>
   );
 }
