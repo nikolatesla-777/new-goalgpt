@@ -55,6 +55,21 @@ export async function publishTelegramDailyList(
 }
 
 /**
+ * Publish a single daily list as PHOTO + CAPTION to Telegram
+ * @param market Market type (e.g., 'OVER_25', 'BTTS')
+ * @param caption Optional custom caption text (HTML supported)
+ */
+export async function publishTelegramDailyListPhoto(
+  market: string,
+  caption?: string
+): Promise<TelegramPublishResponse> {
+  return post<TelegramPublishResponse>(
+    `/telegram/publish/daily-list/${market}/photo`,
+    { caption }
+  );
+}
+
+/**
  * Publish all daily lists to Telegram
  * @param options Publish options (dry_run, etc.)
  */

@@ -898,6 +898,181 @@ Stack: ${error.stack || 'No stack trace'}
   });
 
   /**
+   * POST /telegram/publish/daily-list/:market/photo
+   * Publish a single daily list as IMAGE + CAPTION to Telegram
+   *
+   * Request Body:
+   * - caption?: string (optional custom caption, defaults to generated)
+   */
+  fastify.post('/telegram/publish/daily-list/:market/photo', async (request, reply) => {
+    const marketParam = (request.params as any).market;
+    const { caption: customCaption } = request.body as { caption?: string };
+    const startTime = Date.now();
+
+    const requestId = randomUUID();
+    const logContext = {
+      operation: 'daily_list_publish_photo',
+      market: marketParam,
+      request_id: requestId,
+      has_custom_caption: !!customCaption,
+    };
+
+    try {
+      logger.info(`[TelegramDailyLists] 🖼️ Publishing ${marketParam} as photo...`, logContext);
+
+      // 1. Check bot configuration
+      if (!telegramBot.isConfigured()) {
+        return reply.status(503).send({ error: 'Telegram bot not configured' });
+      }
+
+      // 2. Get today's daily lists from database
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+      const listsQuery = await pool.query(
+        'SELECT * FROM telegram_daily_lists WHERE list_date = $1',
+        [today]
+      );
+
+      if (listsQuery.rows.length === 0) {
+        return reply.status(404).send({
+          error: 'No daily lists found for today',
+          date: today,
+        });
+      }
+
+      // 3. Find target list
+      const targetList = listsQuery.rows.find((row: any) => row.market === marketParam);
+
+      if (!targetList) {
+        return reply.status(404).send({
+          error: `No list found for market ${marketParam}`,
+          available_markets: listsQuery.rows.map((r: any) => r.market),
+        });
+      }
+
+      // 4. Import image generator (dynamic to avoid circular deps)
+      const { generateDailyListImage, generateDefaultCaption } = await import(
+        '../../services/telegram/imageGenerator.service'
+      );
+
+      // 5. Generate image
+      const imageBuffer = await generateDailyListImage({
+        market: targetList.market,
+        title: targetList.title,
+        emoji: targetList.emoji,
+        matches_count: targetList.matches_count,
+        avg_confidence: targetList.avg_confidence,
+        matches: targetList.matches,
+        generated_at: targetList.generated_at,
+      });
+
+      logger.info(`[TelegramDailyLists] ✅ Image generated (${(imageBuffer.length / 1024).toFixed(1)}KB)`, logContext);
+
+      // 6. Generate caption (use custom or default)
+      const caption = customCaption || generateDefaultCaption({
+        market: targetList.market,
+        title: targetList.title,
+        emoji: targetList.emoji,
+        matches_count: targetList.matches_count,
+        avg_confidence: targetList.avg_confidence,
+        matches: targetList.matches,
+        generated_at: targetList.generated_at,
+      });
+
+      // 7. Get target channel
+      const targetChannelId = channelRouter.getChannelId(marketParam);
+
+      if (!targetChannelId) {
+        return reply.status(400).send({
+          error: `No Telegram channel configured for market ${marketParam}`,
+        });
+      }
+
+      // 8. Send to Telegram
+      const result = await telegramBot.sendPhoto({
+        chat_id: targetChannelId,
+        photo: imageBuffer,
+        caption,
+        parse_mode: 'HTML',
+      });
+
+      if (!result.ok) {
+        throw new Error(`Telegram API returned ok=false for ${marketParam}`);
+      }
+
+      const telegramMessageId = result.result.message_id;
+
+      logger.info(`[TelegramDailyLists] ✅ Published photo to Telegram`, {
+        ...logContext,
+        telegram_message_id: telegramMessageId,
+      });
+
+      // 9. Save to database
+      const client = await pool.connect();
+      try {
+        const matchIds = targetList.matches.map((m: any) => m.match.fs_id).join(',');
+
+        // Save to telegram_posts
+        await client.query(
+          `INSERT INTO telegram_posts (match_id, channel_id, telegram_message_id, content, status, metadata)
+           VALUES ($1, $2, $3, $4, 'published', $5)`,
+          [
+            `daily_list_photo_${marketParam}_${Date.now()}`,
+            targetChannelId,
+            telegramMessageId,
+            caption,
+            JSON.stringify({
+              list_type: 'daily_photo',
+              market: targetList.market,
+              match_ids: matchIds,
+              match_count: targetList.matches.length,
+              confidence_scores: targetList.matches.map((m: any) => m.confidence),
+              generated_at: targetList.generated_at,
+              image_size_kb: (imageBuffer.length / 1024).toFixed(1),
+            }),
+          ]
+        );
+
+        // Update telegram_daily_lists
+        await client.query(
+          `UPDATE telegram_daily_lists
+           SET telegram_message_id = $1,
+               channel_id = $2,
+               status = 'active'
+           WHERE market = $3 AND list_date = $4`,
+          [telegramMessageId, targetChannelId, marketParam, today]
+        );
+
+        logger.info(`[TelegramDailyLists] 💾 Saved to database`, logContext);
+
+      } finally {
+        client.release();
+      }
+
+      // 10. Return success
+      const duration = Date.now() - startTime;
+
+      return {
+        success: true,
+        market: targetList.market,
+        title: targetList.title,
+        telegram_message_id: telegramMessageId,
+        match_count: targetList.matches_count,
+        avg_confidence: targetList.avg_confidence,
+        image_size_kb: (imageBuffer.length / 1024).toFixed(1),
+        duration_ms: duration,
+      };
+
+    } catch (error: any) {
+      logger.error(`[TelegramDailyLists] ❌ Error publishing photo ${marketParam}:`, error);
+      return reply.status(500).send({
+        success: false,
+        error: error.message,
+        market: marketParam,
+      });
+    }
+  });
+
+  /**
    * POST /telegram/publish/daily-lists
    * Generate and publish daily prediction lists (automated)
    *

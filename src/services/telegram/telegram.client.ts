@@ -24,6 +24,13 @@ interface TelegramMessage {
   disable_web_page_preview?: boolean;
 }
 
+interface TelegramPhotoMessage {
+  chat_id: string | number;
+  photo: Buffer | string;
+  caption?: string;
+  parse_mode?: 'HTML' | 'Markdown';
+}
+
 interface TelegramResponse<T> {
   ok: boolean;
   result: T;
@@ -237,6 +244,47 @@ class TelegramBotClient {
     await this.rateLimiter.throttle();
     this.requestCount++;
     const response = await this.axiosInstance.post<TelegramResponse<MessageResult>>('/sendMessage', message);
+    return response.data;
+  }
+
+  /**
+   * Send a photo to a chat with optional caption
+   */
+  async sendPhoto(message: TelegramPhotoMessage): Promise<TelegramResponse<MessageResult>> {
+    await this.rateLimiter.throttle();
+    this.requestCount++;
+
+    const FormData = require('form-data');
+    const form = new FormData();
+
+    form.append('chat_id', message.chat_id.toString());
+
+    // Photo can be Buffer or file_id string
+    if (Buffer.isBuffer(message.photo)) {
+      form.append('photo', message.photo, {
+        filename: 'image.png',
+        contentType: 'image/png',
+      });
+    } else {
+      form.append('photo', message.photo);
+    }
+
+    if (message.caption) {
+      form.append('caption', message.caption);
+    }
+
+    if (message.parse_mode) {
+      form.append('parse_mode', message.parse_mode);
+    }
+
+    const response = await this.axiosInstance.post<TelegramResponse<MessageResult>>(
+      '/sendPhoto',
+      form,
+      {
+        headers: form.getHeaders(),
+      }
+    );
+
     return response.data;
   }
 

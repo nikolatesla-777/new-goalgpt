@@ -4,6 +4,7 @@ import {
   useTelegramDailyListsToday,
   useTelegramDailyListsRange,
   usePublishDailyList,
+  usePublishDailyListPhoto,
 } from '../../api/hooks';
 import { isDailyListsResponse, isDateDataArray } from '../../api/types/guards';
 import { calculatePerformance } from '../../utils/performanceUtils';
@@ -150,9 +151,11 @@ export function TelegramDailyLists() {
   const [expandedList, setExpandedList] = useState<string | null>(null);
   const [selectedRange, setSelectedRange] = useState<DateRange>('today');
   const [publishingMarket, setPublishingMarket] = useState<string | null>(null);
+  const [photoPublishMarket, setPhotoPublishMarket] = useState<string | null>(null);
+  const [caption, setCaption] = useState<string>('');
 
   // Compute date range based on selected range
-  const { start, end } = useMemo(() => {
+  const { start, end} = useMemo(() => {
     return getDateRange(selectedRange);
   }, [selectedRange]);
 
@@ -161,6 +164,7 @@ export function TelegramDailyLists() {
   const todayQuery = useTelegramDailyListsToday();
   const rangeQuery = useTelegramDailyListsRange(start, end, !isToday);
   const publishMutation = usePublishDailyList();
+  const publishPhotoMutation = usePublishDailyListPhoto();
 
   // Select active query based on range
   const activeQuery = isToday ? todayQuery : rangeQuery;
@@ -239,6 +243,49 @@ export function TelegramDailyLists() {
       options: {}
     });
     setPublishingMarket(null);
+  };
+
+  // Generate default caption for photo publish
+  const generateDefaultCaption = (list: DailyList): string => {
+    const config = MARKET_CONFIG[list.market] || MARKET_CONFIG.OVER_25;
+    const date = new Date().toLocaleDateString('tr-TR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    return `📊 <b>${config.label} TAHMİNLERİ</b>
+
+✅ ${list.matches_count} maç seçildi
+🔥 Ortalama güven: ${list.avg_confidence}%
+📅 Tarih: ${date}
+
+⚠️ <b>Risk Uyarısı:</b> Bu tahminler istatistiksel verilere dayanır.
+Canlıya girmeden önce oran ve kadro kontrolü önerilir.
+
+#GoalGPT #${list.market} #FutbolTahminleri`;
+  };
+
+  // Open photo publish mode with default caption
+  const openPhotoPublishMode = (list: DailyList) => {
+    setPhotoPublishMarket(list.market);
+    setCaption(generateDefaultCaption(list));
+  };
+
+  // Publish as photo
+  const publishAsPhoto = async () => {
+    if (!photoPublishMarket) return;
+
+    try {
+      await publishPhotoMutation.mutateAsync({
+        market: photoPublishMarket,
+        caption: caption,
+      });
+      setPhotoPublishMarket(null);
+      setCaption('');
+    } catch (error) {
+      console.error('Photo publish error:', error);
+    }
   };
 
   // Calculate stats based on view mode
@@ -1067,34 +1114,112 @@ export function TelegramDailyLists() {
                       </button>
                     )}
 
-                    {/* Publish Button */}
-                    <button
-                      onClick={() => publishSingleList(list)}
-                      disabled={isPublishing}
-                      className={`
-                        w-full mt-4 py-4 rounded-xl font-bold text-white
-                        bg-gradient-to-r ${config.gradient}
-                        hover:shadow-xl hover:scale-[1.02]
-                        active:scale-[0.98]
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        transition-all duration-200
-                        flex items-center justify-center gap-3
-                      `}
-                    >
-                      {isPublishing ? (
-                        <>
-                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>Yayınlanıyor...</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                          </svg>
-                          <span>Telegram'a Yayınla</span>
-                        </>
-                      )}
-                    </button>
+                    {/* Publish Buttons */}
+                    <div className="mt-4 flex gap-2">
+                      {/* Text Publish Button */}
+                      <button
+                        onClick={() => publishSingleList(list)}
+                        disabled={isPublishing}
+                        className={`
+                          flex-1 py-4 rounded-xl font-bold text-white
+                          bg-gradient-to-r ${config.gradient}
+                          hover:shadow-xl hover:scale-[1.02]
+                          active:scale-[0.98]
+                          disabled:opacity-50 disabled:cursor-not-allowed
+                          transition-all duration-200
+                          flex items-center justify-center gap-2
+                        `}
+                      >
+                        {isPublishing ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span className="text-sm">Yayınlanıyor...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                            <span className="text-sm">✉️ Metin</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Photo Publish Button */}
+                      <button
+                        onClick={() => openPhotoPublishMode(list)}
+                        disabled={isPublishing || photoPublishMarket === list.market}
+                        className={`
+                          flex-1 py-4 rounded-xl font-bold text-white
+                          bg-gradient-to-r ${config.gradient}
+                          hover:shadow-xl hover:scale-[1.02]
+                          active:scale-[0.98]
+                          disabled:opacity-50 disabled:cursor-not-allowed
+                          transition-all duration-200
+                          flex items-center justify-center gap-2
+                        `}
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-sm">🖼️ Görsel</span>
+                      </button>
+                    </div>
+
+                    {/* Caption Editor (shown when photo mode active) */}
+                    {photoPublishMarket === list.market && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-xl border-2 border-gray-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-sm font-bold text-gray-700">
+                            📝 Caption Metni (HTML destekli)
+                          </label>
+                          <button
+                            onClick={() => {
+                              setPhotoPublishMarket(null);
+                              setCaption('');
+                            }}
+                            className="text-xs text-gray-500 hover:text-gray-700"
+                          >
+                            ✕ Kapat
+                          </button>
+                        </div>
+                        <textarea
+                          value={caption}
+                          onChange={(e) => setCaption(e.target.value)}
+                          rows={8}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono"
+                          placeholder="Caption metninizi buraya yazın..."
+                        />
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={publishAsPhoto}
+                            disabled={publishPhotoMutation.isPending}
+                            className={`
+                              flex-1 py-3 rounded-lg font-bold text-white
+                              bg-gradient-to-r ${config.gradient}
+                              hover:shadow-lg
+                              disabled:opacity-50 disabled:cursor-not-allowed
+                              transition-all duration-200
+                              flex items-center justify-center gap-2
+                            `}
+                          >
+                            {publishPhotoMutation.isPending ? (
+                              <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <span className="text-sm">Yayınlanıyor...</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                                <span className="text-sm">Telegram'a Yayınla</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

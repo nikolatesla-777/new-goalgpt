@@ -7,6 +7,7 @@ import {
   getTelegramDailyListsToday,
   getTelegramDailyListsRange,
   publishTelegramDailyList,
+  publishTelegramDailyListPhoto,
   publishAllTelegramDailyLists,
   regenerateTelegramDailyLists,
 } from '../client';
@@ -85,6 +86,33 @@ export function usePublishDailyList() {
     },
     onError: (error: Error, variables) => {
       toast.error(`${variables.market} yayınlanırken hata oluştu`, error);
+    },
+  });
+}
+
+/**
+ * Hook to publish a single daily list as PHOTO
+ */
+export function usePublishDailyListPhoto() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      market,
+      caption,
+    }: {
+      market: string;
+      caption?: string;
+    }) => publishTelegramDailyListPhoto(market, caption),
+    onSuccess: (_data, variables) => {
+      // Invalidate today's lists to refresh telegram_message_id
+      queryClient.invalidateQueries({
+        queryKey: telegramQueryKeys.dailyListsToday(),
+      });
+      toast.success(`${variables.market} görsel olarak başarıyla yayınlandı! 🖼️`);
+    },
+    onError: (error: Error, variables) => {
+      toast.error(`${variables.market} görsel yayınlanırken hata oluştu`, error);
     },
   });
 }
