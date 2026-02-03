@@ -31,6 +31,12 @@ function getMainMenuKeyboard() {
   return {
     inline_keyboard: [
       [
+        {
+          text: '📱 GoalGPT\'yi Aç',
+          web_app: { url: 'https://api.goalgpt.com/miniapp' }
+        },
+      ],
+      [
         { text: '📊 Günlük Listeler', callback_data: 'menu_gunluk' },
         { text: '⚽️ Canlı Maçlar', callback_data: 'menu_canli' },
       ],

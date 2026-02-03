@@ -66,6 +66,7 @@ import settlementRoutes from './admin/settlement.routes';
 import { footyStatsRoutes } from './footystats.routes';
 import { partnersRoutes } from './partners.routes';
 import { telegramRoutes } from './telegram';
+import { miniAppRoutes } from './miniapp.routes';
 
 // Scoring & Predictions
 import { registerScoringRoutes } from './scoring.routes';
@@ -208,6 +209,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // Telegram publishing (TEMPORARY: PUBLIC for development, will add auth later)
   app.register(telegramRoutes, { prefix: '/api' });
+
+  // Telegram Mini App (PUBLIC - serves web app HTML)
+  app.register(miniAppRoutes);
 
   // Standings management (TEMPORARY: PUBLIC for admin panel, will add auth later)
   app.register(adminStandingsRoutes);

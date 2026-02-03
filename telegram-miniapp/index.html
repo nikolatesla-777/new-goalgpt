@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GoalGPT - AI Destekli Maç Tahmin Asistanı</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color, #0f1419);
+      color: var(--tg-theme-text-color, #ffffff);
+      padding: 0;
+      margin: 0;
+      overflow-x: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .header h1 {
+      font-size: 24px;
+      margin-bottom: 5px;
+      font-weight: 700;
+    }
+
+    .header p {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .stats-bar {
+      display: flex;
+      justify-content: space-around;
+      padding: 15px;
+      background: var(--tg-theme-secondary-bg-color, #1a1f2e);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: bold;
+      color: #3b82f6;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 4px;
+    }
+
+    .container {
+      padding: 15px;
+    }
+
+    .menu-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .menu-card {
+      background: var(--tg-theme-secondary-bg-color, #1a1f2e);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .menu-card:active {
+      transform: scale(0.95);
+    }
+
+    .menu-card:hover {
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .menu-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .menu-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .menu-subtitle {
+      font-size: 11px;
+      opacity: 0.6;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 25px 0 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .match-card {
+      background: var(--tg-theme-secondary-bg-color, #1a1f2e);
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .match-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .match-league {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .match-time {
+      font-size: 12px;
+      color: #3b82f6;
+      font-weight: 600;
+    }
+
+    .match-teams {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .team-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .match-score {
+      font-size: 18px;
+      font-weight: 700;
+      color: #10b981;
+    }
+
+    .match-predictions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .prediction-badge {
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .prediction-badge.high {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      opacity: 0.7;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      opacity: 0.5;
+      font-size: 12px;
+    }
+
+    .badge-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #ef4444;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .badge-live::before {
+      content: '●';
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .user-greeting {
+      background: rgba(59, 130, 246, 0.1);
+      border-left: 3px solid #3b82f6;
+      padding: 12px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+
+    .user-greeting strong {
+      color: #3b82f6;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      opacity: 0.6;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚽️ GoalGPT</h1>
+    <p>AI Destekli Maç Tahmin Asistanı</p>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-value" id="totalMatches">-</div>
+      <div class="stat-label">Bugün</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value" id="liveMatches">-</div>
+      <div class="stat-label">Canlı</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value" id="predictions">-</div>
+      <div class="stat-label">Tahmin</div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="user-greeting" id="userGreeting">
+      <strong>Hoş geldiniz!</strong> GoalGPT'ye hoş geldiniz.
+    </div>
+
+    <div class="menu-grid">
+      <div class="menu-card" onclick="showSection('daily')">
+        <div class="menu-icon">📊</div>
+        <div class="menu-title">Günlük Listeler</div>
+        <div class="menu-subtitle">AI tahminleri</div>
+      </div>
+      <div class="menu-card" onclick="showSection('live')">
+        <div class="menu-icon">⚽️</div>
+        <div class="menu-title">Canlı Maçlar</div>
+        <div class="menu-subtitle">Anlık skorlar</div>
+      </div>
+      <div class="menu-card" onclick="showSection('analysis')">
+        <div class="menu-icon">🤖</div>
+        <div class="menu-title">AI Analiz</div>
+        <div class="menu-subtitle">Maç analizi</div>
+      </div>
+      <div class="menu-card" onclick="showSection('stats')">
+        <div class="menu-icon">📈</div>
+        <div class="menu-title">İstatistikler</div>
+        <div class="menu-subtitle">Performans</div>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <span>🔥</span> Öne Çıkan Maçlar
+    </div>
+
+    <div id="matchesContainer">
+      <div class="loading">Yükleniyor...</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Powered by GoalGPT © 2026
+  </div>
+
+  <script>
+    // Telegram WebApp API
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.enableClosingConfirmation();
+
+    // Set theme colors
+    document.body.style.setProperty('--tg-theme-bg-color', tg.themeParams.bg_color || '#0f1419');
+    document.body.style.setProperty('--tg-theme-secondary-bg-color', tg.themeParams.secondary_bg_color || '#1a1f2e');
+    document.body.style.setProperty('--tg-theme-text-color', tg.themeParams.text_color || '#ffffff');
+
+    // Get user info
+    const user = tg.initDataUnsafe?.user;
+    if (user) {
+      document.getElementById('userGreeting').innerHTML =
+        `<strong>Hoş geldiniz, ${user.first_name}!</strong> GoalGPT'de neler yapabilirsiniz?`;
+    }
+
+    // Mock data for demonstration
+    function loadStats() {
+      document.getElementById('totalMatches').textContent = '24';
+      document.getElementById('liveMatches').textContent = '8';
+      document.getElementById('predictions').textContent = '12';
+    }
+
+    function loadMatches() {
+      const container = document.getElementById('matchesContainer');
+
+      // Mock matches
+      const matches = [
+        {
+          league: 'Premier League',
+          time: '20:00',
+          home: 'Manchester City',
+          away: 'Liverpool',
+          score: '2-1',
+          live: true,
+          predictions: ['BTTS', 'Üst 2.5']
+        },
+        {
+          league: 'La Liga',
+          time: '22:00',
+          home: 'Barcelona',
+          away: 'Real Madrid',
+          score: '-',
+          live: false,
+          predictions: ['BTTS', 'Üst 3.5', 'İY Gol']
+        },
+        {
+          league: 'Süper Lig',
+          time: '19:00',
+          home: 'Galatasaray',
+          away: 'Fenerbahçe',
+          score: '1-0',
+          live: true,
+          predictions: ['BTTS']
+        }
+      ];
+
+      container.innerHTML = matches.map(match => `
+        <div class="match-card" onclick="showMatchDetail('${match.home}')">
+          <div class="match-header">
+            <span class="match-league">${match.league}</span>
+            <span class="match-time">
+              ${match.live ? '<span class="badge-live">CANLI</span>' : match.time}
+            </span>
+          </div>
+          <div class="match-teams">
+            <span class="team-name">${match.home}</span>
+            <span class="match-score">${match.score}</span>
+            <span class="team-name">${match.away}</span>
+          </div>
+          <div class="match-predictions">
+            ${match.predictions.map(p => `<span class="prediction-badge high">${p}</span>`).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function showSection(section) {
+      tg.showAlert(`${section} bölümü yakında aktif olacak! 🚀`);
+    }
+
+    function showMatchDetail(team) {
+      tg.showPopup({
+        title: 'Maç Detayı',
+        message: `${team} maçının detaylı analizi yakında!`,
+        buttons: [
+          {type: 'ok', text: 'Tamam'}
+        ]
+      });
+    }
+
+    // Initialize
+    loadStats();
+    loadMatches();
+
+    // Tell bot that app is ready
+    tg.ready();
+  </script>
+</body>
+</html>
