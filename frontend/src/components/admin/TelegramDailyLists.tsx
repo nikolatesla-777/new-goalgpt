@@ -950,67 +950,56 @@ export function TelegramDailyLists() {
                               </div>
                             </div>
 
-                            {/* Premium Result Banner - Full Width (Settlement completed) */}
+                            {/* Minimal Result Banner (Settlement completed) */}
                             {match.match_finished && match.final_score && match.result && (
-                              <div className={`mt-3 -mx-4 -mb-4 px-4 py-3 rounded-b-xl ${
+                              <div className={`mt-2 -mx-4 -mb-4 px-4 py-2 rounded-b-xl flex items-center justify-between ${
                                 match.result === 'won'
-                                  ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-t-2 border-green-200'
+                                  ? 'bg-green-50 border-t border-green-200'
                                   : match.result === 'lost'
-                                  ? 'bg-gradient-to-r from-red-50 to-rose-50 border-t-2 border-red-200'
-                                  : 'bg-gradient-to-r from-gray-50 to-slate-50 border-t-2 border-gray-200'
+                                  ? 'bg-red-50 border-t border-red-200'
+                                  : 'bg-gray-50 border-t border-gray-200'
                               }`}>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    {match.result === 'won' && (
-                                      <>
-                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-500 text-white">
-                                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                          </svg>
-                                        </div>
-                                        <div>
-                                          <p className="text-xs font-medium text-green-600 uppercase tracking-wide">Tahmin Tuttu</p>
-                                          <p className="text-lg font-bold text-green-900">Kazandı</p>
-                                        </div>
-                                      </>
-                                    )}
-                                    {match.result === 'lost' && (
-                                      <>
-                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-red-500 text-white">
-                                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                                          </svg>
-                                        </div>
-                                        <div>
-                                          <p className="text-xs font-medium text-red-600 uppercase tracking-wide">Tahmin Tutmadı</p>
-                                          <p className="text-lg font-bold text-red-900">Kaybetti</p>
-                                        </div>
-                                      </>
-                                    )}
-                                    {match.result === 'void' && (
-                                      <>
-                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-400 text-white">
-                                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                          </svg>
-                                        </div>
-                                        <div>
-                                          <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Eşleştirme Hatası</p>
-                                          <p className="text-lg font-bold text-gray-900">Geçersiz</p>
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-                                  <div className={`px-4 py-2 rounded-lg font-bold text-xl ${
-                                    match.result === 'won'
-                                      ? 'bg-white text-green-900 shadow-sm'
-                                      : match.result === 'lost'
-                                      ? 'bg-white text-red-900 shadow-sm'
-                                      : 'bg-white text-gray-900 shadow-sm'
-                                  }`}>
-                                    {match.final_score.home} - {match.final_score.away}
-                                    <span className="text-xs font-normal text-gray-500 ml-2">FT</span>
-                                  </div>
+                                <div className="flex items-center gap-2">
+                                  {match.result === 'won' && (
+                                    <>
+                                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-green-500 text-white">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </div>
+                                      <span className="text-sm font-semibold text-green-700">Kazandı</span>
+                                    </>
+                                  )}
+                                  {match.result === 'lost' && (
+                                    <>
+                                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </div>
+                                      <span className="text-sm font-semibold text-red-700">Kaybetti</span>
+                                    </>
+                                  )}
+                                  {match.result === 'void' && (
+                                    <>
+                                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-400 text-white">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" />
+                                        </svg>
+                                      </div>
+                                      <span className="text-sm font-semibold text-gray-700">Geçersiz</span>
+                                    </>
+                                  )}
+                                </div>
+                                <div className={`px-3 py-1 rounded-lg font-bold text-base ${
+                                  match.result === 'won'
+                                    ? 'bg-white text-green-900'
+                                    : match.result === 'lost'
+                                    ? 'bg-white text-red-900'
+                                    : 'bg-white text-gray-900'
+                                }`}>
+                                  {match.final_score.home} - {match.final_score.away}
+                                  <span className="text-[10px] font-normal text-gray-500 ml-1">FT</span>
                                 </div>
                               </div>
                             )}
