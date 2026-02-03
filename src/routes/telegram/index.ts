@@ -7,6 +7,7 @@
 import { FastifyInstance } from 'fastify';
 import { publishRoutes } from './publish.routes';
 import { dailyListsRoutes } from './dailyLists.routes';
+import { registerAnalysisRoutes } from './analysis.routes';
 import { telegramWebhookRoutes } from '../telegram.webhook';
 
 /**

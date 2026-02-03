@@ -82,8 +82,8 @@ Mini app açılacak! 🎊
 
 ### Mini App URL
 ```
-Production: https://api.goalgpt.com/miniapp
-Local: http://142.93.103.128:3000/miniapp
+Production: https://partnergoalgpt.com/miniapp  ✅ LIVE
+Local: http://localhost:3000/miniapp
 ```
 
 ### Dosyalar
@@ -103,7 +103,7 @@ src/scripts/
 ```typescript
 {
   text: '📱 GoalGPT\'yi Aç',
-  web_app: { url: 'https://api.goalgpt.com/miniapp' }
+  web_app: { url: 'https://partnergoalgpt.com/miniapp' }  // ✅ HTTPS ACTIVE
 }
 ```
 
@@ -211,11 +211,51 @@ Mini app'i mevcut backend API'lere bağla:
 
 ## ✅ Durum: CANLI
 
-- 🟢 Bot çalışıyor
-- 🟢 Mini app serve ediliyor
+- 🟢 Bot çalışıyor (@momentumanalizi_bot)
+- 🟢 Mini app HTTPS ile serve ediliyor (https://partnergoalgpt.com/miniapp)
 - 🟢 Web app butonu aktif
 - 🟢 Telegram WebApp API entegre
+- 🟢 SSL sertifikası aktif (Let's Encrypt)
+- 🟢 Nginx reverse proxy yapılandırıldı
 - 🟡 Gerçek veri bekleniyor (mock data gösteriliyor)
+
+---
+
+## 🔧 Deployment Detayları
+
+### SSL Setup (HTTPS)
+Mini app Telegram'da çalışabilmesi için HTTPS gerektirir. Setup:
+
+1. **Domain**: partnergoalgpt.com (DNS: 142.93.103.128'e yönlendirildi)
+2. **SSL Sertifikası**: Let's Encrypt (certbot ile otomatik yenileme)
+3. **Nginx Konfigürasyonu**:
+   ```nginx
+   # /etc/nginx/sites-available/goalgpt
+   location = /miniapp {
+       proxy_pass http://goalgpt_backend;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       # ... diğer proxy headers
+   }
+   ```
+4. **Symlink**: `/etc/nginx/sites-enabled/goalgpt` → `/etc/nginx/sites-available/goalgpt`
+
+### Bot Deployment
+```bash
+# Production sunucu
+ssh root@142.93.103.128
+cd /var/www/goalgpt
+
+# Bot'u güncelle
+git pull
+scp src/scripts/telegram-bot-simple.ts root@142.93.103.128:/var/www/goalgpt/src/scripts/
+
+# PM2 ile yeniden başlat
+pm2 restart telegram-bot-simple
+
+# Logs kontrol
+pm2 logs telegram-bot-simple --lines 50
+```
 
 ---
 

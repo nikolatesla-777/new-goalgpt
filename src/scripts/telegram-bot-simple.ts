@@ -33,7 +33,7 @@ function getMainMenuKeyboard() {
       [
         {
           text: '📱 GoalGPT\'yi Aç',
-          web_app: { url: 'https://api.goalgpt.com/miniapp' }
+          web_app: { url: 'https://partnergoalgpt.com/miniapp' }
         },
       ],
       [
