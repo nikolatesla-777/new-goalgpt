@@ -880,7 +880,22 @@ export function TelegramDailyLists() {
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-2">
+                                {/* Time & League (Top Row) */}
+                                <div className="flex items-center gap-3 text-xs text-gray-500 mb-1">
+                                  <span className="flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </span>
+                                  <span className="truncate">{match.league_name}</span>
+                                </div>
+
+                                {/* Team Names & Status Badges (Bottom Row) */}
+                                <div className="flex items-center gap-2">
                                   <span className="text-lg font-bold text-gray-400">#{idx + 1}</span>
                                   <span className={`text-sm font-bold truncate ${matchStarted ? 'text-gray-500' : 'text-gray-900'}`}>
                                     {match.home_name} vs {match.away_name}
@@ -927,18 +942,6 @@ export function TelegramDailyLists() {
 
                                     return null;
                                   })()}
-                                </div>
-                                <div className="flex items-center gap-4 text-xs text-gray-500">
-                                  <span className="flex items-center gap-1">
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    {new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })}
-                                  </span>
-                                  <span className="truncate">{match.league_name}</span>
                                 </div>
                               </div>
                               <div className={`px-3 py-1 rounded-lg font-bold text-sm ${
