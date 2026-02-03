@@ -40,20 +40,6 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
 
       const fsMatch = response.data;
 
-      // DEBUG: Log available fields
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('[DEBUG] FootyStats Match Data Keys:', Object.keys(fsMatch).join(', '));
-      console.log('[DEBUG] Field Availability:');
-      console.log('  btts_potential:', fsMatch.pre_match_teamA_overall_btts_percentage);
-      console.log('  o25_potential:', fsMatch.pre_match_teamA_overall_over25_percentage);
-      console.log('  o15_potential:', fsMatch.pre_match_teamA_overall_over15_percentage);
-      console.log('  ht_over_05:', fsMatch.pre_match_teamA_overall_first_half_goals_for_percentage);
-      console.log('  corners:', fsMatch.pre_match_teamA_overall_corners_for_90_per_match);
-      console.log('  cards:', fsMatch.pre_match_teamA_overall_cards_for_90_per_match);
-      console.log('  h2h:', fsMatch.h2h ? 'YES' : 'NO');
-      console.log('  trends:', fsMatch.trends ? 'YES' : 'NO');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
       // Map FootyStats data to our format
       const match = {
         id: fsMatch.id,
@@ -61,31 +47,31 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
         away_name: fsMatch.away_name,
         competition_name: fsMatch.competition_name || fsMatch.league_name || 'Unknown League',
         date_unix: fsMatch.date_unix,
-        btts_potential: fsMatch.pre_match_teamA_overall_btts_percentage,
-        o25_potential: fsMatch.pre_match_teamA_overall_over25_percentage,
-        o15_potential: fsMatch.pre_match_teamA_overall_over15_percentage,
-        ht_over_05_potential: fsMatch.pre_match_teamA_overall_first_half_goals_for_percentage,
+        btts_potential: fsMatch.btts_potential,
+        o25_potential: fsMatch.o25_potential,
+        o15_potential: fsMatch.o15_potential,
+        ht_over_05_potential: fsMatch.o05HT_potential,
         team_a_xg_prematch: fsMatch.team_a_xg_prematch,
         team_b_xg_prematch: fsMatch.team_b_xg_prematch,
-        team_a_form: fsMatch.team_a_form_string,
-        team_b_form: fsMatch.team_b_form_string,
-        corners_potential: fsMatch.pre_match_teamA_overall_corners_for_90_per_match,
-        cards_potential: fsMatch.pre_match_teamA_overall_cards_for_90_per_match,
-        shots_potential: fsMatch.pre_match_teamA_overall_shots_on_target_for_90_per_match,
-        fouls_potential: fsMatch.pre_match_teamA_overall_fouls_committed_for_90_per_match,
+        team_a_form: fsMatch.pre_match_home_ppg,
+        team_b_form: fsMatch.pre_match_away_ppg,
+        corners_potential: fsMatch.corners_potential,
+        cards_potential: fsMatch.cards_potential,
+        shots_potential: fsMatch.team_a_shotsOnTarget,
+        fouls_potential: fsMatch.team_a_fouls,
         odds_ft_1: fsMatch.odds_ft_1,
         odds_ft_x: fsMatch.odds_ft_x,
         odds_ft_2: fsMatch.odds_ft_2,
         h2h: fsMatch.h2h ? {
-          total_matches: fsMatch.h2h.total,
-          home_wins: fsMatch.h2h.homeWins,
-          draws: fsMatch.h2h.draws,
-          away_wins: fsMatch.h2h.awayWins,
-          btts_pct: fsMatch.h2h.btts_pct,
-          avg_goals: fsMatch.h2h.avg_goals,
-          over15_pct: fsMatch.h2h.over15_pct,
-          over25_pct: fsMatch.h2h.over25_pct,
-          over35_pct: fsMatch.h2h.over35_pct,
+          total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
+          home_wins: fsMatch.h2h.previous_matches_results?.team_a_wins,
+          draws: fsMatch.h2h.previous_matches_results?.draw,
+          away_wins: fsMatch.h2h.previous_matches_results?.team_b_wins,
+          btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage,
+          avg_goals: fsMatch.h2h.betting_stats?.avg_goals,
+          over15_pct: fsMatch.h2h.betting_stats?.over15Percentage,
+          over25_pct: fsMatch.h2h.betting_stats?.over25Percentage,
+          over35_pct: fsMatch.h2h.betting_stats?.over35Percentage,
         } : undefined,
         trends: fsMatch.trends,
       };
@@ -199,31 +185,31 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
           away_name: fsMatch.away_name,
           competition_name: fsMatch.competition_name || fsMatch.league_name || 'Unknown League',
           date_unix: fsMatch.date_unix,
-          btts_potential: fsMatch.pre_match_teamA_overall_btts_percentage,
-          o25_potential: fsMatch.pre_match_teamA_overall_over25_percentage,
-          o15_potential: fsMatch.pre_match_teamA_overall_over15_percentage,
-          ht_over_05_potential: fsMatch.pre_match_teamA_overall_first_half_goals_for_percentage,
+          btts_potential: fsMatch.btts_potential,
+          o25_potential: fsMatch.o25_potential,
+          o15_potential: fsMatch.o15_potential,
+          ht_over_05_potential: fsMatch.o05HT_potential,
           team_a_xg_prematch: fsMatch.team_a_xg_prematch,
           team_b_xg_prematch: fsMatch.team_b_xg_prematch,
-          team_a_form: fsMatch.team_a_form_string,
-          team_b_form: fsMatch.team_b_form_string,
-          corners_potential: fsMatch.pre_match_teamA_overall_corners_for_90_per_match,
-          cards_potential: fsMatch.pre_match_teamA_overall_cards_for_90_per_match,
-          shots_potential: fsMatch.pre_match_teamA_overall_shots_on_target_for_90_per_match,
-          fouls_potential: fsMatch.pre_match_teamA_overall_fouls_committed_for_90_per_match,
+          team_a_form: fsMatch.pre_match_home_ppg,
+          team_b_form: fsMatch.pre_match_away_ppg,
+          corners_potential: fsMatch.corners_potential,
+          cards_potential: fsMatch.cards_potential,
+          shots_potential: fsMatch.team_a_shotsOnTarget,
+          fouls_potential: fsMatch.team_a_fouls,
           odds_ft_1: fsMatch.odds_ft_1,
           odds_ft_x: fsMatch.odds_ft_x,
           odds_ft_2: fsMatch.odds_ft_2,
           h2h: fsMatch.h2h ? {
-            total_matches: fsMatch.h2h.total,
-            home_wins: fsMatch.h2h.homeWins,
-            draws: fsMatch.h2h.draws,
-            away_wins: fsMatch.h2h.awayWins,
-            btts_pct: fsMatch.h2h.btts_pct,
-            avg_goals: fsMatch.h2h.avg_goals,
-            over15_pct: fsMatch.h2h.over15_pct,
-            over25_pct: fsMatch.h2h.over25_pct,
-            over35_pct: fsMatch.h2h.over35_pct,
+            total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
+            home_wins: fsMatch.h2h.previous_matches_results?.team_a_wins,
+            draws: fsMatch.h2h.previous_matches_results?.draw,
+            away_wins: fsMatch.h2h.previous_matches_results?.team_b_wins,
+            btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage,
+            avg_goals: fsMatch.h2h.betting_stats?.avg_goals,
+            over15_pct: fsMatch.h2h.betting_stats?.over15Percentage,
+            over25_pct: fsMatch.h2h.betting_stats?.over25Percentage,
+            over35_pct: fsMatch.h2h.betting_stats?.over35Percentage,
           } : undefined,
           trends: fsMatch.trends,
         });
