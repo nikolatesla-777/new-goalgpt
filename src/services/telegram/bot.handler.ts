@@ -337,9 +337,9 @@ async function handleHelpCommand(chatId: number) {
 async function handleDailyCommand(chatId: number) {
   await telegramBot.sendMessage({
     chat_id: chatId,
-    text: '📋 *Günlük Tahmin Listeleri*\n\nHangi piyasa için liste görmek istersiniz?',
+    text: '📋 *Günlük Tahmin Listeleri*\n\nBu özellik yakında aktif olacak! 🚀',
     parse_mode: 'Markdown',
-    reply_markup: getDailyListsKeyboard(),
+    reply_markup: getMainMenuKeyboard(),
   });
 }
 
