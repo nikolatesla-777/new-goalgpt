@@ -25,6 +25,7 @@ interface Match {
     btts?: number;
     over25?: number;
     over15?: number;
+    avg?: number;
     corners?: number;
     cards?: number;
   };
@@ -952,6 +953,24 @@ export function TelegramDailyLists() {
                                 {match.confidence >= 80 ? '🔥' : match.confidence >= 70 ? '⭐' : '💡'} {match.confidence}
                               </div>
                             </div>
+
+                            {/* Statistics Row - Only for OVER 2.5 Market */}
+                            {list.market === 'OVER_25' && (match.potentials || match.xg) && (
+                              <div className="mt-2 pt-2 border-t border-gray-100">
+                                <div className="text-xs text-gray-600 font-medium space-y-1">
+                                  {match.potentials && (
+                                    <div>
+                                      ÜST2.5: {match.potentials.over25 ?? '-'}% | BTTS: {match.potentials.btts ?? '-'}% | Avg: {match.potentials.avg ?? '-'}%
+                                    </div>
+                                  )}
+                                  {match.xg && (
+                                    <div>
+                                      XG: {match.xg.home?.toFixed(1) ?? '-'} - {match.xg.away?.toFixed(1) ?? '-'} (total: {((match.xg.home ?? 0) + (match.xg.away ?? 0)).toFixed(1)})
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
                             {/* Minimal Result Banner (Settlement completed) */}
                             {match.match_finished && match.final_score && match.result && (

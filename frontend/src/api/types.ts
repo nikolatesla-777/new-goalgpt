@@ -20,6 +20,7 @@ export interface DailyListMatch {
     btts?: number;
     over25?: number;
     over15?: number;
+    avg?: number;
     corners?: number;
     cards?: number;
   };
