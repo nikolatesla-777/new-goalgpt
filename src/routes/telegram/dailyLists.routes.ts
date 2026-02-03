@@ -978,16 +978,24 @@ Stack: ${error.stack || 'No stack trace'}
         generated_at: targetList.generated_at,
       });
 
-      // 7. Get target channel
-      const targetChannelId = channelRouter.getTargetChatId(marketParam);
-
-      if (!targetChannelId) {
+      // 7. Parse market param to canonical MarketId
+      const marketId = parseMarketParam(marketParam);
+      if (!marketId) {
         return reply.status(400).send({
-          error: `No Telegram channel configured for market ${marketParam}`,
+          error: `Invalid market parameter: ${marketParam}`,
         });
       }
 
-      // 8. Send to Telegram
+      // 8. Get target channel
+      const targetChannelId = channelRouter.getTargetChatId(marketId);
+
+      if (!targetChannelId) {
+        return reply.status(400).send({
+          error: `No Telegram channel configured for market ${marketId}`,
+        });
+      }
+
+      // 9. Send to Telegram
       const result = await telegramBot.sendPhoto({
         chat_id: targetChannelId,
         photo: imageBuffer,
@@ -1006,7 +1014,7 @@ Stack: ${error.stack || 'No stack trace'}
         telegram_message_id: telegramMessageId,
       });
 
-      // 9. Save to database
+      // 10. Save to database
       const client = await pool.connect();
       try {
         const matchIds = targetList.matches.map((m: any) => m.match.fs_id).join(',');
