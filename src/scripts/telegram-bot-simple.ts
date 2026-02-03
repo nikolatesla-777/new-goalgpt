@@ -40,27 +40,131 @@ async function handleUpdate(update: any) {
       chatId,
       `⚽️ Merhaba ${firstName}!\n\n` +
       `GoalGPT'e hoş geldiniz. AI destekli maç tahmin sistemi.\n\n` +
-      `Komutlar:\n` +
-      `/start - Başlangıç\n` +
-      `/help - Yardım\n` +
-      `/canli - Canlı maçlar (yakında)\n` +
-      `/gunluk - Günlük listeler (yakında)`
+      `📋 Menüden komutları seçebilirsiniz!`
     );
-  } else if (text === '/help') {
+  }
+  else if (text === '/help' || text === '/yardim') {
     await sendMessage(
       chatId,
       `📖 *Yardım*\n\n` +
-      `GoalGPT'yi kullanmak için aşağıdaki komutları kullanabilirsiniz:\n\n` +
-      `/start - Başlangıç\n` +
-      `/help - Bu yardım mesajı\n` +
-      `/canli - Canlı maçlar (yakında)\n` +
-      `/gunluk - Günlük tahmin listeleri (yakında)\n\n` +
+      `Aşağıdaki komutları kullanabilirsiniz:\n\n` +
+      `🏠 /start - Başlangıç\n` +
+      `📊 /gunluk - Günlük tahmin listeleri\n` +
+      `⚽️ /canli - Canlı maçlar\n` +
+      `🤖 /analizyap - AI analiz iste\n` +
+      `🎁 /kupon - Kupon hazırla\n` +
+      `📈 /performans - Performans takibi\n` +
+      `📞 /iletisim - İletişim\n` +
+      `📋 /kurallar - Kurallar\n` +
+      `👤 /uyelik - Üyelik durumu\n` +
+      `🚀 /uyeol - Prime üyelik\n\n` +
       `Daha fazla özellik çok yakında! 🚀`
     );
-  } else {
+  }
+  else if (text === '/gunluk') {
     await sendMessage(
       chatId,
-      `Merhaba! /start veya /help yazarak başlayabilirsiniz.`
+      `📊 *Günlük Tahmin Listeleri*\n\n` +
+      `AI destekli günlük tahmin listelerimiz hazırlanıyor...\n\n` +
+      `Bu özellik çok yakında aktif olacak! 🎯`
+    );
+  }
+  else if (text === '/canli') {
+    await sendMessage(
+      chatId,
+      `⚽️ *Canlı Maçlar*\n\n` +
+      `Canlı maç skorları ve analizleri...\n\n` +
+      `Bu özellik çok yakında aktif olacak! 📺`
+    );
+  }
+  else if (text === '/analizyap') {
+    await sendMessage(
+      chatId,
+      `🤖 *AI Analiz*\n\n` +
+      `Analiz iste!\n\n` +
+      `Bir maç linki gönderin, AI analizi yapayım! 🔬`
+    );
+  }
+  else if (text === '/kupon' || text === '/kuponyap') {
+    await sendMessage(
+      chatId,
+      `🎁 *Kupon Hazırla*\n\n` +
+      `Kupon hazırlanıyor...\n\n` +
+      `AI destekli kupon önerisi yakında! 📝`
+    );
+  }
+  else if (text === '/performans') {
+    await sendMessage(
+      chatId,
+      `📈 *Performans Takibi*\n\n` +
+      `İstatistikleriniz:\n` +
+      `✅ Kazanılan: -\n` +
+      `❌ Kaybedilen: -\n` +
+      `📊 Başarı oranı: -%\n\n` +
+      `Yakında detaylı istatistikler! 📊`
+    );
+  }
+  else if (text === '/iletisim') {
+    await sendMessage(
+      chatId,
+      `📞 *İletişim*\n\n` +
+      `Oynadım, Ne Oldu?\n\n` +
+      `Sorularınız için: @goalgpt_destek\n` +
+      `Web: goalgpt.com 🌐`
+    );
+  }
+  else if (text === '/kurallar') {
+    await sendMessage(
+      chatId,
+      `📋 *Kurallar*\n\n` +
+      `Kurallara göz atın.\n\n` +
+      `1. Sorumlu bahis oynayın\n` +
+      `2. AI önerileri tavsiye niteliğindedir\n` +
+      `3. Kendi analizinizi de yapın\n\n` +
+      `Detaylı kurallar: goalgpt.com/kurallar 📜`
+    );
+  }
+  else if (text === '/uyelik') {
+    await sendMessage(
+      chatId,
+      `👤 *Üyelik Durumu*\n\n` +
+      `Üyelik durumunuzu görüntüleyin.\n\n` +
+      `📦 Paket: Ücretsiz\n` +
+      `📅 Son kullanım: -\n\n` +
+      `Prime'a geçmek için: /uyeol 🚀`
+    );
+  }
+  else if (text === '/uyeol') {
+    await sendMessage(
+      chatId,
+      `🚀 *Prime Üyelik*\n\n` +
+      `Prime üyelik 🚀\n\n` +
+      `✅ Sınırsız analiz\n` +
+      `✅ VIP tahminler\n` +
+      `✅ Öncelikli destek\n\n` +
+      `Yakında aktif olacak! 💎`
+    );
+  }
+  else if (text === '/hesapla') {
+    await sendMessage(
+      chatId,
+      `🧮 *Hesapla*\n\n` +
+      `Oynadım, Ne Oldu?\n\n` +
+      `Kupon hesaplama özelliği yakında! 💰`
+    );
+  }
+  else if (text === '/istatistik') {
+    await sendMessage(
+      chatId,
+      `📊 *İstatistik Merkezi*\n\n` +
+      `Detaylı istatistikler ve analizler...\n\n` +
+      `Bu özellik çok yakında! 📈`
+    );
+  }
+  else {
+    await sendMessage(
+      chatId,
+      `Merhaba! Menüden bir komut seçin veya /help yazın. ⚽️`
     );
   }
 }
