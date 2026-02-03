@@ -979,7 +979,7 @@ Stack: ${error.stack || 'No stack trace'}
       });
 
       // 7. Get target channel
-      const targetChannelId = channelRouter.getChannelId(marketParam);
+      const targetChannelId = channelRouter.getTargetChatId(marketParam);
 
       if (!targetChannelId) {
         return reply.status(400).send({
