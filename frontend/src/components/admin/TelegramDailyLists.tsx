@@ -954,21 +954,24 @@ export function TelegramDailyLists() {
                               </div>
                             </div>
 
-                            {/* Statistics Row - Only for OVER 2.5 Market */}
+                            {/* Statistics Badges - Only for OVER 2.5 Market */}
                             {list.market === 'OVER_25' && (match.potentials || match.xg) && (
-                              <div className="mt-2 pt-2 border-t border-gray-100">
-                                <div className="text-xs text-gray-600 font-medium space-y-1">
-                                  {match.potentials && (
-                                    <div>
-                                      ÜST2.5: {match.potentials.over25 ?? '-'}% | BTTS: {match.potentials.btts ?? '-'}%
-                                    </div>
-                                  )}
-                                  {match.xg && (
-                                    <div>
-                                      XG: {match.xg.home?.toFixed(1) ?? '-'} - {match.xg.away?.toFixed(1) ?? '-'} (total: {((match.xg.home ?? 0) + (match.xg.away ?? 0)).toFixed(1)})
-                                    </div>
-                                  )}
-                                </div>
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                {match.potentials?.over25 && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+                                    🔥 Ü2.5: {match.potentials.over25}%
+                                  </span>
+                                )}
+                                {match.potentials?.btts && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
+                                    💚 BTTS: {match.potentials.btts}%
+                                  </span>
+                                )}
+                                {match.xg && (match.xg.home || match.xg.away) && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                                    ⚡ xG: {((match.xg.home ?? 0) + (match.xg.away ?? 0)).toFixed(1)}
+                                  </span>
+                                )}
                               </div>
                             )}
 
