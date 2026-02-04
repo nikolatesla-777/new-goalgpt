@@ -382,7 +382,12 @@
     }
 
     function showSection(section) {
-      tg.showAlert(`${section} bölümü yakında aktif olacak! 🚀`);
+      if (section === 'daily') {
+        // Redirect to React-based daily lists page
+        window.location.href = '/miniapp';
+      } else {
+        tg.showAlert(`${section} bölümü yakında aktif olacak! 🚀`);
+      }
     }
 
     function showMatchDetail(team) {
