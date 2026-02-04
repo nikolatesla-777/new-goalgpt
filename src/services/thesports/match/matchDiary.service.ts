@@ -396,7 +396,7 @@ export class MatchDiaryService {
             })
             .catch(err => logger.warn(`Failed to fetch competition ${match.competition_id}:`, err));
           
-          // Set placeholder competition to avoid "Unknown League" - but only if we have no competition at all
+          // Set placeholder competition to avoid "Bilinmeyen Lig" - but only if we have no competition at all
           if (!match.competition) {
             match.competition = {
               id: match.competition_id,

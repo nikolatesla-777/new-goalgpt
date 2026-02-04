@@ -481,7 +481,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           home_logo: match.home_logo || '⚽',
           away_logo: match.away_logo || '⚽',
           date: match.match_time,
-          league: match.league_name || 'Unknown League',
+          league: match.league_name || 'Bilinmeyen Lig',
           status_id: match.status_id,
         },
         potentials: {
@@ -1141,7 +1141,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           }
         }
 
-        leagueName = leagueName || 'Unknown League';
+        leagueName = leagueName || 'Bilinmeyen Lig';
 
         return {
           fs_id: m.id,

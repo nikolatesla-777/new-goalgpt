@@ -55,7 +55,7 @@ export async function runMissingLeaguesReport(): Promise<void> {
         // Group by league
         const leagueGroups: Record<string, any[]> = {};
         unmappedMatches.rows.forEach(row => {
-          const league = row.league_name || 'Unknown League';
+          const league = row.league_name || 'Bilinmeyen Lig';
           if (!leagueGroups[league]) {
             leagueGroups[league] = [];
           }

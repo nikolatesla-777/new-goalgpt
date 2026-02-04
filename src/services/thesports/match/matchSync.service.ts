@@ -1,10 +1,10 @@
 
 /**
  * Match Sync Service
- * 
+ *
  * SINGLE SOURCE OF TRUTH for saving matches to database
  * Ensures teams and competitions exist before saving matches
- * Fixes "Unknown League" and Foreign Key issues
+ * Fixes "Bilinmeyen Lig" and Foreign Key issues
  */
 
 import { logger } from '../../../utils/logger';

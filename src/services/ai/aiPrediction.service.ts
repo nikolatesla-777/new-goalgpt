@@ -996,7 +996,7 @@ export class AIPredictionService {
                 -- Team/Competition data
                 COALESCE(ht.name, p.home_team_name, 'Unknown Home') as home_team_name,
                 COALESCE(at.name, p.away_team_name, 'Unknown Away') as away_team_name,
-                COALESCE(c.name, p.league_name, 'Unknown League') as league_name
+                COALESCE(c.name, p.league_name, 'Bilinmeyen Lig') as league_name
             FROM ai_predictions p
             LEFT JOIN ts_matches m ON p.match_id = m.external_id
             LEFT JOIN ts_teams ht ON m.home_team_id = ht.external_id

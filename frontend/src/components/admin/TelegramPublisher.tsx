@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   useTodaysMatches,
   useTelegramHealth,
   usePublishToTelegram,
 } from '../../api/hooks';
-import { MatchAnalysisModal } from './MatchAnalysisModal';
+import { generateMatchAnalysis } from '../../api/client';
 
 // ============================================================================
 // INTERFACES
@@ -56,6 +57,169 @@ interface Pick {
 }
 
 // ============================================================================
+// MATCH ANALYSIS SECTION COMPONENT
+// ============================================================================
+
+function MatchAnalysisSection({ matchId }: { matchId: number }) {
+  const [copied, setCopied] = useState(false);
+
+  // Fetch analysis when component mounts
+  const { data: analysisData, isLoading, isError, error } = useQuery({
+    queryKey: ['match-analysis', matchId],
+    queryFn: () => generateMatchAnalysis(matchId),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Copy to clipboard
+  const handleCopy = () => {
+    if (!analysisData) return;
+    navigator.clipboard.writeText(analysisData.formatted.copy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Get confidence emoji
+  const getConfidenceEmoji = (confidence: 'high' | 'medium' | 'low') => {
+    switch (confidence) {
+      case 'high': return '🔥';
+      case 'medium': return '⭐';
+      case 'low': return '💡';
+    }
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-5 border-2 border-green-200">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+          <span className="text-lg">🍀</span>
+          AI Maç Analizi
+        </h4>
+        {analysisData && (
+          <button
+            onClick={handleCopy}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+              copied
+                ? 'bg-green-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-green-100 border border-green-300'
+            }`}
+          >
+            {copied ? '✓ Kopyalandı' : '📋 Kopyala'}
+          </button>
+        )}
+      </div>
+
+      {isLoading && (
+        <div className="text-center py-8">
+          <div className="inline-block w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mb-3"></div>
+          <p className="text-sm text-gray-600">Analiz oluşturuluyor...</p>
+        </div>
+      )}
+
+      {isError && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 text-center">
+          <svg className="w-8 h-8 text-red-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm text-red-600">{error instanceof Error ? error.message : 'Analiz oluşturulamadı'}</p>
+        </div>
+      )}
+
+      {analysisData && (
+        <div className="space-y-4">
+          {/* Full Analysis - Always Open */}
+          <details open className="group">
+            <summary className="cursor-pointer list-none">
+              <div className="bg-white rounded-lg p-3 border border-green-200 hover:border-green-300 transition-colors flex items-center justify-between">
+                <span className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <span>📄</span>
+                  Detaylı Analiz
+                </span>
+                <svg
+                  className="w-5 h-5 text-gray-500 group-open:rotate-180 transition-transform"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </summary>
+            <div className="mt-3 space-y-3">
+              {analysisData.analysis.fullAnalysis.split('\n\n').map((section, idx) => {
+                if (!section.trim()) return null;
+
+                const isHeader = section.startsWith('**');
+                if (isHeader) {
+                  const headerMatch = section.match(/\*\*(.+?)\*\*/);
+                  const header = headerMatch ? headerMatch[1] : '';
+                  const content = section.replace(/\*\*.+?\*\*\n?/, '').trim();
+
+                  return (
+                    <div key={idx} className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                      <h5 className="text-sm font-bold text-gray-900 mb-2">{header}</h5>
+                      <p className="text-sm text-gray-700 leading-relaxed">{content}</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={idx} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <p className="text-sm text-gray-700 leading-relaxed">{section}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+
+          {/* Recommendations */}
+          {analysisData.analysis.recommendations.length > 0 && (
+            <div className="space-y-3">
+              <h5 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <span>📊</span>
+                Öneriler ({analysisData.analysis.recommendations.length})
+              </h5>
+              {analysisData.analysis.recommendations.map((rec, idx) => (
+                <div key={idx} className="bg-white rounded-lg p-4 border-2 border-green-200 shadow-sm">
+                  <div className="flex items-start gap-3 mb-3">
+                    <span className="text-3xl">{getConfidenceEmoji(rec.confidence)}</span>
+                    <div className="flex-1">
+                      <div className="font-bold text-base text-gray-900 mb-2">
+                        {rec.market} → {rec.prediction}
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-sm text-gray-600">Güven: </span>
+                        <span className={`font-bold text-sm px-2 py-1 rounded ${
+                          rec.confidence === 'high' ? 'bg-green-100 text-green-700' :
+                          rec.confidence === 'medium' ? 'bg-blue-100 text-blue-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {rec.confidence === 'high' ? 'Yüksek' : rec.confidence === 'medium' ? 'Orta' : 'Düşük'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 leading-relaxed">{rec.reasoning}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Warning */}
+          <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4 flex items-start gap-3">
+            <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <p className="text-sm text-yellow-700 leading-relaxed">
+              Bu analiz istatistiksel verilere dayanmaktadır. Lütfen kendi araştırmanızı da yapın ve sorumlu bir şekilde bahis oynayın.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // CONSTANTS
 // ============================================================================
 
@@ -75,8 +239,6 @@ export function TelegramPublisher() {
   const [publishSuccess, setPublishSuccess] = useState<number | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
   const [publishingMatchId, setPublishingMatchId] = useState<number | null>(null);
-  const [analysisModalMatchId, setAnalysisModalMatchId] = useState<number | null>(null);
-  const [analysisModalMatchName, setAnalysisModalMatchName] = useState<string>('');
 
   // Date filter state - default to today
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -439,49 +601,6 @@ export function TelegramPublisher() {
                         {/* Expanded Details */}
                         {isExpanded && (
                           <div className="mt-4 pt-4 border-t border-gray-200 space-y-6">
-                            {/* FootyStats Analiz Verileri */}
-                            <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-4 border border-gray-200">
-                              <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                                <span className="text-lg">📊</span>
-                                FootyStats Analiz Verileri
-                              </h4>
-
-                              <div className="grid grid-cols-2 gap-3">
-                                {match.corners_potential && (
-                                  <div className="bg-white rounded-lg p-3 border border-gray-200">
-                                    <div className="text-xs text-gray-500 mb-1">🚩 Korner</div>
-                                    <div className="text-xl font-bold text-gray-900">{match.corners_potential.toFixed(1)}</div>
-                                  </div>
-                                )}
-                                {match.cards_potential && (
-                                  <div className="bg-white rounded-lg p-3 border border-gray-200">
-                                    <div className="text-xs text-gray-500 mb-1">🟨 Kart</div>
-                                    <div className="text-xl font-bold text-gray-900">{match.cards_potential.toFixed(1)}</div>
-                                  </div>
-                                )}
-                                {match.shots_potential && (
-                                  <div className="bg-white rounded-lg p-3 border border-gray-200">
-                                    <div className="text-xs text-gray-500 mb-1">🎯 Şut</div>
-                                    <div className="text-xl font-bold text-gray-900">{match.shots_potential}</div>
-                                  </div>
-                                )}
-                                {match.fouls_potential && (
-                                  <div className="bg-white rounded-lg p-3 border border-gray-200">
-                                    <div className="text-xs text-gray-500 mb-1">🚫 Faul</div>
-                                    <div className="text-xl font-bold text-gray-900">{match.fouls_potential}</div>
-                                  </div>
-                                )}
-                                {match.odds_ft_1 && match.odds_ft_x && match.odds_ft_2 && (
-                                  <div className="bg-white rounded-lg p-3 border border-gray-200 col-span-2">
-                                    <div className="text-xs text-gray-500 mb-1">💰 Oranlar</div>
-                                    <div className="text-lg font-bold text-gray-900">
-                                      {match.odds_ft_1.toFixed(2)} - {match.odds_ft_x.toFixed(2)} - {match.odds_ft_2.toFixed(2)}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
                             {/* H2H Stats */}
                             {match.h2h && match.h2h.total_matches && match.h2h.total_matches > 0 && (
                               <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
@@ -592,6 +711,9 @@ export function TelegramPublisher() {
                               </div>
                             )}
 
+                            {/* AI Match Analysis Section */}
+                            <MatchAnalysisSection matchId={match.id} />
+
                             {/* Telegram Publish Panel */}
                             <div className="pt-4 border-t-2 border-gray-100">
                               <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-2xl p-6 border-2 border-blue-100">
@@ -655,19 +777,6 @@ export function TelegramPublisher() {
                                   </div>
                                 </div>
 
-                                {/* Analysis Button */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setAnalysisModalMatchId(match.id);
-                                    setAnalysisModalMatchName(`${match.home_name} vs ${match.away_name}`);
-                                  }}
-                                  className="w-full py-3 rounded-xl font-bold text-gray-700 text-base bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 hover:from-green-100 hover:to-emerald-100 hover:shadow-lg hover:border-green-300 transition-all duration-200 flex items-center justify-center gap-2 mb-3"
-                                >
-                                  <span className="text-2xl">🍀</span>
-                                  <span>Maç Analizi Üret</span>
-                                </button>
-
                                 {/* Publish Button */}
                                 <button
                                   onClick={(e) => {
@@ -726,18 +835,6 @@ export function TelegramPublisher() {
             </div>
           </div>
       </div>
-
-      {/* Analysis Modal */}
-      {analysisModalMatchId && (
-        <MatchAnalysisModal
-          matchId={analysisModalMatchId}
-          matchName={analysisModalMatchName}
-          onClose={() => {
-            setAnalysisModalMatchId(null);
-            setAnalysisModalMatchName('');
-          }}
-        />
-      )}
     </div>
   );
 }

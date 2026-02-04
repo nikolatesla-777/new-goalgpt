@@ -24,7 +24,7 @@ export async function getTodaysMatches(date?: string) {
     ...m,
     id: m.fs_id,
     external_id: `fs_${m.fs_id}`,
-    competition_name: m.league_name || 'Unknown League',
+    competition_name: m.league_name || 'Bilinmeyen Lig',
     btts_potential: m.potentials?.btts,
     o25_potential: m.potentials?.over25,
     o15_potential: m.potentials?.over15 || m.potentials?.avg,

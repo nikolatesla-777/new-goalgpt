@@ -12,6 +12,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 let offset = 0;
 let isRunning = true;
 
@@ -101,6 +102,45 @@ function getBackButton() {
       [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }],
     ],
   };
+}
+
+async function getDailyList(listId: string): Promise<any> {
+  try {
+    const response = await axios.get(`${BACKEND_URL}/api/telegram/daily-lists/${listId}`);
+    return response.data;
+  } catch (error: any) {
+    logger.error('[Bot] Error fetching daily list:', error.message);
+    return null;
+  }
+}
+
+function formatDailyListMessage(list: any, title: string): string {
+  if (!list || !list.matches || list.matches.length === 0) {
+    return `${title}\n\nBugün için maç bulunamadı. 😔`;
+  }
+
+  let message = `${title}\n`;
+  message += `📅 Tarih: ${new Date().toLocaleDateString('tr-TR')}\n`;
+  message += `📊 Maç Sayısı: ${list.matches.length}\n`;
+  message += `🎯 Başarı Oranı: ${list.performance?.success_rate || 'Hesaplanıyor...'}%\n\n`;
+  message += `━━━━━━━━━━━━━━━━\n\n`;
+
+  list.matches.slice(0, 10).forEach((match: any, index: number) => {
+    message += `${index + 1}. ${match.home_team} vs ${match.away_team}\n`;
+    message += `   🕐 ${match.match_time || match.formatted_date}\n`;
+    message += `   🏆 ${match.league_name}\n`;
+    if (match.prediction_reason) {
+      message += `   💡 ${match.prediction_reason}\n`;
+    }
+    message += `\n`;
+  });
+
+  if (list.matches.length > 10) {
+    message += `\n... ve ${list.matches.length - 10} maç daha!\n`;
+    message += `\nTüm listeyi görmek için Mini App'i açın: /goalgpt`;
+  }
+
+  return message;
 }
 
 async function handlePreCheckoutQuery(preCheckoutQuery: any) {
@@ -207,7 +247,101 @@ async function handleCallbackQuery(callbackQuery: any) {
       {
         chat_id: chatId,
         message_id: messageId,
-        text: '📊 *Günlük Tahmin Listeleri*\n\nAI destekli günlük tahmin listelerimiz hazırlanıyor...\n\nBu özellik çok yakında aktif olacak! 🎯',
+        text: `📊 *Günlük Tahmin Listeleri*\n\nBugünün AI destekli tahmin listelerine aşağıdan ulaşabilirsiniz:\n\n📅 ${new Date().toLocaleDateString('tr-TR')}`,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '⚽️ 2.5 Üst', callback_data: 'list_ust25' },
+              { text: '⚽️ 1.5 Üst', callback_data: 'list_ust15' }
+            ],
+            [
+              { text: '🕐 İY 0.5 Üst', callback_data: 'list_iy05' }
+            ],
+            [
+              { text: '🚩 Korner 7.5 Üst', callback_data: 'list_korner' },
+            ],
+            [
+              { text: '🟨 Sarı Kart 3.5 Üst', callback_data: 'list_sarikart' }
+            ],
+            [
+              { text: '🔙 Ana Menü', callback_data: 'menu_main' }
+            ]
+          ]
+        },
+      }
+    );
+  }
+  else if (data === 'list_ust25') {
+    const list = await getDailyList('OVER_25');
+    const message = formatDailyListMessage(list, '⚽️ *2.5 ÜST LİSTESİ*');
+
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: message,
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'list_ust15') {
+    const list = await getDailyList('OVER_15');
+    const message = formatDailyListMessage(list, '⚽️ *1.5 ÜST LİSTESİ*');
+
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: message,
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'list_iy05') {
+    const list = await getDailyList('HT_OVER_05');
+    const message = formatDailyListMessage(list, '🕐 *İLK YARI 0.5 ÜST LİSTESİ*');
+
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: message,
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'list_korner') {
+    const list = await getDailyList('CORNERS');
+    const message = formatDailyListMessage(list, '🚩 *KORNER 7.5 ÜST LİSTESİ*');
+
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: message,
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'list_sarikart') {
+    const list = await getDailyList('CARDS');
+    const message = formatDailyListMessage(list, '🟨 *SARI KART 3.5 ÜST LİSTESİ*');
+
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: message,
         parse_mode: 'Markdown',
         reply_markup: getBackButton(),
       }
@@ -351,9 +485,28 @@ async function handleUpdate(update: any) {
     await sendMessage(
       chatId,
       `📊 *Günlük Tahmin Listeleri*\n\n` +
-      `AI destekli günlük tahmin listelerimiz hazırlanıyor...\n\n` +
-      `Bu özellik çok yakında aktif olacak! 🎯`,
-      getBackButton()
+      `Bugünün AI destekli tahmin listelerine aşağıdan ulaşabilirsiniz:\n\n` +
+      `📅 ${new Date().toLocaleDateString('tr-TR')}`,
+      {
+        inline_keyboard: [
+          [
+            { text: '⚽️ 2.5 Üst', callback_data: 'list_ust25' },
+            { text: '⚽️ 1.5 Üst', callback_data: 'list_ust15' }
+          ],
+          [
+            { text: '🕐 İY 0.5 Üst', callback_data: 'list_iy05' }
+          ],
+          [
+            { text: '🚩 Korner 7.5 Üst', callback_data: 'list_korner' },
+          ],
+          [
+            { text: '🟨 Sarı Kart 3.5 Üst', callback_data: 'list_sarikart' }
+          ],
+          [
+            { text: '🔙 Ana Menü', callback_data: 'menu_main' }
+          ]
+        ]
+      }
     );
   }
   else if (text === '/canli') {
@@ -363,6 +516,31 @@ async function handleUpdate(update: any) {
       `Canlı maç skorları ve analizleri...\n\n` +
       `Bu özellik çok yakında aktif olacak! 📺`
     );
+  }
+  else if (text === '/ust25') {
+    const list = await getDailyList('OVER_25');
+    const message = formatDailyListMessage(list, '⚽️ *2.5 ÜST LİSTESİ*');
+    await sendMessage(chatId, message);
+  }
+  else if (text === '/ust15') {
+    const list = await getDailyList('OVER_15');
+    const message = formatDailyListMessage(list, '⚽️ *1.5 ÜST LİSTESİ*');
+    await sendMessage(chatId, message);
+  }
+  else if (text === '/iy05') {
+    const list = await getDailyList('HT_OVER_05');
+    const message = formatDailyListMessage(list, '🕐 *İLK YARI 0.5 ÜST LİSTESİ*');
+    await sendMessage(chatId, message);
+  }
+  else if (text === '/korner') {
+    const list = await getDailyList('CORNERS');
+    const message = formatDailyListMessage(list, '🚩 *KORNER 7.5 ÜST LİSTESİ*');
+    await sendMessage(chatId, message);
+  }
+  else if (text === '/sarikart') {
+    const list = await getDailyList('CARDS');
+    const message = formatDailyListMessage(list, '🟨 *SARI KART 3.5 ÜST LİSTESİ*');
+    await sendMessage(chatId, message);
   }
   else if (text === '/analizyap') {
     await sendMessage(

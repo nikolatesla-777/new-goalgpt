@@ -27,6 +27,8 @@ interface MatchData {
   team_b_xg_prematch?: number;
   team_a_form?: string;
   team_b_form?: string;
+  team_a_form_string?: string;  // W-W-D-L-W formatında son 5 maç
+  team_b_form_string?: string;  // W-W-D-L-W formatında son 5 maç
   corners_potential?: number;
   cards_potential?: number;
   shots_potential?: number;
@@ -80,6 +82,21 @@ function formatMatchDate(unixTimestamp: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+/**
+ * Parse form string (W-W-D-L-W) to extract wins, draws, losses
+ */
+function parseFormString(formString?: string): { wins: number; draws: number; losses: number; formString: string } | null {
+  if (!formString) return null;
+
+  const results = formString.split('-').filter(r => r.trim().length > 0);
+
+  const wins = results.filter(r => r === 'W').length;
+  const draws = results.filter(r => r === 'D').length;
+  const losses = results.filter(r => r === 'L').length;
+
+  return { wins, draws, losses, formString };
 }
 
 /**
@@ -326,12 +343,20 @@ function generateFormAnalysis(match: MatchData): string | null {
     }
   }
 
-  // Form strings if available
-  if (match.team_a_form) {
-    analysis += `\n\n${match.home_name} son maç formu: ${match.team_a_form} `;
+  // Detailed form analysis with W-D-L breakdown
+  analysis += `\n\n**Son 5 Maç Performansı:**\n`;
+
+  const homeForm = parseFormString(match.team_a_form_string);
+  const awayForm = parseFormString(match.team_b_form_string);
+
+  if (homeForm) {
+    const homeEmoji = homeForm.wins >= 3 ? '🔥' : homeForm.wins >= 2 ? '⭐' : homeForm.losses >= 3 ? '❄️' : '➡️';
+    analysis += `${homeEmoji} **${match.home_name}**: ${homeForm.wins}G-${homeForm.draws}B-${homeForm.losses}M (${homeForm.formString})\n`;
   }
-  if (match.team_b_form) {
-    analysis += `\n${match.away_name} son maç formu: ${match.team_b_form}`;
+
+  if (awayForm) {
+    const awayEmoji = awayForm.wins >= 3 ? '🔥' : awayForm.wins >= 2 ? '⭐' : awayForm.losses >= 3 ? '❄️' : '➡️';
+    analysis += `${awayEmoji} **${match.away_name}**: ${awayForm.wins}G-${awayForm.draws}B-${awayForm.losses}M (${awayForm.formString})`;
   }
 
   return analysis;

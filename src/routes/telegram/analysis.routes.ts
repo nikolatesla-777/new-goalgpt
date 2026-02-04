@@ -40,12 +40,58 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
 
       const fsMatch = response.data;
 
+      // DEBUG: Log match data to find team ID fields
+      const matchKeys = Object.keys(fsMatch);
+      const teamIdFields = matchKeys.filter(k => k.toLowerCase().includes('id') || k.toLowerCase().includes('team'));
+      logger.info(`[AnalysisRoutes] 🔍 Match ID fields: ${teamIdFields.join(', ')}`);
+      teamIdFields.forEach(field => {
+        logger.info(`[AnalysisRoutes] 🔍 ${field}: ${(fsMatch as any)[field]}`);
+      });
+
+      // Fetch team form data (last 5 matches) for both teams
+      let homeFormString: string | undefined;
+      let awayFormString: string | undefined;
+
+      try {
+        logger.info(`[AnalysisRoutes] Fetching form data for homeID: ${fsMatch.homeID}, awayID: ${fsMatch.awayID}`);
+
+        const [homeFormResponse, awayFormResponse] = await Promise.all([
+          footyStatsAPI.getTeamLastX(fsMatch.homeID),
+          footyStatsAPI.getTeamLastX(fsMatch.awayID)
+        ]);
+
+        logger.info(`[AnalysisRoutes] Form responses - Home success: ${homeFormResponse?.success}, Away success: ${awayFormResponse?.success}`);
+
+        if (homeFormResponse.success && homeFormResponse.data && homeFormResponse.data.length > 0) {
+          const homeFormData = homeFormResponse.data[0];
+          logger.info(`[AnalysisRoutes] 🔍 Home form data keys: ${Object.keys(homeFormData).join(', ')}`);
+          homeFormString = homeFormData.formRun_overall;
+          logger.info(`[AnalysisRoutes] Home form string: ${homeFormString}`);
+        } else {
+          logger.warn(`[AnalysisRoutes] ❌ No home form data - success: ${homeFormResponse?.success}, data length: ${homeFormResponse?.data?.length}`);
+        }
+
+        if (awayFormResponse.success && awayFormResponse.data && awayFormResponse.data.length > 0) {
+          const awayFormData = awayFormResponse.data[0];
+          logger.info(`[AnalysisRoutes] 🔍 Away form data keys: ${Object.keys(awayFormData).join(', ')}`);
+          awayFormString = awayFormData.formRun_overall;
+          logger.info(`[AnalysisRoutes] Away form string: ${awayFormString}`);
+        } else {
+          logger.warn(`[AnalysisRoutes] ❌ No away form data - success: ${awayFormResponse?.success}, data length: ${awayFormResponse?.data?.length}`);
+        }
+
+        logger.info(`[AnalysisRoutes] ✅ Form data fetched - Home: ${homeFormString}, Away: ${awayFormString}`);
+      } catch (formError) {
+        logger.warn(`[AnalysisRoutes] ❌ Failed to fetch team form data:`, formError);
+        // Continue without form data
+      }
+
       // Map FootyStats data to our format
       const match = {
         id: fsMatch.id,
         home_name: fsMatch.home_name,
         away_name: fsMatch.away_name,
-        competition_name: fsMatch.competition_name || fsMatch.league_name || 'Unknown League',
+        competition_name: fsMatch.competition_name || fsMatch.league_name || 'Bilinmeyen Lig',
         date_unix: fsMatch.date_unix,
         btts_potential: fsMatch.btts_potential,
         o25_potential: fsMatch.o25_potential,
@@ -55,6 +101,8 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
         team_b_xg_prematch: fsMatch.team_b_xg_prematch,
         team_a_form: fsMatch.pre_match_home_ppg,
         team_b_form: fsMatch.pre_match_away_ppg,
+        team_a_form_string: homeFormString,
+        team_b_form_string: awayFormString,
         corners_potential: fsMatch.corners_potential,
         cards_potential: fsMatch.cards_potential,
         shots_potential: fsMatch.team_a_shotsOnTarget,
@@ -90,6 +138,8 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
         team_b_xg_prematch: match.team_b_xg_prematch,
         team_a_form: match.team_a_form,
         team_b_form: match.team_b_form,
+        team_a_form_string: match.team_a_form_string,
+        team_b_form_string: match.team_b_form_string,
         corners_potential: match.corners_potential,
         cards_potential: match.cards_potential,
         shots_potential: match.shots_potential,
@@ -183,7 +233,7 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
         const analysis = generateMatchAnalysis({
           home_name: fsMatch.home_name,
           away_name: fsMatch.away_name,
-          competition_name: fsMatch.competition_name || fsMatch.league_name || 'Unknown League',
+          competition_name: fsMatch.competition_name || fsMatch.league_name || 'Bilinmeyen Lig',
           date_unix: fsMatch.date_unix,
           btts_potential: fsMatch.btts_potential,
           o25_potential: fsMatch.o25_potential,
@@ -219,7 +269,7 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
           match: {
             home_name: fsMatch.home_name,
             away_name: fsMatch.away_name,
-            competition_name: fsMatch.competition_name || fsMatch.league_name || 'Unknown League',
+            competition_name: fsMatch.competition_name || fsMatch.league_name || 'Bilinmeyen Lig',
             date_unix: fsMatch.date_unix,
           },
           analysis: {

@@ -140,7 +140,7 @@ export async function getMatchScoringPreview(
     match_info: {
       home_team: matchData.home_name,
       away_team: matchData.away_name,
-      league: matchData.competition_name || 'Unknown League',
+      league: matchData.competition_name || 'Bilinmeyen Lig',
       kickoff_time: matchData.date_unix,
     },
     markets,
