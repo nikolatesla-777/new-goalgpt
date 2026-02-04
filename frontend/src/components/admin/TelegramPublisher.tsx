@@ -524,29 +524,29 @@ export function TelegramPublisher() {
                             </div>
 
                             {/* Team Names with Logos */}
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 overflow-hidden">
                               {/* Home Team */}
-                              <div className="flex items-center gap-2 flex-1">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
                                 {match.home_logo ? (
-                                  <img src={match.home_logo} alt={match.home_name} className="w-8 h-8 object-contain" />
+                                  <img src={match.home_logo} alt={match.home_name} className="w-8 h-8 object-contain flex-shrink-0" />
                                 ) : (
-                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
                                     <span className="text-lg">⚽</span>
                                   </div>
                                 )}
-                                <span className="text-lg font-bold text-gray-900">{match.home_name}</span>
+                                <span className="text-lg font-bold text-gray-900 truncate">{match.home_name}</span>
                               </div>
 
                               {/* VS Separator */}
-                              <span className="text-gray-400 font-normal px-2">vs</span>
+                              <span className="text-gray-400 font-normal px-2 flex-shrink-0">vs</span>
 
                               {/* Away Team */}
-                              <div className="flex items-center gap-2 flex-1 justify-end">
-                                <span className="text-lg font-bold text-gray-900">{match.away_name}</span>
+                              <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+                                <span className="text-lg font-bold text-gray-900 truncate">{match.away_name}</span>
                                 {match.away_logo ? (
-                                  <img src={match.away_logo} alt={match.away_name} className="w-8 h-8 object-contain" />
+                                  <img src={match.away_logo} alt={match.away_name} className="w-8 h-8 object-contain flex-shrink-0" />
                                 ) : (
-                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
                                     <span className="text-lg">⚽</span>
                                   </div>
                                 )}
@@ -663,11 +663,11 @@ export function TelegramPublisher() {
 
                                 {match.trends.home && match.trends.home.length > 0 && (
                                   <div className="mb-4">
-                                    <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                    <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2 overflow-hidden">
                                       {match.home_logo ? (
-                                        <img src={match.home_logo} alt="" className="w-4 h-4 object-contain" />
+                                        <img src={match.home_logo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
                                       ) : '⚽'}
-                                      {match.home_name}
+                                      <span className="truncate">{match.home_name}</span>
                                     </div>
                                     <div className="space-y-1.5">
                                       {match.trends.home.slice(0, 4).map((trend: any, idx: number) => (
@@ -687,11 +687,11 @@ export function TelegramPublisher() {
 
                                 {match.trends.away && match.trends.away.length > 0 && (
                                   <div>
-                                    <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                    <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2 overflow-hidden">
                                       {match.away_logo ? (
-                                        <img src={match.away_logo} alt="" className="w-4 h-4 object-contain" />
+                                        <img src={match.away_logo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
                                       ) : '⚽'}
-                                      {match.away_name}
+                                      <span className="truncate">{match.away_name}</span>
                                     </div>
                                     <div className="space-y-1.5">
                                       {match.trends.away.slice(0, 4).map((trend: any, idx: number) => (
@@ -728,7 +728,7 @@ export function TelegramPublisher() {
                                 {/* Selected Match Info */}
                                 <div className="mb-5 p-4 bg-white/80 backdrop-blur-sm rounded-xl border border-blue-200/50">
                                   <div className="text-xs text-blue-600 mb-1 font-semibold uppercase tracking-wide">Seçili Maç</div>
-                                  <div className="font-bold text-gray-900">
+                                  <div className="font-bold text-gray-900 truncate">
                                     {match.home_name} <span className="text-gray-400 font-normal">vs</span> {match.away_name}
                                   </div>
                                 </div>
