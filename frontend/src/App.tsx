@@ -25,6 +25,9 @@ import { ALL_MENU_ITEMS } from './config/admin.registry';
 // LAZY LOAD: Special components not in registry
 const AdminBotDetail = lazy(() => import('./components/admin').then(m => ({ default: m.AdminBotDetail })));
 
+// MiniApp
+const MiniAppDailyLists = lazy(() => import('./components/miniapp').then(m => ({ default: m.MiniAppDailyLists })));
+
 // Team Detail
 const TeamDetailLayout = lazy(() => import('./components/team-detail/TeamDetailLayout').then(m => ({ default: m.TeamDetailLayout })));
 const OverviewTab = lazy(() => import('./components/team-detail/tabs').then(m => ({ default: m.OverviewTab })));
@@ -81,6 +84,15 @@ function App() {
         <AIPredictionsProvider>
           <BrowserRouter>
           <Routes>
+            {/* MiniApp Routes (No AdminLayout - Standalone) */}
+            <Route path="/daily-lists" element={
+              <ErrorBoundary>
+                <Suspense fallback={<LoadingFallback />}>
+                  <MiniAppDailyLists />
+                </Suspense>
+              </ErrorBoundary>
+            } />
+
             {/* All routes now use AdminLayout with sidebar */}
             <Route element={<AdminLayout />}>
               {/* Auto-generated routes from registry */}
