@@ -483,6 +483,65 @@ function translateFullTrend(text: string, teamName: string): string {
     return result + '.';
   }
 
+  // Pattern 23: "The last X games for [Team] has each seen both teams scoring..."
+  // e.g. "The last 5 games for Hougang United has each seen both teams scoring. Will they improve their defence,
+  //        or will we see more of the same here? This season Hougang United has seen a total of 6/9 fixtures end
+  //        with both teams scoring. That's 67% of all matches played."
+  if (lower.includes('has each seen both teams scoring')) {
+    const recentMatch = lower.match(/the last (\d+) games for .+ has each seen both teams scoring/);
+    const seasonMatch = lower.match(/a total of (\d+)\/(\d+) fixtures end with both teams scoring/);
+    const pctMatch = lower.match(/that's (\d+)% of all matches played/);
+
+    let result = '';
+    if (recentMatch) {
+      result = `${teamName}'nın son ${recentMatch[1]} maçında iki takım da gol attı`;
+    }
+    if (seasonMatch && pctMatch) {
+      result += `. Bu sezon ${teamName}'nın oynadığı ${seasonMatch[2]} maçın ${seasonMatch[1]}'inde (%${pctMatch[1]}) "Karşılıklı gol var" (BTTS) gerçekleşti`;
+    }
+    return result + '.';
+  }
+
+  // Pattern 24: "[Team] is unbeaten in the last X games coming into this fixture against [Opponent],
+  //              having won Y and drawn Z. They have scored N goals in those X games."
+  if (lower.includes('is unbeaten in the last') && lower.includes('coming into this fixture')) {
+    const unbeatenMatch = lower.match(/is unbeaten in the last (\d+) games coming into this fixture/);
+    const wdMatch = lower.match(/having won (\d+) and drawn (\d+)/);
+    const goalsMatch = lower.match(/scored (\d+) goals in those (\d+) games/);
+
+    if (unbeatenMatch) {
+      let result = `${teamName} son ${unbeatenMatch[1]} maçtır yenilmiyor`;
+      if (wdMatch) {
+        result += ` (${wdMatch[1]} galibiyet, ${wdMatch[2]} beraberlik)`;
+      }
+      if (goalsMatch) {
+        result += ` ve bu maçlarda toplam ${goalsMatch[1]} gol attı`;
+      }
+      return result + '.';
+    }
+  }
+
+  // Pattern 25: "[Team] will need to improve their attack if they're to get anything out of this game.
+  //              They have not scored in the last X matches. During the last five games they have scored Y times
+  //              and overall this season they have scored Z goals per game."
+  if (lower.includes('will need to improve their attack')) {
+    const noScoreMatch = lower.match(/not scored in the last (\d+) matches/);
+    const lastFiveMatch = lower.match(/last five games they have scored (\d+) times/);
+    const avgMatch = lower.match(/this season they have scored ([\d.]+) goals per game/);
+
+    let result = `${teamName} bu maçtan bir şeyler çıkarmak istiyorsa hücumunu geliştirmesi gerekiyor`;
+    if (noScoreMatch) {
+      result += `; son ${noScoreMatch[1]} maçta gol atamadı`;
+    }
+    if (lastFiveMatch) {
+      result += `. Son 5 maçta ${lastFiveMatch[1]} gol attı`;
+    }
+    if (avgMatch) {
+      result += ` ve bu sezon maç başına ortalama ${avgMatch[1]} gol kaydediyor`;
+    }
+    return result + '.';
+  }
+
   // Fallback: Generic translation based on sentiment
   if (lower.includes('great') || lower.includes('good form')) {
     return `${teamName} iyi bir performans sergiliyor.`;
@@ -491,8 +550,9 @@ function translateFullTrend(text: string, teamName: string): string {
     return `${teamName} zorlu bir dönemden geçiyor.`;
   }
 
-  // If no pattern matched, return original (better than losing info)
-  return text;
+  // No pattern matched — return empty string to exclude from output rather than showing English
+  logger.warn(`[TrendsGenerator] No pattern matched for trend text: "${text.substring(0, 80)}..."`);
+  return '';
 }
 
 /**
