@@ -311,15 +311,16 @@ function TabButton({ active, onClick, icon, label, count, color }: any) {
 function GoalTrends({ matches }: { matches: GoalTrend[] }) {
   const [tweetModal, setTweetModal] = useState<{ match: GoalTrend; text: string; imageBase64?: string } | null>(null);
   const [capturingId, setCapturingId] = useState<number | null>(null);
-  const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  // captureRefs points only to the stats area (without the bottom badge/button row)
+  const captureRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const handlePaylas = async (match: GoalTrend) => {
     setCapturingId(match.fs_id);
     let imageBase64: string | undefined;
-    const cardEl = cardRefs.current.get(match.fs_id);
-    if (cardEl) {
+    const captureEl = captureRefs.current.get(match.fs_id);
+    if (captureEl) {
       try {
-        const canvas = await html2canvas(cardEl, {
+        const canvas = await html2canvas(captureEl, {
           backgroundColor: '#1f2937',
           scale: 2,
           useCORS: true,
@@ -352,77 +353,83 @@ function GoalTrends({ matches }: { matches: GoalTrend[] }) {
       {matches.map((match) => (
         <div
           key={match.fs_id}
-          ref={(el) => { if (el) cardRefs.current.set(match.fs_id, el); else cardRefs.current.delete(match.fs_id); }}
-          className="bg-gray-800 rounded-xl p-5 hover:bg-gray-750 transition-colors border border-gray-700/50"
+          className="bg-gray-800 rounded-xl overflow-hidden hover:bg-gray-750 transition-colors border border-gray-700/50"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-gray-500" />
-              <span className="text-xs text-gray-400">{match.league_name}</span>
+          {/* ── CAPTURE AREA: only this div is screenshotted ── */}
+          <div
+            ref={(el) => { if (el) captureRefs.current.set(match.fs_id, el); else captureRefs.current.delete(match.fs_id); }}
+            className="p-5"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-gray-500" />
+                <span className="text-xs text-gray-400">{match.league_name}</span>
+              </div>
+              <span className="text-xs text-gray-500">
+                {new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
             </div>
-            <span className="text-xs text-gray-500">
-              {new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', {
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </span>
-          </div>
 
-          {/* Teams */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3 flex-1">
-              {match.home_logo && (
-                <img
-                  src={match.home_logo}
-                  alt={match.home_name}
-                  className="w-8 h-8 object-contain"
-                  onError={(e) => (e.currentTarget.style.display = 'none')}
-                />
-              )}
-              <span className="text-white font-semibold text-sm">{match.home_name}</span>
+            {/* Teams */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3 flex-1">
+                {match.home_logo && (
+                  <img
+                    src={match.home_logo}
+                    alt={match.home_name}
+                    className="w-8 h-8 object-contain"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                  />
+                )}
+                <span className="text-white font-semibold text-sm">{match.home_name}</span>
+              </div>
+              <div className="px-4">
+                <span className="text-gray-500 text-sm">vs</span>
+              </div>
+              <div className="flex items-center gap-3 flex-1 justify-end">
+                <span className="text-white font-semibold text-sm">{match.away_name}</span>
+                {match.away_logo && (
+                  <img
+                    src={match.away_logo}
+                    alt={match.away_name}
+                    className="w-8 h-8 object-contain"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                  />
+                )}
+              </div>
             </div>
-            <div className="px-4">
-              <span className="text-gray-500 text-sm">vs</span>
+
+            {/* Stats Grid — Gol İstatistikleri */}
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              <StatBox label="KG VAR" value={`${match.btts}%`} highlight={match.btts >= 70} color="green" />
+              <StatBox label="2.5 ÜST" value={`${match.over25}%`} highlight={match.over25 >= 70} color="green" />
+              <StatBox label="1.5 ÜST" value={`${match.over15}%`} highlight={match.over15 >= 75} color="emerald" />
+              <StatBox label="IY 0.5Ü" value={`${match.ht_over05}%`} highlight={match.ht_over05 >= 70} color="teal" />
             </div>
-            <div className="flex items-center gap-3 flex-1 justify-end">
-              <span className="text-white font-semibold text-sm">{match.away_name}</span>
-              {match.away_logo && (
-                <img
-                  src={match.away_logo}
-                  alt={match.away_name}
-                  className="w-8 h-8 object-contain"
-                  onError={(e) => (e.currentTarget.style.display = 'none')}
-                />
-              )}
+            {/* Stats Grid — Fiziksel & Beklenti */}
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              <StatBox label="AVG Gol" value={match.avg_goals.toFixed(1)} highlight={match.avg_goals >= 3} color="blue" />
+              <StatBox label="xG" value={match.xg_total.toFixed(1)} highlight={match.xg_total >= 2.5} color="blue" />
+              <StatBox label="Korner 7.5Ü" value={match.corner_over75 > 0 ? `${match.corner_over75}%` : '—'} highlight={match.corner_over75 >= 70} color="orange" />
+              <StatBox label="Sarı Kart 3.5Ü" value={match.card_over35 > 0 ? `${match.card_over35}%` : '—'} highlight={match.card_over35 >= 65} color="red" />
+            </div>
+
+            {/* Stats Grid — Sezon Gol Ortalaması (Ev/Dep) */}
+            <div className="grid grid-cols-4 gap-2">
+              <StatBox label="Ev Attı" value={match.home_scored > 0 ? match.home_scored.toFixed(2) : '—'} highlight={match.home_scored >= 1.5} color="green" />
+              <StatBox label="Ev Yedi" value={match.home_conceded > 0 ? match.home_conceded.toFixed(2) : '—'} highlight={match.home_conceded >= 1.5} color="red" />
+              <StatBox label="Dep Attı" value={match.away_scored > 0 ? match.away_scored.toFixed(2) : '—'} highlight={match.away_scored >= 1.5} color="emerald" />
+              <StatBox label="Dep Yedi" value={match.away_conceded > 0 ? match.away_conceded.toFixed(2) : '—'} highlight={match.away_conceded >= 1.5} color="orange" />
             </div>
           </div>
+          {/* ── END CAPTURE AREA ── */}
 
-          {/* Stats Grid — Gol İstatistikleri */}
-          <div className="grid grid-cols-4 gap-2 mb-2">
-            <StatBox label="KG VAR" value={`${match.btts}%`} highlight={match.btts >= 70} color="green" />
-            <StatBox label="2.5 ÜST" value={`${match.over25}%`} highlight={match.over25 >= 70} color="green" />
-            <StatBox label="1.5 ÜST" value={`${match.over15}%`} highlight={match.over15 >= 75} color="emerald" />
-            <StatBox label="IY 0.5Ü" value={`${match.ht_over05}%`} highlight={match.ht_over05 >= 70} color="teal" />
-          </div>
-          {/* Stats Grid — Fiziksel & Beklenti */}
-          <div className="grid grid-cols-4 gap-2 mb-2">
-            <StatBox label="AVG Gol" value={match.avg_goals.toFixed(1)} highlight={match.avg_goals >= 3} color="blue" />
-            <StatBox label="xG" value={match.xg_total.toFixed(1)} highlight={match.xg_total >= 2.5} color="blue" />
-            <StatBox label="Korner 7.5Ü" value={match.corner_over75 > 0 ? `${match.corner_over75}%` : '—'} highlight={match.corner_over75 >= 70} color="orange" />
-            <StatBox label="Sarı Kart 3.5Ü" value={match.card_over35 > 0 ? `${match.card_over35}%` : '—'} highlight={match.card_over35 >= 65} color="red" />
-          </div>
-
-          {/* Stats Grid — Sezon Gol Ortalaması (Ev/Dep) */}
-          <div className="grid grid-cols-4 gap-2 mb-3">
-            <StatBox label="Ev Attı" value={match.home_scored > 0 ? match.home_scored.toFixed(2) : '—'} highlight={match.home_scored >= 1.5} color="green" />
-            <StatBox label="Ev Yedi" value={match.home_conceded > 0 ? match.home_conceded.toFixed(2) : '—'} highlight={match.home_conceded >= 1.5} color="red" />
-            <StatBox label="Dep Attı" value={match.away_scored > 0 ? match.away_scored.toFixed(2) : '—'} highlight={match.away_scored >= 1.5} color="emerald" />
-            <StatBox label="Dep Yedi" value={match.away_conceded > 0 ? match.away_conceded.toFixed(2) : '—'} highlight={match.away_conceded >= 1.5} color="orange" />
-          </div>
-
-          {/* Confidence Badge */}
-          <div className="flex items-center justify-between">
+          {/* Confidence Badge — outside capture area, not included in screenshot */}
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-700/50">
             <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full font-semibold">
               {match.trend_type}
             </span>
