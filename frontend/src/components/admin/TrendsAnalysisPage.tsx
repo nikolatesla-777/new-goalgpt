@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { TrendUp, Target, Flag, Fire, TrendDown, Trophy, Coins } from '@phosphor-icons/react';
 import { useTrendsAnalysis } from '../../api/hooks';
-import { publishTrendsToTwitter, publishSingleMatchTweet } from '../../api/client';
+import { publishTrendsToTwitter, publishSingleMatchTweet, getMatchAnalysis } from '../../api/client';
+import type { MatchAnalysis } from '../../api/types';
 
 interface TrendMatch {
   fs_id: number;
@@ -874,6 +875,28 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
+function generateReplyTweet(analysis: MatchAnalysis): string {
+  const highConf = analysis.recommendations
+    .filter(r => r.confidence === 'high')
+    .slice(0, 3);
+
+  if (highConf.length === 0) return '';
+
+  const lines: string[] = ['🔍 AI Analiz Dipnotu', ''];
+
+  for (const r of highConf) {
+    const firstSentence = (r.reasoning.split('.')[0] || r.reasoning).trim();
+    const shortReason = firstSentence.length > 75
+      ? firstSentence.substring(0, 72) + '...'
+      : firstSentence;
+    lines.push(`▶ ${r.prediction} — ${shortReason}.`);
+  }
+
+  lines.push('', '#GoalGPT');
+  const result = lines.join('\n');
+  return result.length > 280 ? result.substring(0, 277) + '...' : result;
+}
+
 function MatchTweetModal({
   match,
   initialText,
@@ -886,13 +909,35 @@ function MatchTweetModal({
   onClose: () => void;
 }) {
   const [text, setText] = useState(initialText);
+  const [replyText, setReplyText] = useState('');
+  const [withReply, setWithReply] = useState(false);
+  const [replyLoading, setReplyLoading] = useState(true);
   const [publishState, setPublishState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [withImage, setWithImage] = useState(!!imageBase64);
 
+  // Fetch AI analysis on mount
+  useEffect(() => {
+    setReplyLoading(true);
+    getMatchAnalysis(match.fs_id)
+      .then(data => {
+        if (data.success && data.analysis) {
+          const generated = generateReplyTweet(data.analysis);
+          if (generated) {
+            setReplyText(generated);
+            setWithReply(true);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setReplyLoading(false));
+  }, [match.fs_id]);
+
   const charCount = text.length;
+  const replyCharCount = replyText.length;
   const isOverLimit = charCount > 280;
-  const isDisabled = isOverLimit || charCount === 0 || publishState === 'loading';
+  const isReplyOverLimit = replyCharCount > 280;
+  const isDisabled = isOverLimit || charCount === 0 || publishState === 'loading' || (withReply && isReplyOverLimit);
 
   const handlePublish = async () => {
     if (isDisabled) return;
@@ -900,7 +945,8 @@ function MatchTweetModal({
     try {
       const result = await publishSingleMatchTweet(
         text.trim(),
-        withImage && imageBase64 ? imageBase64 : undefined
+        withImage && imageBase64 ? imageBase64 : undefined,
+        withReply && replyText.trim() ? replyText.trim() : undefined
       );
       if (result.success) {
         setPublishState('success');
@@ -999,10 +1045,80 @@ function MatchTweetModal({
           )}
         </div>
 
+        {/* Thread Reply Section */}
+        <div className="px-4 pb-2">
+          <div className="border border-gray-700 rounded-lg overflow-hidden">
+            {/* Reply section header */}
+            <div className="flex items-center justify-between px-3 py-2 bg-gray-750 border-b border-gray-700 bg-gray-900/50">
+              <div className="flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" d="M3 10h10a4 4 0 010 8H9m-6-8l3-3m-3 3l3 3" />
+                </svg>
+                <span className="text-xs text-gray-400 font-medium">Thread Yanıtı (AI Analiz Dipnotu)</span>
+                {replyLoading && (
+                  <svg className="w-3 h-3 text-blue-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" strokeWidth="3" className="opacity-25" />
+                    <path strokeLinecap="round" d="M4 12a8 8 0 018-8" strokeWidth="3" className="opacity-75" />
+                  </svg>
+                )}
+              </div>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <span className="text-xs text-gray-500">{withReply ? 'Açık' : 'Kapalı'}</span>
+                <div
+                  onClick={() => setWithReply(v => !v)}
+                  className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${withReply ? 'bg-blue-500' : 'bg-gray-600'}`}
+                >
+                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${withReply ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
+            </div>
+
+            {withReply && (
+              <div className="p-3">
+                {replyLoading ? (
+                  <div className="space-y-2">
+                    <div className="h-3 bg-gray-700 rounded animate-pulse w-3/4" />
+                    <div className="h-3 bg-gray-700 rounded animate-pulse w-full" />
+                    <div className="h-3 bg-gray-700 rounded animate-pulse w-5/6" />
+                  </div>
+                ) : (
+                  <>
+                    <textarea
+                      className="w-full bg-gray-700 text-white text-sm rounded-lg p-3 resize-none border border-gray-600 focus:border-blue-500 focus:outline-none font-mono"
+                      rows={6}
+                      value={replyText}
+                      onChange={(e) => {
+                        setReplyText(e.target.value);
+                        setPublishState('idle');
+                        setErrorMsg('');
+                      }}
+                      placeholder="Yanıt tweet metni..."
+                      disabled={publishState === 'loading'}
+                    />
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs text-gray-500">Ana tweetin altına yanıt olarak gönderilir</span>
+                      <span className={`text-xs font-mono ${
+                        isReplyOverLimit ? 'text-red-400 font-bold' : replyCharCount > 250 ? 'text-yellow-400' : 'text-gray-400'
+                      }`}>
+                        {replyCharCount}/280
+                      </span>
+                    </div>
+                    {isReplyOverLimit && (
+                      <p className="text-xs text-red-400 mt-1">
+                        ⚠️ Yanıt tweet 280 karakteri aşıyor ({replyCharCount - 280} fazla)
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Status Messages */}
         {publishState === 'success' && (
           <div className="mx-4 mb-3 px-3 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
-            ✓ Tweet başarıyla yayınlandı!
+            ✓ {withReply ? '2 tweet thread olarak yayınlandı!' : 'Tweet başarıyla yayınlandı!'}
           </div>
         )}
         {publishState === 'error' && (

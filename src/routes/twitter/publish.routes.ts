@@ -76,12 +76,13 @@ export async function twitterPublishRoutes(fastify: FastifyInstance): Promise<vo
    * POST /twitter/publish/single-match
    * Publish a single manually edited tweet for a specific match.
    *
-   * Body: { text: string, imageBase64?: string }
-   *   - text: tweet text (max 280 chars)
-   *   - imageBase64: optional PNG as base64 (no data: prefix) — uploaded via Twitter v1.1 media upload
+   * Body: { text: string, imageBase64?: string, replyText?: string }
+   *   - text: main tweet text (max 280 chars)
+   *   - imageBase64: optional PNG as base64 (no data: prefix)
+   *   - replyText: optional reply tweet text (max 280 chars) — posted as thread reply
    */
-  fastify.post<{ Body: { text: string; imageBase64?: string } }>('/twitter/publish/single-match', async (request, reply) => {
-    const { text, imageBase64 } = request.body ?? {};
+  fastify.post<{ Body: { text: string; imageBase64?: string; replyText?: string } }>('/twitter/publish/single-match', async (request, reply) => {
+    const { text, imageBase64, replyText } = request.body ?? {};
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return reply.status(400).send({ success: false, error: 'text is required' });
@@ -91,9 +92,14 @@ export async function twitterPublishRoutes(fastify: FastifyInstance): Promise<vo
       return reply.status(400).send({ success: false, error: 'Tweet 280 karakteri geçemez' });
     }
 
+    if (replyText && replyText.length > 280) {
+      return reply.status(400).send({ success: false, error: 'Yanıt tweet 280 karakteri geçemez' });
+    }
+
     logger.info('[Twitter.Route] POST /twitter/publish/single-match', {
       length: text.length,
       hasImage: !!imageBase64,
+      hasReply: !!replyText,
       preview: text.substring(0, 60).replace(/\n/g, '\\n'),
     });
 
@@ -110,7 +116,13 @@ export async function twitterPublishRoutes(fastify: FastifyInstance): Promise<vo
         }
       }
 
-      const result = await twitterClient.postThread([text.trim()], mediaId ? [mediaId] : undefined);
+      // Build thread: main tweet + optional reply
+      const tweets = [text.trim()];
+      if (replyText && replyText.trim().length > 0) {
+        tweets.push(replyText.trim());
+      }
+
+      const result = await twitterClient.postThread(tweets, mediaId ? [mediaId] : undefined);
 
       if (!result.success) {
         return reply.status(500).send({ success: false, error: result.error ?? 'Tweet gönderilemedi' });
@@ -120,7 +132,9 @@ export async function twitterPublishRoutes(fastify: FastifyInstance): Promise<vo
         success: true,
         dry_run: result.dry_run,
         tweet_id: result.main_tweet_id,
+        reply_tweet_id: tweets.length > 1 ? result.tweet_ids?.[1] : undefined,
         has_media: !!mediaId,
+        thread_length: tweets.length,
       };
     } catch (err: any) {
       logger.error('[Twitter.Route] single-match error:', err);

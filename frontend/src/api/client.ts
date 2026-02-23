@@ -106,9 +106,17 @@ export async function publishTrendsToTwitter(): Promise<TwitterPublishResponse> 
  */
 export async function publishSingleMatchTweet(
   text: string,
-  imageBase64?: string
-): Promise<{ success: boolean; dry_run: boolean; tweet_id?: string; error?: string }> {
-  return post('/twitter/publish/single-match', { text, imageBase64 });
+  imageBase64?: string,
+  replyText?: string
+): Promise<{ success: boolean; dry_run: boolean; tweet_id?: string; reply_tweet_id?: string; thread_length?: number; error?: string }> {
+  return post('/twitter/publish/single-match', { text, imageBase64, replyText });
+}
+
+/**
+ * Fetch AI analysis for a FootyStats match ID
+ */
+export async function getMatchAnalysis(fsMatchId: number): Promise<MatchAnalysisResponse> {
+  return post<MatchAnalysisResponse>(`/telegram/analysis/match/${fsMatchId}`, {});
 }
 
 // ============================================================================
