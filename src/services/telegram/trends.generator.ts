@@ -106,16 +106,6 @@ function calculateAdditionalTrends(
     }
   }
 
-  // Trend 2: BTTS season statistics
-  if (form.btts_pct && data.h2h?.total_matches) {
-    // Calculate matches count from percentage (rough estimate)
-    const seasonMatches = Math.round(data.h2h.total_matches * 1.5); // Assume ~18 season matches
-    const bttsMatches = Math.round((form.btts_pct / 100) * seasonMatches);
-    trends.push(
-      `Bu sezon ${seasonMatches} maçın ${bttsMatches}'inde (%${form.btts_pct}) karşılıklı gol oldu`
-    );
-  }
-
   // Trend 3: Over 2.5 tendencies
   if (form.over25_pct && form.over25_pct >= 60) {
     trends.push(
@@ -151,7 +141,7 @@ function convertFootyStatsTrendsToTurkish(
 ): string[] {
   const turkish: string[] = [];
 
-  for (const trendTuple of trends.slice(0, 4)) {
+  for (const trendTuple of trends.slice(0, 6)) {
     if (!trendTuple || !Array.isArray(trendTuple) || trendTuple.length < 2) continue;
 
     const [sentiment, text] = trendTuple;
