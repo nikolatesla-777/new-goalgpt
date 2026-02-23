@@ -460,7 +460,8 @@ function translateFullTrend(text: string, teamName: string): string {
 
   // Pattern 22: "X's defence will have to be at their best to stop Y from scoring"
   if (lower.includes('defence will have to be at their best') || lower.includes('defense will have to be at their best')) {
-    const stopFromScoringMatch = lower.match(/stop ([\w\s]+) from scoring/);
+    // Use original text (not lowercased) to preserve proper casing of team names
+    const stopFromScoringMatch = text.match(/stop ([\w\s]+) from scoring/i);
     const scoredInLastMatch = lower.match(/scored in (?:each of )?(?:the )?(?:their )?last (\d+) (?:home )?games/);
     const failedMatch = lower.match(/(?:only )?failed to score in (\d+)/);
 
