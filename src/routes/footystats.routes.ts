@@ -245,6 +245,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       // Concurrency-limited runner: process max 4 competitions at a time
       const CONCURRENCY = 4;
       const allCidArray = [...allCompIds];
+      let enrichmentTimedOut = false;
       const enrichmentPromise = (async () => {
         for (let i = 0; i < allCidArray.length; i += CONCURRENCY) {
           const batch = allCidArray.slice(i, i + CONCURRENCY);
@@ -254,6 +255,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
       const enrichmentTimeout = new Promise<void>(resolve =>
         setTimeout(() => {
+          enrichmentTimedOut = true;
           logger.warn('[FootyStats] League enrichment exceeded 6s — returning partial data, caches will populate in background');
           resolve();
         }, 6000)
@@ -445,8 +447,14 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         generated_at: new Date().toISOString()
       };
 
-      // Store in response cache
-      _trendsResponseCache = { data: result, ts: Date.now() };
+      // Only store in response cache if enrichment completed fully.
+      // If it timed out, partial data (with "Bilinmeyen Lig") would be cached
+      // for 5 minutes — instead we let the next request retry with warmed caches.
+      if (!enrichmentTimedOut) {
+        _trendsResponseCache = { data: result, ts: Date.now() };
+      } else {
+        logger.info('[FootyStats] Skipping response cache due to enrichment timeout — next request will retry');
+      }
       return result;
       })(); // end _trendsComputationPromise IIFE
 
