@@ -1872,6 +1872,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
           has_trends_raw: !!fsMatch.trends,
           home_team_id: fsMatch.homeID,
           away_team_id: fsMatch.awayID,
+          raw_home_trends: (fsMatch.trends?.home || []).length,
+          raw_away_trends: (fsMatch.trends?.away || []).length,
         }
       };
 
