@@ -106,13 +106,6 @@ function calculateAdditionalTrends(
     }
   }
 
-  // Trend 3: Over 2.5 tendencies
-  if (form.over25_pct && form.over25_pct >= 60) {
-    trends.push(
-      `Maçların %${form.over25_pct}'i 2.5 üst ile sonuçlandı`
-    );
-  }
-
   // Trend 4: Home/Away specific form (if available)
   const specificForm = isHome ? data.form?.home?.home_only : data.form?.away?.away_only;
   if (specificForm) {
@@ -507,162 +500,37 @@ export function generateTurkishTrends(
     hasPotentials: !!data.potentials,
   });
 
-  // PRIORITY 1: Use FootyStats trends if available, then SUPPLEMENT with calculated trends
-  let homeTrends: string[] = [];
-  let awayTrends: string[] = [];
-
+  // PRIORITY 1: Use FootyStats trends ONLY — no synthetic supplements
+  // Goal: 100% match with FootyStats website data
   if (data.trends?.home && data.trends.home.length > 0) {
-    logger.info('[TrendsGenerator] Using FootyStats trends as base');
-    homeTrends = convertFootyStatsTrendsToTurkish(data.trends.home, homeTeam);
-    awayTrends = convertFootyStatsTrendsToTurkish(data.trends.away || [], awayTeam);
+    logger.info('[TrendsGenerator] Using FootyStats trends exclusively');
+    const homeTrends = convertFootyStatsTrendsToTurkish(data.trends.home, homeTeam);
+    const awayTrends = convertFootyStatsTrendsToTurkish(data.trends.away || [], awayTeam);
 
-    // If we have enough trends (5+ each), return immediately
-    if (homeTrends.length >= 5 && awayTrends.length >= 5) {
-      logger.info('[TrendsGenerator] FootyStats provided enough trends');
-      return { home: homeTrends, away: awayTrends };
-    }
+    const result = {
+      home: homeTrends.slice(0, 8),
+      away: awayTrends.slice(0, 8),
+    };
 
-    logger.info('[TrendsGenerator] Supplementing with calculated trends');
-  } else {
-    logger.info('[TrendsGenerator] Using rule-based generation');
+    logger.info('[TrendsGenerator] Final result:', {
+      home_count: result.home.length,
+      away_count: result.away.length,
+      home: result.home,
+      away: result.away,
+    });
+
+    return result;
   }
 
-  // PRIORITY 2: Calculate additional trends from Form/H2H/xG data
-  // (Add to existing homeTrends and awayTrends arrays)
-
-  // Add calculated trends using helper function
-  const calculatedHomeTrends = calculateAdditionalTrends(homeTeam, true, data);
-  const calculatedAwayTrends = calculateAdditionalTrends(awayTeam, false, data);
-
-  // Add calculated trends that don't duplicate existing ones
-  for (const trend of calculatedHomeTrends) {
-    if (homeTrends.length < 8 && !homeTrends.some(t => t.includes(trend.substring(0, 20)))) {
-      homeTrends.push(trend);
-    }
-  }
-
-  for (const trend of calculatedAwayTrends) {
-    if (awayTrends.length < 8 && !awayTrends.some(t => t.includes(trend.substring(0, 20)))) {
-      awayTrends.push(trend);
-    }
-  }
-
-  // PRIORITY 3: Legacy fallback trends (only if still needed)
-
-  // Home trends from Form
-  if (data.form?.home?.ppg != null) {  // != null checks both null and undefined
-    if (data.form.home.ppg >= 2.0) {
-      homeTrends.push(`İyi formda (${data.form.home.ppg.toFixed(1)} puan/maç)`);
-    } else if (data.form.home.ppg < 1.0) {
-      homeTrends.push(`Zayıf form (${data.form.home.ppg.toFixed(1)} puan/maç)`);
-    } else {
-      homeTrends.push(`Orta seviye form (${data.form.home.ppg.toFixed(1)} puan/maç)`);
-    }
-  }
-
-  if (data.form?.home?.btts_pct && data.form.home.btts_pct >= 50) {
-    homeTrends.push(`Maçların %${data.form.home.btts_pct}'inde karşılıklı gol`);
-  }
-
-  if (data.form?.home?.over25_pct && data.form.home.over25_pct >= 50) {
-    homeTrends.push(`Maçların %${data.form.home.over25_pct}'inde 2.5 üst`);
-  }
-
-  // Away trends from Form
-  if (data.form?.away?.ppg != null) {  // != null checks both null and undefined
-    if (data.form.away.ppg >= 2.0) {
-      awayTrends.push(`Deplasmanda güçlü (${data.form.away.ppg.toFixed(1)} puan/maç)`);
-    } else if (data.form.away.ppg < 1.0) {
-      awayTrends.push(`Deplasmanda zayıf (${data.form.away.ppg.toFixed(1)} puan/maç)`);
-    } else {
-      awayTrends.push(`Orta seviye deplasman formu (${data.form.away.ppg.toFixed(1)} puan/maç)`);
-    }
-  }
-
-  if (data.form?.away?.btts_pct && data.form?.away.btts_pct >= 50) {
-    awayTrends.push(`Deplasman maçlarının %${data.form.away.btts_pct}'inde KG`);
-  }
-
-  if (data.form?.away?.over25_pct && data.form.away.over25_pct >= 50) {
-    awayTrends.push(`Deplasman maçlarının %${data.form.away.over25_pct}'inde 2.5 üst`);
-  }
-
-  // Derive from Potentials/xG/H2H if Form missing
-  if (homeTrends.length < 5) {
-    // Add xG-based trend
-    if (data.xg?.home !== undefined && data.xg?.away !== undefined) {
-      const totalXg = data.xg.home + data.xg.away;
-      if (totalXg >= 2.5) {
-        homeTrends.push(`Yüksek gol beklentisi (xG: ${totalXg.toFixed(1)})`);
-      } else {
-        homeTrends.push(`Orta gol beklentisi (xG: ${totalXg.toFixed(1)})`);
-      }
-    }
-
-    // Add H2H trend
-    if (homeTrends.length < 5 && data.h2h?.avg_goals) {
-      homeTrends.push(`H2H ortalama ${data.h2h.avg_goals.toFixed(1)} gol`);
-    }
-
-    // Add H2H BTTS trend
-    if (homeTrends.length < 5 && data.h2h?.btts_pct && data.h2h.btts_pct >= 50) {
-      homeTrends.push(`H2H'de %${data.h2h.btts_pct} karşılıklı gol`);
-    }
-
-    // Add Potentials trend
-    if (homeTrends.length < 5 && data.potentials?.over25) {
-      homeTrends.push(`2.5 üst potansiyeli %${data.potentials.over25}`);
-    }
-
-    // Add BTTS potential
-    if (homeTrends.length < 5 && data.potentials?.btts) {
-      homeTrends.push(`BTTS potansiyeli %${data.potentials.btts}`);
-    }
-  }
-
-  // Same for away trends
-  if (awayTrends.length < 5) {
-    // Add xG-based trend for away
-    if (data.xg?.away !== undefined) {
-      if (data.xg.away >= 1.5) {
-        awayTrends.push(`Deplasmanda ofansif (xG: ${data.xg.away.toFixed(1)})`);
-      } else {
-        awayTrends.push(`Deplasmanda pasif ofans (xG: ${data.xg.away.toFixed(1)})`);
-      }
-    }
-
-    // Add H2H away wins
-    if (awayTrends.length < 5 && data.h2h?.away_wins !== undefined && data.h2h?.total_matches) {
-      const winPct = ((data.h2h.away_wins / data.h2h.total_matches) * 100).toFixed(0);
-      awayTrends.push(`H2H'de %${winPct} galibiyet oranı`);
-    }
-
-    // Add potentials
-    if (awayTrends.length < 5 && data.potentials?.btts) {
-      awayTrends.push(`Karşılıklı gol potansiyeli %${data.potentials.btts}`);
-    }
-
-    if (awayTrends.length < 5 && data.potentials?.over25) {
-      awayTrends.push(`2.5 üst potansiyeli %${data.potentials.over25}`);
-    }
-  }
-
-  // FINAL FALLBACK: Generic insights if still < 3 bullets
-  while (homeTrends.length < 5) {
-    if (homeTrends.length === 0) homeTrends.push('Ev sahibi avantajı mevcut');
-    else if (homeTrends.length === 1) homeTrends.push('Orta seviyede hücum performansı');
-    else if (homeTrends.length === 2) homeTrends.push('Savunma dengeli yapıda');
-  }
-
-  while (awayTrends.length < 5) {
-    if (awayTrends.length === 0) awayTrends.push('Deplasman performansı takip ediliyor');
-    else if (awayTrends.length === 1) awayTrends.push('Orta seviye deplasman formu');
-    else if (awayTrends.length === 2) awayTrends.push('Kontra atak potansiyeli var');
-  }
+  // PRIORITY 2: No FootyStats trends — use form-string analysis only (WWLDW based)
+  // This is the only supplement allowed as it's derived from actual FootyStats form strings
+  logger.info('[TrendsGenerator] No FootyStats trends, using form-string analysis');
+  const homeTrends = calculateAdditionalTrends(homeTeam, true, data);
+  const awayTrends = calculateAdditionalTrends(awayTeam, false, data);
 
   const result = {
-    home: homeTrends.slice(0, 8),  // Max 8 bullets (FootyStats shows 5-8)
-    away: awayTrends.slice(0, 8),  // Max 8 bullets (FootyStats shows 5-8)
+    home: homeTrends.slice(0, 8),
+    away: awayTrends.slice(0, 8),
   };
 
   logger.info('[TrendsGenerator] Final result:', {
