@@ -226,10 +226,40 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         if (cid) allCompIds.add(cid);
       });
 
-      // Fetch league names AND league table stats for all competitions.
-      // Uses in-memory caches (24h / 6h TTL). Runs at most 4 competitions concurrently
-      // to avoid FootyStats rate limiting, and races against a 6-second timeout so
-      // cold-cache startup never blocks the response long-term.
+      // --- DB LEAGUE NAME LOOKUP (single fast query, reliable fallback) ---
+      // Use TheSports DB to get league names by home/away team name pairs.
+      // This is the same approach as /footystats/daily-tips and is O(1) queries.
+      const dbLeagueNames = new Map<string, string>(); // key: "home|away" lowercase
+      try {
+        const { pool } = await import('../database/connection');
+        const allTeamNames = matches.flatMap((m: any) => [m.home_name, m.away_name]);
+        const uniqueTeamNames = [...new Set(allTeamNames)] as string[];
+        const dbResult = await pool.query(
+          `SELECT DISTINCT
+             t1.name AS home_name,
+             t2.name AS away_name,
+             c.name  AS league_name
+           FROM ts_matches m
+           INNER JOIN ts_teams t1 ON m.home_team_id::text = t1.external_id::text
+           INNER JOIN ts_teams t2 ON m.away_team_id::text = t2.external_id::text
+           INNER JOIN ts_competitions c ON m.competition_id::text = c.external_id::text
+           WHERE (t1.name = ANY($1) OR t2.name = ANY($1))
+             AND m.match_time >= extract(epoch from NOW() - INTERVAL '1 day')::bigint
+             AND m.match_time <= extract(epoch from NOW() + INTERVAL '2 days')::bigint`,
+          [uniqueTeamNames]
+        );
+        dbResult.rows.forEach((row: any) => {
+          const key = `${row.home_name}|${row.away_name}`.toLowerCase();
+          dbLeagueNames.set(key, row.league_name);
+        });
+        logger.info(`[FootyStats] DB league name lookup: ${dbLeagueNames.size} matches resolved`);
+      } catch (dbErr: any) {
+        logger.warn('[FootyStats] DB league name lookup failed (non-fatal):', dbErr.message);
+      }
+
+      // Fetch league table stats for all competitions (for home/away scored/conceded).
+      // Uses in-memory caches (6h TTL). Runs at most 4 competitions concurrently
+      // and races against a 6-second timeout.
       const leagueNames = new Map<number, string>();
       const leagueTeamMaps = new Map<number, Map<number, Record<string, any>>>();
 
@@ -263,9 +293,15 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       await Promise.race([enrichmentPromise, enrichmentTimeout]);
 
       // Helper: resolve league name for a match
+      // Priority: 1) FootyStats API name (may be Turkish), 2) TheSports DB name, 3) raw API fields
       const getLeagueName = (m: any): string => {
         const cid = Number(m.competition_id || m.competitionId);
-        return leagueNames.get(cid) || m.league_name || m.competition_name || 'Bilinmeyen Lig';
+        const apiName = leagueNames.get(cid);
+        if (apiName && apiName !== 'Bilinmeyen Lig') return apiName;
+        const dbKey = `${m.home_name}|${m.away_name}`.toLowerCase();
+        const dbName = dbLeagueNames.get(dbKey);
+        if (dbName) return dbName;
+        return m.league_name || m.competition_name || 'Bilinmeyen Lig';
       };
 
       // GOAL TRENDS - collect matching matches first, then fetch full-season team stats
