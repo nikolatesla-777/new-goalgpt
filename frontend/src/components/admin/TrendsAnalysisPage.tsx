@@ -1042,9 +1042,14 @@ function MatchTweetModal({
   const [replyText, setReplyText] = useState('');
   const [withReply, setWithReply] = useState(false);
   const [replyLoading, setReplyLoading] = useState(true);
+  const [trendText, setTrendText] = useState('');
+  const [trendLoading, setTrendLoading] = useState(true);
+  const [withTrend, setWithTrend] = useState(false);
   const [publishState, setPublishState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [withImage, setWithImage] = useState(!!imageBase64);
+
+  const SEPARATOR = '──────────────────';
 
   // Fetch AI analysis on mount
   useEffect(() => {
@@ -1061,6 +1066,33 @@ function MatchTweetModal({
       })
       .catch(() => {})
       .finally(() => setReplyLoading(false));
+  }, [match.fs_id]);
+
+  // Fetch trend template on mount
+  useEffect(() => {
+    setTrendLoading(true);
+    getMatchTrends(match.fs_id)
+      .then(data => {
+        const home = data.trends?.home || [];
+        const away = data.trends?.away || [];
+        if (home.length > 0 || away.length > 0) {
+          const lines = [
+            '⚡️ TREND ANALİZİ ⚡️',
+            '',
+            `🏠 ${(data.home_name || match.home_name).toUpperCase()}`,
+            SEPARATOR,
+            ...(home.length > 0 ? home.map((t: { text: string }) => `👉 ${t.text}`) : ['👉 Trend verisi bulunamadı.']),
+            '',
+            ` ✈️  ${(data.away_name || match.away_name).toUpperCase()}`,
+            SEPARATOR,
+            ...(away.length > 0 ? away.map((t: { text: string }) => `👉 ${t.text}`) : ['👉 Trend verisi bulunamadı.']),
+          ];
+          setTrendText(lines.join('\n'));
+          setWithTrend(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setTrendLoading(false));
   }, [match.fs_id]);
 
   const charCount = text.length;
@@ -1239,6 +1271,49 @@ function MatchTweetModal({
                       </p>
                     )}
                   </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Trend Template Section */}
+        <div className="px-4 pb-2">
+          <div className="border border-purple-700/40 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-purple-900/20 border-b border-purple-700/30">
+              <div className="flex items-center gap-2">
+                <span className="text-purple-400 text-sm">⚡️</span>
+                <span className="text-xs text-purple-300 font-medium">Trend Şablonu</span>
+                {trendLoading && (
+                  <svg className="w-3 h-3 text-purple-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" strokeWidth="3" className="opacity-25" />
+                    <path strokeLinecap="round" d="M4 12a8 8 0 018-8" strokeWidth="3" className="opacity-75" />
+                  </svg>
+                )}
+              </div>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <span className="text-xs text-gray-500">{withTrend ? 'Açık' : 'Kapalı'}</span>
+                <div
+                  onClick={() => setWithTrend(v => !v)}
+                  className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${withTrend ? 'bg-purple-500' : 'bg-gray-600'}`}
+                >
+                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${withTrend ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
+            </div>
+
+            {withTrend && (
+              <div className="p-3">
+                {trendLoading ? (
+                  <div className="space-y-2">
+                    <div className="h-3 bg-gray-700 rounded animate-pulse w-3/4" />
+                    <div className="h-3 bg-gray-700 rounded animate-pulse w-full" />
+                    <div className="h-3 bg-gray-700 rounded animate-pulse w-5/6" />
+                  </div>
+                ) : (
+                  <pre className="text-xs text-gray-200 whitespace-pre-wrap font-sans leading-relaxed bg-gray-900/50 rounded-lg p-3 border border-purple-700/20 max-h-64 overflow-y-auto">
+                    {trendText || 'Trend verisi bulunamadı.'}
+                  </pre>
                 )}
               </div>
             )}
