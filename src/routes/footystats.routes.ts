@@ -226,15 +226,16 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         if (cid) allCompIds.add(cid);
       });
 
-      // --- DB LEAGUE NAME LOOKUP (single fast query, reliable fallback) ---
-      // Use TheSports DB to get league names by home/away team name pairs.
-      // This is the same approach as /footystats/daily-tips and is O(1) queries.
+      // --- DB LOOKUP: league names + team logos (single pair of queries) ---
       const dbLeagueNames = new Map<string, string>(); // key: "home|away" lowercase
+      const dbLogos = new Map<string, string>();        // key: team name lowercase → logo_url
       try {
         const { pool } = await import('../database/connection');
         const allTeamNames = matches.flatMap((m: any) => [m.home_name, m.away_name]);
         const uniqueTeamNames = [...new Set(allTeamNames)] as string[];
-        const dbResult = await pool.query(
+
+        // League names via match join
+        const leagueResult = await pool.query(
           `SELECT DISTINCT
              t1.name AS home_name,
              t2.name AS away_name,
@@ -248,13 +249,23 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
              AND m.match_time <= extract(epoch from NOW() + INTERVAL '2 days')::bigint`,
           [uniqueTeamNames]
         );
-        dbResult.rows.forEach((row: any) => {
+        leagueResult.rows.forEach((row: any) => {
           const key = `${row.home_name}|${row.away_name}`.toLowerCase();
           dbLeagueNames.set(key, row.league_name);
         });
-        logger.info(`[FootyStats] DB league name lookup: ${dbLeagueNames.size} matches resolved`);
+
+        // Team logos (direct lookup by name)
+        const logoResult = await pool.query(
+          `SELECT name, logo_url FROM ts_teams WHERE name = ANY($1) AND logo_url IS NOT NULL`,
+          [uniqueTeamNames]
+        );
+        logoResult.rows.forEach((row: any) => {
+          dbLogos.set(row.name.toLowerCase(), row.logo_url);
+        });
+
+        logger.info(`[FootyStats] DB lookup: ${dbLeagueNames.size} leagues, ${dbLogos.size} logos resolved`);
       } catch (dbErr: any) {
-        logger.warn('[FootyStats] DB league name lookup failed (non-fatal):', dbErr.message);
+        logger.warn('[FootyStats] DB lookup failed (non-fatal):', dbErr.message);
       }
 
       // Fetch league table stats for all competitions (for home/away scored/conceded).
@@ -293,7 +304,6 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       await Promise.race([enrichmentPromise, enrichmentTimeout]);
 
       // Helper: resolve league name for a match
-      // Priority: 1) FootyStats API name (may be Turkish), 2) TheSports DB name, 3) raw API fields
       const getLeagueName = (m: any): string => {
         const cid = Number(m.competition_id || m.competitionId);
         const apiName = leagueNames.get(cid);
@@ -303,6 +313,10 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         if (dbName) return dbName;
         return m.league_name || m.competition_name || 'Bilinmeyen Lig';
       };
+
+      // Helper: resolve logo URL for a team (DB first, then raw API field)
+      const getLogo = (teamName: string, rawLogo: any): string | null =>
+        dbLogos.get(teamName.toLowerCase()) || rawLogo || null;
 
       // GOAL TRENDS - collect matching matches first, then fetch full-season team stats
       const filteredForGoals = matches.filter((m: any) =>
@@ -328,8 +342,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             fs_id: m.fs_id || m.id,
             home_name: m.home_name,
             away_name: m.away_name,
-            home_logo: m.home_logo || null,
-            away_logo: m.away_logo || null,
+            home_logo: getLogo(m.home_name, m.home_logo),
+            away_logo: getLogo(m.away_name, m.away_logo),
             league_name: getLeagueName(m),
             date_unix: m.date_unix,
             btts,
@@ -363,8 +377,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             fs_id: m.fs_id || m.id,
             home_name: m.home_name,
             away_name: m.away_name,
-            home_logo: m.home_logo || null,
-            away_logo: m.away_logo || null,
+            home_logo: getLogo(m.home_name, m.home_logo),
+            away_logo: getLogo(m.away_name, m.away_logo),
             league_name: getLeagueName(m),
             date_unix: m.date_unix,
             corners,
@@ -386,8 +400,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             fs_id: m.fs_id || m.id,
             home_name: m.home_name,
             away_name: m.away_name,
-            home_logo: m.home_logo || null,
-            away_logo: m.away_logo || null,
+            home_logo: getLogo(m.home_name, m.home_logo),
+            away_logo: getLogo(m.away_name, m.away_logo),
             league_name: getLeagueName(m),
             date_unix: m.date_unix,
             cards,
@@ -416,8 +430,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             fs_id: m.fs_id || m.id,
             home_name: m.home_name,
             away_name: m.away_name,
-            home_logo: m.home_logo || null,
-            away_logo: m.away_logo || null,
+            home_logo: getLogo(m.home_name, m.home_logo),
+            away_logo: getLogo(m.away_name, m.away_logo),
             league_name: getLeagueName(m),
             date_unix: m.date_unix,
             home_xg: homeXg,
@@ -451,8 +465,8 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             fs_id: m.fs_id || m.id,
             home_name: m.home_name,
             away_name: m.away_name,
-            home_logo: m.home_logo || null,
-            away_logo: m.away_logo || null,
+            home_logo: getLogo(m.home_name, m.home_logo),
+            away_logo: getLogo(m.away_name, m.away_logo),
             league_name: getLeagueName(m),
             date_unix: m.date_unix,
             btts: bttsPot,
