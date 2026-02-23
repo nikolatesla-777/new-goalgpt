@@ -76,23 +76,33 @@ type TwitterPublishState =
   | { status: 'success'; message: string }
   | { status: 'error'; message: string };
 
+const TWEET_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣'];
+
 function generateMatchTweet(match: GoalTrend): string {
   const time = new Date(match.date_unix * 1000).toLocaleTimeString('tr-TR', {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Europe/Istanbul',
   });
+
+  const MIN = 60;
+  const stats: Array<{ label: string; value: number }> = [
+    { label: 'KG VAR',             value: match.btts },
+    { label: '2.5 ÜST',            value: match.over25 },
+    { label: '1.5 ÜST',            value: match.over15 },
+    { label: 'IY 0.5 ÜST',         value: match.ht_over05 },
+    { label: 'Korner 7.5 ÜST',     value: match.corner_over75 },
+    { label: 'Sarı Kart 3.5 ÜST',  value: match.card_over35 },
+  ].filter(s => s.value >= MIN);
+
+  const statLines = stats.map((s, i) => `${TWEET_EMOJIS[i]}  ${s.label}: %${s.value}`);
+
   const lines: string[] = [
     `⚽ ${match.home_name} - ${match.away_name}`,
     ``,
     `🏆 ${match.league_name} | ⏰ ${time}`,
     ``,
-    `1️⃣  KG VAR: %${match.btts}`,
-    `2️⃣  2.5 ÜST: %${match.over25}`,
-    `3️⃣  1.5 ÜST: %${match.over15}`,
-    `4️⃣  IY 0.5 ÜST: %${match.ht_over05}`,
-    `5️⃣  Korner 7.5 ÜST: %${match.corner_over75}`,
-    `6️⃣  Sarı Kart 3.5 ÜST: %${match.card_over35}`,
+    ...statLines,
     ``,
     `🤖 GoalGPT #Futbol #YapayZeka`,
     ``,
