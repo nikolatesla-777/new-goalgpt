@@ -111,6 +111,27 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // Scoring API (composite TheSports + FootyStats features)
     await registerScoringRoutes(publicAPI);
+
+    // Image proxy — allows html2canvas to capture cross-origin logos without CORS issues
+    publicAPI.get<{ Querystring: { url?: string } }>('/api/proxy/image', async (req, reply) => {
+      const { url } = req.query;
+      if (!url) return reply.status(400).send({ error: 'url required' });
+      const decoded = decodeURIComponent(url);
+      if (!decoded.startsWith('http://') && !decoded.startsWith('https://')) {
+        return reply.status(400).send({ error: 'Invalid URL' });
+      }
+      try {
+        const upstream = await fetch(decoded, { headers: { 'User-Agent': 'GoalGPT-ImageProxy/1.0' } });
+        const buffer = Buffer.from(await upstream.arrayBuffer());
+        const ct = upstream.headers.get('content-type') || 'image/png';
+        reply.header('Content-Type', ct);
+        reply.header('Cache-Control', 'public, max-age=86400');
+        reply.header('Access-Control-Allow-Origin', '*');
+        return reply.send(buffer);
+      } catch (err: any) {
+        return reply.status(502).send({ error: err.message });
+      }
+    });
   });
 
   // ============================================================================

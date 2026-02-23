@@ -320,14 +320,32 @@ function GoalTrends({ matches }: { matches: GoalTrend[] }) {
     const captureEl = captureRefs.current.get(match.fs_id);
     if (captureEl) {
       try {
+        // Replace external logo URLs with backend-proxied URLs to avoid CORS issues
+        const imgEls = Array.from(captureEl.querySelectorAll('img')) as HTMLImageElement[];
+        const origSrcs = imgEls.map(img => img.src);
+        imgEls.forEach(img => {
+          if (img.src && (img.src.startsWith('http://') || img.src.startsWith('https://'))) {
+            img.src = `/api/proxy/image?url=${encodeURIComponent(img.src)}`;
+          }
+        });
+        // Wait for proxied images to load
+        await Promise.all(imgEls.map(img => new Promise<void>(resolve => {
+          if (img.complete) { resolve(); return; }
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        })));
+
         const canvas = await html2canvas(captureEl, {
           backgroundColor: '#1f2937',
           scale: 2,
-          useCORS: true,
-          allowTaint: true,
+          useCORS: false,
+          allowTaint: false,
           logging: false,
         });
         imageBase64 = canvas.toDataURL('image/png').replace('data:image/png;base64,', '');
+
+        // Restore original logo URLs
+        imgEls.forEach((img, i) => { img.src = origSrcs[i]; });
       } catch {
         // proceed without image if capture fails
       }
