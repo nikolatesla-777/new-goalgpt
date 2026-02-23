@@ -165,33 +165,112 @@ export class MatchDetailSyncService {
 
   /**
    * Sync stats to ts_match_stats table
+   * FIXED: ts_match_stats uses dedicated columns (home_corner, home_yellow_cards, etc.)
+   * instead of generic stat_type/home_value/away_value structure
    */
   async syncStats(matchId: string, stats: any[]): Promise<number> {
     if (!stats || stats.length === 0) return 0;
 
     const client = await pool.connect();
     try {
-      let synced = 0;
+      // Build column updates from stats array
+      const updates: Record<string, number> = {};
 
       for (const stat of stats) {
-        const statType = STAT_TYPE_MAP[stat.type] || `type_${stat.type}`;
-        const homeValue = stat.home ?? null;
-        const awayValue = stat.away ?? null;
+        const statType = STAT_TYPE_MAP[stat.type];
+        if (!statType) continue; // Skip unknown stat types
 
-        await client.query(`
-          INSERT INTO ts_match_stats (match_id, stat_type, home_value, away_value, updated_at)
-          VALUES ($1, $2, $3, $4, NOW())
-          ON CONFLICT (match_id, stat_type, COALESCE(minute, -1))
-          DO UPDATE SET
-            home_value = EXCLUDED.home_value,
-            away_value = EXCLUDED.away_value,
-            updated_at = NOW()
-        `, [matchId, statType, homeValue, awayValue]);
+        const homeValue = stat.home ?? 0;
+        const awayValue = stat.away ?? 0;
 
-        synced++;
+        // Map to table columns
+        switch (statType) {
+          case 'corners':
+            updates.home_corner = homeValue;
+            updates.away_corner = awayValue;
+            break;
+          case 'yellow_cards':
+            updates.home_yellow_cards = homeValue;
+            updates.away_yellow_cards = awayValue;
+            break;
+          case 'red_cards':
+            updates.home_red_cards = homeValue;
+            updates.away_red_cards = awayValue;
+            break;
+          case 'shots_on_target':
+            updates.home_shots_on_target = homeValue;
+            updates.away_shots_on_target = awayValue;
+            break;
+          case 'shots_off_target':
+            // Note: ts_match_stats doesn't have shots_off_target columns
+            // We store total shots instead
+            updates.home_shots = (updates.home_shots || 0) + homeValue;
+            updates.away_shots = (updates.away_shots || 0) + awayValue;
+            break;
+          case 'dangerous_attacks':
+            updates.home_dangerous_attacks = homeValue;
+            updates.away_dangerous_attacks = awayValue;
+            break;
+          case 'attacks':
+            updates.home_attacks = homeValue;
+            updates.away_attacks = awayValue;
+            break;
+          case 'possession':
+            updates.home_possession = homeValue;
+            updates.away_possession = awayValue;
+            break;
+          case 'passes':
+            updates.home_passes = homeValue;
+            updates.away_passes = awayValue;
+            break;
+          case 'pass_accuracy':
+            updates.home_accurate_passes = homeValue;
+            updates.away_accurate_passes = awayValue;
+            break;
+          case 'tackles':
+            updates.home_tackles = homeValue;
+            updates.away_tackles = awayValue;
+            break;
+          case 'interceptions':
+            updates.home_interceptions = homeValue;
+            updates.away_interceptions = awayValue;
+            break;
+          case 'fouls':
+            updates.home_fouls = homeValue;
+            updates.away_fouls = awayValue;
+            break;
+          case 'offsides':
+            updates.home_offsides = homeValue;
+            updates.away_offsides = awayValue;
+            break;
+          case 'saves':
+            updates.home_saves = homeValue;
+            updates.away_saves = awayValue;
+            break;
+        }
       }
 
-      return synced;
+      if (Object.keys(updates).length === 0) return 0;
+
+      // Build dynamic UPDATE query
+      const columns = Object.keys(updates);
+      const setClause = columns.map((col, i) => `${col} = $${i + 2}`).join(', ');
+      const values = [matchId, ...Object.values(updates)];
+
+      await client.query(`
+        INSERT INTO ts_match_stats (match_id, ${columns.join(', ')}, last_updated_at)
+        VALUES ($1, ${columns.map((_, i) => `$${i + 2}`).join(', ')}, NOW())
+        ON CONFLICT (match_id)
+        DO UPDATE SET
+          ${setClause},
+          last_updated_at = NOW()
+      `, values);
+
+      logger.debug(`[MatchDetailSync] Synced ${columns.length} stats for ${matchId}`, {
+        stats: Object.keys(updates).join(', ')
+      });
+
+      return stats.length;
     } catch (error: any) {
       logger.error(`[MatchDetailSync] Error syncing stats for ${matchId}:`, error);
       return 0;

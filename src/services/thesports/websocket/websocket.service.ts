@@ -21,6 +21,7 @@ import { EventLatencyMonitor } from './eventLatencyMonitor';
 import { aiPredictionService } from '../../ai/aiPrediction.service';
 import { predictionSettlementService } from '../../ai/predictionSettlement.service';
 import { halfStatsPersistenceService } from '../match/halfStatsPersistence.service';
+import { MatchDetailSyncService } from '../match/matchDetailSync.service';
 
 export class WebSocketService {
   private client: WebSocketClient;
@@ -57,6 +58,9 @@ export class WebSocketService {
   // Housekeeping interval reference (so we can stop it on disconnect)
   private cleanupInterval: NodeJS.Timeout | null = null;
 
+  // Match detail sync service for stats persistence
+  private matchDetailSyncService: MatchDetailSyncService;
+
   constructor() {
     this.client = new WebSocketClient({
       host: config.thesports?.mqtt?.host || 'mqtt://mq.thesports.com', // MQTT broker host (env: THESPORTS_MQTT_HOST)
@@ -68,6 +72,7 @@ export class WebSocketService {
     this.validator = new WebSocketValidator();
     this.eventDetector = new EventDetector();
     this.latencyMonitor = new EventLatencyMonitor();
+    this.matchDetailSyncService = new MatchDetailSyncService();
 
     // Register message handler
     this.client.onMessage((message) => {
@@ -137,13 +142,6 @@ export class WebSocketService {
   private async handleMessage(message: any): Promise<void> {
     try {
       // TEMPORARY DEBUG: Log all incoming messages (check for non-empty arrays)
-      const msgType = this.validator.isScoreMessage(message) ? 'SCORE'
-        : this.validator.isStatsMessage(message) ? 'STATS'
-        : this.validator.isIncidentsMessage(message) ? 'INCIDENTS'
-        : this.validator.isTliveMessage(message) ? 'TLIVE'
-        : 'OTHER';
-      logger.info(`[WebSocket] handleMessage called, message type: ${msgType}`);
-
       // LATENCY MONITORING: Record MQTT message received timestamp
       const mqttReceivedTs = Date.now();
 
@@ -152,7 +150,6 @@ export class WebSocketService {
 
       // Handle score messages
       if (this.validator.isScoreMessage(message)) {
-        logger.info(`[WebSocket] isScoreMessage=true, score array length: ${Array.isArray(message?.score) ? message.score.length : 0}`);
         const scoreMessages = Array.isArray((message as any).score) ? (message as any).score : [];
         for (const scoreMsg of scoreMessages) {
           try {
@@ -489,8 +486,20 @@ export class WebSocketService {
         // Parse stats to structured format (pass full message with id + stats array)
         const structuredStats = this.parser.parseStatsToStructured(message as any);
 
-        // Update database with statistics
+        // Update database with statistics (JSONB column)
         await this.updateMatchStatisticsInDatabase(matchId, structuredStats, providerUpdateTime);
+
+        // CRITICAL: Also sync to ts_match_stats table (detailed columns for settlement)
+        // Extract raw stats array from message
+        const statsArray = Array.isArray((message as any)?.stats) ? (message as any).stats : [];
+        if (statsArray.length > 0) {
+          try {
+            await this.matchDetailSyncService.syncStats(matchId, statsArray);
+            logger.debug(`✅ Stats synced to ts_match_stats for ${matchId}: ${statsArray.length} stats`);
+          } catch (err: any) {
+            logger.error(`❌ Failed to sync stats to ts_match_stats for ${matchId}:`, err.message);
+          }
+        }
 
         // Update cache
         const statsCacheKey = `${CacheKeyPrefix.TheSports}:ws:stats:${matchId}`;

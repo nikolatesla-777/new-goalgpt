@@ -16,7 +16,6 @@
 
 import { logger } from '../../utils/logger';
 import { safeQuery } from '../../database/connection';
-import { MatchTeamStatsService } from '../thesports/match/matchTeamStats.service';
 
 // ============================================================================
 // TYPES
@@ -468,41 +467,43 @@ export async function settleDailyList(list: DailyListRecord): Promise<ListSettle
   const resultsMap = new Map<string, TheSportsMatchResult>();
   matchResults.forEach(r => resultsMap.set(r.external_id, r));
 
-  // Fetch team stats for CORNERS and CARDS markets (only if needed)
+  // Fetch team stats for CORNERS and CARDS markets from ts_match_stats table
   let teamStatsMap = new Map<string, any>();
   if (list.market === 'CORNERS' || list.market === 'CARDS') {
     try {
-      const teamStatsService = new MatchTeamStatsService();
+      // Query ts_match_stats table directly instead of API
+      const statsResults = await safeQuery<any>(
+        `SELECT
+          match_id,
+          home_corner,
+          away_corner,
+          home_yellow_cards,
+          away_yellow_cards
+         FROM ts_match_stats
+         WHERE match_id = ANY($1)`,
+        [matchIds]
+      );
 
-      // Fetch team stats for each match in parallel
-      const teamStatsPromises = matchIds.map(async (matchId) => {
-        try {
-          const response = await teamStatsService.getMatchTeamStats({ match_id: matchId });
-          const matchStats = response.results?.[0];
-          if (matchStats && matchStats.stats) {
-            return { matchId, stats: matchStats.stats };
+      // Map to format expected by evaluateMatch function
+      statsResults.forEach(row => {
+        teamStatsMap.set(row.match_id, [
+          {
+            corner_kicks: row.home_corner ?? 0,
+            yellow_cards: row.home_yellow_cards ?? 0,
+          },
+          {
+            corner_kicks: row.away_corner ?? 0,
+            yellow_cards: row.away_yellow_cards ?? 0,
           }
-        } catch (err: any) {
-          logger.warn(`[DailyListsSettlement] Failed to fetch team stats for ${matchId}`, {
-            error: err.message,
-          });
-        }
-        return { matchId, stats: null };
+        ]);
       });
 
-      const teamStatsResults = await Promise.all(teamStatsPromises);
-      teamStatsResults.forEach(result => {
-        if (result.stats) {
-          teamStatsMap.set(result.matchId, result.stats);
-        }
-      });
-
-      logger.info(`[DailyListsSettlement] Fetched team stats for ${teamStatsMap.size}/${matchIds.length} matches`, {
+      logger.info(`[DailyListsSettlement] Fetched team stats from ts_match_stats for ${teamStatsMap.size}/${matchIds.length} matches`, {
         market: list.market,
       });
 
     } catch (err: any) {
-      logger.error(`[DailyListsSettlement] Error fetching team stats`, {
+      logger.error(`[DailyListsSettlement] Error fetching team stats from database`, {
         error: err.message,
         market: list.market,
       });

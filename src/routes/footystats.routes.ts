@@ -32,6 +32,95 @@ import {
   getCacheStats
 } from '../services/footystats/cache.service';
 
+// ============================================================================
+// MODULE-LEVEL LEAGUE TABLE CACHE (in-memory, 6-hour TTL)
+// One /league-tables call covers ALL teams in a league (full season stats)
+// competition_id from todays-matches == season_id for /league-tables
+// ============================================================================
+const _leagueTableCache = new Map<number, { teamMap: Map<number, Record<string, any>>; ts: number }>();
+const _LEAGUE_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// ============================================================================
+// MODULE-LEVEL LEAGUE NAME CACHE (in-memory, 24-hour TTL)
+// /league-season?season_id=competition_id returns name_tr (Turkish), english_name, name
+// ============================================================================
+const _leagueNameCache = new Map<number, { name: string; ts: number }>();
+const _LEAGUE_NAME_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// ============================================================================
+// TRENDS RESPONSE CACHE (in-memory, 5-minute TTL)
+// Caches the full computed trends-analysis response so concurrent requests
+// don't all flood FootyStats API simultaneously. Also prevents repeated
+// computation on every request.
+// ============================================================================
+let _trendsResponseCache: { data: any; ts: number } | null = null;
+const _TRENDS_RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// Pending promise: if a computation is in progress, subsequent requests wait for it
+let _trendsComputationPromise: Promise<any> | null = null;
+
+/**
+ * Returns Turkish (or English fallback) league name for a given competition_id.
+ * Uses /league-season endpoint which contains name_tr, english_name, name, country.
+ */
+async function getLeagueNameCached(competitionId: number): Promise<string> {
+  const cached = _leagueNameCache.get(competitionId);
+  if (cached && Date.now() - cached.ts < _LEAGUE_NAME_CACHE_TTL_MS) return cached.name;
+
+  try {
+    const res = await footyStatsAPI.getLeagueSeason(competitionId);
+    const d = (res.data as any)?.data ?? res.data;
+    const nameTr = d?.name_tr;
+    const englishName = d?.english_name;
+    const name = d?.name;
+    const country = d?.country;
+
+    let resolved = nameTr || englishName || name;
+    if (!resolved && country && (englishName || name)) {
+      resolved = `${country} - ${englishName || name}`;
+    }
+    if (!resolved) resolved = 'Bilinmeyen Lig';
+
+    _leagueNameCache.set(competitionId, { name: resolved, ts: Date.now() });
+    return resolved;
+  } catch {
+    // On error cache a short-lived placeholder to avoid hammering the API
+    _leagueNameCache.set(competitionId, { name: 'Bilinmeyen Lig', ts: Date.now() - _LEAGUE_NAME_CACHE_TTL_MS + 60_000 });
+    return 'Bilinmeyen Lig';
+  }
+}
+
+/**
+ * Returns a map of teamId → full-season stats (home & away).
+ * Computed from /league-tables which returns all teams in a league at once.
+ */
+async function getLeagueTeamStatsCached(competitionId: number): Promise<Map<number, Record<string, any>>> {
+  const cached = _leagueTableCache.get(competitionId);
+  if (cached && Date.now() - cached.ts < _LEAGUE_CACHE_TTL_MS) return cached.teamMap;
+
+  const teamMap = new Map<number, Record<string, any>>();
+  try {
+    const res = await footyStatsAPI.getLeagueTables(competitionId);
+    const rows: any[] = (res.data as any)?.league_table ?? [];
+    for (const row of rows) {
+      const id = Number(row.id);
+      if (!id) continue;
+      const homeMP = (row.seasonWins_home ?? 0) + (row.seasonDraws_home ?? 0) + (row.seasonLosses_home ?? 0);
+      const awayMP = (row.seasonWins_away ?? 0) + (row.seasonDraws_away ?? 0) + (row.seasonLosses_away ?? 0);
+      teamMap.set(id, {
+        home_scored_avg: homeMP > 0 ? (row.seasonGoals_home ?? 0) / homeMP : 0,
+        home_conceded_avg: homeMP > 0 ? (row.seasonConceded_home ?? 0) / homeMP : 0,
+        away_scored_avg: awayMP > 0 ? (row.seasonGoals_away ?? 0) / awayMP : 0,
+        away_conceded_avg: awayMP > 0 ? (row.seasonConceded_away ?? 0) / awayMP : 0,
+      });
+    }
+    _leagueTableCache.set(competitionId, { teamMap, ts: Date.now() });
+  } catch {
+    // Return empty map on error; callers fall back to xG
+  }
+  return teamMap;
+}
+
 export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> {
   // NOTE: Debug endpoint /footystats/debug-db DELETED for security (exposed DB schema)
 
@@ -88,19 +177,27 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
   // Get trends analysis for today's matches (MOVED TO TOP TO AVOID LOADING ISSUES)
   fastify.get('/footystats/trends-analysis', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      // Return cached response if fresh (5-minute TTL)
+      if (_trendsResponseCache && Date.now() - _trendsResponseCache.ts < _TRENDS_RESPONSE_CACHE_TTL_MS) {
+        logger.info('[FootyStats] trends-analysis: serving from response cache');
+        return _trendsResponseCache.data;
+      }
+
+      // If computation is already in progress (concurrent requests), wait for it
+      if (_trendsComputationPromise) {
+        logger.info('[FootyStats] trends-analysis: waiting for in-progress computation');
+        return await _trendsComputationPromise;
+      }
+
+      // Start computation; store promise so concurrent requests share it
+      _trendsComputationPromise = (async () => {
       logger.info('[FootyStats] Fetching trends analysis...');
 
-      const today = new Date();
-
-      // Get cached today's matches
-      const cached = await getCachedTodayMatches(today);
-      let matches = cached;
-
-      // If not cached, fetch from API
-      if (!matches) {
-        const response = await footyStatsAPI.getTodaysMatches();
-        matches = response.data || [];
-      }
+      // Skip DB cache lookup to avoid connection pool exhaustion under live match load.
+      // Fetch directly from FootyStats API (fast ~0.3s). League table data uses
+      // in-memory _leagueTableCache (6h TTL) to avoid repeated API calls.
+      const response = await footyStatsAPI.getTodaysMatches();
+      const matches = response.data || [];
 
       if (!matches || matches.length === 0) {
         return {
@@ -116,86 +213,174 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         };
       }
 
-      // GOAL TRENDS - High scoring matches
-      const goalTrends = matches
-        .filter((m: any) => m.potentials?.btts >= 65 || m.potentials?.over25 >= 65)
-        .map((m: any) => ({
-          fs_id: m.fs_id,
-          home_name: m.home_name,
-          away_name: m.away_name,
-          home_logo: m.home_logo,
-          away_logo: m.away_logo,
-          league_name: m.league_name,
-          date_unix: m.date_unix,
-          btts: m.potentials?.btts || 0,
-          over25: m.potentials?.over25 || 0,
-          avg_goals: m.potentials?.avg || 0,
-          xg_total: (m.xg?.home || 0) + (m.xg?.away || 0),
-          trend_type: m.potentials?.btts >= 70 ? 'High BTTS' : 'High Goals',
-          confidence: Math.max(m.potentials?.btts || 0, m.potentials?.over25 || 0)
-        }))
+      // Helper: read field from either processed (cached) or raw API format
+      const bp = (m: any, field: string, rawField: string): number =>
+        m.potentials?.[field] ?? m[rawField] ?? 0;
+      const bx = (m: any, team: 'home' | 'away'): number =>
+        m.xg?.[team] ?? (team === 'home' ? m.team_a_xg_prematch : m.team_b_xg_prematch) ?? 0;
+
+      // Collect ALL unique competition_ids from ALL matches (for league names + table stats)
+      const allCompIds = new Set<number>();
+      matches.forEach((m: any) => {
+        const cid = Number(m.competition_id || m.competitionId);
+        if (cid) allCompIds.add(cid);
+      });
+
+      // Fetch league names AND league table stats for all competitions.
+      // Uses in-memory caches (24h / 6h TTL). Runs at most 4 competitions concurrently
+      // to avoid FootyStats rate limiting, and races against a 6-second timeout so
+      // cold-cache startup never blocks the response long-term.
+      const leagueNames = new Map<number, string>();
+      const leagueTeamMaps = new Map<number, Map<number, Record<string, any>>>();
+
+      const enrichOneCompetition = async (cid: number) => {
+        const [name, teamMap] = await Promise.all([
+          getLeagueNameCached(cid),
+          getLeagueTeamStatsCached(cid),
+        ]);
+        leagueNames.set(cid, name);
+        leagueTeamMaps.set(cid, teamMap);
+      };
+
+      // Concurrency-limited runner: process max 4 competitions at a time
+      const CONCURRENCY = 4;
+      const allCidArray = [...allCompIds];
+      const enrichmentPromise = (async () => {
+        for (let i = 0; i < allCidArray.length; i += CONCURRENCY) {
+          const batch = allCidArray.slice(i, i + CONCURRENCY);
+          await Promise.all(batch.map(enrichOneCompetition));
+        }
+      })();
+
+      const enrichmentTimeout = new Promise<void>(resolve =>
+        setTimeout(() => {
+          logger.warn('[FootyStats] League enrichment exceeded 6s — returning partial data, caches will populate in background');
+          resolve();
+        }, 6000)
+      );
+      await Promise.race([enrichmentPromise, enrichmentTimeout]);
+
+      // Helper: resolve league name for a match
+      const getLeagueName = (m: any): string => {
+        const cid = Number(m.competition_id || m.competitionId);
+        return leagueNames.get(cid) || m.league_name || m.competition_name || 'Bilinmeyen Lig';
+      };
+
+      // GOAL TRENDS - collect matching matches first, then fetch full-season team stats
+      const filteredForGoals = matches.filter((m: any) =>
+        bp(m, 'btts', 'btts_potential') >= 65 || bp(m, 'over25', 'o25_potential') >= 65
+      );
+
+      // Helper: get full-season stats for a team from its competition's table
+      const getTeamSeasonStats = (m: any, teamId: number): Record<string, any> | undefined => {
+        const cid = Number(m.competition_id || m.competitionId);
+        return leagueTeamMaps.get(cid)?.get(teamId);
+      };
+
+      // GOAL TRENDS - High scoring matches with real full-season scored/conceded averages
+      const goalTrends = filteredForGoals
+        .map((m: any) => {
+          const btts = bp(m, 'btts', 'btts_potential');
+          const over25 = bp(m, 'over25', 'o25_potential');
+          const homeXg = bx(m, 'home');
+          const awayXg = bx(m, 'away');
+          const homeStats = getTeamSeasonStats(m, Number(m.homeID));
+          const awayStats = getTeamSeasonStats(m, Number(m.awayID));
+          return {
+            fs_id: m.fs_id || m.id,
+            home_name: m.home_name,
+            away_name: m.away_name,
+            home_logo: m.home_logo || null,
+            away_logo: m.away_logo || null,
+            league_name: getLeagueName(m),
+            date_unix: m.date_unix,
+            btts,
+            over25,
+            over15: bp(m, 'over15', 'o15_potential'),
+            ht_over05: bp(m, 'ht_over05', 'o05HT_potential'),
+            avg_goals: bp(m, 'avg', 'avg_potential'),
+            xg_total: homeXg + awayXg,
+            corners: bp(m, 'corners', 'corners_potential'),
+            cards: bp(m, 'cards', 'cards_potential'),
+            corner_over75: (() => { const c = bp(m, 'corners', 'corners_potential'); return c > 0 ? Math.min(90, Math.max(20, Math.round((c / 10) * 75 + 5))) : 0; })(),
+            card_over35: (() => { const k = bp(m, 'cards', 'cards_potential'); return k > 0 ? Math.min(88, Math.max(20, Math.round((k / 5) * 70 + 10))) : 0; })(),
+            // Full-season averages per venue (goals scored/conceded in home or away games)
+            home_scored: homeStats?.home_scored_avg ?? homeXg,
+            home_conceded: homeStats?.home_conceded_avg ?? awayXg,
+            away_scored: awayStats?.away_scored_avg ?? awayXg,
+            away_conceded: awayStats?.away_conceded_avg ?? homeXg,
+            trend_type: btts >= 70 ? 'High BTTS' : 'High Goals',
+            confidence: Math.max(btts, over25),
+          };
+        })
         .sort((a: any, b: any) => b.confidence - a.confidence)
         .slice(0, 20);
 
       // CORNER TRENDS - High corner potential
       const cornerTrends = matches
-        .filter((m: any) => m.potentials?.corners >= 10)
-        .map((m: any) => ({
-          fs_id: m.fs_id,
-          home_name: m.home_name,
-          away_name: m.away_name,
-          home_logo: m.home_logo,
-          away_logo: m.away_logo,
-          league_name: m.league_name,
-          date_unix: m.date_unix,
-          corners: m.potentials?.corners || 0,
-          over9_5: m.potentials?.corners >= 9.5 ? 75 : 50,
-          over10_5: m.potentials?.corners >= 10.5 ? 70 : 45,
-          trend_type: 'High Corners',
-          confidence: Math.min(95, Math.round(m.potentials?.corners * 7))
-        }))
+        .filter((m: any) => bp(m, 'corners', 'corners_potential') >= 10)
+        .map((m: any) => {
+          const corners = bp(m, 'corners', 'corners_potential');
+          return {
+            fs_id: m.fs_id || m.id,
+            home_name: m.home_name,
+            away_name: m.away_name,
+            home_logo: m.home_logo || null,
+            away_logo: m.away_logo || null,
+            league_name: getLeagueName(m),
+            date_unix: m.date_unix,
+            corners,
+            over9_5: corners >= 9.5 ? 75 : 50,
+            over10_5: corners >= 10.5 ? 70 : 45,
+            trend_type: 'High Corners',
+            confidence: Math.min(95, Math.round(corners * 7)),
+          };
+        })
         .sort((a: any, b: any) => b.corners - a.corners)
         .slice(0, 15);
 
       // CARDS TRENDS - High cards potential
       const cardsTrends = matches
-        .filter((m: any) => m.potentials?.cards >= 4)
-        .map((m: any) => ({
-          fs_id: m.fs_id,
-          home_name: m.home_name,
-          away_name: m.away_name,
-          home_logo: m.home_logo,
-          away_logo: m.away_logo,
-          league_name: m.league_name,
-          date_unix: m.date_unix,
-          cards: m.potentials?.cards || 0,
-          over3_5: m.potentials?.cards >= 3.5 ? 70 : 50,
-          over4_5: m.potentials?.cards >= 4.5 ? 65 : 45,
-          trend_type: 'High Cards',
-          confidence: Math.min(85, Math.round(m.potentials?.cards * 15))
-        }))
+        .filter((m: any) => bp(m, 'cards', 'cards_potential') >= 4)
+        .map((m: any) => {
+          const cards = bp(m, 'cards', 'cards_potential');
+          return {
+            fs_id: m.fs_id || m.id,
+            home_name: m.home_name,
+            away_name: m.away_name,
+            home_logo: m.home_logo || null,
+            away_logo: m.away_logo || null,
+            league_name: getLeagueName(m),
+            date_unix: m.date_unix,
+            cards,
+            over3_5: cards >= 3.5 ? 70 : 50,
+            over4_5: cards >= 4.5 ? 65 : 45,
+            trend_type: 'High Cards',
+            confidence: Math.min(85, Math.round(cards * 15)),
+          };
+        })
         .sort((a: any, b: any) => b.cards - a.cards)
         .slice(0, 15);
 
       // FORM TRENDS - Teams with strong recent form (based on xG difference)
       const formTrends = matches
         .filter((m: any) => {
-          const xgDiff = Math.abs((m.xg?.home || 0) - (m.xg?.away || 0));
+          const xgDiff = Math.abs(bx(m, 'home') - bx(m, 'away'));
           return xgDiff >= 0.5; // Significant xG difference indicates form advantage
         })
         .map((m: any) => {
-          const homeXg = m.xg?.home || 0;
-          const awayXg = m.xg?.away || 0;
+          const homeXg = bx(m, 'home');
+          const awayXg = bx(m, 'away');
           const favorite = homeXg > awayXg ? 'home' : 'away';
           const xgDiff = Math.abs(homeXg - awayXg);
 
           return {
-            fs_id: m.fs_id,
+            fs_id: m.fs_id || m.id,
             home_name: m.home_name,
             away_name: m.away_name,
-            home_logo: m.home_logo,
-            away_logo: m.away_logo,
-            league_name: m.league_name,
+            home_logo: m.home_logo || null,
+            away_logo: m.away_logo || null,
+            league_name: getLeagueName(m),
             date_unix: m.date_unix,
             home_xg: homeXg,
             away_xg: awayXg,
@@ -203,7 +388,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             favorite: favorite,
             favorite_name: favorite === 'home' ? m.home_name : m.away_name,
             trend_type: 'Form Advantage',
-            confidence: Math.min(85, Math.round(50 + (xgDiff * 20)))
+            confidence: Math.min(85, Math.round(50 + (xgDiff * 20))),
           };
         })
         .sort((a: any, b: any) => b.xg_diff - a.xg_diff)
@@ -212,35 +397,34 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
       // VALUE BETS - Mismatched odds vs predictions
       const valueBets = matches
         .filter((m: any) => {
-          if (!m.odds?.home || !m.odds?.away) return false;
-          const totalXg = (m.xg?.home || 0) + (m.xg?.away || 0);
-          const bttsPot = m.potentials?.btts || 0;
-          const over25Pot = m.potentials?.over25 || 0;
-
-          // Value if high prediction but good odds
+          const oddsHome = m.odds?.home || m.odds_ft_1;
+          const oddsAway = m.odds?.away || m.odds_ft_2;
+          if (!oddsHome || !oddsAway) return false;
+          const totalXg = bx(m, 'home') + bx(m, 'away');
+          const bttsPot = bp(m, 'btts', 'btts_potential');
+          const over25Pot = bp(m, 'over25', 'o25_potential');
           return (bttsPot >= 60 && totalXg >= 2.5) || (over25Pot >= 65 && totalXg >= 2.8);
         })
         .map((m: any) => {
-          const bttsPot = m.potentials?.btts || 0;
-          const over25Pot = m.potentials?.over25 || 0;
-          const totalXg = (m.xg?.home || 0) + (m.xg?.away || 0);
-
+          const bttsPot = bp(m, 'btts', 'btts_potential');
+          const over25Pot = bp(m, 'over25', 'o25_potential');
+          const totalXg = bx(m, 'home') + bx(m, 'away');
           return {
-            fs_id: m.fs_id,
+            fs_id: m.fs_id || m.id,
             home_name: m.home_name,
             away_name: m.away_name,
-            home_logo: m.home_logo,
-            away_logo: m.away_logo,
-            league_name: m.league_name,
+            home_logo: m.home_logo || null,
+            away_logo: m.away_logo || null,
+            league_name: getLeagueName(m),
             date_unix: m.date_unix,
             btts: bttsPot,
             over25: over25Pot,
             xg_total: totalXg,
-            odds_home: m.odds?.home,
-            odds_draw: m.odds?.draw,
-            odds_away: m.odds?.away,
+            odds_home: m.odds?.home || m.odds_ft_1,
+            odds_draw: m.odds?.draw || m.odds_ft_x,
+            odds_away: m.odds?.away || m.odds_ft_2,
             trend_type: 'Value Bet',
-            confidence: Math.round((bttsPot + over25Pot + (totalXg * 10)) / 3)
+            confidence: Math.round((bttsPot + over25Pot + (totalXg * 10)) / 3),
           };
         })
         .sort((a: any, b: any) => b.confidence - a.confidence)
@@ -248,7 +432,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
       logger.info(`[FootyStats] Trends analysis completed: ${goalTrends.length} goal trends, ${cornerTrends.length} corner trends`);
 
-      return {
+      const result = {
         success: true,
         trends: {
           goalTrends,
@@ -260,7 +444,20 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         totalMatches: matches.length,
         generated_at: new Date().toISOString()
       };
+
+      // Store in response cache
+      _trendsResponseCache = { data: result, ts: Date.now() };
+      return result;
+      })(); // end _trendsComputationPromise IIFE
+
+      try {
+        const result = await _trendsComputationPromise;
+        return result;
+      } finally {
+        _trendsComputationPromise = null;
+      }
     } catch (error: any) {
+      _trendsComputationPromise = null;
       logger.error('[FootyStats] Trends analysis error:', error);
       return reply.status(500).send({
         success: false,
@@ -682,6 +879,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
         const matchKey = `${m.home_name}|${m.away_name}`.toLowerCase();
         return {
           fs_id: m.id,
+          homeID: m.homeID,
+          awayID: m.awayID,
+          competition_id: m.competition_id,
           home_name: m.home_name,
           away_name: m.away_name,
           home_logo: teamLogosMap.get(m.home_name.toLowerCase()) || null,
@@ -1145,6 +1345,9 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
 
         return {
           fs_id: m.id,
+          homeID: m.homeID,
+          awayID: m.awayID,
+          competition_id: m.competition_id,
           home_name: m.home_name,
           away_name: m.away_name,
           home_logo: homeLogo,
@@ -1159,6 +1362,7 @@ export async function footyStatsRoutes(fastify: FastifyInstance): Promise<void> 
             over25: m.o25_potential,
             avg: m.avg_potential,
             over15: m.o15_potential,
+            ht_over05: m.o05HT_potential || 0,
             corners: m.corners_potential,
             cards: m.cards_potential,
             shots: m.team_a_xg_prematch && m.team_b_xg_prematch

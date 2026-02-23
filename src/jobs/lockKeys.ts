@@ -116,6 +116,9 @@ export const LOCK_KEYS = {
   /** Missing leagues report - generates report of unmapped matches by league */
   MISSING_LEAGUES_REPORT: 910000000031n,
 
+  /** Twitter trends publish - publishes daily trend analysis to Twitter/X */
+  TWITTER_TRENDS_PUBLISH: 910000000032n,
+
   // ============================================================
   // MATCH-LEVEL LOCKS (920_000_000_xxx + match_id)
   // These prevent concurrent updates to the same match

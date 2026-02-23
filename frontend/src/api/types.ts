@@ -132,6 +132,23 @@ export interface TelegramPublishResponse {
 }
 
 // ============================================================================
+// Twitter Publishing
+// ============================================================================
+
+export interface TwitterPublishResponse {
+  success: boolean;
+  dry_run?: boolean;
+  skipped?: boolean;
+  skip_reason?: string;
+  tweet_count?: number;
+  main_tweet_id?: string;
+  tweet_ids?: string[];
+  post_id?: string;
+  error?: string;
+  elapsed_ms?: number;
+}
+
+// ============================================================================
 // Trends Analysis
 // ============================================================================
 

@@ -51,6 +51,10 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
       // Fetch team form data (last 5 matches) for both teams
       let homeFormString: string | undefined;
       let awayFormString: string | undefined;
+      let homeHTGoalsScored: number | undefined;
+      let homeHTGoalsConceded: number | undefined;
+      let awayHTGoalsScored: number | undefined;
+      let awayHTGoalsConceded: number | undefined;
 
       try {
         logger.info(`[AnalysisRoutes] Fetching form data for homeID: ${fsMatch.homeID}, awayID: ${fsMatch.awayID}`);
@@ -63,19 +67,75 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
         logger.info(`[AnalysisRoutes] Form responses - Home success: ${homeFormResponse?.success}, Away success: ${awayFormResponse?.success}`);
 
         if (homeFormResponse.success && homeFormResponse.data && homeFormResponse.data.length > 0) {
-          const homeFormData = homeFormResponse.data[0];
+          const homeFormData = homeFormResponse.data[0] as any;
           logger.info(`[AnalysisRoutes] 🔍 Home form data keys: ${Object.keys(homeFormData).join(', ')}`);
-          homeFormString = homeFormData.formRun_overall;
-          logger.info(`[AnalysisRoutes] Home form string: ${homeFormString}`);
+
+          // Check if stats object exists
+          if (homeFormData.stats) {
+            const homeStats = homeFormData.stats;
+
+            // Form string - calculate from W/D/L numbers
+            const homeWins = homeStats.seasonWinsNum_home || 0;
+            const homeDraws = homeStats.seasonDrawsNum_home || 0;
+            const homeLosses = homeStats.seasonLossesNum_home || 0;
+
+            // Create form string from last matches (approximate using ratios)
+            if (homeWins + homeDraws + homeLosses > 0) {
+              const totalMatches = homeWins + homeDraws + homeLosses;
+              homeFormString = `${homeWins}G-${homeDraws}B-${homeLosses}M (${totalMatches} maç)`;
+            }
+
+            // Calculate first half goals from season averages
+            // Typically ~40-45% of goals are scored in first half
+            const homeGoalsScored = homeStats.seasonGoals_home || homeStats.seasonGoalsTotal_home || 0;
+            const homeGoalsConceded = homeStats.seasonConceded_home || homeStats.seasonConcededNum_home || 0;
+            const homeMatchesPlayed = homeStats.seasonMatchesPlayed_home || 1;
+
+            // Calculate per-match average and estimate first half (40%)
+            homeHTGoalsScored = (homeGoalsScored / homeMatchesPlayed) * 0.4;
+            homeHTGoalsConceded = (homeGoalsConceded / homeMatchesPlayed) * 0.4;
+
+            logger.info(`[AnalysisRoutes] Home - Form: ${homeFormString}, HT Goals: ${homeHTGoalsScored?.toFixed(2)}, HT Conceded: ${homeHTGoalsConceded?.toFixed(2)}`);
+          } else {
+            logger.warn(`[AnalysisRoutes] ❌ No stats object in home form data`);
+          }
         } else {
           logger.warn(`[AnalysisRoutes] ❌ No home form data - success: ${homeFormResponse?.success}, data length: ${homeFormResponse?.data?.length}`);
         }
 
         if (awayFormResponse.success && awayFormResponse.data && awayFormResponse.data.length > 0) {
-          const awayFormData = awayFormResponse.data[0];
+          const awayFormData = awayFormResponse.data[0] as any;
           logger.info(`[AnalysisRoutes] 🔍 Away form data keys: ${Object.keys(awayFormData).join(', ')}`);
-          awayFormString = awayFormData.formRun_overall;
-          logger.info(`[AnalysisRoutes] Away form string: ${awayFormString}`);
+
+          // Check if stats object exists
+          if (awayFormData.stats) {
+            const awayStats = awayFormData.stats;
+
+            // Form string - calculate from W/D/L numbers
+            const awayWins = awayStats.seasonWinsNum_away || 0;
+            const awayDraws = awayStats.seasonDrawsNum_away || 0;
+            const awayLosses = awayStats.seasonLossesNum_away || 0;
+
+            // Create form string from last matches (approximate using ratios)
+            if (awayWins + awayDraws + awayLosses > 0) {
+              const totalMatches = awayWins + awayDraws + awayLosses;
+              awayFormString = `${awayWins}G-${awayDraws}B-${awayLosses}M (${totalMatches} maç)`;
+            }
+
+            // Calculate first half goals from season averages
+            // Typically ~40-45% of goals are scored in first half
+            const awayGoalsScored = awayStats.seasonGoals_away || awayStats.seasonGoalsTotal_away || 0;
+            const awayGoalsConceded = awayStats.seasonConceded_away || awayStats.seasonConcededNum_away || 0;
+            const awayMatchesPlayed = awayStats.seasonMatchesPlayed_away || 1;
+
+            // Calculate per-match average and estimate first half (40%)
+            awayHTGoalsScored = (awayGoalsScored / awayMatchesPlayed) * 0.4;
+            awayHTGoalsConceded = (awayGoalsConceded / awayMatchesPlayed) * 0.4;
+
+            logger.info(`[AnalysisRoutes] Away - Form: ${awayFormString}, HT Goals: ${awayHTGoalsScored?.toFixed(2)}, HT Conceded: ${awayHTGoalsConceded?.toFixed(2)}`);
+          } else {
+            logger.warn(`[AnalysisRoutes] ❌ No stats object in away form data`);
+          }
         } else {
           logger.warn(`[AnalysisRoutes] ❌ No away form data - success: ${awayFormResponse?.success}, data length: ${awayFormResponse?.data?.length}`);
         }
@@ -103,6 +163,10 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
         team_b_form: fsMatch.pre_match_away_ppg,
         team_a_form_string: homeFormString,
         team_b_form_string: awayFormString,
+        team_a_ht_goals_scored: homeHTGoalsScored,
+        team_a_ht_goals_conceded: homeHTGoalsConceded,
+        team_b_ht_goals_scored: awayHTGoalsScored,
+        team_b_ht_goals_conceded: awayHTGoalsConceded,
         corners_potential: fsMatch.corners_potential,
         cards_potential: fsMatch.cards_potential,
         shots_potential: fsMatch.team_a_shotsOnTarget,
@@ -140,6 +204,10 @@ export async function registerAnalysisRoutes(fastify: FastifyInstance) {
         team_b_form: match.team_b_form,
         team_a_form_string: match.team_a_form_string,
         team_b_form_string: match.team_b_form_string,
+        team_a_ht_goals_scored: match.team_a_ht_goals_scored,
+        team_a_ht_goals_conceded: match.team_a_ht_goals_conceded,
+        team_b_ht_goals_scored: match.team_b_ht_goals_scored,
+        team_b_ht_goals_conceded: match.team_b_ht_goals_conceded,
         corners_potential: match.corners_potential,
         cards_potential: match.cards_potential,
         shots_potential: match.shots_potential,

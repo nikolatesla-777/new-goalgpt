@@ -29,6 +29,13 @@ interface MatchData {
   team_b_form?: string;
   team_a_form_string?: string;  // W-W-D-L-W formatında son 5 maç
   team_b_form_string?: string;  // W-W-D-L-W formatında son 5 maç
+
+  // First Half Stats (Home/Away specific)
+  team_a_ht_goals_scored?: number;   // Ev sahibi ilk yarı gol ortalaması (ev sahibi olarak)
+  team_a_ht_goals_conceded?: number; // Ev sahibi ilk yarı yediği gol ortalaması (ev sahibi olarak)
+  team_b_ht_goals_scored?: number;   // Deplasman ilk yarı gol ortalaması (deplasman olarak)
+  team_b_ht_goals_conceded?: number; // Deplasman ilk yarı yediği gol ortalaması (deplasman olarak)
+
   corners_potential?: number;
   cards_potential?: number;
   shots_potential?: number;
@@ -82,21 +89,6 @@ function formatMatchDate(unixTimestamp: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-/**
- * Parse form string (W-W-D-L-W) to extract wins, draws, losses
- */
-function parseFormString(formString?: string): { wins: number; draws: number; losses: number; formString: string } | null {
-  if (!formString) return null;
-
-  const results = formString.split('-').filter(r => r.trim().length > 0);
-
-  const wins = results.filter(r => r === 'W').length;
-  const draws = results.filter(r => r === 'D').length;
-  const losses = results.filter(r => r === 'L').length;
-
-  return { wins, draws, losses, formString };
 }
 
 /**
@@ -277,6 +269,32 @@ function generateHTOver05Analysis(match: MatchData): string | null {
     analysis += `Düşük oran, takımların temkinli başlayabileceğini ve ilk yarının daha taktiksel geçebileceğini gösteriyor. Asıl hareketlilik ikinci yarıda olabilir.`;
   }
 
+  // Add team-specific first half stats
+  const hasHomeStats = match.team_a_ht_goals_scored !== undefined || match.team_a_ht_goals_conceded !== undefined;
+  const hasAwayStats = match.team_b_ht_goals_scored !== undefined || match.team_b_ht_goals_conceded !== undefined;
+
+  if (hasHomeStats || hasAwayStats) {
+    analysis += `\n\n**Takım Bazında İlk Yarı İstatistikleri:**\n`;
+
+    if (hasHomeStats) {
+      const homeScored = match.team_a_ht_goals_scored ?? 0;
+      const homeConceded = match.team_a_ht_goals_conceded ?? 0;
+      const scoringEmoji = homeScored >= 0.7 ? '⚽' : homeScored >= 0.5 ? '🎯' : '🔻';
+      const defendingEmoji = homeConceded <= 0.4 ? '🛡️' : homeConceded <= 0.7 ? '⚠️' : '🔴';
+
+      analysis += `${scoringEmoji} **${match.home_name} (Ev Sahibi)**: İlk yarıda ortalama ${homeScored.toFixed(2)} gol atıyor, ${homeConceded.toFixed(2)} gol yiyor.\n`;
+    }
+
+    if (hasAwayStats) {
+      const awayScored = match.team_b_ht_goals_scored ?? 0;
+      const awayConceded = match.team_b_ht_goals_conceded ?? 0;
+      const scoringEmoji = awayScored >= 0.7 ? '⚽' : awayScored >= 0.5 ? '🎯' : '🔻';
+      const defendingEmoji = awayConceded <= 0.4 ? '🛡️' : awayConceded <= 0.7 ? '⚠️' : '🔴';
+
+      analysis += `${scoringEmoji} **${match.away_name} (Deplasman)**: İlk yarıda ortalama ${awayScored.toFixed(2)} gol atıyor, ${awayConceded.toFixed(2)} gol yiyor.`;
+    }
+  }
+
   return analysis;
 }
 
@@ -344,19 +362,22 @@ function generateFormAnalysis(match: MatchData): string | null {
   }
 
   // Detailed form analysis with W-D-L breakdown
-  analysis += `\n\n**Son 5 Maç Performansı:**\n`;
+  analysis += `\n\n**Sezon Performansı:**\n`;
 
-  const homeForm = parseFormString(match.team_a_form_string);
-  const awayForm = parseFormString(match.team_b_form_string);
-
-  if (homeForm) {
-    const homeEmoji = homeForm.wins >= 3 ? '🔥' : homeForm.wins >= 2 ? '⭐' : homeForm.losses >= 3 ? '❄️' : '➡️';
-    analysis += `${homeEmoji} **${match.home_name}**: ${homeForm.wins}G-${homeForm.draws}B-${homeForm.losses}M (${homeForm.formString})\n`;
+  if (match.team_a_form_string) {
+    // Parse form string: "5G-2B-3M (10 maç)"
+    const homeWins = parseInt(match.team_a_form_string.match(/(\d+)G/)?.[1] || '0');
+    const homeLosses = parseInt(match.team_a_form_string.match(/(\d+)M/)?.[1] || '0');
+    const homeEmoji = homeWins >= homeLosses + 2 ? '🔥' : homeWins > homeLosses ? '⭐' : homeLosses >= homeWins + 2 ? '❄️' : '➡️';
+    analysis += `${homeEmoji} **${match.home_name}**: ${match.team_a_form_string}\n`;
   }
 
-  if (awayForm) {
-    const awayEmoji = awayForm.wins >= 3 ? '🔥' : awayForm.wins >= 2 ? '⭐' : awayForm.losses >= 3 ? '❄️' : '➡️';
-    analysis += `${awayEmoji} **${match.away_name}**: ${awayForm.wins}G-${awayForm.draws}B-${awayForm.losses}M (${awayForm.formString})`;
+  if (match.team_b_form_string) {
+    // Parse form string: "5G-2B-3M (10 maç)"
+    const awayWins = parseInt(match.team_b_form_string.match(/(\d+)G/)?.[1] || '0');
+    const awayLosses = parseInt(match.team_b_form_string.match(/(\d+)M/)?.[1] || '0');
+    const awayEmoji = awayWins >= awayLosses + 2 ? '🔥' : awayWins > awayLosses ? '⭐' : awayLosses >= awayWins + 2 ? '❄️' : '➡️';
+    analysis += `${awayEmoji} **${match.away_name}**: ${match.team_b_form_string}`;
   }
 
   return analysis;

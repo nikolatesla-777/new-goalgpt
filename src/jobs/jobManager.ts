@@ -430,6 +430,17 @@ const jobs: JobDefinition[] = [
     enabled: true,
     description: 'Sync real-time standings from TheSports /table/live (only when live matches exist)',
   },
+  {
+    name: 'Twitter Trends Auto-Publish',
+    schedule: `0 ${process.env.TWITTER_AUTO_PUBLISH_HOUR || '6'} * * *`, // 06:00 UTC = 09:00 Turkey
+    handler: async () => {
+      const { runTwitterTrendsJob } = await import('./twitterTrends.job');
+      await runTwitterTrendsJob();
+    },
+    enabled: process.env.TWITTER_PUBLISH_ENABLED === 'true' ||
+             process.env.TWITTER_DRY_RUN === 'true',
+    description: 'Auto-publish daily trend analysis to Twitter/X (feature-flagged, kill-switch enabled)',
+  },
 ];
 
 /**

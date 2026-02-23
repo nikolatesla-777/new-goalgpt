@@ -9,6 +9,7 @@ import type {
   DailyListsRangeResponse,
   TelegramPublishRequest,
   TelegramPublishResponse,
+  TwitterPublishResponse,
   TrendsAnalysisResponse,
   PlayerSearchResponse,
   LeagueStandingsResponse,
@@ -85,6 +86,29 @@ export async function publishAllTelegramDailyLists(
  */
 export async function regenerateTelegramDailyLists(): Promise<DailyListsResponse> {
   return post<DailyListsResponse>('/telegram/daily-lists/regenerate');
+}
+
+// ============================================================================
+// Twitter Publishing API
+// ============================================================================
+
+/**
+ * Publish today's trend analysis as a Twitter/X thread
+ */
+export async function publishTrendsToTwitter(): Promise<TwitterPublishResponse> {
+  return post<TwitterPublishResponse>('/twitter/publish/trends');
+}
+
+/**
+ * Publish a single manually edited match tweet, optionally with a card image (base64 PNG)
+ * @param text The final tweet text (max 280 chars)
+ * @param imageBase64 Optional PNG image as base64 string (no data: prefix)
+ */
+export async function publishSingleMatchTweet(
+  text: string,
+  imageBase64?: string
+): Promise<{ success: boolean; dry_run: boolean; tweet_id?: string; error?: string }> {
+  return post('/twitter/publish/single-match', { text, imageBase64 });
 }
 
 // ============================================================================
@@ -166,6 +190,9 @@ export default {
 
   // Trends
   getTrendsAnalysis,
+
+  // Twitter
+  publishTrendsToTwitter,
 
   // Players
   searchPlayers,

@@ -8,6 +8,7 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import dotenv from 'dotenv';
+import { Pool } from 'pg';
 
 dotenv.config();
 
@@ -15,6 +16,95 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 let offset = 0;
 let isRunning = true;
+
+// Database connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// VIP kontrolü
+async function isUserVIP(telegramUserId: number): Promise<boolean> {
+  try {
+    const result = await pool.query(
+      `SELECT id FROM telegram_vip_subscriptions
+       WHERE telegram_user_id = $1
+       AND status = 'active'
+       AND expires_at > NOW()
+       LIMIT 1`,
+      [telegramUserId]
+    );
+    return result.rows.length > 0;
+  } catch (error) {
+    logger.error('[Bot] VIP check error:', error);
+    return false;
+  }
+}
+
+// Bugün kaç liste görüntüledi?
+async function getTodayViewCount(telegramUserId: number): Promise<number> {
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(DISTINCT list_type) as count
+       FROM telegram_daily_list_views
+       WHERE telegram_user_id = $1
+       AND view_date = CURRENT_DATE`,
+      [telegramUserId]
+    );
+    return parseInt(result.rows[0]?.count || '0');
+  } catch (error) {
+    logger.error('[Bot] View count error:', error);
+    return 0;
+  }
+}
+
+// Liste görüntülemeyi kaydet
+async function recordListView(telegramUserId: number, listType: string): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO telegram_daily_list_views (telegram_user_id, list_type, view_date)
+       VALUES ($1, $2, CURRENT_DATE)
+       ON CONFLICT (telegram_user_id, view_date, list_type) DO NOTHING`,
+      [telegramUserId, listType]
+    );
+  } catch (error) {
+    logger.error('[Bot] Record view error:', error);
+  }
+}
+
+// Liste erişim kontrolü
+async function canAccessList(telegramUserId: number): Promise<{ allowed: boolean; reason?: string }> {
+  const isVIP = await isUserVIP(telegramUserId);
+
+  if (isVIP) {
+    return { allowed: true };
+  }
+
+  const viewCount = await getTodayViewCount(telegramUserId);
+
+  if (viewCount >= 1) {
+    return {
+      allowed: false,
+      reason: 'free_limit_reached'
+    };
+  }
+
+  return { allowed: true };
+}
+
+// VIP kilit mesajı
+function getVIPLockedMessage(): string {
+  return `🔒 *VIP İçerik*\n\n` +
+    `Bu liste *VIP üyelerine* özeldir.\n\n` +
+    `✨ *Günlük 1 liste ÜCRETSİZ!*\n` +
+    `Bugünkü ücretsiz listenizi zaten kullandınız.\n\n` +
+    `🚀 *VIP Üyelik ile:*\n` +
+    `• Sınırsız tüm tahmin listeleri\n` +
+    `• AI destekli maç analizleri\n` +
+    `• Canlı skor bildirimleri\n` +
+    `• Özel kupon önerileri\n\n` +
+    `💎 *Haftalık sadece 200 Stars (≈199₺)*\n\n` +
+    `VIP üye olmak için: /uyeol`;
+}
 
 async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
   await axios.post(
@@ -104,10 +194,16 @@ function getBackButton() {
   };
 }
 
-async function getDailyList(listId: string): Promise<any> {
+async function getDailyList(market: string): Promise<any> {
   try {
-    const response = await axios.get(`${BACKEND_URL}/api/telegram/daily-lists/${listId}`);
-    return response.data;
+    const response = await axios.get(`${BACKEND_URL}/api/telegram/daily-lists/today`);
+    if (!response.data || !response.data.lists) {
+      return null;
+    }
+
+    // Find the specific market list
+    const list = response.data.lists.find((l: any) => l.market === market);
+    return list || null;
   } catch (error: any) {
     logger.error('[Bot] Error fetching daily list:', error.message);
     return null;
@@ -122,16 +218,46 @@ function formatDailyListMessage(list: any, title: string): string {
   let message = `${title}\n`;
   message += `📅 Tarih: ${new Date().toLocaleDateString('tr-TR')}\n`;
   message += `📊 Maç Sayısı: ${list.matches.length}\n`;
-  message += `🎯 Başarı Oranı: ${list.performance?.success_rate || 'Hesaplanıyor...'}%\n\n`;
+
+  // Performance gösterimi
+  if (list.performance) {
+    const perf = list.performance;
+    message += `🎯 Başarı: ${perf.won || 0}/${perf.total || 0} (${perf.win_rate || 0}%)\n`;
+  }
+
   message += `━━━━━━━━━━━━━━━━\n\n`;
 
   list.matches.slice(0, 10).forEach((match: any, index: number) => {
-    message += `${index + 1}. ${match.home_team} vs ${match.away_team}\n`;
-    message += `   🕐 ${match.match_time || match.formatted_date}\n`;
-    message += `   🏆 ${match.league_name}\n`;
-    if (match.prediction_reason) {
-      message += `   💡 ${match.prediction_reason}\n`;
+    // Takım isimleri
+    const homeName = match.home_name || 'N/A';
+    const awayName = match.away_name || 'N/A';
+    message += `${index + 1}. *${homeName}* vs *${awayName}*\n`;
+
+    // Saat - Unix timestamp'i Türkiye saatine göre formatla
+    if (match.date_unix) {
+      const matchDate = new Date(match.date_unix * 1000);
+      const timeStr = matchDate.toLocaleString('tr-TR', {
+        timeZone: 'Europe/Istanbul',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      message += `   🕐 ${timeStr}\n`;
     }
+
+    // Lig
+    if (match.league_name) {
+      message += `   🏆 ${match.league_name}\n`;
+    }
+
+    // Güven skoru ve sebep
+    if (match.confidence) {
+      message += `   🔥 Güven: ${match.confidence}/100\n`;
+    }
+    if (match.reason) {
+      message += `   💡 ${match.reason}\n`;
+    }
+
     message += `\n`;
   });
 
@@ -256,6 +382,7 @@ async function handleCallbackQuery(callbackQuery: any) {
               { text: '⚽️ 1.5 Üst', callback_data: 'list_ust15' }
             ],
             [
+              { text: '🎯 KG VAR', callback_data: 'list_kgvar' },
               { text: '🕐 İY 0.5 Üst', callback_data: 'list_iy05' }
             ],
             [
@@ -273,8 +400,32 @@ async function handleCallbackQuery(callbackQuery: any) {
     );
   }
   else if (data === 'list_ust25') {
+    const userId = callbackQuery.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await axios.post(
+        `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          text: getVIPLockedMessage(),
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💎 VIP Üye Ol', callback_data: 'upgrade_vip' }],
+              [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }]
+            ]
+          },
+        }
+      );
+      return;
+    }
+
     const list = await getDailyList('OVER_25');
     const message = formatDailyListMessage(list, '⚽️ *2.5 ÜST LİSTESİ*');
+
+    await recordListView(userId, 'OVER_25');
 
     await axios.post(
       `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
@@ -288,8 +439,32 @@ async function handleCallbackQuery(callbackQuery: any) {
     );
   }
   else if (data === 'list_ust15') {
+    const userId = callbackQuery.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await axios.post(
+        `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          text: getVIPLockedMessage(),
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💎 VIP Üye Ol', callback_data: 'upgrade_vip' }],
+              [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }]
+            ]
+          },
+        }
+      );
+      return;
+    }
+
     const list = await getDailyList('OVER_15');
     const message = formatDailyListMessage(list, '⚽️ *1.5 ÜST LİSTESİ*');
+
+    await recordListView(userId, 'OVER_15');
 
     await axios.post(
       `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
@@ -303,8 +478,32 @@ async function handleCallbackQuery(callbackQuery: any) {
     );
   }
   else if (data === 'list_iy05') {
+    const userId = callbackQuery.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await axios.post(
+        `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          text: getVIPLockedMessage(),
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💎 VIP Üye Ol', callback_data: 'upgrade_vip' }],
+              [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }]
+            ]
+          },
+        }
+      );
+      return;
+    }
+
     const list = await getDailyList('HT_OVER_05');
     const message = formatDailyListMessage(list, '🕐 *İLK YARI 0.5 ÜST LİSTESİ*');
+
+    await recordListView(userId, 'HT_OVER_05');
 
     await axios.post(
       `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
@@ -318,8 +517,32 @@ async function handleCallbackQuery(callbackQuery: any) {
     );
   }
   else if (data === 'list_korner') {
+    const userId = callbackQuery.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await axios.post(
+        `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          text: getVIPLockedMessage(),
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💎 VIP Üye Ol', callback_data: 'upgrade_vip' }],
+              [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }]
+            ]
+          },
+        }
+      );
+      return;
+    }
+
     const list = await getDailyList('CORNERS');
     const message = formatDailyListMessage(list, '🚩 *KORNER 7.5 ÜST LİSTESİ*');
+
+    await recordListView(userId, 'CORNERS');
 
     await axios.post(
       `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
@@ -333,8 +556,71 @@ async function handleCallbackQuery(callbackQuery: any) {
     );
   }
   else if (data === 'list_sarikart') {
+    const userId = callbackQuery.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await axios.post(
+        `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          text: getVIPLockedMessage(),
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💎 VIP Üye Ol', callback_data: 'upgrade_vip' }],
+              [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }]
+            ]
+          },
+        }
+      );
+      return;
+    }
+
     const list = await getDailyList('CARDS');
     const message = formatDailyListMessage(list, '🟨 *SARI KART 3.5 ÜST LİSTESİ*');
+
+    await recordListView(userId, 'CARDS');
+
+    await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        text: message,
+        parse_mode: 'Markdown',
+        reply_markup: getBackButton(),
+      }
+    );
+  }
+  else if (data === 'list_kgvar') {
+    const userId = callbackQuery.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await axios.post(
+        `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          text: getVIPLockedMessage(),
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💎 VIP Üye Ol', callback_data: 'upgrade_vip' }],
+              [{ text: '🔙 Ana Menü', callback_data: 'menu_main' }]
+            ]
+          },
+        }
+      );
+      return;
+    }
+
+    const list = await getDailyList('BTTS');
+    const message = formatDailyListMessage(list, '🎯 *KG VAR LİSTESİ*');
+
+    await recordListView(userId, 'BTTS');
 
     await axios.post(
       `https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`,
@@ -407,6 +693,10 @@ async function handleCallbackQuery(callbackQuery: any) {
       }
     );
   }
+  else if (data === 'upgrade_vip') {
+    // VIP üyelik invoice gönder
+    await sendInvoice(chatId);
+  }
 }
 
 async function handleUpdate(update: any) {
@@ -470,14 +760,16 @@ async function handleUpdate(update: any) {
       `🏠 /start - Başlangıç\n` +
       `📱 /goalgpt - GoalGPT Mini App Aç\n` +
       `📊 /gunluk - Günlük tahmin listeleri\n` +
-      `⚽️ /canli - Canlı maçlar\n` +
+      `⚽️ /ust25 - 2.5 Üst Listesi\n` +
+      `⚽️ /ust15 - 1.5 Üst Listesi\n` +
+      `🎯 /kgvar - KG VAR Listesi\n` +
+      `🕐 /iy05 - İlk Yarı 0.5 Üst\n` +
+      `🚩 /korner - Korner Listesi\n` +
+      `🟨 /sarikart - Sarı Kart Listesi\n` +
       `🤖 /analizyap - AI analiz iste\n` +
-      `🎁 /kupon - Kupon hazırla\n` +
       `📈 /performans - Performans takibi\n` +
       `📞 /iletisim - İletişim\n` +
-      `📋 /kurallar - Kurallar\n` +
-      `👤 /uyelik - Üyelik durumu\n` +
-      `🚀 /uyeol - Prime üyelik\n\n` +
+      `👤 /uyelik - Üyelik durumu\n\n` +
       `Daha fazla özellik çok yakında! 🚀`
     );
   }
@@ -494,6 +786,7 @@ async function handleUpdate(update: any) {
             { text: '⚽️ 1.5 Üst', callback_data: 'list_ust15' }
           ],
           [
+            { text: '🎯 KG VAR', callback_data: 'list_kgvar' },
             { text: '🕐 İY 0.5 Üst', callback_data: 'list_iy05' }
           ],
           [
@@ -518,28 +811,93 @@ async function handleUpdate(update: any) {
     );
   }
   else if (text === '/ust25') {
+    const userId = update.message.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await sendMessage(chatId, getVIPLockedMessage());
+      await sendInvoice(chatId);
+      return;
+    }
+
     const list = await getDailyList('OVER_25');
     const message = formatDailyListMessage(list, '⚽️ *2.5 ÜST LİSTESİ*');
+    await recordListView(userId, 'OVER_25');
     await sendMessage(chatId, message);
   }
   else if (text === '/ust15') {
+    const userId = update.message.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await sendMessage(chatId, getVIPLockedMessage());
+      await sendInvoice(chatId);
+      return;
+    }
+
     const list = await getDailyList('OVER_15');
     const message = formatDailyListMessage(list, '⚽️ *1.5 ÜST LİSTESİ*');
+    await recordListView(userId, 'OVER_15');
     await sendMessage(chatId, message);
   }
   else if (text === '/iy05') {
+    const userId = update.message.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await sendMessage(chatId, getVIPLockedMessage());
+      await sendInvoice(chatId);
+      return;
+    }
+
     const list = await getDailyList('HT_OVER_05');
     const message = formatDailyListMessage(list, '🕐 *İLK YARI 0.5 ÜST LİSTESİ*');
+    await recordListView(userId, 'HT_OVER_05');
     await sendMessage(chatId, message);
   }
   else if (text === '/korner') {
+    const userId = update.message.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await sendMessage(chatId, getVIPLockedMessage());
+      await sendInvoice(chatId);
+      return;
+    }
+
     const list = await getDailyList('CORNERS');
     const message = formatDailyListMessage(list, '🚩 *KORNER 7.5 ÜST LİSTESİ*');
+    await recordListView(userId, 'CORNERS');
     await sendMessage(chatId, message);
   }
   else if (text === '/sarikart') {
+    const userId = update.message.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await sendMessage(chatId, getVIPLockedMessage());
+      await sendInvoice(chatId);
+      return;
+    }
+
     const list = await getDailyList('CARDS');
     const message = formatDailyListMessage(list, '🟨 *SARI KART 3.5 ÜST LİSTESİ*');
+    await recordListView(userId, 'CARDS');
+    await sendMessage(chatId, message);
+  }
+  else if (text === '/kgvar') {
+    const userId = update.message.from.id;
+    const access = await canAccessList(userId);
+
+    if (!access.allowed) {
+      await sendMessage(chatId, getVIPLockedMessage());
+      await sendInvoice(chatId);
+      return;
+    }
+
+    const list = await getDailyList('BTTS');
+    const message = formatDailyListMessage(list, '🎯 *KG VAR LİSTESİ*');
+    await recordListView(userId, 'BTTS');
     await sendMessage(chatId, message);
   }
   else if (text === '/analizyap') {

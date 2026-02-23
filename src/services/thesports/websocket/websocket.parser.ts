@@ -69,131 +69,69 @@ export class WebSocketParser {
    */
   parseMQTTMessage(data: any): WebSocketMessage | null {
     try {
-      logger.info(`[Parser] parseMQTTMessage called, data type: ${typeof data}, isArray: ${Array.isArray(data)}`);
-
       // Handle object format: {"0": {...}, "1": {...}}
-      // Convert to array of messages
       if (data && typeof data === 'object' && !Array.isArray(data)) {
-        // Check if it's a multi-message object with numeric keys
         const keys = Object.keys(data);
-        logger.info(`[Parser] Object detected, keys: [${keys.join(', ')}]`);
         const numericKeys = keys.filter(k => /^\d+$/.test(k));
-        logger.info(`[Parser] Numeric keys filtered: [${numericKeys.join(', ')}], count: ${numericKeys.length}`);
-        
+
         if (numericKeys.length > 0) {
-          // Convert object to array: {"0": msg1, "1": msg2} -> [msg1, msg2]
           const messages = numericKeys.map(key => data[key]);
-
-          logger.info(`[Parser] parseMQTTMessage detected ${numericKeys.length} numeric keys, unwrapping ${messages.length} messages`);
-
-          // Parse each message and combine results
           const result = { score: [] as WebSocketScoreMessage[], stats: [] as WebSocketStatsMessage[], incidents: [] as WebSocketIncidentMessage[], tlive: [] as WebSocketTliveMessage[] };
           let hasValidMessage = false;
 
           for (const msg of messages) {
-            if (!msg || typeof msg !== 'object') {
-              logger.warn(`[Parser] Skipping invalid message (not object): ${typeof msg}`);
-              continue;
-            }
-
-            logger.info(`[Parser] Unwrapped message: ${JSON.stringify(msg).slice(0, 150)}...`);
-
-            // Guard: Check if match_id or id exists
+            if (!msg || typeof msg !== 'object') continue;
             const matchId = this.extractMatchIdFromPayload(msg);
-            if (!matchId || matchId.trim() === '') {
-              logger.warn('MQTT message missing valid match_id/id, skipping:', msg);
-              continue;
-            }
-
-            logger.info(`[Parser] Match ID extracted: ${matchId}, calling parseSingleMessage`);
-
-            // Try to parse as score, stats, or incidents
+            if (!matchId || matchId.trim() === '') continue;
             const parsed = this.parseSingleMessage(msg);
             if (parsed) {
-              logger.info(`[Parser] parseSingleMessage returned valid result`);
               if (parsed.score) result.score.push(...parsed.score);
               if (parsed.stats) result.stats.push(...parsed.stats);
               if (parsed.incidents) result.incidents.push(...parsed.incidents);
               if ((parsed as any).tlive) (result as any).tlive.push(...(parsed as any).tlive);
               hasValidMessage = true;
-            } else {
-              logger.warn(`[Parser] parseSingleMessage returned NULL for message`);
             }
           }
 
-          logger.info(`[Parser] parseMQTTMessage result: hasValidMessage=${hasValidMessage}`);
           return hasValidMessage ? result : null;
         }
-        
+
         // Handle single object format: {"id": "...", "stats": [...]}
         const matchId = this.extractMatchIdFromPayload(data);
-        if (!matchId || matchId.trim() === '') {
-          logger.warn('MQTT message missing valid match_id/id:', data);
-          return null;
-        }
-        
+        if (!matchId || matchId.trim() === '') return null;
         return this.parseSingleMessage(data);
       }
 
       // Handle array format
       if (Array.isArray(data)) {
-        logger.info(`[Parser] Array detected, length: ${data.length}, first element type: ${typeof data[0]}`);
-
         // Check if it's an array of message objects: [{id: "...", stats: [...]}, ...]
         if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null && !Array.isArray(data[0])) {
-          logger.info(`[Parser] Array of message objects detected, processing ${data.length} messages`);
-
-          // Parse each message object and combine results
           const result = { score: [] as WebSocketScoreMessage[], stats: [] as WebSocketStatsMessage[], incidents: [] as WebSocketIncidentMessage[], tlive: [] as WebSocketTliveMessage[] };
           let hasValidMessage = false;
 
           for (const msg of data) {
-            if (!msg || typeof msg !== 'object') {
-              logger.warn(`[Parser] Skipping invalid message in array: ${typeof msg}`);
-              continue;
-            }
-
-            logger.info(`[Parser] Processing array message: ${JSON.stringify(msg).slice(0, 150)}...`);
-
-            // Guard: Check if match_id or id exists
+            if (!msg || typeof msg !== 'object') continue;
             const matchId = this.extractMatchIdFromPayload(msg);
-            if (!matchId || matchId.trim() === '') {
-              logger.warn('[Parser] Array message missing valid match_id/id, skipping:', msg);
-              continue;
-            }
-
-            logger.info(`[Parser] Match ID extracted: ${matchId}, calling parseSingleMessage`);
-
-            // Try to parse as score, stats, or incidents
+            if (!matchId || matchId.trim() === '') continue;
             const parsed = this.parseSingleMessage(msg);
             if (parsed) {
-              logger.info(`[Parser] parseSingleMessage returned valid result`);
               if (parsed.score) result.score.push(...parsed.score);
               if (parsed.stats) result.stats.push(...parsed.stats);
               if (parsed.incidents) result.incidents.push(...parsed.incidents);
               if ((parsed as any).tlive) (result as any).tlive.push(...(parsed as any).tlive);
               hasValidMessage = true;
-            } else {
-              logger.warn(`[Parser] parseSingleMessage returned NULL for array message`);
             }
           }
 
-          logger.info(`[Parser] Array processing result: hasValidMessage=${hasValidMessage}`);
           return hasValidMessage ? result : null;
         }
 
         // Otherwise, treat as score array: [match_id, status_code, home_data[], away_data[], timestamp]
-        logger.info(`[Parser] Treating as score array format`);
         const matchId = this.extractMatchIdFromPayload(data);
-        if (!matchId || matchId.trim() === '') {
-          logger.warn('MQTT array message missing valid match_id, skipping:', data);
-          return null;
-        }
-
+        if (!matchId || matchId.trim() === '') return null;
         return this.parseSingleMessage(data);
       }
 
-      logger.warn('Unknown MQTT message structure:', data);
       return null;
     } catch (error: any) {
       logger.error('Failed to parse MQTT message:', error);
@@ -205,40 +143,18 @@ export class WebSocketParser {
    * Parse a single message (array or object format)
    */
   private parseSingleMessage(data: any): WebSocketMessage | null {
-    // DEBUG: Log type checks
-    const isScore = this.isScoreUpdate(data);
-    const isStats = this.isStatsUpdate(data);
-    const isIncidents = this.isIncidentsUpdate(data);
-    const isTlive = this.isTliveUpdate(data);
-
-    logger.info(`[Parser] parseSingleMessage checks - score:${isScore}, stats:${isStats}, incidents:${isIncidents}, tlive:${isTlive}`);
-
-    // Check message type based on structure
-    // Score update: [match_id, status_code, home_data[], away_data[], timestamp]
-    if (isScore) {
-      logger.info(`[Parser] Parsing as SCORE message`);
+    if (this.isScoreUpdate(data)) {
       return { score: [this.parseScoreFromArray(data)], stats: [], incidents: [], tlive: [] };
     }
-
-    // Stats update: Different structure
-    if (isStats) {
-      logger.info(`[Parser] Parsing as STATS message`);
+    if (this.isStatsUpdate(data)) {
       return { score: [], stats: [this.parseStatsFromArray(data)], incidents: [], tlive: [] };
     }
-
-    // Incidents: Different structure
-    if (isIncidents) {
-      logger.info(`[Parser] Parsing as INCIDENTS message`);
+    if (this.isIncidentsUpdate(data)) {
       return { score: [], stats: [], incidents: [this.parseIncidentsFromArray(data)], tlive: [] };
     }
-
-    // TLIVE update: match timeline / phase changes (HT/2H/FT etc.)
-    if (isTlive) {
-      logger.info(`[Parser] Parsing as TLIVE message`);
+    if (this.isTliveUpdate(data)) {
       return { score: [], stats: [], incidents: [], tlive: [this.parseTliveFromArray(data)] };
     }
-
-    logger.warn(`[Parser] Unknown message type - returning null`);
     return null;
   }
 

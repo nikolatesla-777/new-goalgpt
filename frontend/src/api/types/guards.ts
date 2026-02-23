@@ -3,7 +3,7 @@
  * Provides runtime type checking to replace unsafe type assertions
  */
 
-import type { DailyListsResponse } from '../types';
+import type { DailyListsResponse, DailyListsRangeResponse } from '../types';
 
 export interface DateData {
   date: string;
@@ -19,6 +19,17 @@ export function isDailyListsResponse(data: unknown): data is DailyListsResponse 
     'lists' in obj &&
     Array.isArray(obj.lists) &&
     (obj.generated_at === undefined || typeof obj.generated_at === 'string' || typeof obj.generated_at === 'number')
+  );
+}
+
+export function isRangeResponse(data: unknown): data is DailyListsRangeResponse {
+  if (typeof data !== 'object' || data === null) return false;
+
+  const obj = data as any;
+  return (
+    'success' in obj &&
+    'data' in obj &&
+    Array.isArray(obj.data)
   );
 }
 

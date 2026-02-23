@@ -13,8 +13,198 @@ import { getDailyLists, refreshDailyLists, formatDailyListMessage, formatDailyLi
 import { evaluateMatch } from '../../services/telegram/dailyListsSettlement.service';
 import { channelRouter } from '../../services/telegram/channelRouter';
 import { parseMarketParam, getAllowedMarketParams, DAILY_LIST_MARKET_TO_ID } from '../../types/markets';
+import { generateMatchAnalysis, formatAnalysisForTelegram } from '../../services/analysis/matchAnalysisGenerator.service';
+import { footyStatsAPI } from '../../services/footystats/footystats.client';
 
 const PUBLISH_DELAY_MS = 1000; // 1 second between messages for rate limiting
+const DETAILED_ANALYSIS_DELAY_MS = 5000; // 5 seconds before sending detailed analyses
+const ANALYSIS_MESSAGE_DELAY_MS = 2000; // 2 seconds between each analysis message
+
+/**
+ * Send detailed analysis for each match in the list
+ * Called AFTER the main list is published
+ */
+async function sendDetailedAnalysesAsync(
+  targetList: any,
+  targetChannelId: string,
+  marketParam: string
+): Promise<void> {
+  try {
+    logger.info(`[TelegramDailyLists] 📊 Scheduling detailed analyses for ${marketParam}...`);
+
+    // Wait 5 seconds before sending detailed analyses
+    await new Promise(resolve => setTimeout(resolve, DETAILED_ANALYSIS_DELAY_MS));
+
+    logger.info(`[TelegramDailyLists] 🔍 Fetching detailed analyses for ${targetList.matches.length} matches...`);
+
+    // Send header message
+    const headerMessage = `📊 <b>DETAYLI ANALİZLER</b>\n\n${targetList.emoji} <b>${targetList.title}</b>\n\nHer maç için detaylı istatistiksel analiz aşağıda yer almaktadır:`;
+
+    try {
+      await telegramBot.sendMessage({
+        chat_id: targetChannelId,
+        text: headerMessage,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      });
+      logger.info(`[TelegramDailyLists] ✅ Detailed analyses header sent`);
+
+      // Wait 1 second after header
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (headerError) {
+      logger.warn(`[TelegramDailyLists] ⚠️ Failed to send header message:`, headerError);
+    }
+
+    // Send analysis for each match
+    for (let i = 0; i < targetList.matches.length; i++) {
+      const candidate = targetList.matches[i];
+      const fsMatchId = candidate.match.fs_id;
+
+      try {
+        // Fetch match data from FootyStats API
+        const response = await footyStatsAPI.getMatchDetails(fsMatchId);
+
+        if (!response.success || !response.data) {
+          logger.warn(`[TelegramDailyLists] ⚠️ Match ${fsMatchId} not found in FootyStats`);
+          continue;
+        }
+
+        const fsMatch = response.data;
+
+        // Fetch team form data for enhanced analysis
+        let homeFormString: string | undefined;
+        let awayFormString: string | undefined;
+        let homeHTGoalsScored: number | undefined;
+        let homeHTGoalsConceded: number | undefined;
+        let awayHTGoalsScored: number | undefined;
+        let awayHTGoalsConceded: number | undefined;
+
+        try {
+          const [homeFormResponse, awayFormResponse] = await Promise.all([
+            footyStatsAPI.getTeamLastX(fsMatch.homeID),
+            footyStatsAPI.getTeamLastX(fsMatch.awayID)
+          ]);
+
+          // Extract home team stats
+          if (homeFormResponse.success && homeFormResponse.data && homeFormResponse.data.length > 0) {
+            const homeFormData = homeFormResponse.data[0] as any;
+            if (homeFormData.stats) {
+              const homeStats = homeFormData.stats;
+              const homeWins = homeStats.seasonWinsNum_home || 0;
+              const homeDraws = homeStats.seasonDrawsNum_home || 0;
+              const homeLosses = homeStats.seasonLossesNum_home || 0;
+              if (homeWins + homeDraws + homeLosses > 0) {
+                const totalMatches = homeWins + homeDraws + homeLosses;
+                homeFormString = `${homeWins}G-${homeDraws}B-${homeLosses}M (${totalMatches} maç)`;
+              }
+              const homeGoalsScored = homeStats.seasonGoals_home || homeStats.seasonGoalsTotal_home || 0;
+              const homeGoalsConceded = homeStats.seasonConceded_home || homeStats.seasonConcededNum_home || 0;
+              const homeMatchesPlayed = homeStats.seasonMatchesPlayed_home || 1;
+              homeHTGoalsScored = (homeGoalsScored / homeMatchesPlayed) * 0.4;
+              homeHTGoalsConceded = (homeGoalsConceded / homeMatchesPlayed) * 0.4;
+            }
+          }
+
+          // Extract away team stats
+          if (awayFormResponse.success && awayFormResponse.data && awayFormResponse.data.length > 0) {
+            const awayFormData = awayFormResponse.data[0] as any;
+            if (awayFormData.stats) {
+              const awayStats = awayFormData.stats;
+              const awayWins = awayStats.seasonWinsNum_away || 0;
+              const awayDraws = awayStats.seasonDrawsNum_away || 0;
+              const awayLosses = awayStats.seasonLossesNum_away || 0;
+              if (awayWins + awayDraws + awayLosses > 0) {
+                const totalMatches = awayWins + awayDraws + awayLosses;
+                awayFormString = `${awayWins}G-${awayDraws}B-${awayLosses}M (${totalMatches} maç)`;
+              }
+              const awayGoalsScored = awayStats.seasonGoals_away || awayStats.seasonGoalsTotal_away || 0;
+              const awayGoalsConceded = awayStats.seasonConceded_away || awayStats.seasonConcededNum_away || 0;
+              const awayMatchesPlayed = awayStats.seasonMatchesPlayed_away || 1;
+              awayHTGoalsScored = (awayGoalsScored / awayMatchesPlayed) * 0.4;
+              awayHTGoalsConceded = (awayGoalsConceded / awayMatchesPlayed) * 0.4;
+            }
+          }
+        } catch (formError) {
+          logger.warn(`[TelegramDailyLists] ⚠️ Failed to fetch form data for match ${fsMatchId}`, formError);
+        }
+
+        // Generate analysis
+        const analysis = generateMatchAnalysis({
+          home_name: fsMatch.home_name,
+          away_name: fsMatch.away_name,
+          competition_name: fsMatch.competition_name || fsMatch.league_name || 'Bilinmeyen Lig',
+          date_unix: fsMatch.date_unix,
+          btts_potential: fsMatch.btts_potential,
+          o25_potential: fsMatch.o25_potential,
+          o15_potential: fsMatch.o15_potential,
+          ht_over_05_potential: fsMatch.o05HT_potential,
+          team_a_xg_prematch: fsMatch.team_a_xg_prematch,
+          team_b_xg_prematch: fsMatch.team_b_xg_prematch,
+          team_a_form: fsMatch.pre_match_home_ppg,
+          team_b_form: fsMatch.pre_match_away_ppg,
+          team_a_form_string: homeFormString,
+          team_b_form_string: awayFormString,
+          team_a_ht_goals_scored: homeHTGoalsScored,
+          team_a_ht_goals_conceded: homeHTGoalsConceded,
+          team_b_ht_goals_scored: awayHTGoalsScored,
+          team_b_ht_goals_conceded: awayHTGoalsConceded,
+          corners_potential: fsMatch.corners_potential,
+          cards_potential: fsMatch.cards_potential,
+          shots_potential: fsMatch.team_a_shotsOnTarget,
+          fouls_potential: fsMatch.team_a_fouls,
+          odds_ft_1: fsMatch.odds_ft_1,
+          odds_ft_x: fsMatch.odds_ft_x,
+          odds_ft_2: fsMatch.odds_ft_2,
+          h2h: fsMatch.h2h ? {
+            total_matches: fsMatch.h2h.previous_matches_results?.totalMatches,
+            home_wins: fsMatch.h2h.previous_matches_results?.team_a_wins,
+            draws: fsMatch.h2h.previous_matches_results?.draw,
+            away_wins: fsMatch.h2h.previous_matches_results?.team_b_wins,
+            btts_pct: fsMatch.h2h.betting_stats?.bttsPercentage,
+            avg_goals: fsMatch.h2h.betting_stats?.avg_goals,
+            over15_pct: fsMatch.h2h.betting_stats?.over15Percentage,
+            over25_pct: fsMatch.h2h.betting_stats?.over25Percentage,
+            over35_pct: fsMatch.h2h.betting_stats?.over35Percentage,
+          } : undefined,
+          trends: fsMatch.trends,
+        });
+
+        // Format for Telegram
+        const telegramMessage = formatAnalysisForTelegram(analysis);
+
+        // Send to Telegram
+        logger.info(`[TelegramDailyLists] 📤 Sending detailed analysis ${i + 1}/${targetList.matches.length} for ${fsMatch.home_name} vs ${fsMatch.away_name}`);
+
+        const result = await telegramBot.sendMessage({
+          chat_id: targetChannelId,
+          text: telegramMessage,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        });
+
+        if (result.ok) {
+          logger.info(`[TelegramDailyLists] ✅ Detailed analysis sent (${i + 1}/${targetList.matches.length})`);
+        } else {
+          logger.warn(`[TelegramDailyLists] ⚠️ Failed to send detailed analysis for match ${fsMatchId}`);
+        }
+
+        // Wait between messages to avoid rate limiting
+        if (i < targetList.matches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, ANALYSIS_MESSAGE_DELAY_MS));
+        }
+
+      } catch (matchError) {
+        logger.error(`[TelegramDailyLists] ❌ Error sending detailed analysis for match ${fsMatchId}:`, matchError);
+        // Continue with next match
+      }
+    }
+
+    logger.info(`[TelegramDailyLists] ✅ Finished sending detailed analyses for ${marketParam}`);
+
+  } catch (error) {
+    logger.error(`[TelegramDailyLists] ❌ Error in sendDetailedAnalysesAsync:`, error);
+  }
+}
 
 /**
  * Get live scores for multiple matches (bulk query)
@@ -613,6 +803,71 @@ Stack: ${error.stack || 'No stack trace'}
         };
       }
 
+      // CRITICAL FIX: Load settlement data for all dates in range
+      const client = await pool.connect();
+      const settlementByDateAndMarket = new Map<string, Map<string, any>>();
+
+      try {
+        const allDates = Object.keys(listsByDate);
+        if (allDates.length > 0) {
+          const settlementQuery = await client.query(
+            `SELECT list_date, market, settlement_result, status, settled_at
+             FROM telegram_daily_lists
+             WHERE list_date = ANY($1)`,
+            [allDates]
+          );
+
+          settlementQuery.rows.forEach(row => {
+            const dateKey = typeof row.list_date === 'string'
+              ? row.list_date
+              : new Date(row.list_date).toISOString().split('T')[0];
+
+            if (!settlementByDateAndMarket.has(dateKey)) {
+              settlementByDateAndMarket.set(dateKey, new Map());
+            }
+            settlementByDateAndMarket.get(dateKey)!.set(row.market, row);
+          });
+
+          logger.info(`[TelegramDailyLists] ✅ Loaded settlement data for ${settlementQuery.rows.length} lists across ${allDates.length} dates`);
+        }
+      } finally {
+        client.release();
+      }
+
+      // Merge settlement data into lists
+      Object.entries(listsByDate).forEach(([date, lists]) => {
+        const dateSettlements = settlementByDateAndMarket.get(date);
+        if (!dateSettlements) return;
+
+        lists.forEach((list: any) => {
+          const settlement = dateSettlements.get(list.market);
+          if (settlement && settlement.settlement_result) {
+            list.settlement_result = settlement.settlement_result;
+            list.status = settlement.status;
+            list.settled_at = settlement.settled_at;
+
+            // Map settlement results to individual matches
+            if (settlement.settlement_result.matches && Array.isArray(settlement.settlement_result.matches)) {
+              const settlementMatchesMap = new Map(
+                settlement.settlement_result.matches.map((sm: any) => [sm.fs_match_id, sm])
+              );
+
+              list.matches.forEach((candidate: any) => {
+                const settlementMatch = settlementMatchesMap.get(candidate.match.fs_id);
+                if (settlementMatch) {
+                  candidate._settlement = {
+                    result: settlementMatch.result,
+                    home_score: settlementMatch.home_score,
+                    away_score: settlementMatch.away_score,
+                    reason: settlementMatch.reason,
+                  };
+                }
+              });
+            }
+          }
+        });
+      });
+
       // Collect all unique matches for bulk live score query
       const allMatches = new Map<number, any>();
       Object.values(listsByDate).flat().forEach((list: any) => {
@@ -638,19 +893,54 @@ Stack: ${error.stack || 'No stack trace'}
                 avg_confidence: Math.round(
                   list.matches.reduce((sum: number, m: any) => sum + m.confidence, 0) / list.matches.length
                 ),
-                matches: list.matches.map((m: any) => ({
-                  fs_id: m.match.fs_id,
-                  home_name: m.match.home_name,
-                  away_name: m.match.away_name,
-                  league_name: m.match.league_name,
-                  date_unix: m.match.date_unix,
-                  confidence: m.confidence,
-                  reason: m.reason,
-                  potentials: m.match.potentials,
-                  xg: m.match.xg,
-                  odds: m.match.odds,
-                  live_score: liveScoresMap.get(m.match.fs_id) || null,
-                })),
+                settlement_result: list.settlement_result,
+                matches: list.matches.map((m: any) => {
+                  // PRIORITY 1: Use settlement data if available
+                  if (m._settlement) {
+                    const isVoid = m._settlement.result === 'VOID';
+                    return {
+                      fs_id: m.match.fs_id,
+                      match_id: m.match.match_id,
+                      home_name: m.match.home_name,
+                      away_name: m.match.away_name,
+                      league_name: m.match.league_name,
+                      date_unix: m.match.date_unix,
+                      confidence: m.confidence,
+                      reason: m.reason,
+                      potentials: m.match.potentials,
+                      xg: m.match.xg,
+                      odds: m.match.odds,
+                      live_score: liveScoresMap.get(m.match.fs_id) || null,
+                      match_finished: isVoid ? false : true,
+                      final_score: isVoid ? null : {
+                        home: m._settlement.home_score || 0,
+                        away: m._settlement.away_score || 0,
+                      },
+                      result: m._settlement.result === 'WIN' ? 'won' :
+                              m._settlement.result === 'VOID' ? 'void' : 'lost',
+                      settlement_reason: m._settlement.reason || null,
+                    };
+                  }
+
+                  // PRIORITY 2: Fallback to live score data
+                  return {
+                    fs_id: m.match.fs_id,
+                    match_id: m.match.match_id,
+                    home_name: m.match.home_name,
+                    away_name: m.match.away_name,
+                    league_name: m.match.league_name,
+                    date_unix: m.match.date_unix,
+                    confidence: m.confidence,
+                    reason: m.reason,
+                    potentials: m.match.potentials,
+                    xg: m.match.xg,
+                    odds: m.match.odds,
+                    live_score: liveScoresMap.get(m.match.fs_id) || null,
+                    match_finished: false,
+                    final_score: null,
+                    result: 'pending',
+                  };
+                }),
                 preview: formatDailyListMessage(list),
                 generated_at: list.generated_at,
                 performance,
@@ -871,6 +1161,12 @@ Stack: ${error.stack || 'No stack trace'}
       } finally {
         client.release();
       }
+
+      // 5.5. Send detailed analyses in background (fire and forget)
+      // This runs asynchronously after the main list is published
+      sendDetailedAnalysesAsync(targetList, targetChannelId, marketParam).catch(error => {
+        logger.error(`[TelegramDailyLists] ❌ Background detailed analysis failed for ${marketParam}:`, error);
+      });
 
       // 6. Return success response
       const duration = Date.now() - startTime;

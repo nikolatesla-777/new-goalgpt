@@ -182,6 +182,20 @@ export interface FootyStatsTeamForm {
   xg_against_avg_overall: number;
   cornersAVG_overall: number;
   cardsAVG_overall: number;
+
+  // First Half Stats (Home/Away specific)
+  season_FHG_overall?: number;  // First Half Goals scored
+  season_FHGA_overall?: number; // First Half Goals Against
+  season_FHG_home?: number;     // First Half Goals scored at home
+  season_FHGA_home?: number;    // First Half Goals Against at home
+  season_FHG_away?: number;     // First Half Goals scored away
+  season_FHGA_away?: number;    // First Half Goals Against away
+  season_1HG_overall?: number;  // Alternative field name
+  season_1HGA_overall?: number;
+  season_1HG_home?: number;
+  season_1HGA_home?: number;
+  season_1HG_away?: number;
+  season_1HGA_away?: number;
 }
 
 export interface FootyStatsReferee {

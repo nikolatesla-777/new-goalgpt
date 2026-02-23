@@ -6,7 +6,7 @@ import {
   usePublishDailyList,
   usePublishDailyListPhoto,
 } from '../../api/hooks';
-import { isDailyListsResponse, isDateDataArray } from '../../api/types/guards';
+import { isDailyListsResponse, isDateDataArray, isRangeResponse } from '../../api/types/guards';
 import { calculatePerformance } from '../../utils/performanceUtils';
 
 // ============================================================================
@@ -172,7 +172,7 @@ export function TelegramDailyLists() {
 
   // Extract lists and metadata from response
   const lists = isToday && data && isDailyListsResponse(data) ? data.lists : [];
-  const historicalData: DateData[] = !isToday && data && isDateDataArray(data) ? data : [];
+  const historicalData: DateData[] = !isToday && data && isRangeResponse(data) && isDateDataArray(data.data) ? data.data : [];
 
   // DEBUG: Log settlement data
   if (isToday && lists.length > 0) {
@@ -702,58 +702,73 @@ Canlıya girmeden önce oran ve kadro kontrolü önerilir.
                               </div>
                             </div>
 
-                            {/* Summary View (no expand/collapse for historical) */}
+                            {/* Summary View with expand/collapse */}
                             <div className="p-6">
                               <div className="text-sm text-gray-600 mb-3">
-                                {list.matches.slice(0, 3).map((match) => {
-                                  // Generate tooltip for historical matches
-                                  const historicalTooltip = match.result === 'won'
-                                    ? `✅ Kazandı - ${list.market}: Tahmin tuttu!${match.final_score ? ` (${match.final_score.home ?? 0}-${match.final_score.away ?? 0})` : ''}`
-                                    : match.result === 'lost'
-                                    ? `❌ Kaybetti - ${list.market}: Tahmin tutmadı.${match.final_score ? ` (${match.final_score.home ?? 0}-${match.final_score.away ?? 0})` : ''}`
-                                    : match.result === 'void'
-                                    ? `⚪ Geçersiz - TheSports API eşleştirmesi başarısız.`
-                                    : `Sonuç bekleniyor...`;
+                                {(() => {
+                                  const isExpanded = expandedList === `${dateData.date}-${list.market}`;
+                                  const displayMatches = isExpanded ? list.matches : list.matches.slice(0, 3);
 
                                   return (
-                                    <div
-                                      key={match.fs_id}
-                                      title={historicalTooltip}
-                                      className="mb-2 pb-2 border-b border-gray-100 last:border-0 cursor-help"
-                                    >
-                                      <p className="font-medium text-gray-900">
-                                        {match.home_name} vs {match.away_name}
-                                        {match.result && (
-                                          <span className={`ml-2 text-xs ${
-                                            match.result === 'won' ? 'text-green-600' :
-                                            match.result === 'lost' ? 'text-red-600' :
-                                            'text-gray-500'
-                                          }`}>
-                                            {match.result === 'won' ? '✅' : match.result === 'lost' ? '❌' : '⚪'}
-                                          </span>
-                                        )}
-                                      </p>
-                                      <p className="text-xs text-gray-500">
-                                        {match.league_name} • Güven: {match.confidence}%
-                                        {match.final_score && (
-                                          <span className="ml-2 font-bold text-gray-700">
-                                            {match.final_score.home}-{match.final_score.away}
-                                          </span>
-                                        )}
-                                        {match.live_score && !match.final_score && (
-                                          <span className="ml-2 font-bold text-blue-600">
-                                            {match.live_score.home}-{match.live_score.away}
-                                          </span>
-                                        )}
-                                      </p>
-                                    </div>
+                                    <>
+                                      {displayMatches.map((match) => {
+                                        // Generate tooltip for historical matches
+                                        const historicalTooltip = match.result === 'won'
+                                          ? `✅ Kazandı - ${list.market}: Tahmin tuttu!${match.final_score ? ` (${match.final_score.home ?? 0}-${match.final_score.away ?? 0})` : ''}`
+                                          : match.result === 'lost'
+                                          ? `❌ Kaybetti - ${list.market}: Tahmin tutmadı.${match.final_score ? ` (${match.final_score.home ?? 0}-${match.final_score.away ?? 0})` : ''}`
+                                          : match.result === 'void'
+                                          ? `⚪ Geçersiz - TheSports API eşleştirmesi başarısız.`
+                                          : `Sonuç bekleniyor...`;
+
+                                        return (
+                                          <div
+                                            key={match.fs_id}
+                                            title={historicalTooltip}
+                                            className="mb-2 pb-2 border-b border-gray-100 last:border-0 cursor-help"
+                                          >
+                                            <p className="font-medium text-gray-900">
+                                              {match.home_name} vs {match.away_name}
+                                              {match.result && (
+                                                <span className={`ml-2 text-xs ${
+                                                  match.result === 'won' ? 'text-green-600' :
+                                                  match.result === 'lost' ? 'text-red-600' :
+                                                  'text-gray-500'
+                                                }`}>
+                                                  {match.result === 'won' ? '✅' : match.result === 'lost' ? '❌' : '⚪'}
+                                                </span>
+                                              )}
+                                            </p>
+                                            <p className="text-xs text-gray-500">
+                                              {match.league_name} • Güven: {match.confidence}%
+                                              {match.final_score && (
+                                                <span className="ml-2 font-bold text-gray-700">
+                                                  {match.final_score.home}-{match.final_score.away}
+                                                </span>
+                                              )}
+                                              {match.live_score && !match.final_score && (
+                                                <span className="ml-2 font-bold text-blue-600">
+                                                  {match.live_score.home}-{match.live_score.away}
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+                                        );
+                                      })}
+                                      {list.matches.length > 3 && (
+                                        <button
+                                          onClick={() => setExpandedList(isExpanded ? null : `${dateData.date}-${list.market}`)}
+                                          className="w-full text-xs text-blue-600 hover:text-blue-700 font-medium mt-2 py-2 rounded-lg hover:bg-blue-50 transition-colors"
+                                        >
+                                          {isExpanded
+                                            ? '▲ Daha az göster'
+                                            : `▼ ... ve ${list.matches.length - 3} maç daha`
+                                          }
+                                        </button>
+                                      )}
+                                    </>
                                   );
-                                })}
-                                {list.matches.length > 3 && (
-                                  <p className="text-xs text-gray-400 mt-2 text-center">
-                                    ... ve {list.matches.length - 3} maç daha
-                                  </p>
-                                )}
+                                })()}
                               </div>
                             </div>
                           </div>
