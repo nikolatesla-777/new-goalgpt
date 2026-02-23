@@ -152,7 +152,7 @@ function convertFootyStatsTrendsToTurkish(
 
 /**
  * Comprehensive trend translation function
- * Preserves ALL information from English text
+ * Professional Turkish translation matching FootyStats website style
  */
 function translateFullTrend(text: string, teamName: string): string {
   const lower = text.toLowerCase();
@@ -161,35 +161,26 @@ function translateFullTrend(text: string, teamName: string): string {
   if (lower.includes('coming into this game')) {
     let result = '';
 
-    // Extract points
     const pointsMatch = lower.match(/picked up (\d+) points from the last (\d+) games/);
     if (pointsMatch) {
       const points = pointsMatch[1];
       const games = pointsMatch[2];
-      result += `Bu maça gelirken son ${games} maçta ${points} puan topladı`;
-
-      // Home and away mention
-      if (lower.includes('both home and away')) {
-        result += ' (ev sahibi ve deplasman)';
-      }
+      result += `${teamName} bu maça gelirken, iç saha ve deplasman dahil son ${games} maçta ${points} puan topladı`;
     }
 
-    // Extract PPG
     const ppgMatch = lower.match(/that's ([\d.]+) points per game/);
     if (ppgMatch) {
-      result += `, maç başı ortalama ${ppgMatch[1]} puan`;
+      result += `. Bu da maç başına ortalama ${ppgMatch[1]} puan demek`;
     }
 
-    // Extract BTTS
     const bttsMatch = lower.match(/btts has landed in (?:an intriguing )?(\d+) of those games/);
     if (bttsMatch) {
-      result += `. Bu maçların ${bttsMatch[1]}'inde karşılıklı gol gerçekleşti`;
+      result += `. "Karşılıklı gol var" (BTTS) bu maçların ${bttsMatch[1]}'inde gerçekleşti`;
     }
 
-    // Extract goals scored
     const goalsMatch = lower.match(/scored (\d+) times in the last (\d+) fixtures/);
     if (goalsMatch) {
-      result += `. Son ${goalsMatch[2]} maçta ${goalsMatch[1]} gol attı`;
+      result += `. ${teamName} son ${goalsMatch[2]} maçta toplam ${goalsMatch[1]} gol attı`;
     }
 
     return result + '.';
@@ -197,28 +188,22 @@ function translateFullTrend(text: string, teamName: string): string {
 
   // Pattern 2: "It's possible/likely we will see goals..." - Goal prediction
   if (lower.includes('possible') && lower.includes('goals')) {
-    let result = 'Gol beklentisi yüksek';
-
-    // Extract "last X games ending with Y goals or more"
     const goalGamesMatch = lower.match(/last (\d+) games.*?ending with (\d+) goals or more/);
     if (goalGamesMatch) {
-      result = `Son ${goalGamesMatch[1]} maçta ${goalGamesMatch[2]} veya daha fazla gol atıldı, bu maçta da gol görülebilir`;
+      return `${teamName} son ${goalGamesMatch[1]} maçta ${goalGamesMatch[2]} veya daha fazla gol atıldı; bu maçta da gol görülebilir.`;
     }
-
-    return result + '.';
+    return `${teamName} bu maçta gol beklentisi yüksek.`;
   }
 
   // Pattern 3: "We might see some goals..." - High scoring
   if (lower.includes('we might see') && lower.includes('goals')) {
     let result = '';
 
-    // Extract "last X games with Y or more goals"
     const highScoreMatch = lower.match(/last (\d+) games.*?ended with (\d+) or more goals/);
     if (highScoreMatch) {
-      result = `Bu maçta gol seyri olabilir, son ${highScoreMatch[1]} maç ${highScoreMatch[2]} veya daha fazla golle sonuçlandı`;
+      result = `Burada birkaç gol görebiliriz; ${teamName}'nın oynadığı son ${highScoreMatch[1]} maçın tamamı ${highScoreMatch[2]} veya daha fazla golle bitti`;
     }
 
-    // Extract total goals
     const totalGoalsMatch = lower.match(/total of (\d+) goals in the last (\d+) games/);
     if (totalGoalsMatch) {
       result += `. Son ${totalGoalsMatch[2]} maçta toplam ${totalGoalsMatch[1]} gol atıldı`;
@@ -234,7 +219,7 @@ function translateFullTrend(text: string, teamName: string): string {
     const defeatsMatch = lower.match(/(\d+) defeats?/);
 
     if (gamesMatch) {
-      let result = `Son ${gamesMatch[1]} maçta galibiyet alamadı`;
+      let result = `${teamName} son ${gamesMatch[1]} maçta galibiyet alamadı`;
       if (drawsMatch && defeatsMatch) {
         result += ` (${drawsMatch[1]} beraberlik, ${defeatsMatch[1]} mağlubiyet)`;
       }
@@ -249,27 +234,27 @@ function translateFullTrend(text: string, teamName: string): string {
 
     let result = '';
     if (bttsCountMatch) {
-      result = `Son maçların ${bttsCountMatch[1]}'inde karşılıklı gol gerçekleşti`;
+      result = `${teamName}'nın son maçlarının ${bttsCountMatch[1]}'inde iki takım da gol attı`;
     }
 
     if (bttsSeasonMatch) {
-      result += `. Bu sezon ${bttsSeasonMatch[1]} maçta (%${bttsSeasonMatch[2]}) karşılıklı gol oldu`;
+      result += `. Bu sezon ${teamName}'nın oynadığı ${bttsSeasonMatch[1]} maçta (tüm maçlarının %${bttsSeasonMatch[2]}'si) "karşılıklı gol var" (BTTS) gerçekleşti`;
     }
 
     return result + '.';
   }
 
   // Pattern 6: "It's likely X will score" - Scoring streak
-  if (lower.includes("likely") && lower.includes("will score")) {
+  if (lower.includes('likely') && lower.includes('will score')) {
     const streakMatch = lower.match(/netted in the last (\d+) games/);
     const goalsMatch = lower.match(/scored (\d+) goals in the last (\d+) games/);
 
-    let result = 'Gol atma olasılığı yüksek';
+    let result = `${teamName} gol atma konusunda kendine güveniyor`;
     if (streakMatch) {
-      result = `Son ${streakMatch[1]} maçta gol attı, bu maçta da gol atması muhtemel`;
+      result = `${teamName} son ${streakMatch[1]} maçta gol attı; bu seride devam etmesi bekleniyor`;
     }
     if (goalsMatch) {
-      result += `, son ${goalsMatch[2]} maçta ${goalsMatch[1]} gol kaydetti`;
+      result += `, son ${goalsMatch[2]} maçta toplam ${goalsMatch[1]} gol kaydetti`;
     }
 
     return result + '.';
@@ -278,14 +263,14 @@ function translateFullTrend(text: string, teamName: string): string {
   // Pattern 7: Won/Lost streaks
   if (lower.includes('won') && lower.includes('last')) {
     const wonMatch = lower.match(/won (?:the )?last (\d+)/);
-    const homeMatch = lower.includes('home');
-    const awayMatch = lower.includes('away');
+    const isHome = lower.includes('home');
+    const isAway = lower.includes('away');
 
     if (wonMatch) {
       let location = '';
-      if (homeMatch) location = ' ev sahibi';
-      if (awayMatch) location = ' deplasman';
-      return `Son ${wonMatch[1]}${location} maçı kazandı.`;
+      if (isHome) location = ' iç saha';
+      if (isAway) location = ' deplasman';
+      return `${teamName} son ${wonMatch[1]}${location} maçını kazandı.`;
     }
   }
 
@@ -293,7 +278,7 @@ function translateFullTrend(text: string, teamName: string): string {
   if (lower.includes('scored') && lower.includes('last')) {
     const goalsMatch = lower.match(/scored (\d+).*?last (\d+)/);
     if (goalsMatch) {
-      return `Son ${goalsMatch[2]} maçta ${goalsMatch[1]} gol attı.`;
+      return `${teamName} son ${goalsMatch[2]} maçta toplam ${goalsMatch[1]} gol attı.`;
     }
   }
 
@@ -301,15 +286,19 @@ function translateFullTrend(text: string, teamName: string): string {
   if (lower.includes('conceded') && lower.includes('last')) {
     const goalsMatch = lower.match(/conceded (\d+).*?last (\d+)/);
     if (goalsMatch) {
-      return `Son ${goalsMatch[2]} maçta ${goalsMatch[1]} gol yedi.`;
+      return `${teamName} son ${goalsMatch[2]} maçta ${goalsMatch[1]} gol yedi.`;
     }
   }
 
   // Pattern 10: Clean sheets
-  if (lower.includes('clean sheet')) {
+  if (lower.includes('clean sheet') && lower.includes('kept')) {
+    const keptMatch = lower.match(/kept (\d+) clean sheets? in (?:the )?last (\d+)/);
+    if (keptMatch) {
+      return `${teamName} son ${keptMatch[2]} maçta ${keptMatch[1]} kez kalesini gole kapattı.`;
+    }
     const countMatch = lower.match(/(\d+) clean sheets?/);
     if (countMatch) {
-      return `${countMatch[1]} maçta kalesini gole kapatmadı.`;
+      return `${teamName} ${countMatch[1]} maçta kalesini gole kapattı.`;
     }
   }
 
@@ -317,22 +306,21 @@ function translateFullTrend(text: string, teamName: string): string {
   if (lower.includes('not been going') && lower.includes('front of goal')) {
     const failedToScoreMatch = lower.match(/failing to score in (\d+) of the last (\d+) games/);
     if (failedToScoreMatch) {
-      return `Hücumda zorlanıyor, son ${failedToScoreMatch[2]} maçın ${failedToScoreMatch[1]}'inde gol atamadı.`;
+      return `${teamName} hücumda zorlanıyor; son ${failedToScoreMatch[2]} maçın ${failedToScoreMatch[1]}'inde gol atamadı.`;
     }
-    return 'Gol yollarında sıkıntı yaşıyor.';
+    return `${teamName} son dönemde gol yollarında sıkıntı yaşıyor.`;
   }
 
   // Pattern 12: "fired blanks" - Failed to score
   if (lower.includes('fired blanks')) {
-    let result = '';
     const blanksMatch = lower.match(/fired blanks in (\d+) games/);
     const percentMatch = lower.match(/that's (\d+)% of games/);
     const scoredMatch = lower.match(/last (\d+) games.*?scored.*?(\d+) goals/);
 
     if (blanksMatch) {
-      result = `Sezon boyunca ${blanksMatch[1]} maçta gol atamadı`;
+      let result = `${teamName} sezon boyunca ${blanksMatch[1]} maçta gol atamadı`;
       if (percentMatch) {
-        result += ` (maçların %${percentMatch[1]}'i)`;
+        result += ` (maçlarının %${percentMatch[1]}'i)`;
       }
       if (scoredMatch) {
         result += `. Buna rağmen son ${scoredMatch[1]} maçta ${scoredMatch[2]} gol attı`;
@@ -341,33 +329,41 @@ function translateFullTrend(text: string, teamName: string): string {
     }
   }
 
-  // Pattern 13: "Superb stuff ... unbeaten" - Unbeaten streak
+  // Pattern 13: "Superb stuff ... unbeaten" - Unbeaten streak at home/away
   if ((lower.includes('superb stuff') || lower.includes('excellent')) && lower.includes('unbeaten')) {
-    const venue = lower.includes('away from home') ? 'deplasmanda' : lower.includes('at home') ? 'ev sahibi' : '';
+    const isAwayFrom = lower.includes('away from home');
+    const isAtHome = lower.includes('at home');
     const unbeatenMatch = lower.match(/unbeaten in (\d+) games/);
 
     if (unbeatenMatch) {
       const games = unbeatenMatch[1];
-      if (venue) {
-        return `${venue.charAt(0).toUpperCase() + venue.slice(1)} son ${games} maçtır yenilmiyor. Bu seriye devam edebilecek mi?`;
+      if (isAtHome) {
+        return `${teamName} son dönemde sahasında oynamaktan keyif alıyor; takım şu anda iç sahada ${games} maçtır yenilmiyor.`;
       }
-      return `Son ${games} maçtır yenilmiyor. Harika bir performans sergiliyor.`;
+      if (isAwayFrom) {
+        return `${teamName} deplasmanda güçlü bir form tutturdu; son ${games} maçtır deplasmanda yenilmiyor.`;
+      }
+      return `${teamName} harika bir performans sergiliyor; son ${games} maçtır yenilmiyor.`;
     }
   }
 
   // Pattern 14: "Scoring is not an issue" - Strong scoring record
   if (lower.includes('scoring is not an issue')) {
-    const venue = lower.includes('away from home') ? 'deplasmanda' : lower.includes('at home') ? 'ev sahibi' : '';
+    const isAtHome = lower.includes('at home');
+    const isAwayFrom = lower.includes('away from home');
     const streakMatch = lower.match(/scored in the last (\d+) games/);
 
     if (streakMatch) {
       const games = streakMatch[1];
-      if (venue) {
-        return `${venue.charAt(0).toUpperCase() + venue.slice(1)} gol atmada sıkıntı yaşamıyor, son ${games} maçın hepsinde gol attı.`;
+      if (isAtHome) {
+        return `${teamName} ev sahipliğinde gol atmada hiç sıkıntı yaşamıyor; iç sahada oynadığı son ${games} maçın hepsinde gol attı.`;
       }
-      return `Son ${games} maçın hepsinde gol attı. Golcü formda.`;
+      if (isAwayFrom) {
+        return `${teamName} deplasmanda gol bulmakta hiç zorlanmıyor; deplasmanda oynadığı son ${games} maçın hepsinde gol attı.`;
+      }
+      return `${teamName} gol atmada hiç sıkıntı yaşamıyor; son ${games} maçın hepsinde gol attı.`;
     }
-    return 'Gol atmada hiç sıkıntı yaşamıyor.';
+    return `${teamName} gol atmada hiç zorlanmıyor.`;
   }
 
   // Pattern 15: "Momentum is really building" - Building momentum
@@ -375,9 +371,9 @@ function translateFullTrend(text: string, teamName: string): string {
     const streakMatch = lower.match(/gone (\d+) games without losing/);
     const winsMatch = lower.match(/won (\d+) of the last (\d+) games/);
 
-    let result = 'Momentum yakalıyor';
+    let result = `${teamName} momentum yakalıyor`;
     if (streakMatch) {
-      result += `, son ${streakMatch[1]} maçtır kaybetmiyor`;
+      result += `; son ${streakMatch[1]} maçtır kaybetmiyor`;
     }
     if (winsMatch) {
       result += `. Son ${winsMatch[2]} maçta ${winsMatch[1]} galibiyet aldı`;
@@ -387,41 +383,54 @@ function translateFullTrend(text: string, teamName: string): string {
 
   // Pattern 16: "has enjoyed playing at home/away ... unbeaten in X games"
   if (lower.includes('enjoyed playing') || (lower.includes('currently unbeaten') && (lower.includes('at home') || lower.includes('away')))) {
-    const venue = lower.includes('at home') ? 'ev sahibi' : lower.includes('away') ? 'deplasman' : '';
+    const isAtHome = lower.includes('at home');
+    const isAway = lower.includes('away');
     const unbeatenMatch = lower.match(/unbeaten in (\d+) games/);
 
     if (unbeatenMatch) {
       const games = unbeatenMatch[1];
-      if (venue) {
-        return `${venue.charAt(0).toUpperCase() + venue.slice(1)} oynarken son ${games} maçtır yenilmiyor.`;
+      if (isAtHome) {
+        return `${teamName} son dönemde sahasında oynamaktan keyif alıyor; takım şu anda iç sahada ${games} maçtır yenilmiyor.`;
       }
-      return `Son ${games} maçtır yenilmiyor.`;
+      if (isAway) {
+        return `${teamName} deplasmanda rahat hissediyor; son ${games} deplasman maçtır yenilmiyor.`;
+      }
+      return `${teamName} son ${games} maçtır yenilmiyor.`;
     }
   }
 
   // Pattern 17: "will be confident of scoring ... record of scoring in every single home/away game"
   if (lower.includes('confident of scoring') || lower.includes('record of scoring')) {
-    const venue = lower.includes('home game') ? 'ev sahibi' : lower.includes('away game') ? 'deplasman' : '';
+    const isHome = lower.includes('home game');
+    const isAway = lower.includes('away game');
     if (lower.includes('every single')) {
-      if (venue) {
-        return `${venue.charAt(0).toUpperCase() + venue.slice(1)} maçlarında her maç gol atıyor ve bugün de güvenli görünüyor.`;
+      if (isHome) {
+        return `${teamName} ev sahipliğinde her maç gol atıyor; bugün de bu seri devam edebilir.`;
       }
-      return 'Her maç gol atıyor, bugün de gol atacağına güveniyor.';
+      if (isAway) {
+        return `${teamName} deplasmanda her maç gol atıyor; bu seriyi sürdürmesi bekleniyor.`;
+      }
+      return `${teamName} her maç gol atıyor; bugün de bu seri devam edebilir.`;
     }
   }
 
-  // Pattern 18: "has had no trouble finding the back of the net ... scored in last X games"
-  if (lower.includes('no trouble finding the back of the net') || lower.includes('no trouble') && lower.includes('scoring')) {
-    const venue = lower.includes('home games') ? 'ev sahibi' : lower.includes('away games') ? 'deplasman' : '';
+  // Pattern 18: "has had no trouble finding the back of the net"
+  if (lower.includes('no trouble finding the back of the net') || (lower.includes('no trouble') && lower.includes('scoring'))) {
+    const isHome = lower.includes('home games');
+    const isAway = lower.includes('away games');
     const streakMatch = lower.match(/last (\d+) (?:home |away )?games/);
     const goalsMatch = lower.match(/scored (\d+) goals/);
 
-    let result = 'Gol bulmakta hiç zorlanmıyor';
+    let venue = '';
+    if (isHome) venue = ' iç saha';
+    if (isAway) venue = ' deplasman';
+
+    let result = `${teamName} gol bulmakta hiç zorlanmıyor`;
     if (streakMatch) {
-      result += `, son ${streakMatch[1]} ${venue} maçın hepsinde gol attı`;
+      result += `; son ${streakMatch[1]}${venue} maçın hepsinde gol attı`;
     }
     if (goalsMatch) {
-      result += ` (${goalsMatch[1]} gol)`;
+      result += ` (toplam ${goalsMatch[1]} gol)`;
     }
     return result + '.';
   }
@@ -430,52 +439,56 @@ function translateFullTrend(text: string, teamName: string): string {
   if (lower.includes('put together') && lower.includes('run of form')) {
     const withoutDefeatMatch = lower.match(/gone (\d+) games without defeat/);
     if (withoutDefeatMatch) {
-      return `İyi bir form yakaladı ve son ${withoutDefeatMatch[1]} maçtır yenilmiyor.`;
+      return `${teamName} iyi bir form yakaladı ve şu anda ${withoutDefeatMatch[1]} maçtır mağlup olmuyor.`;
     }
-    return 'İyi bir form tutturdu.';
+    return `${teamName} iyi bir form tutturdu.`;
   }
 
   // Pattern 20: "looking to keep up the momentum ... having lost just X game from the last Y"
   if (lower.includes('keep up') && (lower.includes('momentum') || lower.includes('form'))) {
     const lostMatch = lower.match(/lost just (\d+) games? from the last (\d+)/);
     if (lostMatch) {
-      const lost = lostMatch[1];
-      const total = lostMatch[2];
-      return `Momentumu sürdürmek istiyor, son ${total} maçta sadece ${lost} mağlubiyet aldı.`;
+      return `${teamName} momentumunu sürdürmek isteyecek; son ${lostMatch[2]} maçın sadece ${lostMatch[1]}'ini kaybettiler.`;
     }
-    return 'Momentumu sürdürmek istiyor.';
+    return `${teamName} momentumunu sürdürmek istiyor.`;
   }
 
   // Pattern 21: "has been on fire recently" - Hot streak
   if (lower.includes('on fire') || lower.includes('in hot form')) {
-    return 'Son dönemde ateş püskürüyor.';
+    return `${teamName} son dönemde ateş püskürüyor.`;
   }
 
-  // Pattern 22: "keep a clean sheet" / "kept X clean sheets"
-  if (lower.includes('clean sheet')) {
-    const keptMatch = lower.match(/kept (\d+) clean sheets? in (?:the )?last (\d+)/);
-    if (keptMatch) {
-      return `Son ${keptMatch[2]} maçta ${keptMatch[1]} kez kalesini gole kapatmış.`;
-    }
-  }
-
-  // Pattern 23: "X's defence will have to be at their best to stop Y from scoring"
+  // Pattern 22: "X's defence will have to be at their best to stop Y from scoring"
   if (lower.includes('defence will have to be at their best') || lower.includes('defense will have to be at their best')) {
-    // Extract team names
     const stopFromScoringMatch = lower.match(/stop ([\w\s]+) from scoring/);
+    const scoredInLastMatch = lower.match(/scored in (?:each of )?(?:the )?(?:their )?last (\d+) (?:home )?games/);
+    const failedMatch = lower.match(/(?:only )?failed to score in (\d+)/);
+
+    let result = '';
     if (stopFromScoringMatch) {
       const opponent = stopFromScoringMatch[1].trim();
-      return `Savunma çok dikkatli olmalı, ${opponent} gol atmakta zorlanmıyor.`;
+      result = `Rakip savunmanın bugün ${opponent}'ın gol atmasını engellemek için zirvesinde olması gerekecek`;
+    } else {
+      result = `Rakip savunma bugün en iyi seviyesinde olmalı`;
     }
-    return 'Savunma en iyi performansını göstermeli.';
+
+    if (scoredInLastMatch) {
+      result += `; ${teamName} oynadığı son ${scoredInLastMatch[1]} maçta da gol attı`;
+    }
+
+    if (failedMatch) {
+      result += `. Bu sezon yalnızca ${failedMatch[1]} maçta gol atamadılar`;
+    }
+
+    return result + '.';
   }
 
   // Fallback: Generic translation based on sentiment
   if (lower.includes('great') || lower.includes('good form')) {
-    return 'İyi bir performans sergiliyor.';
+    return `${teamName} iyi bir performans sergiliyor.`;
   }
   if (lower.includes('struggling') || lower.includes('poor')) {
-    return 'Zorlu bir dönemden geçiyor.';
+    return `${teamName} zorlu bir dönemden geçiyor.`;
   }
 
   // If no pattern matched, return original (better than losing info)
