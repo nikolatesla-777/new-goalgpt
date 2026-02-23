@@ -134,7 +134,7 @@ function convertFootyStatsTrendsToTurkish(
 ): string[] {
   const turkish: string[] = [];
 
-  for (const trendTuple of trends.slice(0, 6)) {
+  for (const trendTuple of trends.slice(0, 10)) {
     if (!trendTuple || !Array.isArray(trendTuple) || trendTuple.length < 2) continue;
 
     const [sentiment, text] = trendTuple;
@@ -582,8 +582,8 @@ export function generateTurkishTrends(
     const awayTrends = convertFootyStatsTrendsToTurkish(data.trends.away || [], awayTeam);
 
     const result = {
-      home: homeTrends.slice(0, 8),
-      away: awayTrends.slice(0, 8),
+      home: homeTrends.slice(0, 10),
+      away: awayTrends.slice(0, 10),
     };
 
     logger.info('[TrendsGenerator] Final result:', {
@@ -603,8 +603,8 @@ export function generateTurkishTrends(
   const awayTrends = calculateAdditionalTrends(awayTeam, false, data);
 
   const result = {
-    home: homeTrends.slice(0, 8),
-    away: awayTrends.slice(0, 8),
+    home: homeTrends.slice(0, 10),
+    away: awayTrends.slice(0, 10),
   };
 
   logger.info('[TrendsGenerator] Final result:', {
