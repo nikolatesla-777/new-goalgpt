@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { TrendUp, Target, Flag, Fire, TrendDown, Trophy, Coins } from '@phosphor-icons/react';
 import { useTrendsAnalysis } from '../../api/hooks';
-import { publishTrendsToTwitter, publishSingleMatchTweet, getMatchAnalysis } from '../../api/client';
+import { publishTrendsToTwitter, publishSingleMatchTweet, getMatchAnalysis, getMatchTrends } from '../../api/client';
 import type { MatchAnalysis } from '../../api/types';
 
 interface TrendMatch {
@@ -322,8 +322,30 @@ function TabButton({ active, onClick, icon, label, count, color }: any) {
 function GoalTrends({ matches }: { matches: GoalTrend[] }) {
   const [tweetModal, setTweetModal] = useState<{ match: GoalTrend; text: string; imageBase64?: string } | null>(null);
   const [capturingId, setCapturingId] = useState<number | null>(null);
+  const [trendModal, setTrendModal] = useState<{
+    match: GoalTrend;
+    homeTrends: { text: string }[];
+    awayTrends: { text: string }[];
+  } | null>(null);
+  const [trendLoadingId, setTrendLoadingId] = useState<number | null>(null);
   // captureRefs points only to the stats area (without the bottom badge/button row)
   const captureRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  const handleTrend = async (match: GoalTrend) => {
+    setTrendLoadingId(match.fs_id);
+    try {
+      const data = await getMatchTrends(match.fs_id);
+      setTrendModal({
+        match,
+        homeTrends: data.trends?.home || [],
+        awayTrends: data.trends?.away || [],
+      });
+    } catch {
+      // silently ignore
+    } finally {
+      setTrendLoadingId(null);
+    }
+  };
 
   const handlePaylas = async (match: GoalTrend) => {
     setCapturingId(match.fs_id);
@@ -377,6 +399,14 @@ function GoalTrends({ matches }: { matches: GoalTrend[] }) {
           initialText={tweetModal.text}
           imageBase64={tweetModal.imageBase64}
           onClose={() => setTweetModal(null)}
+        />
+      )}
+      {trendModal && (
+        <TrendModal
+          match={trendModal.match}
+          homeTrends={trendModal.homeTrends}
+          awayTrends={trendModal.awayTrends}
+          onClose={() => setTrendModal(null)}
         />
       )}
       {matches.map((match) => (
@@ -480,6 +510,22 @@ function GoalTrends({ matches }: { matches: GoalTrend[] }) {
                   </svg>
                 )}
                 Paylaş
+              </button>
+              <button
+                onClick={() => handleTrend(match)}
+                disabled={trendLoadingId === match.fs_id}
+                className="flex items-center gap-1 px-2 py-1 bg-purple-900/50 hover:bg-purple-700/60 text-purple-300 hover:text-white rounded text-xs transition-colors border border-purple-700/50 hover:border-purple-500 disabled:opacity-50 disabled:cursor-wait"
+                title="Trend Şablonunu Göster"
+              >
+                {trendLoadingId === match.fs_id ? (
+                  <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" strokeWidth="4" className="opacity-25" />
+                    <path strokeLinecap="round" d="M4 12a8 8 0 018-8" strokeWidth="4" className="opacity-75" />
+                  </svg>
+                ) : (
+                  <span>⚡</span>
+                )}
+                Trend
               </button>
               <ConfidenceMeter confidence={match.confidence} />
             </div>
@@ -895,6 +941,90 @@ function generateReplyTweet(analysis: MatchAnalysis): string {
   lines.push('', '#GoalGPT');
   const result = lines.join('\n');
   return result.length > 280 ? result.substring(0, 277) + '...' : result;
+}
+
+// ─────────────────────────────────────────────────────────────
+// TrendModal — Şablon önizlemesi
+// ─────────────────────────────────────────────────────────────
+function TrendModal({
+  match,
+  homeTrends,
+  awayTrends,
+  onClose,
+}: {
+  match: GoalTrend;
+  homeTrends: { text: string }[];
+  awayTrends: { text: string }[];
+  onClose: () => void;
+}) {
+  const SEPARATOR = '──────────────────';
+
+  const tweetText = [
+    '⚡️ TREND ANALİZİ ⚡️',
+    '',
+    `🏠 ${match.home_name.toUpperCase()}`,
+    SEPARATOR,
+    ...(homeTrends.length > 0
+      ? homeTrends.map(t => `👉 ${t.text}`)
+      : ['👉 Trend verisi bulunamadı.']),
+    '',
+    ` ✈️  ${match.away_name.toUpperCase()}`,
+    SEPARATOR,
+    ...(awayTrends.length > 0
+      ? awayTrends.map(t => `👉 ${t.text}`)
+      : ['👉 Trend verisi bulunamadı.']),
+  ].join('\n');
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(tweetText);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg border border-purple-700/50 flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⚡️</span>
+            <span className="text-white font-semibold">Trend Şablonu</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors text-2xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Match info */}
+        <div className="px-4 pt-3 pb-1 flex-shrink-0">
+          <p className="text-xs text-gray-400">
+            {match.home_name} vs {match.away_name} · {match.league_name}
+          </p>
+        </div>
+
+        {/* Tweet preview */}
+        <div className="px-4 py-3 flex-1 overflow-y-auto">
+          <pre className="text-sm text-gray-100 whitespace-pre-wrap font-sans leading-relaxed bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            {tweetText}
+          </pre>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700 flex-shrink-0">
+          <span className="text-xs text-gray-500">
+            {homeTrends.length} ev + {awayTrends.length} deplasman trendi
+          </span>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white rounded-lg text-xs transition-colors font-semibold"
+          >
+            📋 Kopyala
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function MatchTweetModal({

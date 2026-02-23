@@ -130,6 +130,21 @@ export async function getTrendsAnalysis(): Promise<TrendsAnalysisResponse> {
   return get<TrendsAnalysisResponse>('/footystats/trends-analysis');
 }
 
+/**
+ * Get match trends (Turkish translated) for a specific FootyStats match
+ */
+export async function getMatchTrends(fsMatchId: number): Promise<{
+  home_name: string;
+  away_name: string;
+  league_name?: string;
+  trends: {
+    home: { text: string; sentiment?: string }[];
+    away: { text: string; sentiment?: string }[];
+  };
+}> {
+  return get(`/footystats/match/${fsMatchId}`);
+}
+
 // ============================================================================
 // Player Search API
 // ============================================================================
