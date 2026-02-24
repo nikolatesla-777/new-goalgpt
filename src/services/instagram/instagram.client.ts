@@ -44,10 +44,10 @@ export async function postInstagramStory(imageBase64: string): Promise<{
     logger.info(`[Instagram] Posting story with image: ${imageUrl}`);
 
     // 3. Create media container (story)
-    // Meta docs use form-urlencoded with is_stories=1 (not JSON boolean)
+    // Try media_type=STORIES (new Instagram Business API approach)
     const formParams = new URLSearchParams();
     formParams.append('image_url', imageUrl);
-    formParams.append('is_stories', '1');
+    formParams.append('media_type', 'STORIES');
     formParams.append('access_token', IG_ACCESS_TOKEN);
 
     logger.info('[Instagram] Request params: ' + formParams.toString().replace(IG_ACCESS_TOKEN, '***'));
