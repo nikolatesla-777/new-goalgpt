@@ -51,7 +51,6 @@ export async function postInstagramStory(imageBase64: string): Promise<{
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           image_url: imageUrl,
-          media_type: 'IMAGE',
           is_stories: true,
           access_token: IG_ACCESS_TOKEN,
         }),
