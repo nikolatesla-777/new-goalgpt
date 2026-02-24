@@ -367,15 +367,52 @@ function GoalTrends({ matches }: { matches: GoalTrend[] }) {
         img.onload = () => resolve();
         img.onerror = () => resolve();
       })));
-      const canvas = await html2canvas(captureEl, {
+      const cardCanvas = await html2canvas(captureEl, {
         backgroundColor: '#1f2937',
         scale: 2,
         useCORS: false,
         allowTaint: false,
         logging: false,
       });
-      const b64 = canvas.toDataURL('image/png').replace('data:image/png;base64,', '');
       imgEls.forEach((img, i) => { img.src = origSrcs[i]; });
+
+      // Wrap card into a 9:16 Story canvas (1080×1920)
+      const STORY_W = 1080;
+      const STORY_H = 1920;
+      const storyCanvas = document.createElement('canvas');
+      storyCanvas.width = STORY_W;
+      storyCanvas.height = STORY_H;
+      const ctx = storyCanvas.getContext('2d')!;
+
+      // Background gradient
+      const grad = ctx.createLinearGradient(0, 0, 0, STORY_H);
+      grad.addColorStop(0, '#111827');
+      grad.addColorStop(1, '#1f2937');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, STORY_W, STORY_H);
+
+      // Scale card to fit width with padding
+      const padding = 60;
+      const maxW = STORY_W - padding * 2;
+      const scale = Math.min(maxW / cardCanvas.width, 1);
+      const cardW = cardCanvas.width * scale;
+      const cardH = cardCanvas.height * scale;
+      const cardX = (STORY_W - cardW) / 2;
+      const cardY = (STORY_H - cardH) / 2;
+
+      // Card shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 40;
+      ctx.drawImage(cardCanvas, cardX, cardY, cardW, cardH);
+      ctx.shadowBlur = 0;
+
+      // GoalGPT branding at bottom
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.font = 'bold 36px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('GoalGPT', STORY_W / 2, STORY_H - 80);
+
+      const b64 = storyCanvas.toDataURL('image/png').replace('data:image/png;base64,', '');
       return b64;
     } catch {
       return undefined;

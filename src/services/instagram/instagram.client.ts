@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger';
 
 const IG_USER_ID = process.env.INSTAGRAM_USER_ID || '';
 const IG_ACCESS_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN || '';
-const IG_API_BASE = 'https://graph.facebook.com/v21.0';
+const IG_API_BASE = 'https://graph.instagram.com/v21.0';
 
 export async function postInstagramStory(imageBase64: string): Promise<{
   success: boolean;
