@@ -119,6 +119,15 @@ export async function getMatchAnalysis(fsMatchId: number): Promise<MatchAnalysis
   return post<MatchAnalysisResponse>(`/telegram/analysis/match/${fsMatchId}`, {});
 }
 
+/**
+ * Post match card image as Instagram Story
+ */
+export async function postInstagramStory(
+  imageBase64: string
+): Promise<{ success: boolean; story_id?: string; dry_run?: boolean; error?: string }> {
+  return post('/instagram/story', { image_base64: imageBase64 });
+}
+
 // ============================================================================
 // Trends Analysis API
 // ============================================================================

@@ -67,6 +67,7 @@ import { footyStatsRoutes } from './footystats.routes';
 import { partnersRoutes } from './partners.routes';
 import { telegramRoutes } from './telegram';
 import { twitterRoutes } from './twitter';
+import { instagramRoutes } from './instagram';
 import { miniAppRoutes } from './miniapp.routes';
 
 // Scoring & Predictions
@@ -234,6 +235,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // Twitter/X publishing (admin action, kill-switch protected)
   app.register(twitterRoutes, { prefix: '/api' });
+
+  // Instagram Story publishing
+  app.register(instagramRoutes);
 
   // Telegram Mini App (PUBLIC - serves web app HTML)
   app.register(miniAppRoutes);
