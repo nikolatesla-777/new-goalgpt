@@ -327,8 +327,13 @@ function GoalTrends({ matches }: { matches: GoalTrend[] }) {
     awayTrends: { text: string }[];
   } | null>(null);
   const [trendLoadingId, setTrendLoadingId] = useState<number | null>(null);
+  const [storyStates, setStoryStates] = useState<Map<number, 'idle' | 'loading' | 'success' | 'error'>>(new Map());
   // captureRefs points only to the stats area (without the bottom badge/button row)
   const captureRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  const setStoryState = (id: number, state: 'idle' | 'loading' | 'success' | 'error') => {
+    setStoryStates(prev => new Map(prev).set(id, state));
+  };
 
   const handleTrend = async (match: GoalTrend) => {
     setTrendLoadingId(match.fs_id);
@@ -343,6 +348,60 @@ function GoalTrends({ matches }: { matches: GoalTrend[] }) {
       // silently ignore
     } finally {
       setTrendLoadingId(null);
+    }
+  };
+
+  const captureCardImage = async (match: GoalTrend): Promise<string | undefined> => {
+    const captureEl = captureRefs.current.get(match.fs_id);
+    if (!captureEl) return undefined;
+    try {
+      const imgEls = Array.from(captureEl.querySelectorAll('img')) as HTMLImageElement[];
+      const origSrcs = imgEls.map(img => img.src);
+      imgEls.forEach(img => {
+        if (img.src && (img.src.startsWith('http://') || img.src.startsWith('https://'))) {
+          img.src = `/api/proxy/image?url=${encodeURIComponent(img.src)}`;
+        }
+      });
+      await Promise.all(imgEls.map(img => new Promise<void>(resolve => {
+        if (img.complete) { resolve(); return; }
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+      })));
+      const canvas = await html2canvas(captureEl, {
+        backgroundColor: '#1f2937',
+        scale: 2,
+        useCORS: false,
+        allowTaint: false,
+        logging: false,
+      });
+      const b64 = canvas.toDataURL('image/png').replace('data:image/png;base64,', '');
+      imgEls.forEach((img, i) => { img.src = origSrcs[i]; });
+      return b64;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const handleStory = async (match: GoalTrend) => {
+    setStoryState(match.fs_id, 'loading');
+    try {
+      const imageBase64 = await captureCardImage(match);
+      if (!imageBase64) {
+        setStoryState(match.fs_id, 'error');
+        setTimeout(() => setStoryState(match.fs_id, 'idle'), 3000);
+        return;
+      }
+      const result = await postInstagramStory(imageBase64);
+      if (result.success) {
+        setStoryState(match.fs_id, 'success');
+        setTimeout(() => setStoryState(match.fs_id, 'idle'), 4000);
+      } else {
+        setStoryState(match.fs_id, 'error');
+        setTimeout(() => setStoryState(match.fs_id, 'idle'), 3000);
+      }
+    } catch {
+      setStoryState(match.fs_id, 'error');
+      setTimeout(() => setStoryState(match.fs_id, 'idle'), 3000);
     }
   };
 
@@ -525,6 +584,28 @@ function GoalTrends({ matches }: { matches: GoalTrend[] }) {
                   <span>⚡</span>
                 )}
                 Trend
+              </button>
+              <button
+                onClick={() => handleStory(match)}
+                disabled={storyStates.get(match.fs_id) === 'loading'}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors border disabled:cursor-wait ${
+                  storyStates.get(match.fs_id) === 'success'
+                    ? 'bg-pink-600/80 text-white border-pink-500'
+                    : storyStates.get(match.fs_id) === 'error'
+                    ? 'bg-red-600/80 text-white border-red-500'
+                    : 'bg-gradient-to-r from-purple-900/50 to-pink-900/50 hover:from-purple-700/60 hover:to-pink-700/60 text-pink-300 hover:text-white border-pink-700/50 hover:border-pink-500'
+                }`}
+                title="Instagram Story olarak paylaş"
+              >
+                {storyStates.get(match.fs_id) === 'loading' ? (
+                  <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" strokeWidth="4" className="opacity-25" />
+                    <path strokeLinecap="round" d="M4 12a8 8 0 018-8" strokeWidth="4" className="opacity-75" />
+                  </svg>
+                ) : (
+                  <span>📸</span>
+                )}
+                {storyStates.get(match.fs_id) === 'success' ? '✓' : storyStates.get(match.fs_id) === 'error' ? '✗' : 'Story'}
               </button>
               <ConfidenceMeter confidence={match.confidence} />
             </div>
