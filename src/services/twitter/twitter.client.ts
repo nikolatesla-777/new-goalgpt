@@ -245,6 +245,19 @@ class TwitterClient {
       this.errorCount++;
       const httpCode = err.code ?? err.status ?? err.statusCode;
       logger.error(`[Twitter] ❌ Failed to post thread: code=${httpCode} msg="${err.message}" twitter_errors=${JSON.stringify(err.data?.errors ?? err.errors)} tweets_posted=${tweetIds.length}/${tweets.length}`);
+      // Full error dump for diagnosis
+      try {
+        logger.error('[Twitter] ❌ Full error dump:', JSON.stringify({
+          code: httpCode,
+          message: err.message,
+          data: err.data,
+          errors: err.errors,
+          headers: err.headers,
+          rateLimit: err.rateLimit,
+          requestError: err.requestError ? String(err.requestError) : undefined,
+        }, null, 2));
+      } catch {}
+
 
       // 429: Daily/rate limit — show exact reset time
       if (httpCode === 429) {
