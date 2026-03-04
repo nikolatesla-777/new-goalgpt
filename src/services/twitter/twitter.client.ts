@@ -203,13 +203,7 @@ class TwitterClient {
     } catch (err: any) {
       this.errorCount++;
       const httpCode = err.code ?? err.status ?? err.statusCode;
-      logger.error('[Twitter] ❌ Failed to post thread:', {
-        error: err.message,
-        http_code: httpCode,
-        twitter_errors: err.data?.errors ?? err.errors,
-        tweets_posted: tweetIds.length,
-        total_tweets: tweets.length,
-      });
+      logger.error(`[Twitter] ❌ Failed to post thread: code=${httpCode} msg="${err.message}" twitter_errors=${JSON.stringify(err.data?.errors ?? err.errors)} tweets_posted=${tweetIds.length}/${tweets.length}`);
 
       // 429: Daily/rate limit — show exact reset time
       if (httpCode === 429) {
