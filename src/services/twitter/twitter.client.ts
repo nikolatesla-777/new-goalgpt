@@ -176,7 +176,20 @@ class TwitterClient {
           if (mediaIds && mediaIds.length > 0) {
             tweetPayload.media = { media_ids: mediaIds };
           }
-          response = await this.client.v2.tweet(tweetPayload);
+          try {
+            response = await this.client.v2.tweet(tweetPayload);
+          } catch (mediaErr: any) {
+            const mediaErrCode = mediaErr.code ?? mediaErr.status ?? mediaErr.statusCode;
+            if (mediaErrCode === 503 && tweetPayload.media) {
+              // Fallback: retry without media (Free tier may not support media in API tweets)
+              logger.warn(`[Twitter] ⚠️ Media tweet failed (${mediaErrCode}), retrying without image...`);
+              delete tweetPayload.media;
+              response = await this.client.v2.tweet(tweetPayload);
+              logger.info('[Twitter] ✅ Tweet posted without image (fallback)');
+            } else {
+              throw mediaErr;
+            }
+          }
         } else {
           // Reply to previous tweet
           response = await this.client.v2.reply(tweetText, replyToId!);
