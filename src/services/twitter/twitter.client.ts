@@ -108,8 +108,18 @@ class TwitterClient {
 
     try {
       const buffer = Buffer.from(imageBase64, 'base64');
-      const mediaId = await this.client.v1.uploadMedia(buffer, { mimeType: 'image/png' });
-      logger.info(`[Twitter] Media uploaded successfully: ${mediaId}`);
+      const mediaId = await this.client.v1.uploadMedia(buffer, { mimeType: 'image/png', target: 'tweet' });
+      logger.info(`[Twitter] Media uploaded: ${mediaId}, waiting for processing...`);
+
+      // Wait for Twitter to confirm the media is processed and ready to attach
+      try {
+        await this.client.v1.mediaWaitForProcessing(mediaId, { timeoutMs: 15000 });
+        logger.info(`[Twitter] Media processing complete: ${mediaId}`);
+      } catch (waitErr: any) {
+        // mediaWaitForProcessing throws on failed state, but for images it usually succeeds instantly
+        logger.warn(`[Twitter] mediaWaitForProcessing warning (non-fatal): ${waitErr.message}`);
+      }
+
       return { success: true, mediaId };
     } catch (err: any) {
       logger.error('[Twitter] Media upload failed:', err.message);
@@ -176,18 +186,36 @@ class TwitterClient {
           if (mediaIds && mediaIds.length > 0) {
             tweetPayload.media = { media_ids: mediaIds };
           }
-          try {
-            response = await this.client.v2.tweet(tweetPayload);
-          } catch (mediaErr: any) {
-            const mediaErrCode = mediaErr.code ?? mediaErr.status ?? mediaErr.statusCode;
-            if (mediaErrCode === 503 && tweetPayload.media) {
-              // Fallback: retry without media (Free tier may not support media in API tweets)
-              logger.warn(`[Twitter] ⚠️ Media tweet failed (${mediaErrCode}), retrying without image...`);
-              delete tweetPayload.media;
+
+          // Try to post with media; on 503 retry up to 2 times with backoff, then fall back to no-image
+          let posted = false;
+          const MAX_MEDIA_RETRIES = 2;
+          for (let attempt = 0; attempt <= MAX_MEDIA_RETRIES && !posted; attempt++) {
+            try {
+              if (attempt > 0) {
+                const waitMs = attempt * 3000;
+                logger.info(`[Twitter] ⏳ Retry ${attempt}/${MAX_MEDIA_RETRIES} for media tweet in ${waitMs}ms...`);
+                await new Promise(r => setTimeout(r, waitMs));
+              }
               response = await this.client.v2.tweet(tweetPayload);
-              logger.info('[Twitter] ✅ Tweet posted without image (fallback)');
-            } else {
-              throw mediaErr;
+              posted = true;
+              if (attempt > 0) logger.info(`[Twitter] ✅ Media tweet succeeded on retry ${attempt}`);
+            } catch (mediaErr: any) {
+              const mediaErrCode = mediaErr.code ?? mediaErr.status ?? mediaErr.statusCode;
+              if (mediaErrCode === 503) {
+                logger.warn(`[Twitter] ⚠️ Media tweet failed with 503 (attempt ${attempt + 1}/${MAX_MEDIA_RETRIES + 1})`);
+                if (attempt === MAX_MEDIA_RETRIES && tweetPayload.media) {
+                  // All retries exhausted — fall back to posting without image
+                  logger.warn('[Twitter] ⚠️ All retries exhausted, posting without image (fallback)');
+                  delete tweetPayload.media;
+                  response = await this.client.v2.tweet(tweetPayload);
+                  logger.info('[Twitter] ✅ Tweet posted without image (fallback after retries)');
+                  posted = true;
+                }
+                // else: loop continues to next retry
+              } else {
+                throw mediaErr;
+              }
             }
           }
         } else {
