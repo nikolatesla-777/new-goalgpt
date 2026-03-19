@@ -83,7 +83,6 @@ async function main() {
     prediction: string;
     result: string;
     final_score: string | null;
-    score_ht: string | null;
     created_at: Date;
     resulted_at: Date | null;
   }>(`
@@ -98,14 +97,9 @@ async function main() {
       ap.prediction,
       ap.result,
       ap.final_score,
-      NULLIF(
-        CONCAT(m.home_score_half, '-', m.away_score_half),
-        'null-null'
-      ) AS score_ht,
       ap.created_at,
       ap.resulted_at
     FROM ai_predictions ap
-    LEFT JOIN ts_matches m ON m.id::text = ap.match_id
     LEFT JOIN ts_competitions tc ON tc.id::text = ap.competition_id
     WHERE ap.result IN ('won', 'lost', 'pending')
       AND ap.prediction IS NOT NULL
@@ -133,7 +127,6 @@ async function main() {
     picked_at:  row.created_at?.toISOString(),
     timer:      String(row.minute_at_prediction || ''),
     score_pick: row.score_at_prediction || '',
-    score_ht:   row.score_ht || '',
     score_ft:   row.final_score || '',
     predict:    translatePrediction(row.prediction),
     strike_result: translateResult(row.result),
