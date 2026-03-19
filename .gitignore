@@ -13,3 +13,9 @@ eskiuygulamadata/
 
 # Firebase credentials
 firebase-service-account.json
+
+# InPlay Guru (Next.js build artifacts)
+inplayguru/.next/
+inplayguru/node_modules/
+inplayguru/tsconfig.tsbuildinfo
+inplayguru/.env.local

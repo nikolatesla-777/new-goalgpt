@@ -63,7 +63,7 @@ export interface MenuItem {
    * - ai: AI predictions, labs
    * - management: Admin operations (Telegram, lists, trends, etc.)
    */
-  section: 'general' | 'ai' | 'management';
+  section: 'general' | 'ai' | 'management' | 'tools';
 
   /**
    * Feature flag: Show "Coming Soon" badge
@@ -76,6 +76,11 @@ export interface MenuItem {
    * Default: false
    */
   requiresAdmin?: boolean;
+
+  /**
+   * External URL — if set, renders as <a href target="_blank"> instead of NavLink
+   */
+  externalUrl?: string;
 }
 
 export interface MenuSection {
@@ -231,6 +236,19 @@ export const ALL_MENU_ITEMS: MenuItem[] = [
     section: 'management',
     requiresAdmin: true,
   },
+
+  // -------------------------------------------------------------------------
+  // TOOLS SECTION
+  // -------------------------------------------------------------------------
+  {
+    id: 'inplayguru',
+    label: 'InPlay Guru',
+    routePath: '/inplayguru-external',
+    iconKey: 'inplayguru',
+    component: lazy(() => import('../components/admin').then(m => ({ default: m.AdminKomutaMerkezi }))), // unused
+    section: 'tools',
+    externalUrl: 'http://142.93.103.128:3001',
+  },
 ];
 
 // ============================================================================
@@ -253,6 +271,10 @@ export const MENU_SECTIONS: MenuSection[] = [
   {
     label: 'Yonetim',
     items: ALL_MENU_ITEMS.filter(item => item.section === 'management'),
+  },
+  {
+    label: 'Araçlar',
+    items: ALL_MENU_ITEMS.filter(item => item.section === 'tools'),
   },
 ];
 
