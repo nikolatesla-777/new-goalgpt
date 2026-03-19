@@ -105,7 +105,7 @@ async function main() {
       ap.created_at,
       ap.resulted_at
     FROM ai_predictions ap
-    LEFT JOIN ts_matches m ON m.id = ap.match_id
+    LEFT JOIN ts_matches m ON m.id::text = ap.match_id
     LEFT JOIN ts_competitions tc ON tc.id = ap.competition_id
     WHERE ap.result IN ('won', 'lost', 'pending')
       AND ap.prediction IS NOT NULL
