@@ -15,7 +15,7 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       env: {
         NODE_ENV: 'production',
-        PORT: '3001',
+        PORT: '3002',
       },
       min_uptime: '10s',
       max_restarts: 10,
