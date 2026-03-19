@@ -146,6 +146,9 @@ class PredictionSettlementService {
         });
       }
 
+      // InPlay Guru live data sync (fire-and-forget, never blocks settlement)
+      this.syncLiveToInPlayGuru(event).catch(() => {});
+
       return result;
 
     } catch (error: any) {
@@ -665,6 +668,30 @@ class PredictionSettlementService {
     pool.query('SELECT refresh_prediction_stats()')
       .then(() => logger.debug('[Settlement] Stats views refreshed'))
       .catch(err => logger.warn('[Settlement] Stats refresh failed:', err.message));
+  }
+
+  /**
+   * InPlay Guru canlı skor sync — maçtaki tüm pending tahminleri güncelle
+   * Fire-and-forget: settlement flow'u ASLA bloklamaz
+   */
+  private async syncLiveToInPlayGuru(event: SettlementEvent): Promise<void> {
+    try {
+      const { rows } = await pool.query<{ id: string }>(
+        `SELECT id FROM ai_predictions WHERE match_id = $1 AND result = 'pending'`,
+        [event.matchId],
+      );
+      for (const row of rows) {
+        inplayguruSync.syncLive(
+          row.id,
+          event.homeScore,
+          event.awayScore,
+          event.minute ?? null,
+          event.statusId ?? null,
+        ).catch(() => {});
+      }
+    } catch (e: any) {
+      logger.debug(`[Settlement] syncLiveToInPlayGuru error: ${e.message}`);
+    }
   }
 
   // ==========================================================================
