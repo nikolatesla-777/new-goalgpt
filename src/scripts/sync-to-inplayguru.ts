@@ -92,7 +92,7 @@ async function main() {
       ap.canonical_bot_name,
       ap.home_team_name,
       ap.away_team_name,
-      COALESCE(ap.league_name, tc.name_en) AS league_name,
+      COALESCE(ap.league_name, tc.name) AS league_name,
       ap.score_at_prediction,
       ap.minute_at_prediction,
       ap.prediction,
