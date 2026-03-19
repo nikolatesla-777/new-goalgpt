@@ -247,7 +247,7 @@ export const ALL_MENU_ITEMS: MenuItem[] = [
     iconKey: 'inplayguru',
     component: lazy(() => import('../components/admin').then(m => ({ default: m.AdminKomutaMerkezi }))), // unused
     section: 'tools',
-    externalUrl: 'http://142.93.103.128:3001',
+    externalUrl: 'https://partnergoalgpt.com/inplayguru',
   },
 ];
 
