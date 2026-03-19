@@ -14,6 +14,7 @@ import { EventEmitter } from 'events';
 import { pool } from '../../database/connection';
 import { RedisManager } from '../../core/RedisManager';
 import { logger } from '../../utils/logger';
+import { inplayguruSync } from '../inplayguru/inplayguruSync.service';
 import type {
   PredictionEvent,
   PredictionCreatedEvent,
@@ -112,6 +113,19 @@ export class PredictionOrchestrator extends EventEmitter {
       );
 
       const prediction = result.rows[0];
+
+      // InPlay Guru sync (fire-and-forget, never blocks)
+      inplayguruSync.upsert({
+        id: prediction.id,
+        canonical_bot_name:    data.canonical_bot_name,
+        home_team_name:        data.home_team_name,
+        away_team_name:        data.away_team_name,
+        league_name:           data.league_name,
+        score_at_prediction:   data.score_at_prediction,
+        minute_at_prediction:  data.minute_at_prediction,
+        prediction:            data.prediction,
+        created_at:            prediction.created_at,
+      }).catch(() => {});
 
       // Step 4: Emit event
       this.emit('prediction:created', {

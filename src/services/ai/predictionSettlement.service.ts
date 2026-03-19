@@ -19,6 +19,7 @@
 import { pool } from '../../database/connection';
 import { logger } from '../../utils/logger';
 import { logEvent } from '../../utils/obsLogger';
+import { inplayguruSync } from '../inplayguru/inplayguruSync.service';
 
 // ============================================================================
 // INTERFACES
@@ -582,6 +583,9 @@ class PredictionSettlementService {
       reason,
       score,
     });
+
+    // InPlay Guru sync (fire-and-forget)
+    inplayguruSync.settle(predictionId, 'won', score).catch(() => {});
   }
 
   /**
@@ -604,6 +608,9 @@ class PredictionSettlementService {
       reason,
       score,
     });
+
+    // InPlay Guru sync (fire-and-forget)
+    inplayguruSync.settle(predictionId, 'lost', score).catch(() => {});
   }
 
   /**
