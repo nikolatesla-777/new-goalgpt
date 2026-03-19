@@ -243,11 +243,10 @@ export const ALL_MENU_ITEMS: MenuItem[] = [
   {
     id: 'inplayguru',
     label: 'InPlay Guru',
-    routePath: '/inplayguru-external',
+    routePath: '/inplayguru',
     iconKey: 'inplayguru',
-    component: lazy(() => import('../components/admin').then(m => ({ default: m.AdminKomutaMerkezi }))), // unused
+    component: lazy(() => import('../components/admin').then(m => ({ default: m.InPlayGuruPage }))),
     section: 'tools',
-    externalUrl: 'https://partnergoalgpt.com/inplayguru',
   },
 ];
 
