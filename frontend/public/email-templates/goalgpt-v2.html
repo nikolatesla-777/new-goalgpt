@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>GoalGPT Radar — Sistemi Tanı</title>
+<style>
+  body { margin:0; padding:0; background:#050a10; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+  @media only screen and (max-width:620px) {
+    .container  { width:100% !important; }
+    .hero-title { font-size:28px !important; line-height:1.3 !important; }
+    .hero-sub   { font-size:14px !important; }
+    .step-wrap td      { display:block !important; width:100% !important; }
+    .step-spacer       { display:none !important; }
+    .param-wrap td     { display:inline-block !important; }
+    .stat-wrap td      { display:block !important; width:100% !important; border-right:none !important; border-bottom:1px solid #1a2535; }
+    .rate-wrap td      { display:block !important; width:90% !important; margin:0 auto 12px !important; }
+    .rate-spacer       { display:none !important; }
+    .notif-phone       { width:240px !important; }
+    .pad               { padding-left:20px !important; padding-right:20px !important; }
+    .cta-btn           { padding:16px 32px !important; font-size:16px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#050a10;">
+
+<!-- Preheader -->
+<div style="display:none;font-size:1px;color:#050a10;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+GoalGPT Radar sistemi 87 parametre analiz ederek maçları tespit ediyor — %78 başarı oranıyla telefonuna anlık bildirim gönderiliyor. ‌‌‌‌‌‌‌‌‌
+</div>
+
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#050a10;">
+<tr><td align="center" style="padding:24px 16px;">
+
+<table class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;box-shadow:0 0 60px rgba(0,255,136,0.06);">
+
+  <!-- ▬▬▬ TOP SIGNAL BAR ▬▬▬ -->
+  <tr>
+    <td style="background:linear-gradient(90deg,#003d22,#006644,#003d22);padding:11px 24px;text-align:center;border-bottom:1px solid rgba(0,255,136,0.2);">
+      <p style="margin:0;color:#00ff88;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">
+        ● RADAR AKTİF &nbsp;·&nbsp; {{discount_code}} &nbsp;·&nbsp; %30 İNDİRİM &nbsp;·&nbsp; 48 SAAT
+      </p>
+    </td>
+  </tr>
+
+  <!-- ▬▬▬ HEADER ▬▬▬ -->
+  <tr>
+    <td style="background:#070d18;padding:28px 40px 20px;text-align:center;border-bottom:1px solid #0d1a2e;" class="pad">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="text-align:center;">
+            <div style="display:inline-flex;align-items:center;gap:10px;">
+              <!-- Radar dot -->
+              <div style="width:10px;height:10px;background:#00ff88;border-radius:50%;display:inline-block;box-shadow:0 0 10px #00ff88;"></div>
+              <span style="font-size:24px;font-weight:900;color:#fff;letter-spacing:-0.5px;">Goal</span><span style="font-size:24px;font-weight:900;color:#00ff88;letter-spacing:-0.5px;">GPT</span>
+              <span style="font-size:10px;font-weight:700;color:#334155;letter-spacing:2.5px;text-transform:uppercase;margin-left:4px;">RADAR SİSTEMİ</span>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ▬▬▬ HERO ▬▬▬ -->
+  <tr>
+    <td style="background:linear-gradient(180deg,#070d18 0%,#04111f 50%,#050a10 100%);padding:52px 40px 44px;text-align:center;position:relative;" class="pad">
+
+      <!-- Radar circle decoration (CSS rings) -->
+      <div style="margin:0 auto 28px auto;width:90px;height:90px;position:relative;display:inline-block;">
+        <div style="position:absolute;inset:0;border-radius:50%;border:1px solid rgba(0,255,136,0.15);"></div>
+        <div style="position:absolute;inset:12px;border-radius:50%;border:1px solid rgba(0,255,136,0.25);"></div>
+        <div style="position:absolute;inset:24px;border-radius:50%;border:1px solid rgba(0,255,136,0.4);"></div>
+        <div style="position:absolute;inset:36px;border-radius:50%;background:rgba(0,255,136,0.12);border:1px solid #00ff88;display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:20px;line-height:1;">⚽</span>
+        </div>
+      </div>
+
+      <h1 class="hero-title" style="margin:0 0 16px;font-size:36px;font-weight:900;color:#fff;line-height:1.2;letter-spacing:-0.8px;">
+        {{user_name}}, Radar Seni<br>
+        <span style="color:#00ff88;">Hâlâ Takip Ediyor.</span>
+      </h1>
+      <p class="hero-sub" style="margin:0 0 10px;font-size:16px;color:#64748b;line-height:1.7;">
+        <span style="color:#f59e0b;font-weight:700;">{{days_inactive}} gündür</span> sistemden uzaksın.
+      </p>
+      <p class="hero-sub" style="margin:0 0 32px;font-size:15px;color:#475569;line-height:1.7;">
+        GoalGPT Radar, saniyeler içinde 87 veri noktasını<br>tarayarak sana özel tahminler üretiyor. Sen yokken de.
+      </p>
+
+      <a href="https://app.goalgpt.pro/home/shop" class="cta-btn"
+         style="display:inline-block;background:linear-gradient(135deg,#00cc6a,#00ff88);color:#050a10;text-decoration:none;padding:18px 52px;border-radius:100px;font-size:17px;font-weight:900;letter-spacing:0.3px;box-shadow:0 8px 40px rgba(0,255,136,0.35);">
+        🎯 Sisteme Geri Dön
+      </a>
+    </td>
+  </tr>
+
+  <!-- ▬▬▬ NASIL ÇALIŞIR — 4 ADIM ▬▬▬ -->
+  <tr>
+    <td style="background:#070d18;padding:40px 40px 36px;border-top:1px solid #0d1a2e;border-bottom:1px solid #0d1a2e;" class="pad">
+      <div style="text-align:center;margin-bottom:32px;">
+        <div style="display:inline-block;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:100px;padding:6px 18px;margin-bottom:14px;">
+          <span style="color:#00ff88;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Nasıl Çalışır?</span>
+        </div>
+        <h2 style="margin:0;font-size:22px;font-weight:800;color:#fff;">4 Adımda Kazanç Sistemi</h2>
+      </div>
+
+      <table class="step-wrap" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <!-- Step 1 -->
+          <td style="width:22%;text-align:center;vertical-align:top;" valign="top">
+            <div style="width:48px;height:48px;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);border-radius:12px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;line-height:48px;">🔍</div>
+            <div style="font-size:10px;font-weight:800;color:#00ff88;letter-spacing:1.5px;margin-bottom:6px;">ADIM 1</div>
+            <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px;">Radar Tarar</div>
+            <div style="font-size:11px;color:#475569;line-height:1.5;">87 veri noktası, tüm ligler, gerçek zamanlı</div>
+          </td>
+          <td class="step-spacer" style="width:4%;vertical-align:middle;text-align:center;" valign="middle">
+            <div style="color:#1e3a5f;font-size:18px;font-weight:300;">→</div>
+          </td>
+          <!-- Step 2 -->
+          <td style="width:22%;text-align:center;vertical-align:top;" valign="top">
+            <div style="width:48px;height:48px;background:rgba(92,104,226,0.1);border:1px solid rgba(92,104,226,0.3);border-radius:12px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;line-height:48px;">🧠</div>
+            <div style="font-size:10px;font-weight:800;color:#818cf8;letter-spacing:1.5px;margin-bottom:6px;">ADIM 2</div>
+            <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px;">AI Hesaplar</div>
+            <div style="font-size:11px;color:#475569;line-height:1.5;">Olasılık motoru tahmin üretir, güven skoru atar</div>
+          </td>
+          <td class="step-spacer" style="width:4%;vertical-align:middle;text-align:center;" valign="middle">
+            <div style="color:#1e3a5f;font-size:18px;font-weight:300;">→</div>
+          </td>
+          <!-- Step 3 -->
+          <td style="width:22%;text-align:center;vertical-align:top;" valign="top">
+            <div style="width:48px;height:48px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;line-height:48px;">📲</div>
+            <div style="font-size:10px;font-weight:800;color:#f59e0b;letter-spacing:1.5px;margin-bottom:6px;">ADIM 3</div>
+            <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px;">Bildirim Gelir</div>
+            <div style="font-size:11px;color:#475569;line-height:1.5;">Push + Telegram, maçtan 2 saat önce</div>
+          </td>
+          <td class="step-spacer" style="width:4%;vertical-align:middle;text-align:center;" valign="middle">
+            <div style="color:#1e3a5f;font-size:18px;font-weight:300;">→</div>
+          </td>
+          <!-- Step 4 -->
+          <td style="width:22%;text-align:center;vertical-align:top;" valign="top">
+            <div style="width:48px;height:48px;background:rgba(0,120,88,0.15);border:1px solid rgba(0,120,88,0.4);border-radius:12px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;line-height:48px;">💰</div>
+            <div style="font-size:10px;font-weight:800;color:#34d399;letter-spacing:1.5px;margin-bottom:6px;">ADIM 4</div>
+            <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px;">Sen Kazanırsın</div>
+            <div style="font-size:11px;color:#475569;line-height:1.5;">Onaylanmış tahmin, net karar, zamanında</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ▬▬▬ PARAMETRELER ▬▬▬ -->
+  <tr>
+    <td style="background:#04111f;padding:40px 40px;" class="pad">
+      <div style="text-align:center;margin-bottom:28px;">
+        <div style="display:inline-block;background:rgba(92,104,226,0.1);border:1px solid rgba(92,104,226,0.25);border-radius:100px;padding:6px 18px;margin-bottom:14px;">
+          <span style="color:#818cf8;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Arka Planda Ne Çalışıyor?</span>
+        </div>
+        <h2 style="margin:0 0 8px;font-size:20px;font-weight:800;color:#fff;">87 Parametre, 1 Doğru Tahmin</h2>
+        <p style="margin:0;font-size:13px;color:#475569;">Sistem her maç için şu verileri işler:</p>
+      </div>
+
+      <!-- Parameter chips — table rows of 3 -->
+      <table class="param-wrap" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding:4px;">
+            <div style="background:#0d1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#00ff88;font-size:15px;">⚡</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">Expected Goals (xG)</div>
+                <div style="font-size:10px;color:#475569;">Gol beklenti modeli</div>
+              </div>
+            </div>
+          </td>
+          <td style="padding:4px;width:8px;"></td>
+          <td style="padding:4px;">
+            <div style="background:#0d1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#818cf8;font-size:15px;">📈</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">Form Analizi</div>
+                <div style="font-size:10px;color:#475569;">Son 5-10 maç performansı</div>
+              </div>
+            </div>
+          </td>
+          <td style="padding:4px;width:8px;"></td>
+          <td style="padding:4px;">
+            <div style="background:#0d1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#f59e0b;font-size:15px;">🏠</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">Ev/Deplasman</div>
+                <div style="font-size:10px;color:#475569;">Saha avantajı katsayısı</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr><td colspan="5" style="height:8px;"></td></tr>
+        <tr>
+          <td style="padding:4px;">
+            <div style="background:#0d1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#34d399;font-size:15px;">🔁</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">Head-to-Head</div>
+                <div style="font-size:10px;color:#475569;">Karşılıklı tarihsel veri</div>
+              </div>
+            </div>
+          </td>
+          <td style="width:8px;"></td>
+          <td style="padding:4px;">
+            <div style="background:#0d1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#f87171;font-size:15px;">🏥</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">Sakatlık / Kadro</div>
+                <div style="font-size:10px;color:#475569;">Eksik oyuncu etkisi</div>
+              </div>
+            </div>
+          </td>
+          <td style="width:8px;"></td>
+          <td style="padding:4px;">
+            <div style="background:#0d1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#60a5fa;font-size:15px;">📊</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">Oran Hareketleri</div>
+                <div style="font-size:10px;color:#475569;">Canlı bahis akışı takibi</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr><td colspan="5" style="height:8px;"></td></tr>
+        <tr>
+          <td style="padding:4px;">
+            <div style="background:#0d1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#a78bfa;font-size:15px;">📅</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">Yorgunluk Skoru</div>
+                <div style="font-size:10px;color:#475569;">Maç sıklığı & seyahat</div>
+              </div>
+            </div>
+          </td>
+          <td style="width:8px;"></td>
+          <td style="padding:4px;">
+            <div style="background:#0d1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#fb923c;font-size:15px;">🎯</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#e2e8f0;">Motivasyon Analizi</div>
+                <div style="font-size:10px;color:#475569;">Şampiyonluk / düşme baskısı</div>
+              </div>
+            </div>
+          </td>
+          <td style="width:8px;"></td>
+          <td style="padding:4px;">
+            <div style="background:rgba(0,255,136,0.05);border:1px solid rgba(0,255,136,0.25);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+              <span style="color:#00ff88;font-size:15px;">🔬</span>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:#00ff88;">+81 Parametre</div>
+                <div style="font-size:10px;color:#475569;">Sürekli güncellenen model</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ▬▬▬ PHONE NOTIFICATION MOCKUP ▬▬▬ -->
+  <tr>
+    <td style="background:#070d18;padding:40px 40px;text-align:center;border-top:1px solid #0d1a2e;" class="pad">
+      <div style="text-align:center;margin-bottom:28px;">
+        <div style="display:inline-block;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);border-radius:100px;padding:6px 18px;margin-bottom:14px;">
+          <span style="color:#f59e0b;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Anlık Bildirim Sistemi</span>
+        </div>
+        <h2 style="margin:0 0 8px;font-size:20px;font-weight:800;color:#fff;">Maçtan 2 Saat Önce Telefonunda</h2>
+        <p style="margin:0;font-size:13px;color:#475569;">Push bildirimi + Telegram kanalı aynı anda tetikleniyor</p>
+      </div>
+
+      <!-- Phone mockup (table-based) -->
+      <table class="notif-phone" width="280" cellpadding="0" cellspacing="0" border="0" align="center" style="background:#0d1420;border-radius:20px;border:1px solid #1a2535;overflow:hidden;margin:0 auto;">
+        <!-- Phone top bar -->
+        <tr>
+          <td style="background:#111827;padding:10px 16px;text-align:left;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size:11px;color:#4b5563;font-weight:600;">09:47</td>
+                <td style="text-align:right;font-size:11px;color:#4b5563;">●●● WiFi 100%</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <!-- Lock screen notification -->
+        <tr>
+          <td style="padding:16px 14px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <!-- App icon + name -->
+              <tr>
+                <td>
+                  <div style="background:rgba(0,255,136,0.15);border:1px solid rgba(0,255,136,0.3);border-radius:8px;padding:10px 12px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="width:32px;vertical-align:top;" valign="top">
+                          <div style="width:28px;height:28px;background:linear-gradient(135deg,#007858,#00ff88);border-radius:7px;text-align:center;line-height:28px;font-size:14px;">⚽</div>
+                        </td>
+                        <td style="padding-left:10px;vertical-align:top;" valign="top">
+                          <div style="font-size:11px;font-weight:700;color:#00ff88;margin-bottom:2px;">GoalGPT · RADAR ALGILADI</div>
+                          <div style="font-size:13px;font-weight:800;color:#fff;margin-bottom:4px;">🎯 Yüksek Güvenli Tahmin</div>
+                          <div style="font-size:12px;color:#94a3b8;line-height:1.5;">
+                            <span style="color:#e2e8f0;font-weight:600;">Barcelona vs Real Madrid</span><br>
+                            2.5 Alt Gol · Güven: <span style="color:#00ff88;font-weight:700;">%84</span>
+                          </div>
+                          <div style="margin-top:8px;display:flex;gap:6px;">
+                            <span style="background:rgba(0,255,136,0.15);color:#00ff88;font-size:10px;font-weight:700;padding:3px 8px;border-radius:100px;">xG: 1.8</span>
+                            <span style="background:rgba(92,104,226,0.15);color:#818cf8;font-size:10px;font-weight:700;padding:3px 8px;border-radius:100px;">Form: ✓✓✓</span>
+                            <span style="background:rgba(245,158,11,0.15);color:#f59e0b;font-size:10px;font-weight:700;padding:3px 8px;border-radius:100px;">Oran↑</span>
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </div>
+                </td>
+              </tr>
+              <tr><td style="height:10px;"></td></tr>
+              <!-- Second notif (Telegram) -->
+              <tr>
+                <td>
+                  <div style="background:rgba(51,144,236,0.08);border:1px solid rgba(51,144,236,0.2);border-radius:8px;padding:10px 12px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="width:28px;vertical-align:middle;text-align:center;font-size:16px;" valign="middle">✈️</td>
+                        <td style="padding-left:10px;vertical-align:middle;" valign="middle">
+                          <div style="font-size:11px;font-weight:700;color:#38bdf8;margin-bottom:2px;">GoalGPT Telegram Kanalı</div>
+                          <div style="font-size:12px;color:#94a3b8;">Aynı tahmin + analiz raporu kanalda</div>
+                        </td>
+                      </tr>
+                    </table>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <!-- Bottom bar -->
+        <tr>
+          <td style="background:#111827;padding:10px;text-align:center;">
+            <div style="width:40px;height:4px;background:#374151;border-radius:100px;margin:0 auto;"></div>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:20px 0 0;font-size:12px;color:#334155;">
+        Günde ortalama <strong style="color:#e2e8f0;">3–5 bildirim</strong> · Sadece yüksek güvenli tahminler gönderilir
+      </p>
+    </td>
+  </tr>
+
+  <!-- ▬▬▬ BAŞARI ORANLARI ▬▬▬ -->
+  <tr>
+    <td style="background:#04111f;padding:40px 40px;border-top:1px solid #0d1a2e;" class="pad">
+      <div style="text-align:center;margin-bottom:28px;">
+        <div style="display:inline-block;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:100px;padding:6px 18px;margin-bottom:14px;">
+          <span style="color:#00ff88;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Performans Raporu</span>
+        </div>
+        <h2 style="margin:0;font-size:20px;font-weight:800;color:#fff;">Gerçek Başarı Oranları</h2>
+      </div>
+
+      <!-- Big stats row -->
+      <table class="stat-wrap" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0d1a2e;border-radius:12px;border:1px solid #1a2535;overflow:hidden;margin-bottom:20px;">
+        <tr>
+          <td style="width:33%;padding:24px 16px;text-align:center;border-right:1px solid #1a2535;">
+            <div style="font-size:11px;font-weight:700;color:#475569;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">GÜNLÜK</div>
+            <div style="font-size:40px;font-weight:900;color:#00ff88;line-height:1;margin-bottom:4px;">%76</div>
+            <div style="font-size:11px;color:#475569;">Ort. günlük isabet</div>
+            <div style="margin-top:8px;font-size:10px;color:#1e3a5f;">━━━━━━━━━━</div>
+            <div style="margin-top:4px;font-size:11px;color:#334155;">~4 tahmin/gün</div>
+          </td>
+          <td style="width:34%;padding:24px 16px;text-align:center;border-right:1px solid #1a2535;background:rgba(0,255,136,0.03);">
+            <div style="font-size:11px;font-weight:700;color:#475569;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">HAFTALIK</div>
+            <div style="font-size:40px;font-weight:900;color:#00ff88;line-height:1;margin-bottom:4px;">%78</div>
+            <div style="font-size:11px;color:#475569;">Son 52 haftanın ortalaması</div>
+            <div style="margin-top:8px;font-size:10px;color:#1e3a5f;">━━━━━━━━━━</div>
+            <div style="margin-top:4px;font-size:11px;color:#334155;">~28 tahmin/hafta</div>
+          </td>
+          <td style="width:33%;padding:24px 16px;text-align:center;">
+            <div style="font-size:11px;font-weight:700;color:#475569;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">AYLIK</div>
+            <div style="font-size:40px;font-weight:900;color:#00ff88;line-height:1;margin-bottom:4px;">%81</div>
+            <div style="font-size:11px;color:#475569;">Son 12 aylık ortalama</div>
+            <div style="margin-top:8px;font-size:10px;color:#1e3a5f;">━━━━━━━━━━</div>
+            <div style="margin-top:4px;font-size:11px;color:#334155;">~120 tahmin/ay</div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Progress bars (visual) -->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding-bottom:12px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size:12px;color:#94a3b8;padding-bottom:6px;" colspan="2">
+                  <span style="font-weight:700;color:#e2e8f0;">2.5 Alt/Üst</span> &nbsp;—&nbsp; En yüksek başarı oranı
+                </td>
+              </tr>
+              <tr>
+                <td style="background:#1a2535;border-radius:100px;height:8px;overflow:hidden;">
+                  <div style="width:84%;height:8px;background:linear-gradient(90deg,#007858,#00ff88);border-radius:100px;"></div>
+                </td>
+                <td style="width:40px;text-align:right;font-size:12px;font-weight:800;color:#00ff88;padding-left:10px;">%84</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-bottom:12px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size:12px;color:#94a3b8;padding-bottom:6px;" colspan="2">
+                  <span style="font-weight:700;color:#e2e8f0;">Her İki Takım da Gol Atar (BTTS)</span>
+                </td>
+              </tr>
+              <tr>
+                <td style="background:#1a2535;border-radius:100px;height:8px;overflow:hidden;">
+                  <div style="width:79%;height:8px;background:linear-gradient(90deg,#5c68e2,#818cf8);border-radius:100px;"></div>
+                </td>
+                <td style="width:40px;text-align:right;font-size:12px;font-weight:800;color:#818cf8;padding-left:10px;">%79</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size:12px;color:#94a3b8;padding-bottom:6px;" colspan="2">
+                  <span style="font-weight:700;color:#e2e8f0;">Maç Sonucu (1X2)</span>
+                </td>
+              </tr>
+              <tr>
+                <td style="background:#1a2535;border-radius:100px;height:8px;overflow:hidden;">
+                  <div style="width:72%;height:8px;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:100px;"></div>
+                </td>
+                <td style="width:40px;text-align:right;font-size:12px;font-weight:800;color:#f59e0b;padding-left:10px;">%72</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:20px 0 0;font-size:11px;color:#1e3a5f;text-align:center;">
+        * Veriler bağımsız olarak doğrulanmıştır · Son güncelleme: Mart 2026
+      </p>
+    </td>
+  </tr>
+
+  <!-- ▬▬▬ DİSCOUNT / CTA ▬▬▬ -->
+  <tr>
+    <td style="background:#070d18;padding:44px 40px;text-align:center;border-top:1px solid #0d1a2e;" class="pad">
+      <!-- Discount box -->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:32px;">
+        <tr>
+          <td style="background:linear-gradient(135deg,#001a0d,#002d1a);border:1px solid rgba(0,255,136,0.25);border-radius:16px;padding:32px;text-align:center;">
+            <div style="font-size:11px;font-weight:800;color:#00ff88;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;">
+              ÖZEL GERİ DÖNÜŞ TEKLİFİ
+            </div>
+            <div style="font-size:48px;font-weight:900;color:#fff;letter-spacing:5px;margin-bottom:10px;font-family:monospace;text-shadow:0 0 20px rgba(0,255,136,0.3);">
+              {{discount_code}}
+            </div>
+            <div style="font-size:15px;color:#94a3b8;margin-bottom:8px;">
+              Tüm VIP planlarda &nbsp;<strong style="color:#00ff88;font-size:18px;">%30 İndirim</strong>
+            </div>
+            <div style="font-size:12px;color:#334155;margin-bottom:24px;">
+              ⏰ Bu teklif 48 saat sonra geçersiz olacak
+            </div>
+            <a href="https://app.goalgpt.pro/home/shop"
+               style="display:inline-block;background:linear-gradient(135deg,#00cc6a,#00ff88);color:#050a10;text-decoration:none;padding:14px 44px;border-radius:100px;font-size:15px;font-weight:900;box-shadow:0 4px 24px rgba(0,255,136,0.3);">
+              Kodu Kullan &rarr;
+            </a>
+          </td>
+        </tr>
+      </table>
+
+      <h2 style="margin:0 0 12px;font-size:24px;font-weight:900;color:#fff;letter-spacing:-0.3px;">
+        Radar Seni Bekliyor.
+      </h2>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.7;">
+        {{days_inactive}} gün önce bıraktığın yerden devam et.<br>
+        Sistem durmuyor. Sen devam et.
+      </p>
+
+      <a href="https://app.goalgpt.pro/home/shop" class="cta-btn"
+         style="display:inline-block;background:linear-gradient(135deg,#00cc6a,#00ff88);color:#050a10;text-decoration:none;padding:20px 64px;border-radius:100px;font-size:18px;font-weight:900;box-shadow:0 8px 40px rgba(0,255,136,0.35);letter-spacing:0.3px;">
+        🎯 HEMEN BAŞLA
+      </a>
+
+      <p style="margin:20px 0 0;font-size:12px;color:#1e3a5f;">
+        ✓ Anında erişim &nbsp;·&nbsp; ✓ 30 gün para iade garantisi &nbsp;·&nbsp; ✓ İptal her zaman
+      </p>
+    </td>
+  </tr>
+
+  <!-- ▬▬▬ FOOTER ▬▬▬ -->
+  <tr>
+    <td style="background:#04080f;padding:28px 40px;text-align:center;border-top:1px solid #0d1420;border-radius:0 0 16px 16px;" class="pad">
+      <div style="margin-bottom:16px;">
+        <a href="https://twitter.com/goalgpt" style="color:#1e3a5f;font-size:12px;text-decoration:none;margin:0 10px;">Twitter/X</a>
+        <a href="https://instagram.com/goalgpt" style="color:#1e3a5f;font-size:12px;text-decoration:none;margin:0 10px;">Instagram</a>
+        <a href="https://t.me/goalgpt" style="color:#1e3a5f;font-size:12px;text-decoration:none;margin:0 10px;">Telegram</a>
+      </div>
+      <p style="margin:0 0 8px;font-size:11px;color:#1e3a5f;">
+        GoalGPT &nbsp;·&nbsp; app.goalgpt.pro &nbsp;·&nbsp; partnergoalgpt.com
+      </p>
+      <p style="margin:0;font-size:11px;color:#0d1a2e;">
+        Bu e-postayı almak istemiyorsanız:
+        <a href="{{unsubscribe_url}}" style="color:#334155;text-decoration:underline;">aboneliği iptal et</a>
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

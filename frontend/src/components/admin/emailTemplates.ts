@@ -27,6 +27,15 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
     previewPath: '/email-templates/goalgpt-v1.html',
     accentColor: '#5c68e2',
   },
+  {
+    id: 'goalgpt-v2',
+    name: 'GoalGPT V2 — Radar Sistemi',
+    description: 'Radar & AI odaklı. Sistem nasıl çalışır (4 adım), 87 parametre listesi, telefon bildirim mockup\'u, günlük/haftalık/aylık başarı oranları.',
+    defaultSubject: 'GoalGPT Radar {{days_inactive}} gündür seni arıyor 🎯 Sisteme geri dön!',
+    tags: ['Teknik', 'AI Radar', 'Performans', 'Dark'],
+    previewPath: '/email-templates/goalgpt-v2.html',
+    accentColor: '#00ff88',
+  },
 ];
 
 /** Sample data injected into template previews */

@@ -69,6 +69,7 @@ export interface ResendBatchResult {
 /** Map templateId → filename in the project root or VPS root */
 const TEMPLATE_FILES: Record<string, string> = {
   'goalgpt-v1':            'goalgpt-v1.html',
+  'goalgpt-v2':            'goalgpt-v2.html',
   'goalgpt-reengagement':  'goalgpt-reengagement.html',
 };
 
