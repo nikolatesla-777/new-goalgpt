@@ -45,6 +45,7 @@ export interface CampaignPayload {
   emailSubject?: string;        // for email channel
   discountCode?: string;
   adminUserId: string;
+  templateId?: string;          // email template id (default: 'goalgpt-v1')
 }
 
 export interface CampaignResult {
@@ -200,15 +201,20 @@ export async function triggerReengagementCampaign(
   const subject = payload.emailSubject ?? `GoalGPT — Seni Özledik 🤖 Geri Dön, %30 İndirim Kazan!`;
   const discountCode = payload.discountCode ?? 'GOBACK30';
 
+  const templateId = payload.templateId ?? 'goalgpt-v1';
+
   const batchItems = users.map((u) => {
     const firstName = u.full_name?.split(' ')[0] ?? 'Kullanıcı';
     const daysInactive = u.days_inactive ?? payload.segmentParams.inactiveDays;
-    const html = renderReengagementTemplate({
-      user_name: firstName,
-      days_inactive: daysInactive,
-      discount_code: discountCode,
-      unsubscribe_url: `https://app.goalgpt.pro/unsubscribe?uid=${u.id}`,
-    });
+    const html = renderReengagementTemplate(
+      {
+        user_name: firstName,
+        days_inactive: daysInactive,
+        discount_code: discountCode,
+        unsubscribe_url: `https://app.goalgpt.pro/unsubscribe?uid=${u.id}`,
+      },
+      templateId
+    );
     return { to: u.email!, subject, html };
   });
 

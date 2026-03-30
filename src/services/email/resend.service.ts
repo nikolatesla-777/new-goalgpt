@@ -62,43 +62,71 @@ export interface ResendBatchResult {
 // TEMPLATE LOADER
 // ============================================================================
 
-// Cache template in memory after first load
-let _templateCache: string | null = null;
+// ============================================================================
+// TEMPLATE REGISTRY
+// ============================================================================
+
+/** Map templateId → filename in the project root or VPS root */
+const TEMPLATE_FILES: Record<string, string> = {
+  'goalgpt-v1':            'goalgpt-v1.html',
+  'goalgpt-reengagement':  'goalgpt-reengagement.html',
+};
+
+/** Per-template in-memory cache */
+const _templateCache: Record<string, string> = {};
 
 /**
- * Load and cache the re-engagement HTML template.
- * Looks for the file at project root or Downloads/GoalGPT/
+ * Resolve candidate paths for a given filename.
+ * Checks: project root, VPS /var/www/goalgpt, Downloads/GoalGPT
  */
-export function loadReengagementTemplate(): string {
-  if (_templateCache) return _templateCache;
-
-  const candidates = [
-    path.resolve(__dirname, '../../../../goalgpt-reengagement.html'),
-    path.resolve(process.cwd(), 'goalgpt-reengagement.html'),
-    path.resolve(process.env.HOME || '', 'Downloads/GoalGPT/goalgpt-reengagement.html'),
+function getCandidatePaths(filename: string): string[] {
+  return [
+    path.resolve(process.cwd(), filename),
+    path.resolve('/var/www/goalgpt', filename),
+    path.resolve(__dirname, '../../../../', filename),
+    path.resolve(process.env.HOME || '', 'Downloads/GoalGPT', filename),
   ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      _templateCache = fs.readFileSync(candidate, 'utf8');
-      logger.info({ path: candidate }, '[Resend] Template loaded');
-      return _templateCache;
-    }
-  }
-
-  throw new Error('[Resend] goalgpt-reengagement.html template not found');
 }
 
 /**
- * Render the re-engagement template with user-specific variables.
+ * Load an HTML template by templateId (with in-memory cache).
+ * Falls back to the legacy 'goalgpt-reengagement' template if id is unknown.
  */
-export function renderReengagementTemplate(vars: {
-  user_name: string;
-  days_inactive: string | number;
-  discount_code: string;
-  unsubscribe_url: string;
-}): string {
-  let html = loadReengagementTemplate();
+export function loadTemplate(templateId = 'goalgpt-v1'): string {
+  if (_templateCache[templateId]) return _templateCache[templateId];
+
+  const filename = TEMPLATE_FILES[templateId] ?? TEMPLATE_FILES['goalgpt-reengagement'];
+  const candidates = getCandidatePaths(filename);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      _templateCache[templateId] = fs.readFileSync(candidate, 'utf8');
+      logger.info({ path: candidate, templateId }, '[Resend] Template loaded');
+      return _templateCache[templateId];
+    }
+  }
+
+  throw new Error(`[Resend] Template not found: ${filename} (id: ${templateId})`);
+}
+
+/** @deprecated use loadTemplate() */
+export function loadReengagementTemplate(): string {
+  return loadTemplate('goalgpt-reengagement');
+}
+
+/**
+ * Render a template with user-specific variables.
+ */
+export function renderReengagementTemplate(
+  vars: {
+    user_name: string;
+    days_inactive: string | number;
+    discount_code: string;
+    unsubscribe_url: string;
+  },
+  templateId = 'goalgpt-v1'
+): string {
+  let html = loadTemplate(templateId);
   html = html.replace(/\{\{user_name\}\}/g, vars.user_name);
   html = html.replace(/\{\{days_inactive\}\}/g, String(vars.days_inactive));
   html = html.replace(/\{\{discount_code\}\}/g, vars.discount_code);

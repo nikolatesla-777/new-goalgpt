@@ -88,6 +88,7 @@ export default async function emailRoutes(app: FastifyInstance): Promise<void> {
       emailSubject?: string;
       discountCode?: string;
       adminUserId: string;
+      templateId?: string;
     };
   }>('/send-campaign', async (req, reply) => {
     const {
@@ -98,6 +99,7 @@ export default async function emailRoutes(app: FastifyInstance): Promise<void> {
       emailSubject,
       discountCode,
       adminUserId,
+      templateId,
     } = req.body;
 
     // Validate required fields
@@ -122,6 +124,7 @@ export default async function emailRoutes(app: FastifyInstance): Promise<void> {
         emailSubject,
         discountCode,
         adminUserId,
+        templateId,
       });
 
       const statusCode = result.success ? 200 : result.recipientCount === 0 ? 422 : 500;

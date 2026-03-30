@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>GoalGPT — Geri Dön!</title>
+<style>
+  body { margin:0; padding:0; background:#f0f2f5; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+  @media only screen and (max-width:620px) {
+    .container { width:100% !important; }
+    .hero-title { font-size:26px !important; }
+    .stats-table td { display:block !important; width:100% !important; border-right:none !important; border-bottom:1px solid #f3f4f6; }
+    .price-wrap td { display:block !important; width:90% !important; margin:0 auto 12px !important; }
+    .price-spacer { display:none !important; }
+    .testimonial-wrap td { display:block !important; width:100% !important; margin-bottom:12px; }
+    .testimonial-spacer { display:none !important; }
+    .cta-btn { padding:16px 32px !important; font-size:16px !important; }
+    .pad { padding-left:20px !important; padding-right:20px !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Preheader text (hidden in email body, visible in inbox preview) -->
+<div style="display:none;font-size:1px;color:#f0f2f5;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+{{days_inactive}} gündür yoktun — GoalGPT'de binlerce kazanç fırsatını kaçırıyorsun. Geri dön, %30 indirimle başla. ‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌‌
+</div>
+
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f0f2f5;">
+<tr><td align="center" style="padding:24px 16px;">
+
+<table class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.12);">
+
+  <!-- ▬ URGENCY TOP BAR -->
+  <tr>
+    <td style="background:linear-gradient(90deg,#f59e0b 0%,#ef4444 100%);padding:13px 24px;text-align:center;">
+      <p style="margin:0;color:#fff;font-size:13px;font-weight:800;letter-spacing:0.4px;">
+        ⚡ ÖZEL TEKLİF · <span style="font-family:monospace;letter-spacing:2px;">{{discount_code}}</span> kodu ile %30 İNDİRİM · Sadece 48 Saat
+      </p>
+    </td>
+  </tr>
+
+  <!-- ▬ HEADER / LOGO -->
+  <tr>
+    <td style="background:#0a0f1c;padding:28px 40px 24px;text-align:center;" class="pad">
+      <div style="display:inline-block;padding:10px 20px;border:1px solid rgba(92,104,226,0.3);border-radius:100px;background:rgba(92,104,226,0.08);">
+        <span style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-0.5px;">Goal</span><span style="font-size:22px;font-weight:900;color:#818cf8;letter-spacing:-0.5px;">GPT</span>
+        <span style="font-size:10px;color:#475569;letter-spacing:2px;text-transform:uppercase;margin-left:8px;vertical-align:middle;">AI Football</span>
+      </div>
+    </td>
+  </tr>
+
+  <!-- ▬ HERO -->
+  <tr>
+    <td style="background:linear-gradient(180deg,#0a0f1c 0%,#0d1b3e 70%,#112244 100%);padding:48px 40px 44px;text-align:center;" class="pad">
+      <div style="font-size:52px;margin-bottom:16px;line-height:1;">⚽</div>
+      <h1 class="hero-title" style="margin:0 0 14px;font-size:34px;font-weight:900;color:#fff;line-height:1.25;letter-spacing:-0.5px;">
+        {{user_name}},<br>
+        <span style="color:#818cf8;">Seni Çok Özledik!</span>
+      </h1>
+      <p style="margin:0 0 28px;font-size:16px;color:#94a3b8;line-height:1.7;">
+        <span style="color:#fbbf24;font-weight:700;">{{days_inactive}} gündür</span> aramızdaydın.<br>
+        Bu sürede yüzlerce maçı ve kazanç fırsatını kaçırdın.
+      </p>
+
+      <!-- inline stats pill -->
+      <div style="display:inline-block;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:100px;padding:10px 24px;margin-bottom:32px;">
+        <span style="color:#a5b4fc;font-size:13px;font-weight:600;">Son 30 günde &nbsp;·&nbsp; 1,240 doğru tahmin &nbsp;·&nbsp; %78 başarı</span>
+      </div>
+
+      <br>
+      <a href="https://app.goalgpt.pro/home/shop" class="cta-btn"
+         style="display:inline-block;background:linear-gradient(135deg,#007858,#00a36b);color:#fff;text-decoration:none;padding:18px 52px;border-radius:100px;font-size:17px;font-weight:800;letter-spacing:0.3px;box-shadow:0 8px 30px rgba(0,120,88,0.45);">
+        🚀 Hemen Geri Dön
+      </a>
+    </td>
+  </tr>
+
+  <!-- ▬ STATS ROW -->
+  <tr>
+    <td style="background:#fff;padding:0;">
+      <table class="stats-table" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="width:33%;padding:28px 16px;text-align:center;border-right:1px solid #f3f4f6;">
+            <div style="font-size:34px;font-weight:900;color:#5c68e2;line-height:1;">5,400+</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Doğru Tahmin</div>
+          </td>
+          <td style="width:34%;padding:28px 16px;text-align:center;border-right:1px solid #f3f4f6;">
+            <div style="font-size:34px;font-weight:900;color:#007858;line-height:1;">%78</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Başarı Oranı</div>
+          </td>
+          <td style="width:33%;padding:28px 16px;text-align:center;">
+            <div style="font-size:34px;font-weight:900;color:#f59e0b;line-height:1;">24/7</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Canlı Takip</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ▬ WHAT YOU MISSED -->
+  <tr>
+    <td style="background:#fff;padding:32px 40px 24px;" class="pad">
+      <h2 style="margin:0 0 6px;font-size:18px;font-weight:800;color:#111827;text-align:center;">
+        ⚡ Bu Hafta Neler Kaçırdın?
+      </h2>
+      <p style="margin:0 0 20px;font-size:13px;color:#6b7280;text-align:center;">
+        GoalGPT AI tahminleri bu hafta da tuttu:
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="background:#f0fdf4;border-left:4px solid #007858;border-radius:0 8px 8px 0;padding:13px 16px;margin-bottom:8px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size:14px;font-weight:700;color:#111827;">🏆 Barcelona vs Real Madrid</td>
+                <td style="text-align:right;font-size:13px;font-weight:700;color:#007858;white-space:nowrap;">✅ 2-1 Doğru</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr><td style="height:8px;"></td></tr>
+        <tr>
+          <td style="background:#f0fdf4;border-left:4px solid #007858;border-radius:0 8px 8px 0;padding:13px 16px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size:14px;font-weight:700;color:#111827;">🏆 Manchester City vs Arsenal</td>
+                <td style="text-align:right;font-size:13px;font-weight:700;color:#007858;white-space:nowrap;">✅ 1-0 Doğru</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr><td style="height:8px;"></td></tr>
+        <tr>
+          <td style="background:#f0fdf4;border-left:4px solid #007858;border-radius:0 8px 8px 0;padding:13px 16px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="font-size:14px;font-weight:700;color:#111827;">🏆 PSG vs Bayern Münih</td>
+                <td style="text-align:right;font-size:13px;font-weight:700;color:#007858;white-space:nowrap;">✅ 3-1 Doğru</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:16px 0 0;font-size:13px;color:#9ca3af;text-align:center;">
+        + her gün 50'den fazla tahmin · dünya liglerinin tamamı
+      </p>
+    </td>
+  </tr>
+
+  <!-- ▬ DISCOUNT BOX -->
+  <tr>
+    <td style="background:#fff;padding:8px 40px 36px;" class="pad">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="background:linear-gradient(135deg,#1e1b4b,#312e81);border-radius:16px;padding:36px 32px;text-align:center;">
+            <div style="font-size:11px;font-weight:800;color:#a5b4fc;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;">
+              SADECE SENİN İÇİN HAZIRLANDIK
+            </div>
+            <div style="font-size:46px;font-weight:900;color:#fff;letter-spacing:4px;margin-bottom:10px;font-family:monospace;">
+              {{discount_code}}
+            </div>
+            <div style="font-size:15px;color:#c7d2fe;margin-bottom:8px;">
+              Tüm VIP paketlerde&nbsp;<strong style="color:#fbbf24;font-size:18px;">%30 İndirim</strong>
+            </div>
+            <div style="font-size:12px;color:#818cf8;margin-bottom:24px;">
+              ⏰ Bu teklif 48 saat içinde sona eriyor
+            </div>
+            <a href="https://app.goalgpt.pro/home/shop"
+               style="display:inline-block;background:#007858;color:#fff;text-decoration:none;padding:14px 44px;border-radius:100px;font-size:15px;font-weight:800;box-shadow:0 4px 16px rgba(0,120,88,0.4);">
+              Kodu Kullan &rarr;
+            </a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ▬ PRICING CARDS -->
+  <tr>
+    <td style="background:#f8fafc;padding:32px 40px;" class="pad">
+      <h2 style="margin:0 0 6px;font-size:18px;font-weight:800;color:#111827;text-align:center;">
+        VIP Planları
+      </h2>
+      <p style="margin:0 0 24px;font-size:13px;color:#6b7280;text-align:center;">
+        <span style="font-family:monospace;font-weight:700;color:#5c68e2;">{{discount_code}}</span> kodu ile tüm planlarda %30 indirim
+      </p>
+
+      <table class="price-wrap" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <!-- WEEKLY -->
+          <td style="width:30%;vertical-align:top;background:#fff;border-radius:12px;border:2px solid #e5e7eb;padding:22px 14px;text-align:center;" valign="top">
+            <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">HAFTALIK</div>
+            <div style="font-size:11px;color:#9ca3af;text-decoration:line-through;margin-bottom:2px;">69₺</div>
+            <div style="font-size:30px;font-weight:900;color:#111827;line-height:1;">49₺</div>
+            <div style="font-size:11px;color:#9ca3af;margin-bottom:18px;">/hafta</div>
+            <a href="https://app.goalgpt.pro/home/shop" style="display:block;background:#f3f4f6;color:#374151;text-decoration:none;padding:10px 6px;border-radius:8px;font-size:13px;font-weight:700;">Seç</a>
+          </td>
+
+          <td class="price-spacer" style="width:4%;"></td>
+
+          <!-- MONTHLY (highlight) -->
+          <td style="width:34%;vertical-align:top;background:linear-gradient(160deg,#4f46e5,#5c68e2);border-radius:12px;border:2px solid #5c68e2;padding:22px 14px;text-align:center;position:relative;" valign="top">
+            <div style="background:#f59e0b;color:#fff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:100px;display:inline-block;margin-bottom:14px;letter-spacing:0.5px;">EN POPÜLER</div>
+            <div style="font-size:11px;font-weight:700;color:#c7d2fe;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">AYLIK</div>
+            <div style="font-size:11px;color:#a5b4fc;text-decoration:line-through;margin-bottom:2px;">199₺</div>
+            <div style="font-size:34px;font-weight:900;color:#fff;line-height:1;">139₺</div>
+            <div style="font-size:11px;color:#c7d2fe;margin-bottom:18px;">/ay</div>
+            <a href="https://app.goalgpt.pro/home/shop" style="display:block;background:#007858;color:#fff;text-decoration:none;padding:12px 6px;border-radius:8px;font-size:13px;font-weight:700;">Seç</a>
+          </td>
+
+          <td class="price-spacer" style="width:4%;"></td>
+
+          <!-- YEARLY -->
+          <td style="width:28%;vertical-align:top;background:#fff;border-radius:12px;border:2px solid #e5e7eb;padding:22px 14px;text-align:center;" valign="top">
+            <div style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">YILLIK</div>
+            <div style="font-size:11px;color:#9ca3af;text-decoration:line-through;margin-bottom:2px;">4,999₺</div>
+            <div style="font-size:28px;font-weight:900;color:#111827;line-height:1;">3,499₺</div>
+            <div style="font-size:11px;color:#9ca3af;margin-bottom:18px;">/yıl</div>
+            <a href="https://app.goalgpt.pro/home/shop" style="display:block;background:#f3f4f6;color:#374151;text-decoration:none;padding:10px 6px;border-radius:8px;font-size:13px;font-weight:700;">Seç</a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ▬ TESTIMONIALS -->
+  <tr>
+    <td style="background:#fff;padding:32px 40px;" class="pad">
+      <h2 style="margin:0 0 20px;font-size:17px;font-weight:800;color:#111827;text-align:center;">
+        Kullanıcılar Ne Diyor?
+      </h2>
+      <table class="testimonial-wrap" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="width:47%;background:#f8fafc;border-radius:12px;padding:20px;vertical-align:top;border-left:3px solid #5c68e2;" valign="top">
+            <div style="font-size:16px;margin-bottom:8px;color:#f59e0b;">★★★★★</div>
+            <p style="margin:0 0 12px;font-size:13px;color:#374151;line-height:1.65;">
+              "GoalGPT sayesinde haftalık tahminlerim tutmaya başladı. Kesinlikle tavsiye ederim, çok memnunum!"
+            </p>
+            <div style="font-size:12px;font-weight:700;color:#111827;">— Mehmet K., İstanbul</div>
+          </td>
+          <td class="testimonial-spacer" style="width:6%;"></td>
+          <td style="width:47%;background:#f8fafc;border-radius:12px;padding:20px;vertical-align:top;border-left:3px solid #007858;" valign="top">
+            <div style="font-size:16px;margin-bottom:8px;color:#f59e0b;">★★★★★</div>
+            <p style="margin:0 0 12px;font-size:13px;color:#374151;line-height:1.65;">
+              "AI analizleri gerçekten işe yarıyor. %75+ doğruluk oranıyla beklentilerimi aştı."
+            </p>
+            <div style="font-size:12px;font-weight:700;color:#111827;">— Ahmet Y., Ankara</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ▬ SECOND CTA BLOCK -->
+  <tr>
+    <td style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:44px 40px;text-align:center;" class="pad">
+      <h2 style="margin:0 0 12px;font-size:22px;font-weight:900;color:#fff;letter-spacing:-0.3px;">
+        Geri Dönmeye Hazır Mısın?
+      </h2>
+      <p style="margin:0 0 28px;font-size:15px;color:#94a3b8;line-height:1.6;">
+        <span style="font-family:monospace;color:#818cf8;font-weight:700;">{{discount_code}}</span> kodunu kullan,<br>
+        %30 indirimle VIP'e geç.
+      </p>
+      <a href="https://app.goalgpt.pro/home/shop" class="cta-btn"
+         style="display:inline-block;background:linear-gradient(135deg,#007858,#00a36b);color:#fff;text-decoration:none;padding:20px 60px;border-radius:100px;font-size:18px;font-weight:900;box-shadow:0 8px 32px rgba(0,120,88,0.45);letter-spacing:0.3px;">
+        🚀 HEMEN BAŞLA
+      </a>
+      <p style="margin:20px 0 0;font-size:12px;color:#475569;">
+        ✓ 30 gün para iade garantisi &nbsp;·&nbsp; ✓ Anında erişim &nbsp;·&nbsp; ✓ İptal her zaman
+      </p>
+    </td>
+  </tr>
+
+  <!-- ▬ FOOTER -->
+  <tr>
+    <td style="background:#0a0f1c;padding:28px 40px;text-align:center;border-radius:0 0 16px 16px;" class="pad">
+      <div style="margin-bottom:14px;">
+        <a href="https://twitter.com/goalgpt" style="color:#475569;font-size:12px;text-decoration:none;margin:0 10px;">Twitter/X</a>
+        <a href="https://instagram.com/goalgpt" style="color:#475569;font-size:12px;text-decoration:none;margin:0 10px;">Instagram</a>
+        <a href="https://t.me/goalgpt" style="color:#475569;font-size:12px;text-decoration:none;margin:0 10px;">Telegram</a>
+      </div>
+      <p style="margin:0 0 8px;font-size:12px;color:#334155;">
+        GoalGPT &nbsp;·&nbsp; app.goalgpt.pro &nbsp;·&nbsp; partnergoalgpt.com
+      </p>
+      <p style="margin:0;font-size:11px;color:#1e293b;">
+        Bu e-postayı almak istemiyorsanız:
+        <a href="{{unsubscribe_url}}" style="color:#5c68e2;text-decoration:underline;">aboneliği iptal et</a>
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+
+</body>
+</html>
