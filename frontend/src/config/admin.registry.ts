@@ -236,6 +236,15 @@ export const ALL_MENU_ITEMS: MenuItem[] = [
     section: 'management',
     requiresAdmin: true,
   },
+  {
+    id: 'email-campaigns',
+    label: 'E-posta Kampanya',
+    routePath: '/admin/email-campaigns',
+    iconKey: 'telegram',
+    component: lazy(() => import('../components/admin').then(m => ({ default: m.EmailCampaignPage }))),
+    section: 'management',
+    requiresAdmin: true,
+  },
 
   // -------------------------------------------------------------------------
   // TOOLS SECTION

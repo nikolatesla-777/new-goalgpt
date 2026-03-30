@@ -76,6 +76,9 @@ import { registerScoringRoutes } from './scoring.routes';
 // Admin Panel (Phase-3A.1)
 import adminRoutes from './admin.routes';
 
+// Email Campaign (Resend + Re-engagement)
+import emailRoutes from './email.routes';
+
 // ============================================================================
 // CENTRAL REGISTRATION FUNCTION
 // ============================================================================
@@ -217,6 +220,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // Note: Different from JWT-based adminAPI group above
   // This is for Phase-3A.1 admin panel with header-based auth
   app.register(adminRoutes, { prefix: '/api/admin' });
+
+  // Email campaign management (admin API-key auth handled inside plugin)
+  app.register(emailRoutes, { prefix: '/api/admin/email' });
 
   // ============================================================================
   // MIXED AUTH API GROUP

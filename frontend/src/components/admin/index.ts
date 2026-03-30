@@ -21,4 +21,5 @@ export { default as PlayerSearchPage } from './PlayerSearchPage';
 export { default as TrendsAnalysisPage } from './TrendsAnalysisPage';
 export { MatchScoringAnalysis } from './MatchScoringAnalysis';
 export { InPlayGuruPage } from './InPlayGuruPage';
+export { default as EmailCampaignPage } from './EmailCampaignPage';
 
